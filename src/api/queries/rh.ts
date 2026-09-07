@@ -1,416 +1,236 @@
 /**
- * RH CRUD - Salariés, Techniciens, Conducteurs
+ * RH et ressources (`salaries` et ses tables filles, `conducteurs`,
+ * `techniciens`, `vehicules` et son suivi, `materiels`).
  */
 
-import { supabase, SupabaseError, uid } from "../client";
-import type { Salarie, Technicien, Conducteur, Absence, Habilitation, Vehicule, Materiel } from "../types";
+import {
+  getOne,
+  insertOne,
+  listByParent,
+  listByParents,
+  listBySociete,
+  remove,
+  updateOne,
+} from "../client";
+import type {
+  SalarieComplet,
+  SalarieInsert,
+  SalarieUpdate,
+  TablesInsert,
+  TablesUpdate,
+  Uuid,
+  VehiculeInsert,
+  VehiculeUpdate,
+} from "../types";
 
 // ============ SALARIÉS ============
 
-export async function getSalarie(id: string): Promise<Salarie | null> {
-  const { data, error } = await supabase
-    .from("salaries")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError("Failed to fetch salarie", error.code, error);
-  }
-
-  return data || null;
+export function listSalaries(societeId: Uuid) {
+  return listBySociete("salaries", societeId);
 }
 
-export async function listSalaries(societeId: string): Promise<Salarie[]> {
-  const { data, error } = await supabase
-    .from("salaries")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list salaries", error.code, error);
-  }
-
-  return data || [];
+export function getSalarie(id: Uuid) {
+  return getOne("salaries", id);
 }
 
-export async function createSalarie(
-  societeId: string,
-  salarie: Omit<Salarie, "id" | "created_at">
-): Promise<Salarie> {
-  const newSalarie: Omit<Salarie, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...salarie,
-  };
-
-  const { data, error } = await supabase
-    .from("salaries")
-    .insert([newSalarie])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create salarie", error.code, error);
-  }
-
-  return data;
+export function listHabilitations(salarieId: Uuid) {
+  return listByParent(
+    "salarie_habilitations",
+    "salarie_id",
+    salarieId,
+    "date_expiration"
+  );
 }
 
-export async function updateSalarie(
-  id: string,
-  updates: Partial<Omit<Salarie, "id" | "created_at" | "societe_id">>
-): Promise<Salarie> {
-  const { data, error } = await supabase
-    .from("salaries")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update salarie", error.code, error);
-  }
-
-  return data;
+export function listAbsences(salarieId: Uuid) {
+  return listByParent("salarie_absences", "salarie_id", salarieId, "date_debut");
 }
 
-export async function deleteSalarie(id: string): Promise<void> {
-  const { error } = await supabase.from("salaries").delete().eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete salarie", error.code, error);
-  }
+export function listContrats(salarieId: Uuid) {
+  return listByParent("salarie_contrats", "salarie_id", salarieId, "cree_le");
 }
 
-// ============ ABSENCES ============
-
-export async function listAbsences(salarieId: string): Promise<Absence[]> {
-  const { data, error } = await supabase
-    .from("absences")
-    .select("*")
-    .eq("salarie_id", salarieId)
-    .order("date_debut", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to list absences", error.code, error);
-  }
-
-  return data || [];
+export function listFormations(salarieId: Uuid) {
+  return listByParent("salarie_formations", "salarie_id", salarieId, "cree_le");
 }
 
-export async function addAbsence(
-  societeId: string,
-  salarieId: string,
-  dateDebut: string,
-  dateFin: string,
-  type: string,
-  notes?: string
-): Promise<Absence> {
-  const absence: Omit<Absence, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    salarie_id: salarieId,
-    date_debut: dateDebut,
-    date_fin: dateFin,
-    type,
-    notes,
-  };
+export async function getSalarieComplet(id: Uuid): Promise<SalarieComplet | null> {
+  const salarie = await getSalarie(id);
+  if (!salarie) return null;
 
-  const { data, error } = await supabase
-    .from("absences")
-    .insert([absence])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to add absence", error.code, error);
-  }
-
-  return data;
+  const [habilitations, absences] = await Promise.all([
+    listHabilitations(id),
+    listAbsences(id),
+  ]);
+  return { ...salarie, habilitations, absences };
 }
 
-export async function removeAbsence(id: string): Promise<void> {
-  const { error } = await supabase.from("absences").delete().eq("id", id);
+export async function listSalariesComplets(
+  societeId: Uuid
+): Promise<SalarieComplet[]> {
+  const salaries = await listSalaries(societeId);
+  const ids = salaries.map((s) => s.id);
 
-  if (error) {
-    throw new SupabaseError("Failed to remove absence", error.code, error);
-  }
+  const [habilitations, absences] = await Promise.all([
+    listByParents("salarie_habilitations", "salarie_id", ids, "date_expiration"),
+    listByParents("salarie_absences", "salarie_id", ids, "date_debut"),
+  ]);
+
+  return salaries.map((s) => ({
+    ...s,
+    habilitations: habilitations.get(s.id) ?? [],
+    absences: absences.get(s.id) ?? [],
+  }));
 }
 
-// ============ TECHNICIENS ============
-
-export async function getTechnicien(id: string): Promise<Technicien | null> {
-  const { data, error } = await supabase
-    .from("techniciens")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError("Failed to fetch technicien", error.code, error);
-  }
-
-  return data || null;
+export function createSalarie(
+  societeId: Uuid,
+  input: Omit<SalarieInsert, "societe_id">
+) {
+  return insertOne("salaries", { ...input, societe_id: societeId });
 }
 
-export async function listTechniciens(societeId: string): Promise<Technicien[]> {
-  const { data, error } = await supabase
-    .from("techniciens")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom1", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list techniciens", error.code, error);
-  }
-
-  return data || [];
+export function updateSalarie(id: Uuid, updates: SalarieUpdate) {
+  return updateOne("salaries", id, updates);
 }
 
-export async function createTechnicien(
-  societeId: string,
-  technicien: Omit<Technicien, "id" | "created_at">
-): Promise<Technicien> {
-  const newTechnicien: Omit<Technicien, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...technicien,
-  };
-
-  const { data, error } = await supabase
-    .from("techniciens")
-    .insert([newTechnicien])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create technicien", error.code, error);
-  }
-
-  return data;
+export function deleteSalarie(id: Uuid) {
+  return remove("salaries", id);
 }
 
-export async function updateTechnicien(
-  id: string,
-  updates: Partial<Omit<Technicien, "id" | "created_at" | "societe_id">>
-): Promise<Technicien> {
-  const { data, error } = await supabase
-    .from("techniciens")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update technicien", error.code, error);
-  }
-
-  return data;
+export function addHabilitation(input: TablesInsert<"salarie_habilitations">) {
+  return insertOne("salarie_habilitations", input);
 }
 
-export async function deleteTechnicien(id: string): Promise<void> {
-  const { error } = await supabase.from("techniciens").delete().eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete technicien", error.code, error);
-  }
+export function updateHabilitation(
+  id: Uuid,
+  updates: TablesUpdate<"salarie_habilitations">
+) {
+  return updateOne("salarie_habilitations", id, updates);
 }
 
-// ============ CONDUCTEURS ============
-
-export async function listConducteurs(societeId: string): Promise<Conducteur[]> {
-  const { data, error } = await supabase
-    .from("conducteurs")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list conducteurs", error.code, error);
-  }
-
-  return data || [];
+export function deleteHabilitation(id: Uuid) {
+  return remove("salarie_habilitations", id);
 }
 
-export async function createConducteur(
-  societeId: string,
-  conducteur: Omit<Conducteur, "id" | "created_at">
-): Promise<Conducteur> {
-  const newConducteur: Omit<Conducteur, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...conducteur,
-  };
-
-  const { data, error } = await supabase
-    .from("conducteurs")
-    .insert([newConducteur])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create conducteur", error.code, error);
-  }
-
-  return data;
+export function addAbsence(input: TablesInsert<"salarie_absences">) {
+  return insertOne("salarie_absences", input);
 }
 
-export async function updateConducteur(
-  id: string,
-  updates: Partial<Omit<Conducteur, "id" | "created_at" | "societe_id">>
-): Promise<Conducteur> {
-  const { data, error } = await supabase
-    .from("conducteurs")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update conducteur", error.code, error);
-  }
-
-  return data;
+export function updateAbsence(id: Uuid, updates: TablesUpdate<"salarie_absences">) {
+  return updateOne("salarie_absences", id, updates);
 }
 
-export async function deleteConducteur(id: string): Promise<void> {
-  const { error } = await supabase.from("conducteurs").delete().eq("id", id);
+export function deleteAbsence(id: Uuid) {
+  return remove("salarie_absences", id);
+}
 
-  if (error) {
-    throw new SupabaseError("Failed to delete conducteur", error.code, error);
-  }
+// ============ CONDUCTEURS ET TECHNICIENS ============
+
+export function listConducteurs(societeId: Uuid) {
+  return listBySociete("conducteurs", societeId);
+}
+
+export function createConducteur(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"conducteurs">, "societe_id">
+) {
+  return insertOne("conducteurs", { ...input, societe_id: societeId });
+}
+
+export function updateConducteur(id: Uuid, updates: TablesUpdate<"conducteurs">) {
+  return updateOne("conducteurs", id, updates);
+}
+
+export function deleteConducteur(id: Uuid) {
+  return remove("conducteurs", id);
+}
+
+export function listTechniciens(societeId: Uuid) {
+  return listBySociete("techniciens", societeId);
+}
+
+export function createTechnicien(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"techniciens">, "societe_id">
+) {
+  return insertOne("techniciens", { ...input, societe_id: societeId });
+}
+
+export function updateTechnicien(id: Uuid, updates: TablesUpdate<"techniciens">) {
+  return updateOne("techniciens", id, updates);
+}
+
+export function deleteTechnicien(id: Uuid) {
+  return remove("techniciens", id);
 }
 
 // ============ VÉHICULES ============
 
-export async function listVehicules(societeId: string): Promise<Vehicule[]> {
-  const { data, error } = await supabase
-    .from("vehicules")
-    .select("*")
-    .eq("societe_id", societeId)
-    .eq("vendu", false)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list vehicules", error.code, error);
-  }
-
-  return data || [];
+export function listVehicules(societeId: Uuid) {
+  return listBySociete("vehicules", societeId);
 }
 
-export async function createVehicule(
-  societeId: string,
-  vehicule: Omit<Vehicule, "id" | "created_at">
-): Promise<Vehicule> {
-  const newVehicule: Omit<Vehicule, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    vendu: false,
-    ...vehicule,
-  };
-
-  const { data, error } = await supabase
-    .from("vehicules")
-    .insert([newVehicule])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create vehicule", error.code, error);
-  }
-
-  return data;
+export function getVehicule(id: Uuid) {
+  return getOne("vehicules", id);
 }
 
-export async function updateVehicule(
-  id: string,
-  updates: Partial<Omit<Vehicule, "id" | "created_at" | "societe_id">>
-): Promise<Vehicule> {
-  const { data, error } = await supabase
-    .from("vehicules")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update vehicule", error.code, error);
-  }
-
-  return data;
+/** Contrôles périodiques, du plus récent au plus ancien. */
+export function listControlesPeriodiques(vehiculeId: Uuid) {
+  return listByParent(
+    "vehicule_controles_periodiques",
+    "vehicule_id",
+    vehiculeId,
+    "date_controle"
+  );
 }
 
-export async function deleteVehicule(id: string): Promise<void> {
-  const { error } = await supabase.from("vehicules").delete().eq("id", id);
+export function listVehiculeDocuments(vehiculeId: Uuid) {
+  return listByParent("vehicule_documents", "vehicule_id", vehiculeId, "cree_le");
+}
 
-  if (error) {
-    throw new SupabaseError("Failed to delete vehicule", error.code, error);
-  }
+export function listVehiculeEntretiens(vehiculeId: Uuid) {
+  return listByParent("vehicule_entretiens", "vehicule_id", vehiculeId, "cree_le");
+}
+
+export function createVehicule(
+  societeId: Uuid,
+  input: Omit<VehiculeInsert, "societe_id">
+) {
+  return insertOne("vehicules", { ...input, societe_id: societeId });
+}
+
+export function updateVehicule(id: Uuid, updates: VehiculeUpdate) {
+  return updateOne("vehicules", id, updates);
+}
+
+export function deleteVehicule(id: Uuid) {
+  return remove("vehicules", id);
+}
+
+export function addControlePeriodique(
+  input: TablesInsert<"vehicule_controles_periodiques">
+) {
+  return insertOne("vehicule_controles_periodiques", input);
 }
 
 // ============ MATÉRIELS ============
 
-export async function listMateriels(societeId: string): Promise<Materiel[]> {
-  const { data, error } = await supabase
-    .from("materiels")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list materiels", error.code, error);
-  }
-
-  return data || [];
+export function listMateriels(societeId: Uuid) {
+  return listBySociete("materiels", societeId);
 }
 
-export async function createMateriel(
-  societeId: string,
-  materiel: Omit<Materiel, "id" | "created_at">
-): Promise<Materiel> {
-  const newMateriel: Omit<Materiel, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...materiel,
-  };
-
-  const { data, error } = await supabase
-    .from("materiels")
-    .insert([newMateriel])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create materiel", error.code, error);
-  }
-
-  return data;
+export function createMateriel(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"materiels">, "societe_id">
+) {
+  return insertOne("materiels", { ...input, societe_id: societeId });
 }
 
-export async function updateMateriel(
-  id: string,
-  updates: Partial<Omit<Materiel, "id" | "created_at" | "societe_id">>
-): Promise<Materiel> {
-  const { data, error } = await supabase
-    .from("materiels")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update materiel", error.code, error);
-  }
-
-  return data;
+export function updateMateriel(id: Uuid, updates: TablesUpdate<"materiels">) {
+  return updateOne("materiels", id, updates);
 }
 
-export async function deleteMateriel(id: string): Promise<void> {
-  const { error } = await supabase.from("materiels").delete().eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete materiel", error.code, error);
-  }
+export function deleteMateriel(id: Uuid) {
+  return remove("materiels", id);
 }

@@ -1,73 +1,72 @@
 /**
- * Workflows métier complexes
- * Les opérations que l'HTML utilise pour les processus clés
+ * Workflows métier
+ *
+ * Enchaînements que l'app déclenche en un geste : accepter un devis, facturer
+ * un bon de commande, encaisser un règlement, planifier par métier…
  */
 
-import * as queries from "@/queries";
-import type { BonCommande, Facture, Devis } from "@/api/types";
+import { todayISO } from "@/api/client";
+import * as queries from "@/api/queries";
+import { loadAllData } from "@/integrations/html-adapter";
+import type {
+  BonCommande,
+  Facture,
+  FactureComplete,
+  Reglement,
+  ScheduleParMetier,
+  Uuid,
+} from "@/api/types";
 
 // ============ FACTURE ← DEVIS ============
 
-/**
- * Workflow: Devis accepté → Créer facture
- */
+/** Devis accepté → facture reprenant l'en-tête et les lignes. */
 export async function accepterDevisEtCreerFacture(
-  societeId: string,
-  devisId: string
-): Promise<Facture> {
-  // 1. Marquer devis comme accepté
+  societeId: Uuid,
+  devisId: Uuid
+): Promise<FactureComplete> {
   await queries.updateDevisStatut(devisId, "accepté");
-
-  // 2. Créer facture depuis devis
   const facture = await queries.createFactureFromDevis(societeId, devisId);
 
-  console.log(`✅ Devis ${devisId} accepté → Facture ${facture.id} créée`);
+  console.log(`✅ Devis ${devisId} accepté → facture ${facture.numero}`);
   return facture;
 }
 
 // ============ FACTURE ← BON DE COMMANDE ============
 
-/**
- * Workflow: BC complétée → Créer facture
- */
-export async function clotureractureDepuisBC(
-  societeId: string,
-  bcId: string,
+/** Bon de commande reçu → facture. */
+export async function facturerBonCommande(
+  societeId: Uuid,
+  bcId: Uuid,
   dateReception?: string
-): Promise<Facture> {
-  // 1. Marquer BC comme reçue
-  if (dateReception) {
-    await queries.markBCReceived(bcId, dateReception);
-  }
-
-  // 2. Créer facture depuis BC
+): Promise<FactureComplete> {
+  if (dateReception) await queries.markBCReceived(bcId, dateReception);
   const facture = await queries.createFactureFromBC(societeId, bcId);
 
-  console.log(`✅ BC ${bcId} → Facture ${facture.id} créée`);
+  console.log(`✅ BC ${bcId} facturé → ${facture.numero}`);
   return facture;
 }
 
-// ============ PLANIFICATION BC ============
+// ============ PLANIFICATION MULTI-MÉTIER ============
 
-/**
- * Planifier un BC multi-métier avec techniciens/sous-traitants
- */
+export interface PlanningMetier {
+  metier: string;
+  technicien?: string;
+  sousTraitant?: string;
+  datePlanifiee?: string;
+  datePlanifieeFin?: string;
+  heurePlanifiee?: string;
+  dureeHeures?: number;
+}
+
+/** Affecte un intervenant et un créneau à chaque métier du bon de commande. */
 export async function planifierBCMultiMetier(
-  bcId: string,
-  plannings: Array<{
-    metier: string;
-    technicien?: string;
-    sousTraitant?: string;
-    datePlanifiee: string;
-    datePlanifieeFin: string;
-    heurePlanifiee: string;
-    dureeHeures: number;
-  }>
+  bcId: Uuid,
+  plannings: PlanningMetier[]
 ): Promise<BonCommande> {
-  const scheduleParMetier: Record<string, any> = {};
+  const schedule: Record<string, ScheduleParMetier> = {};
 
   for (const p of plannings) {
-    scheduleParMetier[p.metier] = {
+    schedule[p.metier] = {
       technicien: p.technicien,
       sous_traitant: p.sousTraitant,
       date_planifiee: p.datePlanifiee,
@@ -77,249 +76,242 @@ export async function planifierBCMultiMetier(
     };
   }
 
-  const bc = await queries.scheduleBCByMetier(bcId, scheduleParMetier);
-
-  console.log(`✅ BC ${bcId} planifiée pour ${plannings.length} métiers`);
+  const bc = await queries.setScheduleParMetier(bcId, schedule);
+  console.log(`✅ BC ${bcId} planifié sur ${plannings.length} métier(s)`);
   return bc;
 }
 
-// ============ SAV (Bon de Commande lié) ============
+// ============ SAV ============
 
 /**
- * Créer un SAV pour un BC précédent
+ * Crée un SAV à partir d'un bon de commande.
+ *
+ * ⚠ Le lien vers le BC d'origine n'est pas persisté : `bons_commande` n'a pas
+ * de colonne de rattachement (voir docs/SCHEMA.md).
  */
 export async function creerSAV(
-  societeId: string,
-  originalBcId: string,
-  probleme: string,
-  photos?: string[]
+  societeId: Uuid,
+  bcOrigineId: Uuid,
+  probleme: string
 ): Promise<BonCommande> {
-  const bc = await queries.getBonCommande(originalBcId);
-  if (!bc) {
-    throw new Error("BC original not found");
-  }
-
-  const sav = await queries.createSAVBonCommande(
-    societeId,
-    originalBcId,
-    probleme,
-    photos
-  );
-
-  console.log(`✅ SAV créé pour BC ${originalBcId}: ${sav.id}`);
+  const sav = await queries.createSAV(societeId, bcOrigineId, probleme);
+  console.log(`✅ SAV ${sav.numero_bc} créé depuis le BC ${bcOrigineId}`);
   return sav;
 }
 
-// ============ RÉGLEMENT FACTURE ============
+// ============ RÈGLEMENT ============
 
-/**
- * Ajouter un réglement et mettre à jour le statut facture
- */
+/** Encaisse un règlement et bascule la facture en « payée » si le solde est nul. */
 export async function ajouterReglementEtMajStatut(
-  factureId: string,
+  societeId: Uuid,
+  factureId: Uuid,
   montant: number,
   mode: string,
   date: string,
   reference?: string
-): Promise<{ reglement: any; facture: Facture }> {
-  // 1. Ajouter le réglement
-  const reglement = await queries.addReglement(
-    factureId,
+): Promise<{ reglement: Reglement; facture: Facture; soldeRestant: number }> {
+  const reglement = await queries.addReglement(societeId, {
+    facture_id: factureId,
     montant,
     mode,
     date,
-    reference
+    reference,
+  });
+
+  const soldeRestant = await calculerSoldeFacture(factureId);
+
+  const facture =
+    soldeRestant <= 0
+      ? await queries.updateFactureStatut(factureId, "payée")
+      : (await queries.getFacture(factureId))!;
+
+  console.log(
+    soldeRestant <= 0
+      ? `✅ Facture ${factureId} soldée`
+      : `✅ Règlement enregistré — reste ${soldeRestant.toFixed(2)} €`
   );
 
-  // 2. Récupérer la facture et ses totaux
-  const solde = await queries.getFactureSolde(factureId);
+  return { reglement, facture, soldeRestant };
+}
 
-  // 3. Mettre à jour le statut si entièrement payée
-  let facture: Facture;
-  if (solde.solde_restant <= 0) {
-    facture = await queries.updateFactureStatut(factureId, "payée");
-    console.log(`✅ Facture ${factureId} entièrement payée`);
-  } else {
-    facture = (await queries.getFacture(factureId))!;
-    console.log(
-      `✅ Réglement ${reglement.id} - Solde restant: ${solde.solde_restant}€`
-    );
-  }
+/** Total TTC des lignes, remise appliquée, moins les règlements encaissés. */
+export async function calculerSoldeFacture(factureId: Uuid): Promise<number> {
+  const facture = await queries.getFactureComplete(factureId);
+  if (!facture) throw new Error(`Facture ${factureId} introuvable`);
 
-  return { reglement, facture };
+  const totalTTC = facture.lignes.reduce((total, ligne) => {
+    if (ligne.type !== "ligne") return total;
+    const ht = (ligne.quantite ?? 0) * (ligne.prix_unitaire ?? 0);
+    return total + ht * (1 + (ligne.tva ?? 0) / 100);
+  }, 0);
+
+  const remise = totalTTC * ((facture.remise_pourcentage ?? 0) / 100);
+  const reglements = await queries.listReglementsFacture(factureId);
+  const encaisse = reglements.reduce((total, r) => total + (r.montant ?? 0), 0);
+
+  return Number((totalTTC - remise - encaisse).toFixed(2));
 }
 
 // ============ RAPPORT D'INTERVENTION ============
 
-/**
- * Compléter un rapport d'intervention et créer facture
- */
+/** Complète le rapport puis facture l'intervention. */
 export async function completerRapportEtCreerFacture(
-  societeId: string,
-  interventionId: string,
+  societeId: Uuid,
+  interventionId: Uuid,
   constatations: string,
-  preconisations: string,
-  signature?: string,
-  photos?: string[]
-): Promise<Facture> {
-  // 1. Mettre à jour le rapport
-  await queries.updateInterventionRapport(
+  preconisations: string
+): Promise<FactureComplete> {
+  const intervention = await queries.updateInterventionRapport(
     interventionId,
     constatations,
     preconisations
   );
 
-  // 2. Ajouter signature si fournie
-  if (signature) {
-    await queries.signIntervention(interventionId, signature);
-  }
-
-  // 3. Ajouter photos si fournies
-  if (photos && photos.length > 0) {
-    await queries.addInterventionPhotos(interventionId, photos);
-  }
-
-  // 4. Créer facture depuis intervention
   const facture = await queries.createFacture(societeId, {
-    client: "",
-    numero: "",
-    date: new Date().toISOString().split("T")[0],
-    remise_pourcentage: 0,
-    statut: "impayée",
-    conducteur: undefined,
-    verrouillee: false,
-    devis_id: null,
+    client_nom: intervention.client_nom,
+    client_id: intervention.client_id,
+    interlocuteur: intervention.interlocuteur,
+    conducteur: intervention.conducteur,
+    date: todayISO(),
     intervention_id: interventionId,
-    bon_commande_id: null,
-    chantier_id: null,
+    adresse: intervention.adresse,
+    code_postal: intervention.code_postal,
+    ville: intervention.ville,
+    etage: intervention.etage,
+    numero_logement: intervention.numero_logement,
+    logement_statut: intervention.logement_statut,
+    occupant: intervention.occupant,
+    precision_commune: intervention.precision_commune,
   });
 
-  console.log(`✅ Rapport ${interventionId} complété → Facture créée`);
+  console.log(`✅ Rapport ${interventionId} complété → facture ${facture.numero}`);
   return facture;
 }
 
-// ============ CHANTIER - CLÔTURE ============
+// ============ CHANTIER ============
 
-/**
- * Clôturer un chantier
- * Vérifier que tous les BC sont reçus et facturés
- */
-export async function cloturerChantier(
-  chantierId: string,
-  dateClôture: string
-): Promise<void> {
-  // 1. Récupérer le chantier
+/** Clôture un chantier en posant sa date de fin. */
+export async function cloturerChantier(chantierId: Uuid, dateCloture: string) {
   const chantier = await queries.getChantier(chantierId);
-  if (!chantier) {
-    throw new Error("Chantier not found");
-  }
+  if (!chantier) throw new Error(`Chantier ${chantierId} introuvable`);
 
-  // 2. Vérifier statut (optionnel - juste une alerte)
-  const avancement = await queries.getChantierAvancement(chantierId);
-  console.log(`ℹ️ Chantier clôturé - Avancement: ${avancement.avancement_pct}%`);
-
-  // 3. Mettre à jour
-  await queries.updateChantier(chantierId, {
-    date_fin: dateClôture,
+  const chantierClos = await queries.updateChantier(chantierId, {
+    date_fin: dateCloture,
   });
 
-  console.log(`✅ Chantier ${chantierId} clôturé`);
+  console.log(`✅ Chantier ${chantier.nom} clôturé au ${dateCloture}`);
+  return chantierClos;
 }
 
-// ============ NOTIFICATIONS & ALERTES ============
+// ============ NOTIFICATIONS ============
+
+export interface Notification {
+  id: string;
+  type: string;
+  message: string;
+  urgent: boolean;
+}
+
+function joursAvant(date?: string | null): number | null {
+  if (!date) return null;
+  const delta = new Date(date).getTime() - Date.now();
+  return Math.ceil(delta / (1000 * 60 * 60 * 24));
+}
 
 /**
- * Calculer les notifications (véhicules, habilitations, BC en retard)
+ * Échéances à moins de 30 jours.
+ *
+ * ⚠ Le contrôle technique des véhicules n'est pas couvert : `vehicules` n'a
+ * aucune colonne de date de CT (voir docs/SCHEMA.md).
  */
 export async function calculerNotifications(
-  societeId: string
-): Promise<Array<{ id: string; type: string; message: string; urgent: boolean }>> {
-  const notifications: Array<{
-    id: string;
-    type: string;
-    message: string;
-    urgent: boolean;
-  }> = [];
+  societeId: Uuid
+): Promise<Notification[]> {
+  const notifications: Notification[] = [];
 
-  try {
-    const today = new Date().toISOString().split("T")[0];
+  const pousser = (
+    id: string,
+    type: string,
+    libelle: string,
+    date?: string | null
+  ) => {
+    const jours = joursAvant(date);
+    if (jours === null || jours > 30) return;
+    notifications.push({
+      id,
+      type,
+      urgent: jours < 0,
+      message: `${libelle} — ${jours < 0 ? "expiré" : `dans ${jours} j`}`,
+    });
+  };
 
-    // 1. Véhicules - Contrôle technique
-    const vehicules = await queries.listVehicules(societeId);
-    for (const v of vehicules) {
-      if (!v.prochain_ct) continue;
-      const jours = Math.ceil(
-        (new Date(v.prochain_ct).getTime() - new Date().getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
-      if (jours <= 30) {
-        notifications.push({
-          id: `veh_ct_${v.id}`,
-          type: "vehicule",
-          message: `${v.nom} - CT ${jours < 0 ? "expiré" : `dans ${jours}j`}`,
-          urgent: jours < 0,
-        });
-      }
-    }
+  const [vehicules, documents, salaries] = await Promise.all([
+    queries.listVehicules(societeId),
+    queries.listDocumentsLegaux(societeId),
+    queries.listSalariesComplets(societeId),
+  ]);
 
-    // 2. BC en retard
-    const bcs = await queries.listBonsCommande(societeId, { enRetard: true });
-    for (const bc of bcs) {
-      notifications.push({
-        id: `bc_retard_${bc.id}`,
-        type: "bonCommande",
-        message: `BC ${bc.numero_bc} - Échéance dépassée`,
-        urgent: true,
-      });
-    }
-
-    // 3. Documents légaux - Expiration
-    const docs = await queries.listDocuments(societeId);
-    for (const d of docs) {
-      if (!d.date_expiration) continue;
-      const jours = Math.ceil(
-        (new Date(d.date_expiration).getTime() - new Date().getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
-      if (jours <= 30) {
-        notifications.push({
-          id: `doc_${d.id}`,
-          type: "document",
-          message: `${d.nom} - ${jours < 0 ? "expiré" : `expire dans ${jours}j`}`,
-          urgent: jours < 0,
-        });
-      }
-    }
-
-    console.log(`📢 ${notifications.length} notifications calculées`);
-  } catch (err) {
-    console.error("Erreur calcul notifications:", err);
+  for (const v of vehicules) {
+    if (v.vendu) continue;
+    pousser(
+      `veh_carburant_${v.id}`,
+      "vehicule",
+      `${v.nom} — carte carburant`,
+      v.carte_carburant_validite
+    );
+    pousser(
+      `veh_telepeage_${v.id}`,
+      "vehicule",
+      `${v.nom} — télépéage`,
+      v.telepeage_validite
+    );
   }
 
+  for (const d of documents) {
+    pousser(`doc_${d.id}`, "document", d.nom, d.date_validite);
+  }
+
+  for (const s of salaries) {
+    if (!s.actif) continue;
+    const identite = [s.prenom, s.nom].filter(Boolean).join(" ");
+    pousser(
+      `btp_${s.id}`,
+      "salarie",
+      `${identite} — carte BTP`,
+      s.carte_btp_validite
+    );
+    pousser(
+      `visite_${s.id}`,
+      "salarie",
+      `${identite} — visite médicale`,
+      s.visite_medicale_prochaine
+    );
+    for (const h of s.habilitations) {
+      pousser(`hab_${h.id}`, "salarie", `${identite} — ${h.nom}`, h.date_expiration);
+    }
+  }
+
+  console.log(`📢 ${notifications.length} notification(s)`);
   return notifications;
 }
 
-// ============ EXPORT & BACKUP ============
+// ============ SAUVEGARDE ============
 
-/**
- * Exporter les données d'une société pour sauvegarde
- */
-export async function sauvegarderSociete(societeId: string): Promise<Blob> {
-  const data = await queries.loadAllData(societeId);
+/** Export JSON complet d'une société, désigné par son code court. */
+export async function sauvegarderSociete(codeSociete: string): Promise<Blob> {
+  const data = await loadAllData(codeSociete);
 
-  const json = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    societeId,
-    ...data,
-  };
-
-  const blob = new Blob([JSON.stringify(json, null, 2)], {
-    type: "application/json",
-  });
-
-  console.log(
-    `✅ Sauvegarde créée: ${(blob.size / 1024).toFixed(2)}KB`
+  const blob = new Blob(
+    [
+      JSON.stringify(
+        { version: 2, exportedAt: new Date().toISOString(), codeSociete, ...data },
+        null,
+        2
+      ),
+    ],
+    { type: "application/json" }
   );
+
+  console.log(`✅ Sauvegarde : ${(blob.size / 1024).toFixed(2)} Ko`);
   return blob;
 }
