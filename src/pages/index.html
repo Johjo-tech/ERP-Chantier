@@ -1014,6 +1014,17 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-print-job .p-job-adresse{ color:#555; }
 .p-print-job .p-job-metier{ color:#C24E00; font-weight:700; }
 .p-print-empty-cell{ color:#bbb; font-size:8pt; text-align:center; padding-top:6mm; }
+
+/* Circuit de validation d'une tâche de planning */
+.wf-bandeau{ border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:var(--surface); }
+.wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
+.wf-planifiee{ background:#EEF2F7; color:#4A566E; }
+.wf-realisee{ background:#FFF3E4; color:#9A5B00; }
+.wf-validee{ background:#E8F5EC; color:#1E6B37; }
+.wf-refusee{ background:#FDECEE; color:#B42318; }
+.wf-motif{ margin-top:8px; font-size:12px; color:#B42318; }
+.wf-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.wf-meta{ font-size:11.5px; color:var(--text-dim); margin-top:6px; }
 </style>
 </head>
 <body class="sidebar-collapsed">
@@ -1194,6 +1205,9 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <button class="view-modal-close" onclick="closeTechnicienInterventionModal()">✕</button>
     <h3 style="margin-top:0;" id="techModalTitre">Fiche d'intervention</h3>
     <p class="card-sub" id="techModalInfo"></p>
+
+    <!-- Circuit de validation : état de la tâche et actions ouvertes au rôle -->
+    <div id="techModalWorkflow" style="margin-top:12px;"></div>
 
     <div class="section-title" style="margin-top:14px;">🔧 Métiers réalisés</div>
     <div id="techModalMetiers"></div>
@@ -6103,7 +6117,125 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   renderTechModalPhotos(b);
   document.getElementById('technicienInterventionModal').style.display = 'flex';
   setTimeout(()=> setupTechDessinCanvas(b), 30);
+  chargerWorkflowTache(b, techModalCtx.dayIso);
 }
+/* ---------- Circuit de validation d'une tâche ----------
+   L'état et les actions viennent de la base : `planning_taches` porte le
+   statut, et les transitions passent par des fonctions SQL qui horodatent et
+   enregistrent l'auteur. L'interface ne fait que déclencher. */
+
+let wfTacheCourante = null;
+
+const WF_LIBELLES = {
+  planifiee: 'Planifiée',
+  realisee: 'Travaux déclarés faits',
+  validee: 'Validée',
+  refusee: 'Refusée',
+};
+
+async function chargerWorkflowTache(b, dayIso){
+  const zone = document.getElementById('techModalWorkflow');
+  if(!zone) return;
+  zone.innerHTML = '<div class="wf-bandeau"><span class="wf-meta">Chargement du suivi…</span></div>';
+  wfTacheCourante = null;
+
+  try{
+    const date = dayIso || b.datePlanifiee || todayISO();
+    wfTacheCourante = await window.tacheDuBonCommande(b.id, date, b.numeroBC || b.client || 'Intervention');
+    renderWorkflowTache();
+  }catch(err){
+    console.error('Suivi de tâche indisponible', err);
+    zone.innerHTML = `<div class="wf-bandeau"><span class="wf-meta">Suivi indisponible : ${esc(err.message||'erreur')}</span></div>`;
+  }
+}
+
+function renderWorkflowTache(){
+  const zone = document.getElementById('techModalWorkflow');
+  const t = wfTacheCourante;
+  if(!zone || !t) return;
+
+  const statut = t.statut || 'planifiee';
+  const droits = window.actionsTache(statut);
+
+  const boutons = [];
+  if(droits.peutTerminer){
+    boutons.push(`<button class="btn primary" onclick="wfMarquerRealisee()">✓ Travaux terminés</button>`);
+  }
+  if(droits.peutArbitrer){
+    boutons.push(`<button class="btn primary" onclick="wfValider(true)">✓ Valider</button>`);
+    boutons.push(`<button class="btn ghost" onclick="wfValider(false)">✕ Refuser</button>`);
+  }
+  if(statut === 'validee'){
+    boutons.push(`<button class="btn" onclick="wfPretAChiffrer()">💶 Prêt à chiffrer</button>`);
+  }
+
+  const auteur = [];
+  if(t.realisee_le) auteur.push(`Déclarés faits le ${fmtDate(String(t.realisee_le).slice(0,10))}`);
+  if(t.validee_le) auteur.push(`Validés le ${fmtDate(String(t.validee_le).slice(0,10))}`);
+
+  zone.innerHTML = `<div class="wf-bandeau">
+    <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
+    ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
+    ${auteur.length ? `<div class="wf-meta">${esc(auteur.join(' · '))}</div>` : ''}
+    ${boutons.length
+      ? `<div class="wf-actions">${boutons.join('')}</div>`
+      : `<div class="wf-meta">Aucune action disponible pour votre rôle à cette étape.</div>`}
+  </div>`;
+}
+
+async function wfRafraichir(){
+  const taches = await window.listTachesBonCommande(wfTacheCourante.bon_commande_id);
+  wfTacheCourante = taches.find(x => x.id === wfTacheCourante.id) || wfTacheCourante;
+  renderWorkflowTache();
+}
+
+async function wfMarquerRealisee(){
+  const commentaire = document.getElementById('techModalCommentaire').value || undefined;
+  try{
+    // On enregistre d'abord les constats : ils seraient perdus au changement d'état
+    await window.sauvegarderTerrain(wfTacheCourante.id, {
+      commentaire,
+      pieceACommander: document.getElementById('techModalPieceCommander').checked,
+      pieceDescription: document.getElementById('techModalPieceDetail').value || undefined,
+    });
+    await window.marquerRealisee(wfTacheCourante.id, { commentaire });
+    await wfRafraichir();
+    showToast('Travaux déclarés faits — en attente de validation.', 'success');
+  }catch(err){
+    console.error('Passage en réalisé refusé', err);
+    showToast(err.message || 'Action refusée.');
+  }
+}
+
+async function wfValider(ok){
+  let motif;
+  if(!ok){
+    // Un refus non motivé ne dit pas au technicien quoi reprendre
+    motif = prompt('Motif du refus (obligatoire) :');
+    if(!motif || !motif.trim()) return;
+  }
+  try{
+    await window.validerTache(wfTacheCourante.id, ok, motif);
+    await wfRafraichir();
+    showToast(ok ? 'Travaux validés.' : 'Travaux renvoyés au technicien.', 'success');
+  }catch(err){
+    console.error('Validation refusée', err);
+    showToast(err.message || 'Action refusée.');
+  }
+}
+
+async function wfPretAChiffrer(){
+  try{
+    await window.passerPretAChiffrer(wfTacheCourante.bon_commande_id);
+    showToast('Bon de commande prêt à chiffrer.', 'success');
+    await loadAll();
+    renderTab();
+  }catch(err){
+    console.error('Passage à chiffrer refusé', err);
+    showToast(err.message || 'Action refusée.');
+  }
+}
+
 function closeTechnicienInterventionModal(){
   document.getElementById('technicienInterventionModal').style.display = 'none';
   techModalCtx = null;

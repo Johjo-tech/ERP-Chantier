@@ -179,13 +179,22 @@ export async function tacheDuBonCommande(
   });
 }
 
-/** Actions ouvertes au rôle courant sur une tâche, dans son état actuel. */
-export function actionsTache(statut: string | null): {
+export interface ActionsTache {
   peutSaisir: boolean;
   peutTerminer: boolean;
   peutArbitrer: boolean;
-} {
-  const role = roleEffectif();
+}
+
+/**
+ * Actions ouvertes sur une tâche, selon le rôle et l'état.
+ *
+ * Le rôle est un paramètre plutôt qu'une lecture implicite : c'est ce qui rend
+ * la règle vérifiable sans monter une session.
+ */
+export function actionsTache(
+  statut: string | null,
+  role: RoleMembre | null = roleEffectif()
+): ActionsTache {
   const estTerrain = role === "technicien" || role === "sous_traitant";
   const estEncadrant = role === "admin" || role === "conducteur" || role === "secretaire";
 

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { actionsTache } from "@/integrations/session";
 import {
   MODULE_PAR_NAV,
   navAutorisee,
@@ -73,5 +74,37 @@ describe("Onglets de navigation", () => {
 
   it("refuse un onglet inconnu de la matrice", () => {
     expect(peutSurNav("admin", "onglet_inexistant")).toBe(false);
+  });
+});
+
+describe("Actions ouvertes sur une tâche de planning", () => {
+  // La règle qui compte : personne n'arbitre son propre travail.
+  const cas = [
+    { role: "technicien", statut: "planifiee", terminer: true, arbitrer: false },
+    { role: "technicien", statut: "realisee", terminer: false, arbitrer: false },
+    { role: "technicien", statut: "refusee", terminer: true, arbitrer: false },
+    { role: "conducteur", statut: "realisee", terminer: false, arbitrer: true },
+    { role: "conducteur", statut: "planifiee", terminer: true, arbitrer: false },
+    { role: "admin", statut: "realisee", terminer: false, arbitrer: true },
+    { role: "secretaire", statut: "realisee", terminer: false, arbitrer: false },
+    { role: "lecture", statut: "planifiee", terminer: false, arbitrer: false },
+  ] as const;
+
+  it.each(cas)("$role sur une tâche $statut", ({ role, statut, terminer, arbitrer }) => {
+    const droits = actionsTache(statut, role);
+    expect(droits.peutTerminer).toBe(terminer);
+    expect(droits.peutArbitrer).toBe(arbitrer);
+  });
+
+  it("verrouille une tâche validée, même pour un administrateur", () => {
+    const droits = actionsTache("validee", "admin");
+    expect(droits.peutSaisir).toBe(false);
+    expect(droits.peutTerminer).toBe(false);
+    expect(droits.peutArbitrer).toBe(false);
+  });
+
+  it("n'ouvre rien sans rôle", () => {
+    const droits = actionsTache("realisee", null);
+    expect(droits).toEqual({ peutSaisir: false, peutTerminer: false, peutArbitrer: false });
   });
 });
