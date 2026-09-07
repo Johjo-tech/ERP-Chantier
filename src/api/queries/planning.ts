@@ -121,11 +121,42 @@ export async function sauvegarderTerrain(
   if (error) throw new SupabaseError("Sauvegarde terrain refusée", error.code, error);
 }
 
+/**
+ * Transitions autorisées de la machine à états.
+ *
+ * ⚠ Ces contrôles sont un filet côté client, pas une sécurité : le navigateur
+ * est falsifiable. Les fonctions SQL acceptent aujourd'hui n'importe quelle
+ * transition — voir supabase/migrations/ pour le correctif à appliquer en base.
+ */
+const TRANSITIONS: Record<string, StatutTache[]> = {
+  realiser: ["planifiee", "refusee"],
+  arbitrer: ["realisee"],
+};
+
+async function exigerStatut(
+  tacheId: Uuid,
+  action: keyof typeof TRANSITIONS,
+  libelle: string
+): Promise<void> {
+  const tache = await getTache(tacheId);
+  if (!tache) throw new Error("Tâche introuvable.");
+
+  const attendus = TRANSITIONS[action];
+  const statut = (tache.statut ?? "planifiee") as StatutTache;
+  if (!attendus.includes(statut)) {
+    throw new Error(
+      `${libelle} : impossible depuis l'état « ${statut} » (attendu : ${attendus.join(" ou ")}).`
+    );
+  }
+}
+
 /** Le technicien déclare la tâche faite : elle part en validation. */
 export async function marquerRealisee(
   tacheId: Uuid,
   options: { commentaire?: string; dateRealisation?: string } = {}
 ): Promise<void> {
+  await exigerStatut(tacheId, "realiser", "Déclarer les travaux faits");
+
   const { error } = await supabase.rpc("tache_marquer_realisee", {
     p_tache_id: tacheId,
     p_commentaire: options.commentaire,
@@ -148,6 +179,8 @@ export async function validerTache(
   if (!ok && !motif?.trim()) {
     throw new Error("Un refus doit être motivé.");
   }
+  await exigerStatut(tacheId, "arbitrer", "Arbitrer");
+
   const { error } = await supabase.rpc("tache_valider", {
     p_tache_id: tacheId,
     p_ok: ok,
@@ -156,8 +189,21 @@ export async function validerTache(
   if (error) throw new SupabaseError("Validation refusée", error.code, error);
 }
 
-/** Travaux terminés et validés : le bon de commande peut être chiffré. */
+/**
+ * Travaux terminés et validés : le bon de commande peut être chiffré.
+ *
+ * Refuse tant qu'une tâche reste en attente : chiffrer avant arbitrage
+ * reviendrait à facturer des travaux que personne n'a contrôlés.
+ */
 export async function passerPretAChiffrer(bcId: Uuid): Promise<void> {
+  const taches = await listTachesBonCommande(bcId);
+  const enAttente = taches.filter((t) => (t.statut ?? "planifiee") !== "validee");
+  if (enAttente.length) {
+    throw new Error(
+      `${enAttente.length} tâche(s) ne sont pas encore validées par le conducteur.`
+    );
+  }
+
   const { error } = await supabase.rpc("bc_passer_pret_a_chiffrer", {
     p_bc_id: bcId,
   });

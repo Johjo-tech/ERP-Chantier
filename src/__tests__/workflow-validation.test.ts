@@ -281,3 +281,53 @@ suite("Travaux supplémentaires et constats", () => {
     expect(liste.map((t) => t.id)).not.toContain(trav.id);
   });
 });
+
+suite("Transitions interdites", () => {
+  const NOM_CLIENT = "CLIENT DE TEST";
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  let societeId: Uuid;
+  let bcId: Uuid;
+  let tacheId: Uuid;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    if (!societe) throw new Error("Société de test introuvable");
+    societeId = societe.id;
+
+    const bc = await queries.createBonCommande(societeId, {
+      client_nom: NOM_CLIENT,
+      date: aujourdhui,
+    });
+    bcId = bc.id;
+
+    tacheId = (
+      await queries.planifierTache(societeId, {
+        bon_commande_id: bcId,
+        libelle: "Contrôle des transitions",
+        date_tache: aujourdhui,
+      })
+    ).id;
+  });
+
+  it("refuse de valider des travaux jamais déclarés faits", async () => {
+    await expect(queries.validerTache(tacheId, true)).rejects.toThrow(/planifiee/);
+  });
+
+  it("refuse de chiffrer un bon dont une tâche reste en attente", async () => {
+    await expect(queries.passerPretAChiffrer(bcId)).rejects.toThrow(/pas encore validées/);
+  });
+
+  it("refuse de rouvrir une tâche déjà validée", async () => {
+    await queries.marquerRealisee(tacheId);
+    await queries.validerTache(tacheId, true);
+
+    await expect(queries.marquerRealisee(tacheId)).rejects.toThrow(/validee/);
+  });
+
+  it("autorise le chiffrage une fois toutes les tâches validées", async () => {
+    await queries.passerPretAChiffrer(bcId);
+
+    const bc = await queries.getBonCommande(bcId);
+    expect(bc?.statut_workflow).toBe("pret_a_chiffrer");
+  });
+});
