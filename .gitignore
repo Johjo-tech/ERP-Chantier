@@ -7,3 +7,5 @@ dist
 *.log
 .vite
 .output
+supabase/.temp
+supabase/.branches

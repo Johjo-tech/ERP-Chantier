@@ -1,0 +1,40 @@
+# Contrôles automatiques : un échec ici doit bloquer la fusion.
+#
+# Les variables Supabase sont factices : le build a seulement besoin qu'elles
+# existent (le client lève une erreur à l'import si elles manquent). Aucun
+# secret n'est nécessaire, et TEST_USER_* est volontairement absent — les
+# suites d'intégration se désactivent au lieu d'écrire dans une vraie base.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: https://exemple.supabase.co
+      VITE_SUPABASE_ANON_KEY: cle-factice-ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` impose le lockfile : le build de la CI est celui du poste
+      - run: npm ci
+
+      - name: Types
+        run: npm run type-check
+
+      - name: Tests
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build
