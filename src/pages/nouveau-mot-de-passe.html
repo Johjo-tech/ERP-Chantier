@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ERP Chantier - Connexion</title>
-  <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nouveau mot de passe — ERP Chantier</title>
+<style>
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
@@ -138,135 +138,77 @@
   </style>
 </head>
 <body>
-  <div class="login-container">
+  <div class="login-card">
     <div class="login-header">
-      <h1>🏗️ ERP Chantier</h1>
-      <p>Gestion complète de chantiers</p>
+      <h1>Nouveau mot de passe</h1>
+      <p>Choisissez un mot de passe d'au moins 8 caractères.</p>
     </div>
 
-    <form id="loginForm">
+    <form id="pwdForm">
       <div class="form-group">
-        <label for="email">Email</label>
-        <input
-          type="email"
-          id="email"
-          name="email"
-          placeholder="votre@email.com"
-          required
-          autocomplete="email"
-        >
+        <label for="password">Nouveau mot de passe</label>
+        <input type="password" id="password" required autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label for="confirmation">Confirmation</label>
+        <input type="password" id="confirmation" required autocomplete="new-password" placeholder="••••••••">
       </div>
 
-      <div class="form-group">
-        <label for="password">Mot de passe</label>
-        <input
-          type="password"
-          id="password"
-          name="password"
-          placeholder="••••••••"
-          required
-          autocomplete="current-password"
-        >
-      </div>
-
-      <button type="submit" class="btn-login" id="btnLogin">
-        Se connecter
-      </button>
+      <button type="submit" class="btn-login" id="btnSave">Enregistrer</button>
 
       <div class="error-message" id="errorMessage"></div>
       <div class="success-message" id="successMessage"></div>
-      <div class="loading" id="loading">Connexion en cours...</div>
+      <div class="loading" id="loading">Enregistrement…</div>
     </form>
 
     <div style="margin-top: 22px; text-align: center;">
-      <button type="button" id="btnForgot"
-              style="background:none; border:none; color:#6B7686; font-size:13px; cursor:pointer; text-decoration:underline;">
-        Mot de passe oublié ?
-      </button>
+      <a href="/login.html" style="color:#6B7686; font-size:13px;">Retour à la connexion</a>
     </div>
   </div>
 
   <script type="module">
-    import { supabase, demanderReinitialisation } from '@/api/client';
+    /* Supabase pose une session « recovery » en arrivant sur cette page :
+       il suffit alors d'appeler updateUser({ password }). Sans cette session,
+       le lien est expiré ou déjà consommé. */
+    import { supabase, definirMotDePasse } from '@/api/client';
 
-    const form = document.getElementById('loginForm');
-    const emailInput = document.getElementById('email');
-    const passwordInput = document.getElementById('password');
-    const btnLogin = document.getElementById('btnLogin');
+    const form = document.getElementById('pwdForm');
+    const password = document.getElementById('password');
+    const confirmation = document.getElementById('confirmation');
+    const btnSave = document.getElementById('btnSave');
     const errorMessage = document.getElementById('errorMessage');
     const successMessage = document.getElementById('successMessage');
-    const btnForgot = document.getElementById('btnForgot');
     const loading = document.getElementById('loading');
+
+    function showError(m){ successMessage.classList.remove('show'); errorMessage.textContent = m; errorMessage.classList.add('show'); }
+    function showSuccess(m){ errorMessage.classList.remove('show'); successMessage.textContent = m; successMessage.classList.add('show'); }
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        showError("Ce lien est expiré ou déjà utilisé. Demandez-en un nouveau depuis la page de connexion.");
+        btnSave.disabled = true;
+      }
+    })();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (password.value.length < 8) { showError('8 caractères minimum.'); return; }
+      if (password.value !== confirmation.value) { showError('Les deux saisies diffèrent.'); return; }
 
-      const email = emailInput.value.trim();
-      const password = passwordInput.value;
-
-      if (!email || !password) {
-        showError('Veuillez remplir tous les champs');
-        return;
-      }
-
-      btnLogin.disabled = true;
+      btnSave.disabled = true;
       loading.classList.add('show');
-      errorMessage.classList.remove('show');
-
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        if (data.session) {
-          // Rediriger vers l'app
-          window.location.href = '/';
-        }
+        await definirMotDePasse(password.value);
+        showSuccess('Mot de passe enregistré. Redirection…');
+        setTimeout(() => { window.location.href = '/'; }, 1200);
       } catch (err) {
-        const message = err.message || 'Erreur de connexion. Vérifiez vos identifiants.';
-        showError(message);
-        btnLogin.disabled = false;
+        showError(err.message || 'Enregistrement impossible.');
+        btnSave.disabled = false;
+      } finally {
         loading.classList.remove('show');
       }
     });
-
-    function showError(message) {
-      successMessage.classList.remove('show');
-      errorMessage.textContent = message;
-      errorMessage.classList.add('show');
-    }
-
-    function showSuccess(message) {
-      errorMessage.classList.remove('show');
-      successMessage.textContent = message;
-      successMessage.classList.add('show');
-    }
-
-    /* Réinitialisation : Supabase envoie un lien qui repose une session
-       « recovery » sur nouveau-mot-de-passe.html. */
-    btnForgot.addEventListener('click', async () => {
-      const email = emailInput.value.trim();
-      if (!email) {
-        showError('Saisissez votre email, puis cliquez à nouveau.');
-        emailInput.focus();
-        return;
-      }
-      btnForgot.disabled = true;
-      try {
-        await demanderReinitialisation(email);
-        showSuccess('Si un compte existe pour ' + email + ', un lien de réinitialisation vient d\'être envoyé.');
-      } catch (err) {
-        showError(err.message || 'Envoi impossible. Réessayez dans un instant.');
-      } finally {
-        btnForgot.disabled = false;
-      }
-    });
-
   </script>
 </body>
 </html>

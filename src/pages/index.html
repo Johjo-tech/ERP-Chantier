@@ -1023,12 +1023,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <div class="user-menu-wrap">
       <button class="brand user-menu-btn" onclick="toggleUserMenu(event)"><span class="brand-dot"></span><span class="user-menu-name">Aissa Choumane<span class="role-badge" id="roleBadgeDesktop"></span></span><span class="user-menu-chevron">▾</span></button>
       <div class="user-menu" id="userMenu">
-        <div class="user-menu-section-title">Accès</div>
-        <button onclick="setRole('administrateur')">👑 Administrateur</button>
-        <button onclick="setRole('conducteur')">🦺 Conducteur de travaux</button>
-        <button onclick="setRole('technicien')">🔧 Technicien</button>
-        <button onclick="setRole('soustraitant')">🏗️ Sous-traitant</button>
-        <button onclick="setRole('client')">👥 Accès client</button>
+        <div id="userMenuSocietes"></div>
+        <div id="userMenuRoles"></div>
         <div class="user-menu-sep"></div>
         <button onclick="logOut()">Se déconnecter</button>
       </div>
@@ -1056,11 +1052,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
         <button class="brand user-menu-btn" onclick="toggleUserMenu(event)"><span class="brand-dot"></span><span class="user-menu-name">Aissa Choumane<span class="role-badge" id="roleBadgeMobile"></span></span><span class="user-menu-chevron">▾</span></button>
         <div class="user-menu" id="userMenuMobile">
           <div class="user-menu-section-title">Accès</div>
-          <button onclick="setRole('administrateur')">👑 Administrateur</button>
-          <button onclick="setRole('conducteur')">🦺 Conducteur de travaux</button>
-          <button onclick="setRole('technicien')">🔧 Technicien</button>
-        <button onclick="setRole('soustraitant')">🏗️ Sous-traitant</button>
-        <button onclick="setRole('client')">👥 Accès client</button>
+          <div id="userMenuSocietesMobile"></div>
+          <div id="userMenuRolesMobile"></div>
           <div class="user-menu-sep"></div>
           <button onclick="logOut()">Se déconnecter</button>
         </div>
@@ -1382,12 +1375,23 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   </div>
 </div>
 
+<script>
+/* Pont vers la couche données Supabase (src/main.ts).
+   Les scripts `type=module` sont différés : ce script classique publie la
+   promesse que le démarrage de l'app attend avant de lire quoi que ce soit. */
+window.__erpBridgeReady = new Promise(function(resolve, reject){
+  window.__erpBridge = { resolve: resolve, reject: reject };
+});
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
-const SOCIETES = [
+/* Alimenté au démarrage par les sociétés que la RLS rend visibles
+   (voir src/integrations/session.ts). La liste ci-dessous n'est qu'un repli
+   d'affichage si le pont n'a pas encore répondu. */
+let SOCIETES = [
   {id:'kta', nom:'KTA Plomberie'},
   {id:'alkia', nom:'Alkia Menuiserie Serrurerie'},
   {id:'chm', nom:'CHM Entretien'},
@@ -1427,24 +1431,36 @@ const NAV = [
   {id:'statistiques', label:'Statistiques'},
   {id:'parametres', label:'Réglages'}
 ];
+/* Rôles de l'énumération `role_membre` de la base. Les onglets ne sont plus
+   déclarés ici : c'est la matrice de droits (src/integrations/permissions.ts,
+   miroir de la fonction SQL `a_permission`) qui décide. */
 const ROLES = {
-  administrateur: { label:'Administrateur', tabs: null },
-  conducteur: { label:'Conducteur de travaux', tabs: NAV.map(n=>n.id).filter(id=>id!=='factures') },
-  technicien: { label:'Technicien', tabs: ['planning'] },
-  soustraitant: { label:'Sous-traitant', tabs: ['dashboard','planning','devis','factures','interventions','chantiers','parametres'] },
-  client: { label:'Client', tabs: ['bonsCommande','parametres'] },
+  admin: { label:'Administrateur' },
+  secretaire: { label:'Secrétaire' },
+  conducteur: { label:'Conducteur de travaux' },
+  technicien: { label:'Technicien' },
+  lecture: { label:'Lecture seule' },
+  sous_traitant: { label:'Sous-traitant (entreprise)' },
 };
+function libelleRole(role){ return (ROLES[role]||{}).label || 'Sans rôle'; }
 function navPourRole(){
-  const role = ROLES[state.currentRole||'administrateur'];
-  if(!role || !role.tabs) return NAV;
-  return NAV.filter(n=>role.tabs.includes(n.id));
+  const autorises = window.ongletsAutorises
+    ? window.ongletsAutorises(NAV.map(n=>n.id))
+    : NAV.map(n=>n.id);
+  return NAV.filter(n=>autorises.includes(n.id));
 }
+/* Simulation d'affichage, réservée aux administrateurs et sans effet sur la
+   base : la RLS continue de s'appliquer avec le rôle réel. */
 async function setRole(role){
-  state.currentRole = role;
-  document.body.classList.toggle('role-technicien', role==='technicien');
+  if(!window.simulerRole || !window.simulerRole(role==='admin' ? null : role)){
+    showToast("Seul un administrateur peut simuler un autre rôle.");
+    return;
+  }
+  state.currentRole = window.roleEffectif ? window.roleEffectif() : role;
+  document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
   toggleUserMenu();
-  const tabsAutorises = ROLES[role].tabs;
-  if(tabsAutorises && !tabsAutorises.includes(state.tab)) state.tab = tabsAutorises[0];
+  const autorises = navPourRole().map(n=>n.id);
+  if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
   renderShell();
   renderTab();
 }
@@ -1510,7 +1526,7 @@ function heureOptions(current){
 }
 
 let state = {
-  societeId: 'kta', tab: 'dashboard', plusTab: 'clients', currentRole: 'administrateur', devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
+  societeId: 'kta', tab: 'dashboard', plusTab: 'clients', reglagesTab: 'organisation', currentRole: null, devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
   devisConducteurFilter: '', factureConducteurFilter: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], articles: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
@@ -1715,42 +1731,31 @@ function moneyDisplay(n){ return state.ghostMode ? '••• €' : money(n); }
 function computeNotifications(){
   const soc = state.societeId;
   const notifs = [];
-  // Véhicules : contrôle technique
-  state.vehicules.filter(v=>v.societeId===soc && !v.vendu).forEach(v=>{
-    const j = joursAvant(v.prochainCT);
-    if(j!=null && j<=30){
-      notifs.push({
-        id: `veh_ct_${v.id}`, icon:'🚐', urgent: j<0,
-        texte: `${v.nom} — contrôle technique ${j<0? 'expiré' : `dans ${j} j`} (${fmtDate(v.prochainCT)})`,
-        onclick: `setTab('vehicules')`
-      });
-    }
+  /* Véhicules et RH : le calcul vit dans src/integrations/alertes.ts, calé sur
+     les colonnes réelles. L'ancien code lisait `v.prochainCT` et
+     `s.habilitations[]`, qui n'existent pas en base — ces alertes ne se
+     déclenchaient jamais. */
+  const versNotif = (a, icon, onglet) => ({
+    id: a.id, icon, urgent: a.niveau === 'danger',
+    texte: `${a.libelle} — ${a.jours < 0 ? 'expiré' : `dans ${a.jours} j`}${a.echeance ? ` (${fmtDate(a.echeance)})` : ''}`,
+    onclick: `setTab('${onglet}')`
   });
-  // RH : habilitations, carte BTP, visite médicale
+
+  state.vehicules.filter(v=>v.societeId===soc).forEach(v=>{
+    window.alertesVehicule(v).forEach(a=> notifs.push(versNotif(a, '🚐', 'vehicules')));
+  });
+
   state.salaries.filter(s=>s.societeId===soc).forEach(s=>{
-    const nom = `${s.prenom||''} ${s.nom||''}`.trim();
-    (s.habilitations||[]).forEach(h=>{
-      const j = joursAvant(h.dateExpiration);
-      if(j!=null && j<=30){
-        notifs.push({ id:`sal_hab_${s.id}_${h.id}`, icon:'👷', urgent: j<0, texte: `${nom} — ${h.nom||'habilitation'} ${j<0?'expirée':`dans ${j} j`}`, onclick:`setTab('rh')` });
-      }
-    });
-    const jCarte = joursAvant(s.carteBtpValidite);
-    if(jCarte!=null && jCarte<=30) notifs.push({ id:`sal_carte_${s.id}`, icon:'👷', urgent: jCarte<0, texte: `${nom} — carte BTP ${jCarte<0?'expirée':`dans ${jCarte} j`}`, onclick:`setTab('rh')` });
-    const jVisite = joursAvant(s.visiteMedicaleProchaine);
-    if(jVisite!=null && jVisite<=30) notifs.push({ id:`sal_visite_${s.id}`, icon:'👷', urgent: jVisite<0, texte: `${nom} — visite médicale ${jVisite<0?'expirée':`dans ${jVisite} j`}`, onclick:`setTab('rh')` });
+    window.alertesSalarie(s, s.habilitations||[]).forEach(a=> notifs.push(versNotif(a, '👷', 'rh')));
+  });
+
+  state.documents.filter(d=>d.societeId===soc).forEach(d=>{
+    window.alertesDocument(d).forEach(a=> notifs.push(versNotif(a, '📑', 'parametres')));
   });
   // Bons de commande en retard
   const today = todayISO();
   state.bonsCommande.filter(b=>b.societeId===soc && b.dateFinTravaux && b.dateFinTravaux<today).forEach(b=>{
     notifs.push({ id:`bc_retard_${b.id}`, icon:'📦', urgent:true, texte: `${b.numeroBC||b.client||'BC'} — en retard (échéance ${fmtDate(b.dateFinTravaux)})`, onclick:`setTab('bonsCommande')` });
-  });
-  // Documents légaux de l'entreprise
-  ((state.settings[soc]||{}).documentsLegaux||[]).forEach(d=>{
-    const j = joursAvant(d.dateExpiration);
-    if(j!=null && j<=30){
-      notifs.push({ id:`doclegal_${d.id}`, icon:'📑', urgent: j<0, texte: `${d.type} — ${j<0?'expiré':`expire dans ${j} j`}`, onclick:`setTab('parametres')` });
-    }
   });
   // Documents sous-traitants
   state.sousTraitants.filter(st=>st.societeId===soc).forEach(st=>{
@@ -1853,7 +1858,12 @@ function toggleGhostMode(checked){
   renderTab();
   showToast(checked ? 'Mode discret activé' : 'Mode discret désactivé', 'success', 2000);
 }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+/* Date civile locale : toISOString() bascule en UTC et renvoie la veille
+   avant 01h/02h à Paris. */
+function todayISO(){ return dateLocaleISO(new Date()); }
+function dateLocaleISO(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function fmtDate(d){ if(!d) return '—'; const p = d.split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function societeName(id){ const s = SOCIETES.find(x=>x.id===id); return s? s.nom : id; }
@@ -1895,12 +1905,54 @@ function badgeClass(statut){
 function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:'interventions',bonCommande:'bonsCommande',client:'clients',article:'articles',document:'documents',reglement:'reglements',interlocuteur:'interlocuteurs',conducteur:'conducteurs',technicien:'techniciens',metierPerso:'metiersPerso',sousTraitant:'sousTraitants',chantier:'chantiers',salarie:'salaries',vehicule:'vehicules',materiel:'materiels'}[type]; }
 
 /* ---------- Rendu de la coquille ---------- */
+/* Menu utilisateur : sociétés réellement accessibles, et simulation de rôle
+   réservée à l'administrateur (sans effet sur la base, la RLS fait foi). */
+function renderUserMenu(){
+  const societes = window.societesAccessibles ? window.societesAccessibles() : [];
+  /* La section est toujours affichée, même avec une seule société : sinon on ne
+     distingue pas « accès limité à une société » de « sélecteur cassé ». */
+  const htmlSocietes = `<div class="user-menu-section-title">Société</div>`
+    + (societes.length
+        ? societes.map(soc =>
+            `<button onclick="changerSociete('${esc(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
+          ).join('')
+          + (societes.length === 1
+              ? `<div style="padding:6px 12px; color:var(--text-dim); font-size:11px; line-height:1.4;">Une seule société vous est rattachée. Pour en obtenir d'autres, un administrateur doit vous ajouter dans <b>membres_societe</b>.</div>`
+              : '')
+        : `<div style="padding:6px 12px; color:var(--danger); font-size:11px;">Aucune société rattachée à ce compte.</div>`);
+
+  const estAdmin = window.roleReel && window.roleReel() === 'admin';
+  const htmlRoles = estAdmin
+    ? `<div class="user-menu-section-title">Voir en tant que</div>` +
+      [['admin','👑 Administrateur'],['secretaire','📋 Secrétaire'],['conducteur','🦺 Conducteur de travaux'],
+       ['technicien','🔧 Technicien'],['sous_traitant','🏗️ Sous-traitant'],['lecture','👀 Lecture seule']]
+      .map(([id,label]) => `<button onclick="setRole('${id}')">${state.currentRole===id?'✓ ':''}${label}</button>`).join('')
+    : '';
+
+  [['userMenuSocietes','userMenuRoles'],['userMenuSocietesMobile','userMenuRolesMobile']].forEach(([idSoc,idRole])=>{
+    const elSoc = document.getElementById(idSoc);
+    if(elSoc) elSoc.innerHTML = htmlSocietes;
+    const elRole = document.getElementById(idRole);
+    if(elRole) elRole.innerHTML = htmlRoles;
+  });
+
+  const email = window.utilisateurCourant ? window.utilisateurCourant() : '';
+  if(email){
+    document.querySelectorAll('.user-menu-name').forEach(el=>{
+      const badge = el.querySelector('.role-badge');
+      el.textContent = email;
+      if(badge) el.appendChild(badge);
+    });
+  }
+}
+
 function renderShell(){
-  const roleLabel = ROLES[state.currentRole||'administrateur'].label;
+  const roleLabel = libelleRole(state.currentRole);
   ['roleBadgeDesktop','roleBadgeMobile'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.textContent = roleLabel;
   });
+  renderUserMenu();
   document.getElementById('navDesktop').innerHTML = navPourRole().map(n=>`
     <button class="nav-item ${n.id===state.tab?'active':''}" onclick="setTab('${n.id}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n.id]}</svg>
@@ -2018,9 +2070,32 @@ function toggleUserMenu(ev){
   if(menu) menu.classList.add('open');
 }
 document.addEventListener('click', ()=>{ document.querySelectorAll('.user-menu').forEach(m=>m.classList.remove('open')); });
-function logOut(){
-  showToast('Déconnexion — à venir avec la création de compte.', 'success');
+async function logOut(){
   document.querySelectorAll('.user-menu').forEach(m=>m.classList.remove('open'));
+  try{
+    await window.seDeconnecter();
+    // `watchAuthState` renvoie vers /login.html dès la session fermée
+  }catch(e){
+    console.error('Déconnexion impossible', e);
+    showToast('Déconnexion impossible — réessayez.');
+  }
+}
+
+/* Bascule de société : refusée si la RLS ne donne pas accès. */
+async function changerSociete(code){
+  document.querySelectorAll('.user-menu').forEach(m=>m.classList.remove('open'));
+  if(code === state.societeId) return;
+  if(!window.choisirSociete || !window.choisirSociete(code)){
+    showToast("Vous n'avez pas accès à cette société.");
+    return;
+  }
+  state.societeId = code;
+  state.currentRole = window.roleEffectif();
+  document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
+  const autorises = navPourRole().map(n=>n.id);
+  if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
+  renderShell();
+  renderTab();
 }
 function setPlusTab(id){ state.plusTab = id; renderTab(); }
 function renderPlus(){
@@ -2845,7 +2920,7 @@ function applyDelaiPaiement(clientNom){
   const dateEl = document.getElementById('f_date');
   const base = dateEl && dateEl.value ? new Date(dateEl.value+'T00:00:00') : new Date();
   base.setDate(base.getDate() + delai);
-  echEl.value = base.toISOString().slice(0,10);
+  echEl.value = dateLocaleISO(base);
 }
 function bcNumeroDepuisId(bonCommandeId){
   const b = state.bonsCommande.find(x=>x.id===bonCommandeId);
@@ -4334,7 +4409,13 @@ function renderBonsCommande(){
   if(state.currentRole==='client') return renderBonsCommandeClient();
   const list = bonCommandeListItems();
   return `
-    <div class="page-head"><h1>Bons de commande</h1>${state.formOpen.bonCommande? '' : '<button class="btn primary" onclick="openForm(\'bonCommande\')">+ Nouveau bon de commande</button>'}</div>
+    <div class="page-head"><h1>Bons de commande</h1>${state.formOpen.bonCommande? '' : `
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <label class="btn" style="cursor:pointer;">📄 Importer un BC (PDF ou photo)
+          <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="importerBonCommande(this.files[0], this)">
+        </label>
+        <button class="btn primary" onclick="openForm('bonCommande')">+ Nouveau bon de commande</button>
+      </div>`}</div>
     ${state.formOpen.bonCommande ? '' : `<div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
       <input type="text" id="bonCommandeSearchInput" style="flex:1; min-width:220px;" value="${esc(state.bonCommandeSearch||'')}" placeholder="Rechercher : client, n° BC, adresse, montant…" oninput="filterBonsCommandeList(this.value)" onkeydown="searchEnterCycle(event,'bonCommande')">
       <select style="width:auto; min-width:180px;" onchange="filterBonCommandeConducteur(this.value)">${conducteurFilterOptions(state.bonCommandeConducteurFilter)}</select>
@@ -4813,6 +4894,13 @@ function bonCommandeForm(){
   return `
   <div class="form-panel form-panel-v2">
     <h3>${isSAV? (e.id? 'Modifier le SAV' : 'Nouveau SAV') : (e.id? 'Modifier le bon de commande' : 'Nouveau bon de commande')}</h3>
+    ${(isSAV || e.id)? '' : `<div class="ocr-zone" style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2, #FF6A1A); border-radius:10px; background:rgba(255,106,26,.06);">
+      <label class="btn primary" style="cursor:pointer;">📄 Lire un bon de commande (PDF ou photo)
+        <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="lireBonCommande(this.files[0], this)">
+      </label>
+      <small style="display:block; margin-top:6px; color:var(--text-dim); font-size:11.5px;">Le formulaire est prérempli à partir du document — relisez et corrigez avant d'enregistrer.</small>
+      <div id="ocrStatut" style="margin-top:8px; font-size:12px;"></div>
+    </div>`}
     ${(e.id || isSAV)? '' : `<div class="plus-subnav" style="margin-bottom:16px;">
       <button class="plus-subnav-btn ${(!sansBC && !enAttenteBC)?'active':''}" onclick="setBCMode('normal')">Nouveau bon de commande</button>
       <button class="plus-subnav-btn ${sansBC?'active':''}" onclick="setBCMode('sansBC')">Sans bon de commande</button>
@@ -4855,7 +4943,13 @@ function bonCommandeForm(){
       <div class="form-section-head"><span class="form-section-ico"></span>Lieu & locataire</div>
       <div class="field-grid">
         <div class="address-trio">
-          <div class="field"><label>Adresse</label><input type="text" id="bc_adresse" autocomplete="off" value="${esc(e.adresse)}" placeholder="Adresse d'intervention"></div>
+          <div class="field" style="position:relative;">
+            <label>Adresse</label>
+            <input type="text" id="bc_adresse" autocomplete="off" value="${esc(e.adresse)}" placeholder="Adresse d'intervention" data-suggest="bcAdresseSuggestions"
+                   oninput="searchAdresse(this, {adresse:'bc_adresse', codePostal:'bc_codePostal', ville:'bc_ville'})"
+                   onblur="setTimeout(()=>{const b=document.getElementById('bcAdresseSuggestions'); if(b) b.style.display='none';},150)">
+            <div id="bcAdresseSuggestions" class="suggest-box"></div>
+          </div>
           <div class="field"><label>Code postal</label><input type="text" id="bc_codePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'bc_ville')"></div>
           <div class="field"><label>Ville</label><input type="text" id="bc_ville" autocomplete="off" value="${esc(e.ville)}"></div>
         </div>
@@ -7418,19 +7512,63 @@ function renderParametres(){
       </div>
     </div>
 
-    ${renderInfosEntrepriseSection()}
-    ${renderDocumentsLegauxSection()}
-    ${renderConducteursSection()}
-    ${renderTechniciensSection()}
-    ${renderSousTraitantsSection()}
-    ${renderMetiersSection()}
-    ${renderArticlesSection()}
+    ${renderReglagesNav()}
+    <div id="reglagesContenu">${renderReglagesOnglet()}</div>
 
     <footer class="note">
-      Vérifiez le taux de TVA applicable selon la nature des travaux (une attestation du client est requise pour les taux réduits de 5,5 % et 10 % sur des logements de plus de 2 ans).<br><br>
-      Ce prototype partage ses données (devis, factures, interventions, clients, articles, documents) avec toute personne disposant du lien de cette page — elles ne sont pas liées à un compte individuel.
+      Vérifiez le taux de TVA applicable selon la nature des travaux (une attestation du client est requise pour les taux réduits de 5,5 % et 10 % sur des logements de plus de 2 ans).
     </footer>
   `;
+}
+
+/* ---------- Réglages : navigation par onglets ----------
+   Groupés comme dans chantier-mate-ease, pour que les deux applications se
+   parcourent de la même façon. */
+const REGLAGES_GROUPES = [
+  { titre:'Société', items:[
+    {id:'organisation', label:'Organisation', icone:'🏢', desc:"Identité légale et coordonnées"},
+    {id:'legaux', label:'Documents légaux', icone:'📄', desc:'Kbis, assurances, URSSAF'},
+  ]},
+  { titre:'Documents', items:[
+    {id:'documents', label:'Devis & factures', icone:'🧾', desc:'Valeurs par défaut'},
+    {id:'numerotation', label:'Numérotation', icone:'🔢', desc:'Compteurs par année'},
+  ]},
+  { titre:'Référentiels', items:[
+    {id:'travaux', label:'Travaux & unités', icone:'🛠️', desc:'Métiers et unités'},
+    {id:'articles', label:'Articles', icone:'📦', desc:'Catalogue de prix'},
+    {id:'intervenants', label:'Intervenants', icone:'🦺', desc:'Conducteurs, techniciens, sous-traitants'},
+    {id:'rh', label:'RH', icone:'🧑‍🔧', desc:'Seuils d\'alerte'},
+    {id:'vehicules', label:'Véhicules', icone:'🚚', desc:'Seuils d\'alerte'},
+    {id:'notifications', label:'Notifications', icone:'🔔', desc:'Alertes et destinataires'},
+  ]},
+];
+
+function setReglagesTab(id){ state.reglagesTab = id; renderTab(); }
+
+function renderReglagesNav(){
+  const actif = state.reglagesTab || 'organisation';
+  return `<div class="plus-subnav" style="flex-wrap:wrap; gap:6px; margin-bottom:16px;">
+    ${REGLAGES_GROUPES.map(g=>`
+      <span style="align-self:center; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); margin:0 4px 0 8px;">${esc(g.titre)}</span>
+      ${g.items.map(o=>`<button class="plus-subnav-btn ${o.id===actif?'active':''}" onclick="setReglagesTab('${o.id}')" title="${esc(o.desc)}">${o.icone} ${esc(o.label)}</button>`).join('')}
+    `).join('')}
+  </div>`;
+}
+
+function renderReglagesOnglet(){
+  switch(state.reglagesTab || 'organisation'){
+    case 'organisation':  return renderInfosEntrepriseSection();
+    case 'legaux':        return renderDocumentsLegauxSection();
+    case 'documents':     return renderReglagesDocumentsSection();
+    case 'numerotation':  return renderNumerotationSection();
+    case 'travaux':       return renderMetiersSection() + renderUnitesSection();
+    case 'articles':      return renderArticlesSection();
+    case 'intervenants':  return renderConducteursSection() + renderTechniciensSection() + renderSousTraitantsSection();
+    case 'rh':            return renderSeuilsSection('rh');
+    case 'vehicules':     return renderSeuilsSection('vehicules');
+    case 'notifications': return renderNotificationsSection();
+    default:              return renderInfosEntrepriseSection();
+  }
 }
 function renderInfosEntrepriseSection(){
   const s = state.settings[state.societeId] || {};
@@ -7438,12 +7576,18 @@ function renderInfosEntrepriseSection(){
     <div class="card-title" style="margin-bottom:10px;">🏢 Informations de l'entreprise</div>
     <div class="card-sub" style="margin-bottom:14px;">Utilisées dans l'en-tête de vos devis/factures et pour générer automatiquement des documents comme le PPSPS.</div>
     <div class="field-grid">
-      <div class="field"><label>Adresse</label><input type="text" id="ie_adresse" value="${esc(s.adresse)}"></div>
+      <div class="field full" style="position:relative;">
+        <label>Adresse</label>
+        <input type="text" id="ie_adresse" autocomplete="off" value="${esc(s.adresse)}" data-suggest="ieAdresseSuggestions"
+               oninput="searchAdresse(this, {adresse:'ie_adresse', codePostal:'ie_codePostal', ville:'ie_ville'})"
+               onblur="setTimeout(()=>{const b=document.getElementById('ieAdresseSuggestions'); if(b) b.style.display='none';},150)">
+        <div id="ieAdresseSuggestions" class="suggest-box"></div>
+      </div>
       <div class="field"><label>Code postal</label><input type="text" id="ie_codePostal" value="${esc(s.codePostal)}"></div>
       <div class="field"><label>Ville</label><input type="text" id="ie_ville" value="${esc(s.ville)}"></div>
       <div class="field"><label>Téléphone</label><input type="text" id="ie_telephone" value="${esc(s.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="ie_email" value="${esc(s.email)}"></div>
-      <div class="field"><label>SIRET</label><input type="text" id="ie_siret" value="${esc(s.siret)}"></div>
+      ${champSiretHTML('ie_siret', s.siret, {adresse:'ie_adresse', codePostal:'ie_codePostal', ville:'ie_ville'})}
       <div class="field"><label>Nom du gérant / représentant</label><input type="text" id="ie_gerant" value="${esc(s.gerant)}"></div>
       <div class="field"><label>Téléphone du gérant</label><input type="text" id="ie_gerantTelephone" value="${esc(s.gerantTelephone)}"></div>
     </div>
@@ -7456,6 +7600,143 @@ function renderInfosEntrepriseSection(){
   </div>`;
 }
 const TYPES_DOC_LEGAUX = ['KBIS','Assurance décennale','Assurance RC Pro','Attestation de vigilance URSSAF','Qualibat','Attestation fiscale','Autre'];
+/* ---------- Réglages : sections par onglet ----------
+   Chaque section n'écrit que les champs présents à l'écran : `saveReglages()`
+   fusionne avec l'existant, pour qu'un onglet non affiché ne soit pas effacé. */
+function reglagesCourants(){
+  return (state.settings[state.societeId]||{}).reglages || window.REGLAGES_DEFAUT;
+}
+
+function renderReglagesDocumentsSection(){
+  const d = reglagesCourants().documents;
+  return `<div class="card">
+    <div class="card-title" style="margin-bottom:10px;">🧾 Valeurs par défaut des devis et factures</div>
+    <div class="card-sub" style="margin-bottom:14px;">Appliquées aux nouveaux documents de ${esc(societeName(state.societeId))}.</div>
+    <div class="field-grid">
+      <div class="field"><label>Validité des devis (jours)</label><input type="number" min="0" id="rg_validiteDevis" value="${d.validiteDevisJours}"></div>
+      <div class="field"><label>Délai de paiement (jours)</label><input type="number" min="0" id="rg_delaiPaiement" value="${d.delaiPaiementJours}"></div>
+      <div class="field"><label>TVA par défaut (%)</label><input type="number" min="0" step="0.1" id="rg_tva" value="${d.tvaDefaut}"></div>
+      <div class="field"><label>Couleur des documents</label><input type="color" id="rg_couleur" value="${esc(d.couleurAccent)}"></div>
+      <div class="field full"><label>Mention d'acceptation (devis)</label><input type="text" id="rg_mentionAcceptation" value="${esc(d.mentionAcceptation)}"></div>
+      <div class="field full"><label>Conditions affichées sur les devis</label><textarea id="rg_conditionsDevis" style="min-height:60px;">${esc(d.conditionsDevis)}</textarea></div>
+      <div class="field full"><label>Mentions complémentaires (factures)</label><textarea id="rg_mentionsComplementaires" style="min-height:60px;">${esc(d.mentionsComplementaires)}</textarea></div>
+      <div class="field full"><label>Pied de page des documents</label><input type="text" id="rg_piedDePage" value="${esc(d.piedDePage)}"></div>
+      <div class="field full"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="rg_afficherIban" ${d.afficherIban?'checked':''}> Rappeler l'IBAN sur les factures</label></div>
+    </div>
+    <div style="margin-top:16px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
+  </div>`;
+}
+
+function renderUnitesSection(){
+  const r = reglagesCourants();
+  return `<div class="card" style="margin-top:22px;">
+    <div class="card-title" style="margin-bottom:10px;">📏 Unités</div>
+    <div class="card-sub" style="margin-bottom:12px;">Proposées dans les lignes de devis, factures et bons de commande.</div>
+    <div class="field full"><input type="text" id="rg_unites" value="${esc(r.unites.join(', '))}" placeholder="U, ml, m², h…"></div>
+    <small style="color:var(--text-dim); font-size:11px;">Séparées par des virgules. Laissez vide pour revenir à la liste par défaut.</small>
+    <div style="margin-top:14px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
+  </div>`;
+}
+
+/* Seuils : RH et véhicules puisent dans la même table, filtrée par domaine. */
+const SEUILS_PAR_DOMAINE = {
+  rh: ['carteBtp','visiteMedicale','habilitation','documentLegal'],
+  vehicules: ['vehiculeCarte','vehiculeControle'],
+};
+
+function renderSeuilsSection(domaine){
+  const seuils = reglagesCourants().seuils;
+  const libelles = window.LIBELLES_SEUILS;
+  const cles = SEUILS_PAR_DOMAINE[domaine] || Object.keys(seuils);
+  const titre = domaine === 'rh' ? "🧑‍🔧 Seuils d'alerte RH" : "🚚 Seuils d'alerte véhicules";
+
+  return `<div class="card">
+    <div class="card-title" style="margin-bottom:10px;">${titre}</div>
+    <div class="card-sub" style="margin-bottom:14px;">Nombre de jours avant échéance à partir duquel l'alerte apparaît dans la cloche.</div>
+    <div class="field-grid">
+      ${cles.map(k=>`<div class="field"><label>${esc(libelles[k]||k)}</label><input type="number" min="0" id="rg_seuil_${esc(k)}" value="${seuils[k]}"></div>`).join('')}
+    </div>
+    <div style="margin-top:16px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
+  </div>`;
+}
+
+function renderNotificationsSection(){
+  const n = reglagesCourants().notifications;
+  return `<div class="card">
+    <div class="card-title" style="margin-bottom:10px;">🔔 Notifications</div>
+    <div class="field-grid">
+      <div class="field full"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="rg_notifActives" ${n.actives?'checked':''}> Afficher les alertes d'échéance</label></div>
+      <div class="field full"><label>Destinataires des rappels (emails séparés par des virgules)</label><input type="text" id="rg_notifDestinataires" value="${esc(n.destinataires)}" placeholder="conducteur@exemple.fr, rh@exemple.fr"></div>
+    </div>
+    <div style="margin-top:16px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
+  </div>`;
+}
+
+/* Compteurs de numérotation : ils vivent dans la table `compteurs`, incrémentés
+   par la fonction SQL `prochain_numero`. L'écran les montre sans les modifier —
+   les éditer à la main provoquerait des doublons de numéros. */
+function renderNumerotationSection(){
+  return `<div class="card">
+    <div class="card-title" style="margin-bottom:10px;">🔢 Numérotation</div>
+    <div class="card-sub" style="margin-bottom:12px;">Les numéros sont attribués par la base, de façon atomique : deux utilisateurs qui créent un devis en même temps ne peuvent pas obtenir le même numéro.</div>
+    <table class="table">
+      <thead><tr><th>Document</th><th>Format</th></tr></thead>
+      <tbody>
+        ${[['Devis','DEV'],['Facture','FAC'],['Rapport d\'intervention','RAP'],['Bon de commande','BC'],['SAV','SAV']]
+          .map(([nom,code])=>`<tr><td>${esc(nom)}</td><td><code>${code}-${new Date().getFullYear()}-0001</code></td></tr>`).join('')}
+      </tbody>
+    </table>
+    <small style="display:block; margin-top:10px; color:var(--text-dim); font-size:11px;">Les compteurs se réinitialisent chaque année civile.</small>
+  </div>`;
+}
+
+/**
+ * Enregistre les préférences.
+ *
+ * Ne lit que les champs réellement présents dans le DOM : un onglet masqué
+ * garde ses valeurs au lieu d'être écrasé par des chaînes vides.
+ */
+async function saveReglages(){
+  const el = id => document.getElementById(id);
+  const s = state.settings[state.societeId] || {};
+  const base = s.reglages || window.REGLAGES_DEFAUT;
+
+  const documents = { ...base.documents };
+  const champsNum = { rg_validiteDevis:'validiteDevisJours', rg_delaiPaiement:'delaiPaiementJours', rg_tva:'tvaDefaut' };
+  Object.entries(champsNum).forEach(([id, cle])=>{
+    if(el(id)){ const n = parseFloat(el(id).value); if(Number.isFinite(n)) documents[cle] = n; }
+  });
+  const champsTxt = { rg_couleur:'couleurAccent', rg_mentionAcceptation:'mentionAcceptation', rg_conditionsDevis:'conditionsDevis', rg_mentionsComplementaires:'mentionsComplementaires', rg_piedDePage:'piedDePage' };
+  Object.entries(champsTxt).forEach(([id, cle])=>{ if(el(id)) documents[cle] = el(id).value; });
+  if(el('rg_afficherIban')) documents.afficherIban = el('rg_afficherIban').checked;
+
+  const seuils = { ...base.seuils };
+  Object.keys(base.seuils).forEach(k=>{
+    const e = el('rg_seuil_'+k);
+    if(e){ const n = parseFloat(e.value); if(Number.isFinite(n)) seuils[k] = Math.max(0, n); }
+  });
+
+  const notifications = { ...base.notifications };
+  if(el('rg_notifActives')) notifications.actives = el('rg_notifActives').checked;
+  if(el('rg_notifDestinataires')) notifications.destinataires = el('rg_notifDestinataires').value;
+
+  const unites = el('rg_unites')
+    ? el('rg_unites').value.split(',').map(x=>x.trim()).filter(Boolean)
+    : base.unites;
+
+  const obj = { ...s, reglages: { ...base, documents, unites, seuils, notifications } };
+  state.settings[state.societeId] = obj;
+
+  const r = await stSet('settings:'+state.societeId, obj);
+  if(!r){ showToast(saveFailedMessage()); return; }
+
+  // Relire : la fusion réapplique les défauts sur ce qui a été vidé
+  const relu = await stGet('settings:'+state.societeId);
+  if(relu) state.settings[state.societeId] = relu;
+  renderTab();
+  showToast('Préférences enregistrées.', 'success');
+}
+
 function renderDocumentsLegauxSection(){
   const s = state.settings[state.societeId] || {};
   const docs = s.documentsLegaux || [];
@@ -7652,7 +7933,13 @@ function chantierForm(){
       <div class="field"><label>Client</label><select id="ch_client">${clientSelectOptions(e.client)}</select></div>
       <div class="field"><label>Conducteur de travaux</label><select id="ch_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
       <div class="address-trio">
-        <div class="field"><label>Adresse</label><input type="text" id="ch_adresse" value="${esc(e.adresse)}"></div>
+        <div class="field" style="position:relative;">
+          <label>Adresse</label>
+          <input type="text" id="ch_adresse" autocomplete="off" value="${esc(e.adresse)}" data-suggest="chAdresseSuggestions"
+                 oninput="searchAdresse(this, {adresse:'ch_adresse', codePostal:'ch_codePostal', ville:'ch_ville'})"
+                 onblur="setTimeout(()=>{const b=document.getElementById('chAdresseSuggestions'); if(b) b.style.display='none';},150)">
+          <div id="chAdresseSuggestions" class="suggest-box"></div>
+        </div>
         <div class="field"><label>Code postal</label><input type="text" id="ch_codePostal" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'ch_ville')"></div>
         <div class="field"><label>Ville</label><input type="text" id="ch_ville" value="${esc(e.ville)}"></div>
       </div>
@@ -10243,11 +10530,19 @@ function clientForm(){
       </div>
       <div class="field"><label>Téléphone</label><input type="tel" id="c_tel" value="${esc(e.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="c_email" value="${esc(e.email)}" placeholder="contact@client.fr"></div>
-      <div class="field"><label>Délai de paiement (jours)</label><input type="number" min="0" step="1" id="c_delaiPaiement" value="${e.delaiPaiement||30}"></div>
-      <div class="field full"><label>Adresse</label><input type="text" id="c_adresse" autocomplete="off" value="${esc(e.adresse)}"></div>
+      ${champSiretHTML('c_siret', e.siret, {nom:'c_nom', adresse:'c_adresse', codePostal:'c_codePostal', ville:'c_ville'})}
+      <div class="field full" style="position:relative;">
+        <label>Adresse</label>
+        <input type="text" id="c_adresse" autocomplete="off" value="${esc(e.adresse)}" data-suggest="clientAdresseSuggestions"
+               oninput="searchAdresse(this, {adresse:'c_adresse', codePostal:'c_codePostal', ville:'c_ville'})"
+               onblur="setTimeout(()=>{const b=document.getElementById('clientAdresseSuggestions'); if(b) b.style.display='none';},150)">
+        <div id="clientAdresseSuggestions" class="suggest-box"></div>
+      </div>
+      <div class="field"><label>Code postal</label><input type="text" id="c_codePostal" value="${esc(e.codePostal)}"></div>
+      <div class="field"><label>Ville</label><input type="text" id="c_ville" value="${esc(e.ville)}"></div>
       <div class="field full"><label>Notes</label><input type="text" id="c_notes" value="${esc(e.notes)}"></div>
     </div>
-    <div class="field full" style="margin-top:-6px;"><small style="color:var(--text-dim); font-size:11px;">Tapez le nom d'un syndic, bailleur ou société (3 lettres min.) : le nom exact et l'adresse officielle sont proposés automatiquement.</small></div>
+    <div class="field full" style="margin-top:-6px;"><small style="color:var(--text-dim); font-size:11px;">Tapez un nom (3 lettres min.), un SIREN (9 chiffres) ou un SIRET (14) : nom officiel, adresse et SIRET sont renseignés automatiquement. Les établissements fermés sont signalés.</small></div>
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="btn primary" onclick="saveClient()">Enregistrer</button>
       <button class="btn ghost" onclick="closeForm('client')">Annuler</button>
@@ -10264,35 +10559,165 @@ function searchEntreprise(query){
   clearTimeout(entrepriseSearchTimer);
   const box = document.getElementById('clientSuggestions');
   if(!box) return;
-  if(!query || query.trim().length < 3){ box.innerHTML=''; box.style.display='none'; return; }
+  const q = (query||'').trim();
+  const chiffres = q.replace(/[^0-9]/g,'');
+  const estNumero = chiffres.length===9 || chiffres.length===14;
+  if(!q || (q.length < 3 && !estNumero)){ box.innerHTML=''; box.style.display='none'; return; }
+
   entrepriseSearchTimer = setTimeout(async ()=>{
     box.innerHTML = '<div class="suggest-empty">Recherche…</div>';
     box.style.display = 'block';
-    try{
-      const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + encodeURIComponent(query.trim()) + '&per_page=5');
-      const data = await resp.json();
-      entrepriseResults = (data.results || []).slice(0, 5);
-      if(!entrepriseResults.length){ box.innerHTML = '<div class="suggest-empty">Aucun résultat — saisie manuelle possible</div>'; return; }
-      box.innerHTML = entrepriseResults.map((r,i)=>{
-        const nom = r.nom_complet || r.nom_raison_sociale || '';
-        return `<div class="suggest-item" onclick="selectEntreprise(${i})"><b>${esc(nom)}</b><small>${esc(formatEntrepriseAdresse(r))}</small></div>`;
-      }).join('');
-    }catch(err){
-      console.error(err);
-      box.innerHTML = '<div class="suggest-empty">Recherche indisponible — saisie manuelle possible</div>';
+    const res = await window.rechercherEntreprise(q);
+
+    if(res.type === 'erreur'){
+      entrepriseResults = [];
+      box.innerHTML = `<div class="suggest-empty">${esc(res.message)} — saisie manuelle possible</div>`;
+      return;
     }
+
+    entrepriseResults = res.type === 'siret' ? [res.etablissement] : res.etablissements;
+    if(!entrepriseResults.length){
+      box.innerHTML = '<div class="suggest-empty">Aucun résultat — saisie manuelle possible</div>';
+      return;
+    }
+    box.innerHTML = entrepriseResults.map((r,i)=>{
+      const lieu = [r.adresse, r.codePostal, r.ville].filter(Boolean).join(' ');
+      return `<div class="suggest-item" onclick="selectEntreprise(${i})"><b>${esc(r.nom)}</b><small>${esc(lieu)}${r.siret? ' · SIRET '+esc(r.siret):''}</small></div>`;
+    }).join('');
   }, 400);
 }
+
+/* Renseigne le formulaire client depuis l'annuaire : nom, adresse découpée
+   et SIRET, que la base sait stocker. */
 function selectEntreprise(i){
   const r = entrepriseResults[i];
   if(!r) return;
-  const nomEl = document.getElementById('c_nom');
-  const adrEl = document.getElementById('c_adresse');
-  if(nomEl) nomEl.value = r.nom_complet || r.nom_raison_sociale || '';
-  if(adrEl) adrEl.value = formatEntrepriseAdresse(r);
+  const set = (id, v) => { const el = document.getElementById(id); if(el && v != null) el.value = v; };
+  set('c_nom', r.nom);
+  set('c_adresse', r.adresse);
+  set('c_codePostal', r.codePostal);
+  set('c_ville', r.ville);
+  set('c_siret', r.siret);
   const box = document.getElementById('clientSuggestions');
   if(box){ box.innerHTML=''; box.style.display='none'; }
 }
+
+/* ---------- Recherche SIRET / SIREN ----------
+   Champ dédié avec bouton : 14 chiffres remplissent directement, 9 chiffres
+   proposent la liste des établissements ouverts. */
+let siretResults = [];
+let siretCibles = null;
+
+function champSiretHTML(idChamp, valeur, cibles){
+  const cfg = esc(JSON.stringify(cibles));
+  return `<div class="field full" style="position:relative;">
+    <label>SIRET / SIREN</label>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="${idChamp}" value="${esc(valeur||'')}" placeholder="14 chiffres (SIRET) ou 9 chiffres (SIREN)" inputmode="numeric"
+             onkeydown="if(event.key==='Enter'){ event.preventDefault(); chercherSiret('${idChamp}', ${cfg}); }">
+      <button type="button" class="btn" onclick='chercherSiret("${idChamp}", ${cfg})'>🔍 Rechercher</button>
+    </div>
+    <div id="${idChamp}_res" class="suggest-box" style="position:static; margin-top:6px;"></div>
+  </div>`;
+}
+
+async function chercherSiret(idChamp, cibles){
+  const input = document.getElementById(idChamp);
+  const box = document.getElementById(idChamp + '_res');
+  if(!input || !box) return;
+
+  const numero = (input.value||'').replace(/[^0-9]/g,'');
+  if(numero.length !== 9 && numero.length !== 14){
+    showToast('Saisissez 9 chiffres (SIREN) ou 14 chiffres (SIRET).');
+    return;
+  }
+
+  siretCibles = cibles;
+  box.style.display = 'block';
+  box.innerHTML = '<div class="suggest-empty">Recherche…</div>';
+
+  const res = await window.rechercherEntreprise(numero);
+
+  if(res.type === 'erreur'){
+    box.innerHTML = `<div class="suggest-empty" style="color:var(--danger);">${esc(res.message)}</div>`;
+    return;
+  }
+  if(res.type === 'siret'){
+    appliquerEtablissement(res.etablissement, idChamp);
+    box.innerHTML = '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Établissement trouvé — champs remplis.</div>';
+    return;
+  }
+
+  siretResults = res.etablissements || [];
+  if(siretResults.length === 1){
+    appliquerEtablissement(siretResults[0], idChamp);
+    box.innerHTML = '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Établissement trouvé — champs remplis.</div>';
+    return;
+  }
+  box.innerHTML = `<div class="suggest-empty">${siretResults.length} établissements ouverts — choisissez :</div>`
+    + siretResults.map((r,i)=>
+        `<div class="suggest-item" onclick="choisirEtablissement(${i}, '${esc(idChamp)}')"><b>${esc(r.nom)}</b><small>${esc([r.adresse, r.codePostal, r.ville].filter(Boolean).join(' '))} · ${esc(r.siret)}</small></div>`
+      ).join('');
+}
+
+function choisirEtablissement(i, idChamp){
+  const r = siretResults[i];
+  if(!r) return;
+  appliquerEtablissement(r, idChamp);
+  const box = document.getElementById(idChamp + '_res');
+  if(box){ box.innerHTML = '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Champs remplis.</div>'; }
+}
+
+/* Ne remplit que les champs déclarés par l'appelant : chaque formulaire a ses
+   propres identifiants. */
+function appliquerEtablissement(etab, idChamp){
+  const c = siretCibles || {};
+  const set = (id, v) => { const el = id && document.getElementById(id); if(el && v != null) el.value = v; };
+  set(idChamp, etab.siret);
+  set(c.nom, etab.nom);
+  set(c.adresse, etab.adresse);
+  set(c.codePostal, etab.codePostal);
+  set(c.ville, etab.ville);
+}
+
+/* ---------- Autocomplétion d'adresse (Base Adresse Nationale) ---------- */
+let adresseSearchTimer = null;
+let adresseResults = [];
+let adresseCible = null;
+
+function searchAdresse(input, idsCibles){
+  clearTimeout(adresseSearchTimer);
+  const box = document.getElementById(input.dataset.suggest);
+  if(!box) return;
+  const q = (input.value||'').trim();
+  if(q.length < 3){ box.innerHTML=''; box.style.display='none'; return; }
+
+  adresseCible = idsCibles;
+  adresseSearchTimer = setTimeout(async ()=>{
+    box.innerHTML = '<div class="suggest-empty">Recherche…</div>';
+    box.style.display = 'block';
+    adresseResults = await window.rechercherAdresse(q);
+    if(!adresseResults.length){
+      box.innerHTML = '<div class="suggest-empty">Aucune adresse trouvée — saisie manuelle possible</div>';
+      return;
+    }
+    box.innerHTML = adresseResults.map((a,i)=>
+      `<div class="suggest-item" onclick="selectAdresse(${i}, '${esc(box.id)}')"><b>${esc(a.adresse)}</b><small>${esc(a.codePostal)} ${esc(a.ville)}</small></div>`
+    ).join('');
+  }, 350);
+}
+
+function selectAdresse(i, boxId){
+  const a = adresseResults[i];
+  if(!a || !adresseCible) return;
+  const set = (id, v) => { const el = id && document.getElementById(id); if(el) el.value = v; };
+  set(adresseCible.adresse, a.adresse);
+  set(adresseCible.codePostal, a.codePostal);
+  set(adresseCible.ville, a.ville);
+  const box = document.getElementById(boxId);
+  if(box){ box.innerHTML=''; box.style.display='none'; }
+}
+
 async function saveClient(){
   const e = state.editing;
   const nom = document.getElementById('c_nom').value.trim();
@@ -10301,7 +10726,9 @@ async function saveClient(){
   const obj = { id, societeId: state.societeId, nom,
     telephone: document.getElementById('c_tel').value,
     email: document.getElementById('c_email').value,
-    delaiPaiement: parseInt(document.getElementById('c_delaiPaiement').value)||30,
+    siret: document.getElementById('c_siret').value,
+    codePostal: document.getElementById('c_codePostal').value,
+    ville: document.getElementById('c_ville').value,
     adresse: document.getElementById('c_adresse').value,
     notes: document.getElementById('c_notes').value };
   const r = await stSet('client:'+id, obj);
@@ -10488,6 +10915,10 @@ function sousTraitantForm(){
     <h3>${e.id? 'Modifier le sous-traitant' : 'Nouveau sous-traitant'}</h3>
     <div class="field-grid">
       <div class="field full"><label>Nom / Entreprise</label><input type="text" id="st_nom" value="${esc(e.nom)}" placeholder="Ex : SARL Toiture Plus"></div>
+      ${champSiretHTML('st_siret', e.siret, {nom:'st_nom', adresse:'st_adresse', codePostal:'st_codePostal', ville:'st_ville'})}
+      <div class="field full"><label>Adresse</label><input type="text" id="st_adresse" value="${esc(e.adresse)}"></div>
+      <div class="field"><label>Code postal</label><input type="text" id="st_codePostal" value="${esc(e.codePostal)}"></div>
+      <div class="field"><label>Ville</label><input type="text" id="st_ville" value="${esc(e.ville)}"></div>
       <div class="field"><label>Téléphone</label><input type="tel" id="st_telephone" value="${esc(e.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="st_email" value="${esc(e.email)}"></div>
       <div class="field full"><label>Métier(s)</label>${metierCheckboxesHTML('st', e.metiers || (e.metier? [e.metier] : []))}</div>
@@ -10565,6 +10996,10 @@ async function saveSousTraitant(){
   const obj = { id, societeId: state.societeId, nom,
     telephone: document.getElementById('st_telephone').value,
     email: document.getElementById('st_email').value,
+    siret: document.getElementById('st_siret').value,
+    adresse: document.getElementById('st_adresse').value,
+    codePostal: document.getElementById('st_codePostal').value,
+    ville: document.getElementById('st_ville').value,
     metiers, metier: metiers[0]||'', documents: e.documents || [] };
   const r = await stSet('sousTraitant:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
@@ -10602,6 +11037,79 @@ function renderTechniciensSection(){
 function technicienLabel(t){
   return [t.nom1, t.nom2, t.nom3].filter(Boolean).join(' + ');
 }
+/* Retient le client choisi parmi les suggestions de la lecture automatique. */
+function appliquerClientOCR(nom){
+  state.editing.client = nom;
+  renderTab();
+  showToast('Client « ' + nom + ' » retenu.', 'success');
+}
+
+/* Import depuis la liste : ouvre un formulaire vierge puis le préremplit. */
+async function importerBonCommande(fichier, input){
+  if(!fichier) return;
+  openForm('bonCommande');
+  renderTab();
+  await lireBonCommande(fichier, input);
+}
+
+/* ---------- Lecture automatique d'un bon de commande ---------- */
+async function lireBonCommande(fichier, input){
+  if(!fichier) return;
+  const statut = document.getElementById('ocrStatut');
+  const dire = (msg, couleur) => { if(statut){ statut.textContent = msg; statut.style.color = couleur || 'var(--text-dim)'; } };
+
+  dire('Lecture du document en cours…');
+  try{
+    const extraction = await window.extraireBonCommande(fichier);
+    const saisie = window.versSaisieBonCommande(extraction);
+
+    /* Le nom lu correspond rarement au libellé enregistré : on le rapproche du
+       fichier clients pour que le BC se rattache au bon client. */
+    const connus = state.clients.filter(c=>c.societeId===state.societeId).map(c=>c.nom);
+    const rapp = window.rapprocherClient(saisie.client, connus);
+    saisie.client = rapp.nom;
+
+    // On fusionne dans le brouillon en cours sans écraser ce qui est déjà saisi
+    Object.entries(saisie).forEach(([k, v])=>{
+      if(v === undefined || v === '' ) return;
+      if(Array.isArray(v) && !v.length) return;
+      state.editing[k] = v;
+    });
+
+    const avert = extraction.avertissements || [];
+    const messages = [];
+    if(!rapp.nom) messages.push('client non détecté');
+    else if(!rapp.reconnu) messages.push('client « ' + rapp.nom + ' » à confirmer');
+    messages.push(...avert);
+
+    dire(messages.length
+      ? 'Document lu — à vérifier : ' + messages.join(' · ')
+      : 'Document lu — vérifiez les champs avant d\'enregistrer.',
+      messages.length ? 'var(--accent-2)' : 'var(--success, #1E6B37)');
+
+    renderTab();
+
+    /* Client incertain : on propose les plus proches plutôt que de laisser
+       l'utilisateur chercher dans toute la liste. */
+    if(!rapp.reconnu && rapp.suggestions.length){
+      const box = document.getElementById('ocrStatut');
+      if(box){
+        box.innerHTML += `<div style="margin-top:8px;">
+          <div style="font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">Clients les plus proches :</div>
+          ${rapp.suggestions.map(n=>`<button type="button" class="btn small" style="margin:0 6px 6px 0;" onclick="appliquerClientOCR('${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</button>`).join('')}
+        </div>`;
+      }
+    }
+
+    showToast('Bon de commande lu — relisez avant d\'enregistrer.', 'success', 4000);
+  }catch(err){
+    console.error('OCR', err);
+    dire(err.message || 'Lecture impossible.', 'var(--danger)');
+  }finally{
+    if(input) input.value = '';
+  }
+}
+
 function bcMontantFieldsHTML(metiers, montantParMetier, montantSimple, sansChapitre){
   const uniq = [...new Set(metiers||[])];
   const sansChap = sansChapitre || [];
@@ -10845,6 +11353,31 @@ async function saveDocument(){
 
 /* ---------- Démarrage ---------- */
 (async function init(){
+  // Attendre que stGet/stSet/stListKeys/nextNumero pointent sur les tables
+  // Supabase : sans ça, on lirait l'ancienne implémentation kv_store.
+  try{
+    // Le pont fournit les sociétés que la RLS rend visibles, et le rôle
+    // que la base attribue : ni l'une ni l'autre ne sont décidées ici.
+    const societes = await window.__erpBridgeReady;
+    if(Array.isArray(societes) && societes.length){
+      SOCIETES = societes.map(s => ({ id: s.id, nom: s.nom }));
+      if(!societes.some(s => s.id === state.societeId)){
+        state.societeId = societes[0].id;
+      }
+      window.choisirSociete(state.societeId);
+    }
+    state.currentRole = window.roleEffectif();
+    document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
+    const autorises = navPourRole().map(n=>n.id);
+    if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
+  }catch(e){
+    console.error('Couche données indisponible', e);
+    document.body.innerHTML = '<div style="padding:32px;font:14px system-ui;line-height:1.5">'
+      + '<b>Accès impossible.</b><br>'
+      + esc(e && e.message ? e.message : 'Vérifiez votre session puis rechargez la page.')
+      + '</div>';
+    return;
+  }
   await loadAll();
   renderShell();
   renderTab();
@@ -10859,5 +11392,6 @@ async function saveDocument(){
   }
 })();
 </script>
+<script type="module" src="./entry.ts"></script>
 </body>
 </html>
