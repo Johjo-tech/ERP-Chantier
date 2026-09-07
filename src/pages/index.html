@@ -4774,7 +4774,7 @@ function openValidationConducteurModal(bcId, mode){
   document.getElementById('validationModalTitre').textContent = validationModalMode==='directeur' ? 'Valider ce bon de commande (directeur)' : 'Valider ce bon de commande';
   document.getElementById('validationModalConfirmBtn').textContent = validationModalMode==='directeur' ? '✓ Confirmer la validation (directeur)' : '✓ Confirmer la validation';
   renderValidationConducteurTaches(b);
-  renderTravauxSupplementairesListe(b, 'validationConducteurTravauxSup');
+  rafraichirTravauxSupplementaires(b.id, 'validationConducteurTravauxSup');
   document.getElementById('travailSupInput').value = '';
   document.getElementById('validationConducteurModal').style.display = 'flex';
 }
@@ -4797,45 +4797,94 @@ function addTravailSupplementaireTechnicien(){
 function addTravailSupplementaireConducteur(){
   addTravailSupplementaire(validationConducteurCtx, 'travailSupInput', 'validationConducteurTravauxSup');
 }
-function renderTravauxSupplementairesListe(b, containerId){
-  const liste = b.travauxSupplementaires||[];
-  document.getElementById(containerId).innerHTML = liste.length? liste.map(t=>`
-    <div class="achat-row" style="--cat-color:#9B6EF0;">
+function renderTravauxSupplementairesListe(liste, bcId, containerId){
+  const zone = document.getElementById(containerId);
+  if(!zone) return;
+  const prix = window.affichePrix ? window.affichePrix() : true;
+
+  zone.innerHTML = (liste||[]).length ? liste.map(t=>{
+    const chiffre = t.statut === 'chiffre';
+    const detail = chiffre && prix
+      ? money(t.prix_vente_ht) + ' HT'
+      : (chiffre ? 'chiffré' : 'à chiffrer');
+    return `<div class="achat-row" style="--cat-color:#9B6EF0;">
       <div class="achat-row-icon" style="background:#9B6EF022; color:#9B6EF0;">➕</div>
-      <div class="achat-row-main"><div class="achat-designation">${esc(t.texte)}</div><div class="achat-date">${fmtDate(t.date)} · sans prix</div></div>
-      <button class="btn small danger" onclick="removeTravailSupplementaire('${b.id}','${t.id}','${containerId}')">✕</button>
-    </div>`).join('') : '';
+      <div class="achat-row-main">
+        <div class="achat-designation">${esc(t.libelle)}</div>
+        <div class="achat-date">${esc(detail)} · constaté par ${esc(t.origine||'—')}</div>
+      </div>
+      ${(!chiffre && prix) ? `<button class="btn small" onclick="chiffrerTravailSupplementaire('${esc(bcId)}','${esc(t.id)}','${esc(containerId)}')">💶</button>` : ''}
+      <button class="btn small danger" onclick="removeTravailSupplementaire('${esc(bcId)}','${esc(t.id)}','${esc(containerId)}')">✕</button>
+    </div>`;
+  }).join('') : '<div class="empty">Aucun travail supplémentaire.</div>';
 }
+/* Travaux constatés en plus du bon de commande.
+   Ils vivent dans `tache_travaux_supplementaires` : l'ancien tableau posé sur
+   l'objet BC n'avait aucune colonne et n'était donc jamais enregistré. Ils
+   restent « à chiffrer » jusqu'à ce qu'un prix leur soit donné — les ajouter
+   comme ligne à 0 € du bon de commande les aurait rendus invisibles. */
 async function addTravailSupplementaire(bcId, inputId, containerId){
   const input = document.getElementById(inputId);
-  const texte = input.value.trim();
-  if(!texte) return;
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  if(!b.travauxSupplementaires) b.travauxSupplementaires = [];
-  b.travauxSupplementaires.push({ id: uid(), texte, date: todayISO() });
-  if(!b.lignes) b.lignes = [];
-  const dejaEnLigne = b.lignes.some(l=>(l.type||'ligne')==='ligne' && l.designation===texte);
-  if(!dejaEnLigne){
-    b.lignes.push({type:'ligne', designation:texte, qte:1, prixUnitaire:0, tva:10});
+  const libelle = (input.value||'').trim();
+  if(!libelle) return;
+
+  try{
+    const role = window.roleEffectif();
+    await window.ajouterTravailSupplementaire(window.societeActive().uuid, {
+      bon_commande_id: bcId,
+      planning_tache_id: wfTacheCourante ? wfTacheCourante.id : null,
+      libelle,
+      quantite: 1,
+      origine: (role === 'conducteur' || role === 'admin') ? 'conducteur' : 'technicien',
+    });
+    input.value = '';
+    await rafraichirTravauxSupplementaires(bcId, containerId);
+    showToast('Travail supplémentaire consigné — à chiffrer.', 'success');
+  }catch(err){
+    console.error('Ajout du travail supplémentaire refusé', err);
+    showToast(err.message || "Ajout impossible.");
   }
-  input.value = '';
-  renderTravauxSupplementairesListe(b, containerId);
-  await stSet('bonCommande:'+bcId, b);
-  renderTab();
 }
+
 async function removeTravailSupplementaire(bcId, id, containerId){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  const retire = (b.travauxSupplementaires||[]).find(t=>t.id===id);
-  b.travauxSupplementaires = (b.travauxSupplementaires||[]).filter(t=>t.id!==id);
-  if(retire && b.lignes){
-    b.lignes = b.lignes.filter(l=>!((l.type||'ligne')==='ligne' && l.designation===retire.texte && (parseFloat(l.prixUnitaire)||0)===0));
+  try{
+    await window.supprimerTravailSupplementaire(id);
+    await rafraichirTravauxSupplementaires(bcId, containerId);
+  }catch(err){
+    console.error('Suppression refusée', err);
+    showToast(err.message || "Suppression impossible.");
   }
-  renderTravauxSupplementairesListe(b, containerId);
-  await stSet('bonCommande:'+bcId, b);
-  renderTab();
 }
+
+/* Chiffrage : réservé à ceux qui voient les prix. */
+async function chiffrerTravailSupplementaire(bcId, id, containerId){
+  const saisie = prompt('Prix de vente HT :');
+  if(saisie === null) return;
+  const prix = parseFloat(String(saisie).replace(',', '.'));
+  if(!Number.isFinite(prix) || prix < 0){ showToast('Montant invalide.'); return; }
+
+  try{
+    await window.chiffrerTravailSupplementaire(id, prix);
+    await rafraichirTravauxSupplementaires(bcId, containerId);
+    showToast('Travail chiffré.', 'success');
+  }catch(err){
+    console.error('Chiffrage refusé', err);
+    showToast(err.message || "Chiffrage impossible.");
+  }
+}
+
+async function rafraichirTravauxSupplementaires(bcId, containerId){
+  const zone = document.getElementById(containerId);
+  if(!zone) return;
+  try{
+    const liste = await window.listTravauxSupplementaires(bcId);
+    renderTravauxSupplementairesListe(liste, bcId, containerId);
+  }catch(err){
+    console.error('Travaux supplémentaires indisponibles', err);
+    zone.innerHTML = '<div class="empty">Liste indisponible.</div>';
+  }
+}
+
 async function confirmerValidationConducteur(){
   const b = state.bonsCommande.find(x=>x.id===validationConducteurCtx);
   if(!b) return;
@@ -6033,7 +6082,7 @@ function openSousTraitantValidationModal(kind, id, dayIso){
   document.getElementById('stModalDatesRestantes').textContent = autresDates.length? `Ce chantier a ${autresDates.length} autre(s) date(s) planifiée(s) — ${nbRestantes? nbRestantes+' encore à valider' : 'toutes déjà validées'}.` : '';
   document.getElementById('stModalCommentaire').value = b.sousTraitantCommentaire || '';
   document.getElementById('stTravailSupInput').value = '';
-  renderTravauxSupplementairesListe(b, 'stTravauxSupListe');
+  rafraichirTravauxSupplementaires(b.id, 'stTravauxSupListe');
   renderSTModalPhotos(b);
   document.getElementById('stValidationModal').classList.add('open');
 }
@@ -6113,7 +6162,7 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   document.getElementById('techModalPieceDetail').value = b.pieceACommanderDetail || '';
   togglePieceCommanderInput(!!b.pieceACommander);
   document.getElementById('techTravailSupInput').value = '';
-  renderTravauxSupplementairesListe(b, 'techTravailSupListe');
+  rafraichirTravauxSupplementaires(b.id, 'techTravailSupListe');
   renderTechModalPhotos(b);
   document.getElementById('technicienInterventionModal').style.display = 'flex';
   setTimeout(()=> setupTechDessinCanvas(b), 30);
@@ -6158,6 +6207,9 @@ function renderWorkflowTache(){
   const droits = window.actionsTache(statut);
 
   const boutons = [];
+  if(droits.peutSaisir){
+    boutons.push(`<button class="btn" onclick="wfEnregistrerConstats()">💾 Enregistrer mes constats</button>`);
+  }
   if(droits.peutTerminer){
     boutons.push(`<button class="btn primary" onclick="wfMarquerRealisee()">✓ Travaux terminés</button>`);
   }
@@ -6187,6 +6239,23 @@ async function wfRafraichir(){
   const taches = await window.listTachesBonCommande(wfTacheCourante.bon_commande_id);
   wfTacheCourante = taches.find(x => x.id === wfTacheCourante.id) || wfTacheCourante;
   renderWorkflowTache();
+}
+
+/* Enregistre commentaire et pièce sans changer d'état : le technicien peut
+   noter au fil de l'intervention sans la déclarer terminée. */
+async function wfEnregistrerConstats(){
+  try{
+    await window.sauvegarderTerrain(wfTacheCourante.id, {
+      commentaire: document.getElementById('techModalCommentaire').value || undefined,
+      pieceACommander: document.getElementById('techModalPieceCommander').checked,
+      pieceDescription: document.getElementById('techModalPieceDetail').value || undefined,
+    });
+    await wfRafraichir();
+    showToast('Constats enregistrés.', 'success');
+  }catch(err){
+    console.error('Enregistrement des constats refusé', err);
+    showToast(err.message || 'Enregistrement impossible.');
+  }
 }
 
 async function wfMarquerRealisee(){

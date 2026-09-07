@@ -237,6 +237,12 @@ export function injecterSession() {
   w.validerTache = queries.validerTache;
   w.passerPretAChiffrer = queries.passerPretAChiffrer;
   w.listTachesBonCommande = queries.listTachesBonCommande;
+
+  // Travaux constatés en plus du bon de commande
+  w.listTravauxSupplementaires = queries.listTravauxSupplementaires;
+  w.ajouterTravailSupplementaire = queries.ajouterTravailSupplementaire;
+  w.supprimerTravailSupplementaire = queries.supprimerTravailSupplementaire;
+  w.chiffrerTravailSupplementaire = queries.chiffrerTravailSupplementaire;
   w.rechercherEntreprise = rechercherEntreprise;
 
   // Lecture automatique des bons de commande

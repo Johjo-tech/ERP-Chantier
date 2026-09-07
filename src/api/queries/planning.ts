@@ -198,6 +198,10 @@ export function ajouterTravailSupplementaire(
   });
 }
 
+export function supprimerTravailSupplementaire(id: Uuid) {
+  return remove("tache_travaux_supplementaires", id);
+}
+
 export function chiffrerTravailSupplementaire(
   id: Uuid,
   prixVenteHt: number,

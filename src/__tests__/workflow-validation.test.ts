@@ -203,3 +203,81 @@ suite("Circuit de validation devis → facture", () => {
     });
   });
 });
+
+suite("Travaux supplémentaires et constats", () => {
+  const NOM_CLIENT = "CLIENT DE TEST";
+  let societeId: Uuid;
+  let bcId: Uuid;
+  let tacheId: Uuid;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    if (!societe) throw new Error("Société de test introuvable");
+    societeId = societe.id;
+
+    const bc = await queries.createBonCommande(societeId, {
+      client_nom: NOM_CLIENT,
+      date: new Date().toISOString().slice(0, 10),
+    });
+    bcId = bc.id;
+
+    const tache = await queries.planifierTache(societeId, {
+      bon_commande_id: bcId,
+      libelle: "Intervention",
+      date_tache: new Date().toISOString().slice(0, 10),
+    });
+    tacheId = tache.id;
+  });
+
+  it("enregistre les constats sans changer l'état de la tâche", async () => {
+    await queries.sauvegarderTerrain(tacheId, {
+      commentaire: "Accès difficile, prévoir nacelle",
+      pieceACommander: true,
+      pieceDescription: "Joint EPDM 40 mm",
+    });
+
+    const tache = await queries.getTache(tacheId);
+    expect(tache?.commentaire).toBe("Accès difficile, prévoir nacelle");
+    expect(tache?.piece_description).toBe("Joint EPDM 40 mm");
+    expect(tache?.statut).toBe("planifiee");
+  });
+
+  it("consigne un travail en plus, rattaché à la tâche et au bon", async () => {
+    const trav = await queries.ajouterTravailSupplementaire(societeId, {
+      bon_commande_id: bcId,
+      planning_tache_id: tacheId,
+      libelle: "Reprise scellement garde-corps",
+      quantite: 2,
+      unite: "u",
+      origine: "technicien",
+    });
+
+    expect(trav.statut).toBe("a_chiffrer");
+    expect(trav.planning_tache_id).toBe(tacheId);
+
+    const liste = await queries.listTravauxSupplementaires(bcId);
+    expect(liste.map((t) => t.id)).toContain(trav.id);
+  });
+
+  it("laisse le chiffrage à qui voit les prix", async () => {
+    const [trav] = await queries.listTravauxSupplementaires(bcId);
+    const chiffre = await queries.chiffrerTravailSupplementaire(trav.id, 240, 20);
+
+    expect(chiffre.statut).toBe("chiffre");
+    expect(chiffre.prix_vente_ht).toBe(240);
+    expect(chiffre.tva).toBe(20);
+  });
+
+  it("supprime un travail consigné par erreur", async () => {
+    const trav = await queries.ajouterTravailSupplementaire(societeId, {
+      bon_commande_id: bcId,
+      libelle: "Saisie erronée",
+      origine: "technicien",
+    });
+
+    await queries.supprimerTravailSupplementaire(trav.id);
+
+    const liste = await queries.listTravauxSupplementaires(bcId);
+    expect(liste.map((t) => t.id)).not.toContain(trav.id);
+  });
+});
