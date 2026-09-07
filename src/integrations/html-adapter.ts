@@ -1,311 +1,780 @@
 /**
- * HTML Adapter - Bridge entre le HTML original et les vraies API Supabase
+ * Pont entre l'app HTML historique et le schéma relationnel Supabase.
  *
- * Remplace:
- * - stGet/stSet/stDelete/stListKeys (kv_store)
- * - nextNumero/nextSAVNumero
- * - loadAll/exportData/importData
+ * L'app manipule des objets JSON en camelCase, identifie ses sociétés par un
+ * code court et embarque lignes et photos dans des tableaux. Le schéma est
+ * relationnel : colonnes snake_case, clés étrangères uuid, tables filles.
  *
- * ✅ Zéro modification du HTML nécessaire
- * ✅ Les fonctions globales restent les mêmes
- * ✅ On juste change l'implémentation
+ * Ce module conserve la surface `stGet` / `stSet` / `stDelete` / `stListKeys`
+ * attendue par le HTML et traduit dans les deux sens. Il remplace la table
+ * fourre-tout `kv_store`.
+ *
+ * Deux colonnes du schéma rendent la bascule non destructive :
+ * - `client_nom` porte le nom du client en clair, comme l'app le fait ;
+ * - `legacy_id` conserve l'identifiant base36 d'origine, si bien que les
+ *   références croisées de l'app (`devisId`, `bonCommandeId`…) restent valides
+ *   sans réécriture.
  */
 
-import { supabase, getNextNumero, uid, todayISO } from "@/api/client";
+import {
+  dyn,
+  estUuid,
+  getNextNumero,
+  listByParents,
+  supabase,
+  todayISO,
+} from "@/api/client";
+import { colonnesDe, valeursEnum } from "@/api/columns";
+import { fusionnerReglages } from "./reglages";
 import * as queries from "@/api/queries";
-import type { TerrainData } from "@/api/types";
+import type { Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
 
-// ============ KV_STORE REPLACEMENT ============
+// ============ CONVERSION DE NOMS ============
+
+/** Cas où la conversion mécanique camelCase → snake_case donnerait un faux nom. */
+const SNAKE_OVERRIDES: Record<string, string> = {
+  numeroBC: "numero_bc",
+  sansBC: "sans_bc",
+  enAttenteBC: "en_attente_bc",
+};
+
+const CAMEL_OVERRIDES: Record<string, string> = Object.fromEntries(
+  Object.entries(SNAKE_OVERRIDES).map(([camel, snake]) => [snake, camel])
+);
+
+export function toSnake(key: string): string {
+  return SNAKE_OVERRIDES[key] ?? key.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
+}
+
+export function toCamel(key: string): string {
+  return (
+    CAMEL_OVERRIDES[key] ?? key.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
+  );
+}
+
+/** Champs traités explicitement, jamais par la conversion mécanique. */
+const CHAMPS_SPECIAUX = new Set([
+  "id",
+  "legacy_id",
+  "societeId",
+  "societe_id",
+  "client",
+  "client_nom",
+  "lignes",
+  "photos",
+  "rapport",
+  "constatations",
+  "preconisations",
+  "createdAt",
+  "cree_le",
+  "maj_le",
+]);
+
+// ============ LIGNES DE DOCUMENT ============
+
+export interface LigneLegacy {
+  type?: string;
+  designation?: string;
+  commentaire?: string;
+  qte?: number;
+  unite?: string;
+  prixUnitaire?: number;
+  tva?: number;
+}
+
+export function ligneVersDb(ligne: LigneLegacy, position: number) {
+  return {
+    type: (ligne.type as "ligne" | "chapitre" | "commentaire") ?? "ligne",
+    designation: ligne.designation ?? "",
+    commentaire: ligne.commentaire,
+    quantite: ligne.qte,
+    unite: ligne.unite,
+    prix_unitaire: ligne.prixUnitaire,
+    tva: ligne.tva,
+    position,
+  };
+}
+
+export function ligneVersLegacy(row: Record<string, unknown>): LigneLegacy {
+  return {
+    type: row.type as string,
+    designation: row.designation as string,
+    commentaire: row.commentaire as string | undefined,
+    qte: row.quantite as number | undefined,
+    unite: row.unite as string | undefined,
+    prixUnitaire: row.prix_unitaire as number | undefined,
+    tva: row.tva as number | undefined,
+  };
+}
+
+// ============ REGISTRE DES COLLECTIONS ============
+
+interface Collection {
+  table: TableName;
+  lignes?: { table: TableName; fk: string };
+  photos?: { table: TableName; fk: string };
+  /** Le document porte le nom du client en clair (colonne `client_nom`). */
+  client?: boolean;
+  /**
+   * Champs que l'app nomme autrement que la base : `{ champApp: colonne }`.
+   * Sans cette table, `metiersPerso` remonterait sans `nom` et les listes
+   * déroulantes de métiers resteraient vides.
+   */
+  alias?: Record<string, string>;
+  /**
+   * Table fille non cloisonnée : la société se lit chez le parent.
+   * `interlocuteurs` n'a pas de `societe_id`, mais l'app filtre dessus.
+   */
+  societeVia?: { table: TableName; fk: string };
+}
+
+/** Préfixe de clé kv_store → table réelle. */
+const COLLECTIONS: Record<string, Collection> = {
+  devis: {
+    table: "devis",
+    lignes: { table: "devis_lignes", fk: "devis_id" },
+    client: true,
+  },
+  facture: {
+    table: "factures",
+    lignes: { table: "facture_lignes", fk: "facture_id" },
+    client: true,
+  },
+  bonCommande: {
+    table: "bons_commande",
+    lignes: { table: "bon_commande_lignes", fk: "bon_commande_id" },
+    photos: { table: "bon_commande_photos", fk: "bon_commande_id" },
+    client: true,
+  },
+  intervention: {
+    table: "interventions",
+    photos: { table: "intervention_photos", fk: "intervention_id" },
+    client: true,
+  },
+  client: { table: "clients" },
+  article: { table: "articles" },
+  reglement: { table: "reglements" },
+  interlocuteur: {
+    table: "interlocuteurs",
+    societeVia: { table: "clients", fk: "client_id" },
+  },
+  conducteur: { table: "conducteurs" },
+  // L'app compose un libellé à partir de nom1/nom2/nom3 ; la table n'a qu'un
+  // `nom`. Les deux autres n'ont pas de colonne et sont écartés.
+  technicien: { table: "techniciens", alias: { nom1: "nom" } },
+  metierPerso: { table: "metiers", alias: { nom: "libelle" } },
+  sousTraitant: { table: "sous_traitants" },
+  chantier: { table: "chantiers" },
+  salarie: { table: "salaries" },
+  vehicule: { table: "vehicules" },
+  materiel: { table: "materiels" },
+  document: { table: "documents_legaux" },
+  fournisseurControle: { table: "fournisseurs_controle" },
+};
+
+// ============ SOCIÉTÉS ============
+
+const societeParCode = new Map<string, Uuid>();
+const codeParSocieteId = new Map<Uuid, string>();
+let societesChargees = false;
+
+async function chargerSocietes(): Promise<void> {
+  if (societesChargees) return;
+
+  const { data, error } = await supabase.from("societes").select("id, code");
+  if (error) throw error;
+
+  for (const s of data ?? []) {
+    societeParCode.set(s.code, s.id);
+    codeParSocieteId.set(s.id, s.code);
+  }
+  societesChargees = true;
+}
+
+/** Le HTML passe un code court (« kta ») là où la base attend un uuid. */
+async function resolveSocieteId(code: string): Promise<Uuid> {
+  await chargerSocietes();
+  const id = societeParCode.get(code);
+  if (!id) {
+    throw new Error(
+      `Société « ${code} » introuvable : aucune ligne de \`societes\` ne porte ce code.`
+    );
+  }
+  return id;
+}
+
+async function codeSociete(societeId?: Uuid): Promise<string | undefined> {
+  if (!societeId) return undefined;
+  await chargerSocietes();
+  return codeParSocieteId.get(societeId);
+}
+
+// ============ TRADUCTION ============
+
+/** Champs de l'app sans colonne correspondante, déjà signalés une fois. */
+const inconnusSignales = new Set<string>();
 
 /**
- * Remplace: async function stGet(key) { ... }
- * Récupère une valeur JSON depuis une table Supabase
- *
- * Format clé: "prefix:id" → table: prefix, filter: id
+ * L'app historique écrit `""` pour « non renseigné ». Postgres, lui, refuse la
+ * chaîne vide sur une énumération, une date ou un numérique : on la traduit en
+ * `null`, sauf sur les colonnes non nulles qui attendent bien du texte.
  */
-export async function stGet(key: string): Promise<any | null> {
-  if (!key) return null;
+const VIDE_AUTORISE = new Set(["client_nom", "designation", "nom", "libelle"]);
 
-  try {
-    const [prefix, id] = key.split(":");
-    if (!prefix || !id) {
-      console.warn("Invalid key format:", key);
-      return null;
-    }
-
-    // Déterminer la table et la colonne d'ID
-    const tableMap: Record<string, string> = {
-      devis: "id",
-      facture: "id",
-      intervention: "id",
-      bonCommande: "id",
-      client: "id",
-      article: "id",
-      document: "id",
-      reglement: "id",
-      interlocuteur: "id",
-      conducteur: "id",
-      technicien: "id",
-      metierPerso: "id",
-      sousTraitant: "id",
-      chantier: "id",
-      salarie: "id",
-      vehicule: "id",
-      materiel: "id",
-      settings: "societe_id",
-      counters: "societe_id",
-    };
-
-    const table = tableMap[prefix];
-    if (!table) {
-      console.warn("Unknown prefix:", prefix);
-      return null;
-    }
-
-    const { data, error } = await supabase
-      .from(prefix)
-      .select("*")
-      .eq(table, id)
-      .single();
-
-    if (error || !data) {
-      console.debug(`stGet miss: ${key}`);
-      return null;
-    }
-
-    return data;
-  } catch (err) {
-    console.error("stGet error:", err);
+function normaliser(table: string, colonne: string, v: unknown): unknown {
+  if (typeof v === "string" && v.trim() === "" && !VIDE_AUTORISE.has(colonne)) {
     return null;
   }
+
+  // Une valeur hors énumération ferait rejeter l'insertion entière (22P02) ;
+  // on préfère perdre le champ. Cas connu : `interventions.metier`, limité à
+  // trois valeurs alors que l'app gère des métiers libres.
+  const admises = valeursEnum(table, colonne);
+  if (admises && typeof v === "string" && !admises.includes(v)) {
+    const signature = `${table}.${colonne}=${v}`;
+    if (!inconnusSignales.has(signature)) {
+      inconnusSignales.add(signature);
+      console.warn(
+        `Valeur hors énumération, ignorée : ${signature} (admis : ${admises.join(", ")})`
+      );
+    }
+    return null;
+  }
+
+  return v;
 }
 
-/**
- * Remplace: async function stSet(key, val) { ... }
- * Écrit/met à jour une valeur JSON
- */
-export async function stSet(key: string, val: any): Promise<boolean> {
-  if (!key || !val) return false;
+/** Objet HTML (camelCase) → ligne Postgres (snake_case). */
+async function versDb(
+  prefixe: string,
+  valeur: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const collection = COLLECTIONS[prefixe];
+  const colonnes = colonnesDe(collection.table);
+  const row: Record<string, unknown> = {};
 
-  try {
-    const [prefix, id] = key.split(":");
+  for (const [cle, v] of Object.entries(valeur)) {
+    if (CHAMPS_SPECIAUX.has(cle)) continue;
+    if (v === undefined) continue;
 
-    const { error } = await supabase
-      .from(prefix)
-      .upsert({ id, ...val }, { onConflict: "id" });
+    const colonne = collection.alias?.[cle] ?? toSnake(cle);
 
-    if (error) {
-      console.error("stSet error:", error);
-      return false;
+    // Un champ sans colonne ferait rejeter l'insertion entière par PostgREST
+    if (colonnes && !colonnes.has(colonne)) {
+      const signature = `${collection.table}.${colonne}`;
+      if (!inconnusSignales.has(signature)) {
+        inconnusSignales.add(signature);
+        console.warn(`Champ sans colonne, ignoré : ${signature}`);
+      }
+      continue;
     }
 
-    return true;
-  } catch (err) {
-    console.error("stSet error:", err);
-    return false;
+    row[colonne] = normaliser(collection.table, colonne, v);
   }
+
+  const code = valeur.societeId as string | undefined;
+  if (code) row.societe_id = await resolveSocieteId(code);
+
+  if (collection.client) row.client_nom = (valeur.client as string) ?? "";
+
+  // Rapport d'intervention : objet imbriqué → deux colonnes
+  const rapport = valeur.rapport as
+    | { constatations?: string; preconisations?: string }
+    | undefined;
+  if (rapport) {
+    row.constatations = rapport.constatations ?? "";
+    row.preconisations = rapport.preconisations ?? "";
+  }
+
+  return row;
 }
 
-/**
- * Remplace: async function stDelete(key) { ... }
- */
-export async function stDelete(key: string): Promise<boolean> {
-  if (!key) return false;
+/** Ligne Postgres (snake_case) → objet HTML (camelCase). */
+function versLegacy(
+  prefixe: string,
+  row: Record<string, unknown>,
+  code?: string
+): Record<string, unknown> {
+  const collection = COLLECTIONS[prefixe];
+  const valeur: Record<string, unknown> = {};
 
-  try {
-    const [prefix, id] = key.split(":");
+  const champParColonne = Object.fromEntries(
+    Object.entries(collection.alias ?? {}).map(([champ, col]) => [col, champ])
+  );
 
-    const { error } = await supabase
-      .from(prefix)
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("stDelete error:", error);
-      return false;
-    }
-
-    return true;
-  } catch (err) {
-    console.error("stDelete error:", err);
-    return false;
+  for (const [cle, v] of Object.entries(row)) {
+    if (CHAMPS_SPECIAUX.has(cle)) continue;
+    valeur[champParColonne[cle] ?? toCamel(cle)] = v;
   }
+
+  /* L'identifiant exposé est l'uuid, jamais `legacy_id`.
+     Toutes les clés étrangères du schéma pointent vers des uuid : exposer
+     l'identifiant hérité casserait chaque référence croisée
+     (`interlocuteur.clientId`, `facture.devisId`, `devis.chantierId`…).
+     `legacy_id` ne sert qu'à retrouver une ligne issue de kv_store. */
+  valeur.id = row.id;
+  if (row.legacy_id) valeur.legacyId = row.legacy_id;
+  if (row.cree_le) valeur.createdAt = row.cree_le;
+  if (code) valeur.societeId = code;
+
+  if (collection.client) valeur.client = row.client_nom ?? "";
+
+  if (prefixe === "intervention") {
+    valeur.rapport = {
+      constatations: (row.constatations as string) ?? "",
+      preconisations: (row.preconisations as string) ?? "",
+    };
+  }
+
+  return valeur;
 }
 
+// ============ CACHE DE COLLECTION ============
+
 /**
- * Remplace: async function stListKeys(prefix) { ... }
- * Liste toutes les clés commençant par un préfixe
+ * `loadPrefix()` du HTML enchaîne `stListKeys` puis un `stGet` par clé. On
+ * charge donc la collection entière au premier appel, et `stGet` sert depuis ce
+ * cache — ce qui évite une requête par enregistrement.
  */
-export async function stListKeys(prefix: string): Promise<string[]> {
-  if (!prefix) return [];
+const cache = new Map<string, Record<string, unknown>>();
+/** Clé applicative → uuid réel, nécessaire pour écrire les tables filles. */
+const uuidParCle = new Map<string, Uuid>();
 
-  try {
-    const { data, error } = await supabase
-      .from(prefix)
-      .select("id");
+export function viderCache() {
+  cache.clear();
+  uuidParCle.clear();
+  societeParCode.clear();
+  codeParSocieteId.clear();
+  societesChargees = false;
+}
 
-    if (error || !data) return [];
+async function chargerCollection(prefixe: string): Promise<string[]> {
+  const collection = COLLECTIONS[prefixe];
+  if (!collection) return [];
 
-    return data.map((row: any) => `${prefix}:${row.id}`);
-  } catch (err) {
-    console.error("stListKeys error:", err);
+  await chargerSocietes();
+
+  // La RLS restreint déjà aux sociétés de l'utilisateur ; le HTML filtre
+  // ensuite lui-même sur `societeId`. Pour une table fille, on remonte la
+  // société du parent dans la même requête.
+  const select = collection.societeVia
+    ? `*, ${collection.societeVia.table}(societe_id)`
+    : "*";
+  const { data, error } = await dyn().from(collection.table).select(select);
+  if (error) {
+    console.error(`Chargement de ${collection.table} impossible:`, error);
     return [];
   }
+
+  const cles: string[] = [];
+  const uuidParPrefixe = new Map<Uuid, string>();
+
+  for (const brut of (data ?? []) as Record<string, unknown>[]) {
+    let societeId = brut.societe_id as Uuid | undefined;
+    if (collection.societeVia) {
+      const parent = brut[collection.societeVia.table] as
+        | { societe_id?: Uuid }
+        | null;
+      societeId = parent?.societe_id;
+      delete brut[collection.societeVia.table];
+    }
+
+    const valeur = versLegacy(prefixe, brut, await codeSociete(societeId));
+    if (collection.lignes) valeur.lignes = [];
+    if (collection.photos) valeur.photos = [];
+
+    const cle = `${prefixe}:${valeur.id}`;
+    cache.set(cle, valeur);
+    uuidParCle.set(cle, brut.id as Uuid);
+    uuidParPrefixe.set(brut.id as Uuid, cle);
+    cles.push(cle);
+  }
+
+  if (collection.lignes && cles.length) {
+    await attacher(collection.lignes, uuidParPrefixe, "lignes", ligneVersLegacy);
+  }
+  if (collection.photos && cles.length) {
+    await attacher(
+      collection.photos,
+      uuidParPrefixe,
+      "photos",
+      (row) => row.chemin as string
+    );
+  }
+
+  return cles;
+}
+
+/** Rattache les lignes filles en une requête pour toute la collection. */
+async function attacher(
+  enfant: { table: TableName; fk: string },
+  uuidParPrefixe: Map<Uuid, string>,
+  champ: "lignes" | "photos",
+  mapper: (row: Record<string, unknown>) => unknown
+) {
+  const { data, error } = await dyn()
+    .from(enfant.table)
+    .select("*")
+    .in(enfant.fk, [...uuidParPrefixe.keys()])
+    .order("position", { ascending: true });
+
+  if (error) {
+    console.error(`Chargement de ${enfant.table} impossible:`, error);
+    return;
+  }
+
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const cle = uuidParPrefixe.get(row[enfant.fk] as Uuid);
+    const parent = cle ? cache.get(cle) : undefined;
+    if (!parent) continue;
+    (parent[champ] as unknown[]).push(mapper(row));
+  }
+}
+
+// ============ SURFACE ATTENDUE PAR LE HTML ============
+
+function decouper(cle: string): [string, string] {
+  const i = cle.indexOf(":");
+  return i < 0 ? [cle, ""] : [cle.slice(0, i), cle.slice(i + 1)];
+}
+
+/** Remplace : `async function stGet(key)`. */
+export async function stGet(cle: string): Promise<unknown | null> {
+  if (!cle) return null;
+  const [prefixe, id] = decouper(cle);
+
+  if (prefixe === "settings") return lireSettings(id);
+  if (!COLLECTIONS[prefixe]) return null;
+
+  const enCache = cache.get(cle);
+  if (enCache) return enCache;
+
+  await chargerCollection(prefixe);
+  return cache.get(cle) ?? null;
+}
+
+/** Remplace : `async function stSet(key, val)`. */
+export async function stSet(
+  cle: string,
+  valeur: Record<string, unknown>
+): Promise<boolean> {
+  if (!cle || !valeur) return false;
+  const [prefixe, id] = decouper(cle);
+
+  if (prefixe === "settings") return ecrireSettings(id, valeur);
+
+  const collection = COLLECTIONS[prefixe];
+  if (!collection) {
+    console.warn("Préfixe inconnu, écriture ignorée:", prefixe);
+    return false;
+  }
+
+  try {
+    const row = await versDb(prefixe, valeur);
+
+    /* Une ligne existante est adressée par son uuid. Un identifiant base36
+       ne peut venir que d'une reprise kv_store : on le range dans `legacy_id`
+       et Postgres génère la clé primaire. */
+    if (estUuid(id)) {
+      row.id = id;
+    } else {
+      const uuid = uuidParCle.get(cle) ?? (await chercherUuid(collection.table, id));
+      if (uuid) row.id = uuid;
+      else if (id) row.legacy_id = id;
+    }
+
+    const { data, error } = await dyn()
+      .from(collection.table)
+      .upsert(row)
+      .select()
+      .single();
+    if (error) throw error;
+
+    const parentId = (data as Record<string, unknown>).id as Uuid;
+    uuidParCle.set(cle, parentId);
+
+    if (collection.lignes) {
+      const lignes = (valeur.lignes as LigneLegacy[]) ?? [];
+      await remplacerEnfants(
+        collection.lignes,
+        parentId,
+        lignes.map((l, i) => ({
+          ...ligneVersDb(l, i),
+          [collection.lignes!.fk]: parentId,
+        }))
+      );
+    }
+
+    if (collection.photos) {
+      // Les data-URL n'ont pas leur place en base : seules les références
+      // Storage sont persistées (voir `uploadFile`).
+      const chemins = ((valeur.photos as string[]) ?? []).filter(
+        (p) => typeof p === "string" && !p.startsWith("data:")
+      );
+      await remplacerEnfants(
+        collection.photos,
+        parentId,
+        chemins.map((chemin, position) => ({
+          [collection.photos!.fk]: parentId,
+          chemin,
+          position,
+        }))
+      );
+    }
+
+    cache.set(cle, { ...valeur, id });
+    return true;
+  } catch (err) {
+    const e = err as { message?: string; details?: string; hint?: string; code?: string };
+    console.error(
+      `Enregistrement de ${cle} refusé par la base`,
+      { code: e.code, message: e.message, details: e.details, hint: e.hint },
+      err
+    );
+    return false;
+  }
+}
+
+/** Retrouve l'uuid d'une ligne à partir de son identifiant hérité. */
+async function chercherUuid(table: TableName, legacyId: string): Promise<Uuid | null> {
+  if (!legacyId) return null;
+  const { data } = await dyn()
+    .from(table)
+    .select("id")
+    .eq("legacy_id", legacyId)
+    .maybeSingle();
+  return (data as { id: Uuid } | null)?.id ?? null;
+}
+
+async function remplacerEnfants(
+  enfant: { table: TableName; fk: string },
+  parentId: Uuid,
+  rows: Record<string, unknown>[]
+) {
+  await dyn().from(enfant.table).delete().eq(enfant.fk, parentId);
+  if (rows.length) await dyn().from(enfant.table).insert(rows);
+}
+
+/** Remplace : `async function stDelete(key)`. */
+export async function stDelete(cle: string): Promise<boolean> {
+  if (!cle) return false;
+  const [prefixe, id] = decouper(cle);
+
+  const collection = COLLECTIONS[prefixe];
+  if (!collection) return false;
+
+  const uuid = estUuid(id)
+    ? id
+    : uuidParCle.get(cle) ?? (await chercherUuid(collection.table, id));
+  if (!uuid) return false;
+
+  const { error } = await dyn().from(collection.table).delete().eq("id", uuid);
+  if (error) {
+    console.error("stDelete error:", error);
+    return false;
+  }
+
+  cache.delete(cle);
+  uuidParCle.delete(cle);
+  return true;
+}
+
+/** Remplace : `async function stListKeys(prefix)`. */
+export async function stListKeys(prefixe: string): Promise<string[]> {
+  const net = prefixe.endsWith(":") ? prefixe.slice(0, -1) : prefixe;
+  if (!COLLECTIONS[net]) return [];
+  return chargerCollection(net);
 }
 
 // ============ NUMÉROTATION ============
 
-/**
- * Remplace: async function nextNumero(societeId, type) { ... }
- * Utilise la fonction Supabase qui est atomique
- */
-export async function nextNumero(
-  societeId: string,
-  type: "devis" | "facture" | "intervention" | "bonCommande" | "sav"
-): Promise<string> {
-  return getNextNumero(societeId, type);
+/** Le HTML nomme le type « bonCommande » là où la base attend « bon_commande ». */
+const TYPES: Record<string, TypeDocument> = {
+  devis: "devis",
+  facture: "facture",
+  intervention: "intervention",
+  bonCommande: "bon_commande",
+  bon_commande: "bon_commande",
+  sav: "sav",
+};
+
+/** Remplace : `nextNumero(societeId, type)` — désormais atomique côté serveur. */
+export async function nextNumero(code: string, type: string): Promise<string> {
+  return getNextNumero(await resolveSocieteId(code), TYPES[type] ?? "devis");
 }
 
-/**
- * Remplace: async function nextSAVNumero(societeId) { ... }
- */
-export async function nextSAVNumero(societeId: string): Promise<string> {
-  return getNextNumero(societeId, "sav");
+export async function nextSAVNumero(code: string): Promise<string> {
+  return getNextNumero(await resolveSocieteId(code), "sav");
 }
 
-// ============ HELPERS ============
+// ============ RÉGLAGES ============
 
 /**
- * Remplace: function uid() { ... }
- * Génère un UUID unique
+ * L'app attend un objet plat (`s.adresse`, `s.siret`, `s.logo`…) utilisé par
+ * l'en-tête des devis, factures et rapports. En base, l'identité légale est
+ * portée par des colonnes de `societes`, et le reste par le jsonb
+ * `societe_settings.infos_entreprise`. On recompose donc à la lecture, et on
+ * réoriente chaque champ vers sa destination à l'écriture.
  */
-export function generateUid(): string {
-  return uid();
+const CHAMPS_SOCIETE: Record<string, string> = {
+  adresse: "adresse",
+  codePostal: "code_postal",
+  ville: "ville",
+  telephone: "telephone",
+  email: "email",
+  siret: "siret",
+  nom: "nom",
+};
+
+async function lireSettings(code: string): Promise<Record<string, unknown>> {
+  const societeId = await resolveSocieteId(code);
+  const [societe, settings] = await Promise.all([
+    queries.getSociete(societeId),
+    queries.getSocieteSettings(societeId),
+  ]);
+
+  const plat: Record<string, unknown> = {};
+  if (societe) {
+    for (const [champ, colonne] of Object.entries(CHAMPS_SOCIETE)) {
+      plat[champ] = (societe as unknown as Record<string, unknown>)[colonne] ?? "";
+    }
+  }
+
+  // Les préférences libres priment sur les colonnes, comme dans l'écran Réglages
+  const libres = (settings?.infos_entreprise as Record<string, unknown>) ?? {};
+  Object.assign(plat, libres);
+  plat.notifsTraitees = settings?.notifs_traitees ?? [];
+  // Toujours complet, même sans document stocké : l'app peut lire sans garde
+  plat.reglages = fusionnerReglages(libres.reglages);
+  return plat;
 }
 
-/**
- * Remplace: function todayISO() { ... }
- */
-export function getTodayISO(): string {
-  return todayISO();
-}
-
-// ============ LOAD/EXPORT/IMPORT ============
-
-/**
- * Remplace: async function loadAll() { ... }
- * Charge TOUTES les données pour une société (ou plusieurs)
- */
-export async function loadAllData(societeId: string): Promise<TerrainData> {
+async function ecrireSettings(
+  code: string,
+  valeur: Record<string, unknown>
+): Promise<boolean> {
   try {
-    const [
-      devis,
-      factures,
-      interventions,
-      bonsCommande,
-      clients,
-      articles,
-      documents,
-      reglements,
-      interlocuteurs,
-      conducteurs,
-      techniciens,
-      metiersPerso,
-      sousTraitants,
-      chantiers,
-      salaries,
-      vehicules,
-      fournisseursControle,
-      materiels,
-    ] = await Promise.all([
-      queries.listDevis(societeId),
-      queries.listFactures(societeId),
-      queries.listInterventions(societeId),
-      queries.listBonsCommande(societeId),
-      queries.listClients(societeId),
-      queries.listArticles(societeId),
-      queries.listDocuments(societeId),
-      queries.listReglements(societeId),
-      queries.listInterlocuteurs(societeId),
-      queries.listConducteurs(societeId),
-      queries.listTechniciens(societeId),
-      queries.listMetiersPerso(societeId),
-      queries.listSousTraitants(societeId),
-      queries.listChantiers(societeId),
-      queries.listSalaries(societeId),
-      queries.listVehicules(societeId),
-      queries.listFournisseursControle(societeId),
-      queries.listMateriels(societeId),
-    ]);
+    const societeId = await resolveSocieteId(code);
 
-    return {
-      devis,
-      factures,
-      interventions,
-      bons_commande: bonsCommande,
-      clients,
-      articles,
-      documents,
-      reglements,
-      interlocuteurs,
-      conducteurs,
-      techniciens,
-      metiers_perso: metiersPerso,
-      sous_traitants: sousTraitants,
-      chantiers,
-      salaries,
-      vehicules,
-      fournisseurs_controle: fournisseursControle,
-      materiels,
-      settings: {},
-      societeIds: { [societeId]: societeId },
-    };
+    const colonnes: Record<string, unknown> = {};
+    const libres: Record<string, unknown> = {};
+    for (const [champ, v] of Object.entries(valeur)) {
+      if (champ === "notifsTraitees") continue;
+      const colonne = CHAMPS_SOCIETE[champ];
+      if (colonne) colonnes[colonne] = v === "" ? null : v;
+      else libres[champ] = v;
+    }
+
+    await Promise.all([
+      Object.keys(colonnes).length
+        ? queries.updateSociete(societeId, colonnes)
+        : Promise.resolve(),
+      queries.saveSocieteSettings(societeId, {
+        infos_entreprise: libres as Json,
+        notifs_traitees: (valeur.notifsTraitees as string[]) ?? [],
+      }),
+    ]);
+    return true;
   } catch (err) {
-    console.error("loadAllData error:", err);
-    return {
-      devis: [],
-      factures: [],
-      interventions: [],
-      bons_commande: [],
-      clients: [],
-      articles: [],
-      documents: [],
-      reglements: [],
-      interlocuteurs: [],
-      conducteurs: [],
-      techniciens: [],
-      metiers_perso: [],
-      sous_traitants: [],
-      chantiers: [],
-      salaries: [],
-      vehicules: [],
-      fournisseurs_controle: [],
-      materiels: [],
-      settings: {},
-      societeIds: {},
-    };
+    console.error("Écriture des réglages impossible:", err);
+    return false;
   }
 }
 
-/**
- * Remplace: async function exportAllData() { ... }
- * Exporte toutes les données en JSON
- */
-export async function exportAllData(societeId: string, filename?: string): Promise<Blob> {
-  const data = await loadAllData(societeId);
+// ============ CHARGEMENT COMPLET ============
 
-  const json = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    societeId,
-    ...data,
+/** Instantané complet d'une société, pour l'export et les écrans de synthèse. */
+export async function loadAllData(code: string): Promise<TerrainData> {
+  const societeId = await resolveSocieteId(code);
+
+  const [
+    societe,
+    settings,
+    clients,
+    articles,
+    metiers,
+    devis,
+    factures,
+    reglements,
+    bonsCommande,
+    interventions,
+    chantiers,
+    salaries,
+    conducteurs,
+    techniciens,
+    sousTraitants,
+    vehicules,
+    materiels,
+    fournisseursControle,
+    documentsLegaux,
+  ] = await Promise.all([
+    queries.getSociete(societeId),
+    queries.getSocieteSettings(societeId),
+    queries.listClients(societeId),
+    queries.listArticles(societeId),
+    queries.listMetiers(societeId),
+    queries.listDevisComplets(societeId),
+    queries.listFacturesCompletes(societeId),
+    queries.listReglements(societeId),
+    queries.listBonsCommandeComplets(societeId),
+    queries.listInterventionsCompletes(societeId),
+    queries.listChantiersComplets(societeId),
+    queries.listSalariesComplets(societeId),
+    queries.listConducteurs(societeId),
+    queries.listTechniciens(societeId),
+    queries.listSousTraitants(societeId),
+    queries.listVehicules(societeId),
+    queries.listMateriels(societeId),
+    queries.listFournisseursControle(societeId),
+    queries.listDocumentsLegaux(societeId),
+  ]);
+
+  // Une requête pour tous les clients, pas une par client
+  const parClient = await listByParents(
+    "interlocuteurs",
+    "client_id",
+    clients.map((c) => c.id),
+    "nom"
+  );
+  const interlocuteurs = [...parClient.values()].flat();
+
+  return {
+    societe,
+    settings,
+    clients,
+    interlocuteurs,
+    articles,
+    metiers,
+    devis,
+    factures,
+    reglements,
+    bons_commande: bonsCommande,
+    interventions,
+    chantiers,
+    salaries,
+    conducteurs,
+    techniciens,
+    sous_traitants: sousTraitants,
+    vehicules,
+    materiels,
+    fournisseurs_controle: fournisseursControle,
+    documents_legaux: documentsLegaux,
   };
+}
 
-  const blob = new Blob([JSON.stringify(json, null, 2)], {
-    type: "application/json",
-  });
+export async function exportAllData(code: string, filename?: string): Promise<Blob> {
+  const data = await loadAllData(code);
+  const blob = new Blob(
+    [
+      JSON.stringify(
+        { version: 2, exportedAt: new Date().toISOString(), codeSociete: code, ...data },
+        null,
+        2
+      ),
+    ],
+    { type: "application/json" }
+  );
 
-  // Déclencher le téléchargement
   if (typeof window !== "undefined") {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -320,90 +789,21 @@ export async function exportAllData(societeId: string, filename?: string): Promi
   return blob;
 }
 
-/**
- * Remplace: async function importAllData(file) { ... }
- * Importe un fichier JSON exporté
- */
-export async function importAllData(
-  file: File,
-  societeId: string
-): Promise<{ success: boolean; count: number; error?: string }> {
-  try {
-    const text = await file.text();
-    const json = JSON.parse(text);
-
-    let count = 0;
-
-    // Importer chaque collection
-    const collections = {
-      devis: queries.createDevis,
-      factures: queries.createFacture,
-      interventions: queries.createIntervention,
-      bons_commande: queries.createBonCommande,
-      clients: queries.createClient,
-      articles: queries.createArticle,
-      documents: queries.createDocument,
-      reglements: queries.addReglement,
-      interlocuteurs: queries.createInterlocuteur,
-      conducteurs: queries.createConducteur,
-      techniciens: queries.createTechnicien,
-      metiers_perso: queries.createMetierPerso,
-      sous_traitants: queries.createSousTraitant,
-      chantiers: queries.createChantier,
-      salaries: queries.createSalarie,
-      vehicules: queries.createVehicule,
-      fournisseurs_controle: queries.createFournisseurControle,
-      materiels: queries.createMateriel,
-    };
-
-    for (const [key, createFn] of Object.entries(collections)) {
-      const items = json[key] || [];
-      for (const item of items) {
-        if (!item || !item.id) continue;
-        try {
-          // @ts-ignore - createFn est polymorphe
-          await createFn(societeId, item);
-          count++;
-        } catch (err) {
-          console.warn(`Failed to import ${key}:`, err);
-        }
-      }
-    }
-
-    return { success: true, count };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return { success: false, count: 0, error: message };
-  }
-}
-
 // ============ INJECTION GLOBALE ============
 
-/**
- * Injecte les fonctions dans le scope global du HTML
- * Appelle ça au démarrage de main.ts
- */
+/** Substitue les implémentations kv_store du HTML. À appeler avant son `init()`. */
 export function injectGlobalFunctions() {
-  if (typeof window !== "undefined") {
-    // KV Store
-    (window as any).stGet = stGet;
-    (window as any).stSet = stSet;
-    (window as any).stDelete = stDelete;
-    (window as any).stListKeys = stListKeys;
+  if (typeof window === "undefined") return;
+  const w = window as unknown as Record<string, unknown>;
 
-    // Numérotation
-    (window as any).nextNumero = nextNumero;
-    (window as any).nextSAVNumero = nextSAVNumero;
+  w.stGet = stGet;
+  w.stSet = stSet;
+  w.stDelete = stDelete;
+  w.stListKeys = stListKeys;
+  w.nextNumero = nextNumero;
+  w.nextSAVNumero = nextSAVNumero;
+  w.loadAllData = loadAllData;
+  w.exportAllData = exportAllData;
 
-    // Helpers
-    (window as any).uid = generateUid;
-    (window as any).todayISO = getTodayISO;
-
-    // Load/Export/Import
-    (window as any).loadAllData = loadAllData;
-    (window as any).exportAllData = exportAllData;
-    (window as any).importAllData = importAllData;
-
-    console.log("✅ Global functions injected (stGet, stSet, etc.)");
-  }
+  console.log("✅ Accès données branché sur les tables Supabase (kv_store retiré)");
 }
