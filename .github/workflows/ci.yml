@@ -39,3 +39,27 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Analyse statique de la couche TypeScript.
+  #
+  # Semgrep n'extrait pas le JavaScript inline d'un fichier HTML : le monolithe
+  # `src/pages/index.html` et ses 104 écritures `innerHTML` lui restent
+  # invisibles. Ce travail-là revient à la relecture des diffs.
+  securite:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep
+        run: >
+          semgrep scan
+          --config p/typescript
+          --config p/javascript
+          --config p/secrets
+          --config p/owasp-top-ten
+          --exclude=node_modules --exclude=dist
+          --exclude=src/api/database.types.ts --exclude=src/api/columns.ts
+          --error
+          src/ scripts/
