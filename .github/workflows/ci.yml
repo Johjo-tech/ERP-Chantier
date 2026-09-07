@@ -22,9 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22 minimum : @supabase/realtime-js exige un WebSocket natif
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # `npm ci` impose le lockfile : le build de la CI est celui du poste
