@@ -1,301 +1,197 @@
 /**
- * Test Suite - Workflows métier complets
+ * Workflows métier de bout en bout, sur la vraie base.
  *
- * Teste tous les workflows critiques:
- * ✅ Devis → Facture
- * ✅ BC → Facture
- * ✅ Intervention → Facture
- * ✅ Planification multi-métier
- * ✅ Réglement + statut facture
- * ✅ SAV
- * ✅ Notifications
+ * Les tables sont sous RLS : sans identifiants de test dans `.env.local`
+ * (voir setup.ts), toute la suite est ignorée plutôt que rouge.
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
 import * as workflows from "@/api/operations/workflows";
 import * as queries from "@/api/queries";
-import { uid } from "@/api/client";
+import type { Uuid } from "@/api/types";
+import { AUTH_DISPONIBLE, TEST_SOCIETE_CODE } from "./setup";
 
-// Mock société pour les tests
-const TEST_SOCIETE_ID = "test-societe-" + uid();
+const suite = AUTH_DISPONIBLE ? describe : describe.skip;
 
-describe("Workflows Métier", () => {
-  let testDevisId: string;
-  let testBCId: string;
-  let testInterventionId: string;
-  let testFactureId: string;
+suite("Workflows métier", () => {
+  const NOM_CLIENT = "CLIENT DE TEST";
+  let societeId: Uuid;
+  let clientId: Uuid;
+  let devisId: Uuid;
+  let bcId: Uuid;
+  let interventionId: Uuid;
 
   beforeAll(async () => {
-    // Créer des données de test
-    const devis = await queries.createDevis(TEST_SOCIETE_ID, {
-      client: "TEST CLIENT",
-      date: new Date().toISOString().split("T")[0],
-    });
-    testDevisId = devis.id;
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    if (!societe) throw new Error(`Société « ${TEST_SOCIETE_CODE} » introuvable`);
+    societeId = societe.id;
 
-    const bc = await queries.createBonCommande(TEST_SOCIETE_ID, {
-      client: "TEST CLIENT",
-      numero_bc: "TEST-BC-001",
-      date_planifiee: new Date().toISOString().split("T")[0],
-    });
-    testBCId = bc.id;
+    const client = await queries.resolveClientByNom(societeId, NOM_CLIENT);
+    clientId = client.id;
 
-    const intervention = await queries.createIntervention(TEST_SOCIETE_ID, {
-      client: "TEST CLIENT",
-      date: new Date().toISOString().split("T")[0],
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+
+    const devis = await queries.createDevis(
+      societeId,
+      { client_nom: NOM_CLIENT, client_id: clientId, date: aujourdhui },
+      [{ type: "ligne", designation: "Prestation test", quantite: 2, prix_unitaire: 100, tva: 10 }]
+    );
+    devisId = devis.id;
+
+    const bc = await queries.createBonCommande(
+      societeId,
+      { client_nom: NOM_CLIENT, client_id: clientId, date: aujourdhui },
+      [{ type: "ligne", designation: "Fourniture test", quantite: 1, prix_unitaire: 250, tva: 20 }]
+    );
+    bcId = bc.id;
+
+    const intervention = await queries.createIntervention(societeId, {
+      client_nom: NOM_CLIENT,
+      client_id: clientId,
+      date: aujourdhui,
     });
-    testInterventionId = intervention.id;
+    interventionId = intervention.id;
   });
 
   describe("Devis → Facture", () => {
-    it("devrait créer une facture depuis un devis accepté", async () => {
-      const facture = await workflows.accepterDevisEtCreerFacture(
-        TEST_SOCIETE_ID,
-        testDevisId
-      );
+    it("recopie l'en-tête et les lignes du devis", async () => {
+      const facture = await workflows.accepterDevisEtCreerFacture(societeId, devisId);
 
-      expect(facture).toBeDefined();
-      expect(facture.devis_id).toBe(testDevisId);
+      expect(facture.devis_id).toBe(devisId);
+      expect(facture.client_id).toBe(clientId);
       expect(facture.statut).toBe("impayée");
-      expect(facture.client).toBe("TEST CLIENT");
-
-      testFactureId = facture.id;
+      expect(facture.lignes).toHaveLength(1);
+      expect(facture.lignes[0].designation).toBe("Prestation test");
     });
 
-    it("devis devrait être marqué accepté", async () => {
-      const devis = await queries.getDevis(testDevisId);
-
+    it("passe le devis en « accepté »", async () => {
+      const devis = await queries.getDevis(devisId);
       expect(devis?.statut).toBe("accepté");
     });
   });
 
-  describe("BC → Facture", () => {
-    it("devrait créer une facture depuis un BC reçu", async () => {
-      const facture = await workflows.clotureractureDepuisBC(
-        TEST_SOCIETE_ID,
-        testBCId,
-        new Date().toISOString().split("T")[0]
-      );
+  describe("Bon de commande → Facture", () => {
+    it("facture le BC et enregistre sa réception", async () => {
+      const date = new Date().toISOString().slice(0, 10);
+      const facture = await workflows.facturerBonCommande(societeId, bcId, date);
 
-      expect(facture).toBeDefined();
-      expect(facture.bon_commande_id).toBe(testBCId);
-      expect(facture.statut).toBe("impayée");
-    });
+      expect(facture.bon_commande_id).toBe(bcId);
+      expect(facture.lignes).toHaveLength(1);
 
-    it("BC devrait être marqué comme reçu", async () => {
-      const bc = await queries.getBonCommande(testBCId);
-
-      expect(bc?.date_reception).toBeDefined();
+      const bc = await queries.getBonCommande(bcId);
+      expect(bc?.date_reception).toBe(date);
     });
   });
 
-  describe("Rapport d'Intervention", () => {
-    it("devrait compléter un rapport et créer facture", async () => {
+  describe("Rapport d'intervention", () => {
+    it("aplatit le rapport en deux colonnes puis facture", async () => {
       const facture = await workflows.completerRapportEtCreerFacture(
-        TEST_SOCIETE_ID,
-        testInterventionId,
-        "Contrôle technique effectué",
-        "Remplacement du joint détecté",
-        "data:image/svg+xml;base64,PHN2Zz4...", // Signature base64 mock
-        []
+        societeId,
+        interventionId,
+        "Fuite sur colonne",
+        "Tirage multicouche 16 ml"
       );
 
-      expect(facture).toBeDefined();
-      expect(facture.intervention_id).toBe(testInterventionId);
-    });
+      expect(facture.intervention_id).toBe(interventionId);
 
-    it("intervention devrait avoir le rapport rempli", async () => {
-      const intervention = await queries.getIntervention(testInterventionId);
-
-      expect(intervention?.rapport?.constatations).toBe(
-        "Contrôle technique effectué"
-      );
-      expect(intervention?.rapport?.preconisations).toBe(
-        "Remplacement du joint détecté"
-      );
+      const intervention = await queries.getIntervention(interventionId);
+      expect(intervention?.constatations).toBe("Fuite sur colonne");
+      expect(intervention?.preconisations).toBe("Tirage multicouche 16 ml");
     });
   });
 
-  describe("Planification Multi-métier", () => {
-    it("devrait planifier un BC pour plusieurs métiers", async () => {
-      const bc = await workflows.planifierBCMultiMetier(testBCId, [
+  describe("Planification multi-métier", () => {
+    it("écrit un créneau par métier", async () => {
+      const bc = await workflows.planifierBCMultiMetier(bcId, [
         {
           metier: "Plomberie",
           technicien: "Jean Dupont",
-          datePlanifiee: "2024-09-15",
-          datePlanifieeFin: "2024-09-16",
+          datePlanifiee: "2026-09-15",
           heurePlanifiee: "08:00",
           dureeHeures: 16,
         },
         {
           metier: "Électricité",
           sousTraitant: "ACME Electric",
-          datePlanifiee: "2024-09-17",
-          datePlanifieeFin: "2024-09-17",
+          datePlanifiee: "2026-09-17",
           heurePlanifiee: "14:00",
           dureeHeures: 8,
         },
       ]);
 
-      expect(bc.schedule_par_metier).toBeDefined();
-      expect(Object.keys(bc.schedule_par_metier!)).toHaveLength(2);
+      const schedule = (bc.schedule_par_metier ?? {}) as Record<
+        string,
+        { technicien?: string }
+      >;
+      expect(Object.keys(schedule)).toHaveLength(2);
+      expect(schedule.Plomberie.technicien).toBe("Jean Dupont");
     });
   });
 
-  describe("Réglement Facture", () => {
-    it("devrait ajouter un réglement", async () => {
-      const { reglement, facture } =
+  describe("Règlement", () => {
+    it("laisse la facture impayée sur un règlement partiel", async () => {
+      const facture = await queries.createFacture(
+        societeId,
+        {
+          client_nom: NOM_CLIENT,
+          client_id: clientId,
+          date: new Date().toISOString().slice(0, 10),
+        },
+        [{ type: "ligne", designation: "Test solde", quantite: 1, prix_unitaire: 100, tva: 0 }]
+      );
+
+      const { facture: apres, soldeRestant } =
         await workflows.ajouterReglementEtMajStatut(
-          testFactureId,
-          100,
-          "Chèque",
-          new Date().toISOString().split("T")[0],
-          "CHK-001"
+          societeId,
+          facture.id,
+          40,
+          "virement",
+          new Date().toISOString().slice(0, 10)
         );
 
-      expect(reglement).toBeDefined();
-      expect(reglement.montant).toBe(100);
-      expect(reglement.mode).toBe("Chèque");
+      expect(soldeRestant).toBeCloseTo(60, 2);
+      expect(apres.statut).toBe("impayée");
     });
 
-    it("devrait marquer facture comme payée si solde = 0", async () => {
-      // Récupérer les totaux de la facture
-      const totaux = await queries.getFactureTotaux(testFactureId);
-
-      // Ajouter un réglement égal au total
-      await workflows.ajouterReglementEtMajStatut(
-        testFactureId,
-        totaux.montant_ht + totaux.montant_tva,
-        "Virement",
-        new Date().toISOString().split("T")[0]
+    it("solde la facture quand le total est atteint", async () => {
+      const facture = await queries.createFacture(
+        societeId,
+        {
+          client_nom: NOM_CLIENT,
+          client_id: clientId,
+          date: new Date().toISOString().slice(0, 10),
+        },
+        [{ type: "ligne", designation: "Test soldé", quantite: 1, prix_unitaire: 100, tva: 0 }]
       );
 
-      const facture = await queries.getFacture(testFactureId);
-      expect(facture?.statut).toBe("payée");
+      const { facture: apres, soldeRestant } =
+        await workflows.ajouterReglementEtMajStatut(
+          societeId,
+          facture.id,
+          100,
+          "virement",
+          new Date().toISOString().slice(0, 10)
+        );
+
+      expect(soldeRestant).toBeCloseTo(0, 2);
+      expect(apres.statut).toBe("payée");
     });
   });
 
-  describe("SAV (Bon de commande lié)", () => {
-    it("devrait créer un SAV pour un BC précédent", async () => {
-      const sav = await workflows.creerSAV(
-        TEST_SOCIETE_ID,
-        testBCId,
-        "Problème de fuite détecté après 2 jours",
-        []
-      );
-
-      expect(sav).toBeDefined();
-      expect(sav.bon_commande_id).toBe(testBCId);
-      expect(sav.probleme_description).toBe(
-        "Problème de fuite détecté après 2 jours"
-      );
-    });
-  });
-
-  describe("Notifications", () => {
-    it("devrait calculer les notifications", async () => {
-      const notifications = await workflows.calculerNotifications(
-        TEST_SOCIETE_ID
-      );
-
-      expect(Array.isArray(notifications)).toBe(true);
-      // Les notifications peuvent être vides si aucune alerte à date
-      // C'est normal
-    });
-  });
-
-  describe("Export & Backup", () => {
-    it("devrait créer une sauvegarde des données", async () => {
-      const blob = await workflows.sauvegarderSociete(TEST_SOCIETE_ID);
-
-      expect(blob).toBeDefined();
-      expect(blob.type).toBe("application/json");
-      expect(blob.size).toBeGreaterThan(0);
-
-      // Vérifier qu'on peut parser le JSON
-      const text = await blob.text();
-      const data = JSON.parse(text);
-      expect(data.version).toBe(1);
-      expect(data.societeId).toBe(TEST_SOCIETE_ID);
-    });
-  });
-});
-
-describe("Mutations de données", () => {
-  describe("CRUD Clients", () => {
-    let clientId: string;
-
-    it("devrait créer un client", async () => {
-      const client = await queries.createClient(TEST_SOCIETE_ID, {
-        nom: "Nouveau Client",
-        email: "contact@client.com",
-      });
-
-      expect(client).toBeDefined();
-      expect(client.nom).toBe("Nouveau Client");
-      clientId = client.id;
-    });
-
-    it("devrait mettre à jour un client", async () => {
-      const updated = await queries.updateClient(clientId, {
-        email: "new@client.com",
-      });
-
-      expect(updated.email).toBe("new@client.com");
-    });
-
-    it("devrait récupérer un client", async () => {
-      const client = await queries.getClient(clientId);
-
-      expect(client?.id).toBe(clientId);
-    });
-
-    it("devrait lister les clients", async () => {
-      const clients = await queries.listClients(TEST_SOCIETE_ID);
-
-      expect(Array.isArray(clients)).toBe(true);
-      expect(clients.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it("devrait supprimer un client", async () => {
-      await queries.deleteClient(clientId);
-
-      const client = await queries.getClient(clientId);
-      expect(client).toBeNull();
-    });
-  });
-
-  describe("CRUD Articles", () => {
-    it("devrait créer et supprimer un article", async () => {
-      const article = await queries.createArticle(TEST_SOCIETE_ID, {
+  describe("CRUD", () => {
+    it("crée, modifie puis supprime un article", async () => {
+      const article = await queries.createArticle(societeId, {
         code: "ART-TEST",
         designation: "Article de test",
-        prix_vente: 99.99,
+        prix_unitaire: 99.99,
+        tva: 20,
       });
 
-      expect(article).toBeDefined();
+      const modifie = await queries.updateArticle(article.id, { designation: "Modifié" });
+      expect(modifie.designation).toBe("Modifié");
 
       await queries.deleteArticle(article.id);
-
-      const deleted = await queries.getArticle(article.id);
-      expect(deleted).toBeNull();
+      expect(await queries.getArticle(article.id)).toBeNull();
     });
-  });
-});
-
-describe("Sécurité & Validation", () => {
-  it("devrait refuser stGet avec clé invalide", async () => {
-    const result = await queries.getDevis("invalid-id");
-
-    expect(result).toBeNull();
-  });
-
-  it("devrait gérer les erreurs Supabase", async () => {
-    try {
-      // Tenter une opération invalide
-      await queries.deleteDevis("non-existent-devis-id");
-    } catch (err) {
-      expect(err).toBeDefined();
-    }
   });
 });

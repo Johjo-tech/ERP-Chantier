@@ -1,44 +1,43 @@
 /**
- * Setup des tests
- * Initialise l'environnement de test Supabase
+ * Setup des tests.
+ *
+ * Les tables sont protégées par RLS : les tests d'intégration ont besoin d'un
+ * utilisateur applicatif. Renseignez `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`
+ * (et `TEST_SOCIETE_CODE`) dans `.env.local` pour les activer ; sans eux, seules
+ * les suites unitaires tournent.
+ *
+ * Ces variables n'ont pas de préfixe `VITE_` : c'est délibéré, il les rendrait
+ * inlinables dans le bundle navigateur.
  */
 
-import { beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "@/api/client";
+import { beforeAll, afterAll } from "vitest";
+import { signIn, signOut, supabase } from "@/api/client";
 
-// ============ SETUP GLOBAL ============
+// Volontairement sans préfixe `VITE_` : ces variables ne sont lisibles que
+// côté Node (voir vitest.config.ts) et ne peuvent donc pas fuiter dans un
+// bundle navigateur, contrairement à VITE_SUPABASE_ANON_KEY.
+export const TEST_EMAIL = process.env.TEST_USER_EMAIL;
+export const TEST_PASSWORD = process.env.TEST_USER_PASSWORD;
+export const TEST_SOCIETE_CODE = process.env.TEST_SOCIETE_CODE ?? "kta";
+
+/** Les suites d'intégration s'appuient dessus pour se désactiver proprement. */
+export const AUTH_DISPONIBLE = Boolean(TEST_EMAIL && TEST_PASSWORD);
 
 beforeAll(async () => {
-  console.log("🧪 Test environment initializing...");
-
-  // Vérifier la connexion Supabase
-  try {
-    const { data, error } = await supabase.from("clients").select("count", { count: "exact" });
-    if (error) {
-      console.error("❌ Supabase connection failed:", error);
-      throw error;
-    }
-    console.log("✅ Supabase connected");
-  } catch (err) {
-    console.error("❌ Setup failed:", err);
-    throw err;
+  if (!AUTH_DISPONIBLE) {
+    console.warn(
+      "⏭  Tests d'intégration ignorés : TEST_USER_EMAIL / TEST_USER_PASSWORD absents de .env.local"
+    );
+    return;
   }
-});
 
-// ============ CLEANUP ============
+  await signIn(TEST_EMAIL!, TEST_PASSWORD!);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Authentification de test impossible");
+});
 
 afterAll(async () => {
-  console.log("🧹 Cleaning up test data...");
-
-  // TODO: Nettoyer les données de test
-  // Pour l'instant, les données restent dans la BD
-  // À implémenter: transaction que rollback à la fin des tests
-
-  console.log("✅ Test environment cleaned up");
-});
-
-// ============ FIXTURES ============
-
-beforeEach(() => {
-  // Réinitialiser l'état si nécessaire
+  if (AUTH_DISPONIBLE) await signOut();
 });
