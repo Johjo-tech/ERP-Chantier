@@ -65,11 +65,8 @@ export async function getCurrentUser() {
       return null;
     }
 
-    return {
-      id: session.user.id,
-      email: session.user.email,
-      ...profile,
-    };
+    // Le profil porte déjà `id` et `email` : on ne les réécrase pas
+    return { ...profile, email: profile.email ?? session.user.email };
   } catch (err) {
     console.error("Get current user error:", err);
     return null;
