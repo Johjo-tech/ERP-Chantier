@@ -1717,20 +1717,23 @@ async function loadAll(){
   const [devis, factures, interventions, bonsCommande, clients, articles, documents, reglements, interlocuteurs, conducteurs, techniciens, metiersPerso, sousTraitants, chantiers, salaries, vehicules, materiels] = await Promise.all([
     loadPrefix('devis:'), loadPrefix('facture:'), loadPrefix('intervention:'), loadPrefix('bonCommande:'), loadPrefix('client:'), loadPrefix('article:'), loadPrefix('document:'), loadPrefix('reglement:'), loadPrefix('interlocuteur:'), loadPrefix('conducteur:'), loadPrefix('technicien:'), loadPrefix('metierPerso:'), loadPrefix('sousTraitant:'), loadPrefix('chantier:'), loadPrefix('salarie:'), loadPrefix('vehicule:'), loadPrefix('materiel:')
   ]);
-  state.devis = devis.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
-  state.factures = factures.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
-  state.interventions = interventions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
-  state.bonsCommande = bonsCommande.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  /* Le plus récent d'abord. On prend la première date renseignée parmi celles
+     qui font sens pour le document — un bon de commande n'a pas de `date`,
+     il a une date de réception — et `createdAt` départage les ex æquo. */
+  state.devis = trierParDate(devis, ['date']);
+  state.factures = trierParDate(factures, ['date']);
+  state.interventions = trierParDate(interventions, ['date']);
+  state.bonsCommande = trierParDate(bonsCommande, ['dateReception','datePlanifiee','date']);
   state.clients = clients.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
   state.articles = articles.sort((a,b)=> (a.code||'').localeCompare(b.code||''));
   state.documents = documents.sort((a,b)=> (a.dateValidite||'9999').localeCompare(b.dateValidite||'9999'));
-  state.reglements = reglements.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  state.reglements = trierParDate(reglements, ['date']);
   state.interlocuteurs = interlocuteurs.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
   state.conducteurs = conducteurs.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
   state.techniciens = techniciens;
   state.metiersPerso = metiersPerso;
   state.sousTraitants = sousTraitants;
-  state.chantiers = chantiers.sort((a,b)=> (b.dateDebut||'').localeCompare(a.dateDebut||''));
+  state.chantiers = trierParDate(chantiers, ['dateDebut']);
   state.salaries = salaries.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
   state.vehicules = vehicules.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
   state.materiels = materiels.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
@@ -1875,6 +1878,21 @@ function toggleGhostMode(checked){
 /* Date civile locale : toISOString() bascule en UTC et renvoie la veille
    avant 01h/02h à Paris. */
 function todayISO(){ return dateLocaleISO(new Date()); }
+
+/* Tri antéchronologique : première date renseignée parmi `champs`, puis
+   `createdAt` pour départager. Les documents sans date passent en dernier
+   plutôt que de remonter en tête. */
+function trierParDate(liste, champs){
+  const cle = d => {
+    for(const c of champs){ if(d[c]) return String(d[c]); }
+    return '';
+  };
+  return [...liste].sort((a,b)=>{
+    const diff = cle(b).localeCompare(cle(a));
+    if(diff !== 0) return diff;
+    return String(b.createdAt||'').localeCompare(String(a.createdAt||''));
+  });
+}
 function dateLocaleISO(d){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }

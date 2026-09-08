@@ -142,6 +142,8 @@ const COLLECTIONS: Record<string, Collection> = {
   },
   bonCommande: {
     table: "bons_commande",
+    // Le SAV pointe vers son bon d'origine ; la colonne ne porte pas le même nom
+    alias: { bonCommandeId: "bon_commande_parent_id" },
     lignes: { table: "bon_commande_lignes", fk: "bon_commande_id" },
     photos: { table: "bon_commande_photos", fk: "bon_commande_id" },
     client: true,

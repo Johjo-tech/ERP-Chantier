@@ -98,3 +98,57 @@ describe("Robustesse de la traduction vers la base", () => {
     expect(valeursEnum("devis", "adresse")).toBeNull();
   });
 });
+
+describe("Tri antéchronologique des documents", () => {
+  /** Reprise de `trierParDate()` de l'application, à l'identique. */
+  function trierParDate<T extends Record<string, unknown>>(liste: T[], champs: string[]): T[] {
+    const cle = (d: T) => {
+      for (const c of champs) if (d[c]) return String(d[c]);
+      return "";
+    };
+    return [...liste].sort((a, b) => {
+      const diff = cle(b).localeCompare(cle(a));
+      if (diff !== 0) return diff;
+      return String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
+    });
+  }
+
+  it("met le plus récent en premier", () => {
+    const tri = trierParDate(
+      [{ id: "a", date: "2026-01-10" }, { id: "b", date: "2026-03-02" }, { id: "c", date: "2026-02-01" }],
+      ["date"]
+    );
+    expect(tri.map((d) => d.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("retombe sur le champ suivant quand le premier est vide", () => {
+    // Un bon de commande n'a pas de `date` : c'est sa réception qui compte
+    const tri = trierParDate(
+      [
+        { id: "ancien", dateReception: "2026-01-05" },
+        { id: "recent", dateReception: "2026-06-20" },
+      ],
+      ["dateReception", "datePlanifiee", "date"]
+    );
+    expect(tri.map((d) => d.id)).toEqual(["recent", "ancien"]);
+  });
+
+  it("départage les ex æquo par date de création", () => {
+    const tri = trierParDate(
+      [
+        { id: "premier", date: "2026-05-01", createdAt: "2026-05-01T08:00:00Z" },
+        { id: "second", date: "2026-05-01", createdAt: "2026-05-01T17:00:00Z" },
+      ],
+      ["date"]
+    );
+    expect(tri.map((d) => d.id)).toEqual(["second", "premier"]);
+  });
+
+  it("relègue les documents sans date en fin de liste", () => {
+    const tri = trierParDate(
+      [{ id: "sansDate" }, { id: "date", date: "2026-01-01" }],
+      ["date"]
+    );
+    expect(tri.map((d) => d.id)).toEqual(["date", "sansDate"]);
+  });
+});
