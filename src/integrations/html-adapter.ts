@@ -224,6 +224,12 @@ const inconnusSignales = new Set<string>();
 /* Champs du circuit de validation : sans colonne, mais traduits en
    transitions par `appliquerWorkflow` — les signaler serait trompeur. */
 const CHAMPS_TRADUITS = new Set([
+  "piece_a_commander",
+  "piece_a_commander_detail",
+  "piece_a_commander_fournisseur",
+  "piece_a_commander_date_commande",
+  "technicien_commentaire",
+  "technicien_dessin",
   "metiers_fait",
   "date_origine_fait",
   "valide_conducteur",
@@ -456,7 +462,18 @@ interface TacheBC {
   statut: string | null;
   validee_le: string | null;
   realisee_le: string | null;
+  commentaire: string | null;
+  croquis: string | null;
+  piece_a_commander: boolean | null;
+  piece_description: string | null;
+  piece_fournisseur: string | null;
+  piece_date_commande: string | null;
 }
+
+/** Colonnes du circuit, lues d'un bloc pour toute la collection. */
+const CHAMPS_TACHE =
+  "id, bon_commande_id, metier, statut, validee_le, realisee_le, commentaire," +
+  " croquis, piece_a_commander, piece_description, piece_fournisseur, piece_date_commande";
 
 /** Complète les bons de commande chargés avec l'état réel du circuit. */
 async function reconstituerWorkflow(
@@ -467,7 +484,7 @@ async function reconstituerWorkflow(
 
   const { data, error } = await dyn()
     .from("planning_taches")
-    .select("id, bon_commande_id, metier, statut, validee_le, realisee_le")
+    .select(CHAMPS_TACHE)
     .in("bon_commande_id", ids);
 
   if (error) {
@@ -505,6 +522,18 @@ async function reconstituerWorkflow(
 
     const etat = bc.statutWorkflow as string | undefined;
     bc.valideDirecteur = etat === "chiffre" || etat === "facture";
+
+    /* Constats du terrain : l'app les porte sur le bon, la base sur la tâche.
+       Une pièce signalée sur n'importe quelle tâche concerne le bon entier. */
+    const avecPiece = taches.find((t) => t.piece_a_commander);
+    bc.pieceACommander = !!avecPiece;
+    bc.pieceACommanderDetail = avecPiece?.piece_description ?? "";
+    bc.pieceACommanderFournisseur = avecPiece?.piece_fournisseur ?? "";
+    bc.pieceACommanderDateCommande = avecPiece?.piece_date_commande ?? "";
+
+    const avecCommentaire = taches.find((t) => t.commentaire);
+    bc.technicienCommentaire = avecCommentaire?.commentaire ?? "";
+    bc.technicienDessin = taches.find((t) => t.croquis)?.croquis ?? null;
   }
 }
 
@@ -536,7 +565,26 @@ async function appliquerWorkflow(
   );
   const dateFranchie = !avant.dateOrigineFait && !!valeur.dateOrigineFait;
 
-  if (!metiersCoches.length && !conducteurFranchi && !directeurFranchi && !dateFranchie) {
+  /* Constats du terrain : pièce à commander, commentaire, croquis. */
+  const CHAMPS_TERRAIN = [
+    "pieceACommander",
+    "pieceACommanderDetail",
+    "pieceACommanderFournisseur",
+    "pieceACommanderDateCommande",
+    "technicienCommentaire",
+    "technicienDessin",
+  ] as const;
+  const terrainModifie = CHAMPS_TERRAIN.some(
+    (c) => (avant[c] ?? "") !== (valeur[c] ?? "")
+  );
+
+  if (
+    !metiersCoches.length &&
+    !conducteurFranchi &&
+    !directeurFranchi &&
+    !dateFranchie &&
+    !terrainModifie
+  ) {
     return;
   }
 
@@ -604,6 +652,33 @@ async function appliquerWorkflow(
     if (conducteurFranchi) {
       for (const t of taches.filter((x) => x.statut === "realisee")) {
         await queries.validerTache(t.id, true);
+      }
+    }
+
+    /* Les constats vont sur la tâche du bon. La pièce est signalée pour
+       l'ensemble : on la porte sur la première tâche, qui suffit à la faire
+       remonter dans « Pièces en commande ». */
+    if (terrainModifie) {
+      const cible =
+        taches[0]?.id ??
+        (await tachePourMetier(
+          (valeur.metiers as string[])?.[0] ?? (valeur.metier as string) ?? null
+        ));
+
+      if (cible) {
+        const maj: Record<string, unknown> = {
+          piece_a_commander: !!valeur.pieceACommander,
+          piece_description: (valeur.pieceACommanderDetail as string) || null,
+          piece_fournisseur: (valeur.pieceACommanderFournisseur as string) || null,
+          piece_date_commande:
+            (valeur.pieceACommanderDateCommande as string) || null,
+        };
+        const commentaire = valeur.technicienCommentaire as string | undefined;
+        if (commentaire !== undefined) maj.commentaire = commentaire || null;
+        const croquis = valeur.technicienDessin as string | null | undefined;
+        if (croquis !== undefined) maj.croquis = croquis || null;
+
+        await queries.updateTache(cible, maj);
       }
     }
 
