@@ -1007,6 +1007,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   .p-badge-origine{ background:#E9A23B !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .p-sans-prix td{ background:#FFF1F0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+/* Logo de l'émetteur, en tête de tout document imprimé. */
+.p-logo{ max-height:18mm; max-width:55mm; display:block; margin-bottom:2.5mm; }
 /* Conditions de règlement et mentions du code de commerce, en pied de facture. */
 .p-conditions{ width:100%; margin-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-conditions td{ width:50%; vertical-align:top; font-size:8.5pt; color:#3C4757; padding-right:6mm; }
@@ -3335,6 +3337,7 @@ function renderPrintIntervention(it){
   return `
     <table class="p-header"><tr>
       <td style="width:55%;">
+        ${logoHTML(s)}
         <div class="p-doctitle">RAPPORT D'INTERVENTION</div>
       </td>
       <td style="width:45%;">
@@ -3467,6 +3470,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
   return `
     <table class="p-header"><tr>
       <td style="width:55%;">
+        ${logoHTML(s)}
         <div class="p-company">${esc(em.nom)}</div>
         ${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}
       </td>
@@ -3510,6 +3514,17 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     ${blocMentionsHTML(type, s)}
     <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
   `;
+}
+
+/**
+ * Logo de l'en-tête.
+ *
+ * Il était téléversable, stocké et visible dans les réglages, mais
+ * n'apparaissait sur aucun document imprimé — seul l'export Word du PPSPS
+ * s'en servait. Il vit en data-URL, donc html2pdf le rend sans requête réseau.
+ */
+function logoHTML(s){
+  return s && s.logo ? `<img class="p-logo" src="${esc(s.logo)}" alt="">` : '';
 }
 
 /**
