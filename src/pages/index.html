@@ -1033,7 +1033,11 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .wf-refusee{ background:#FDECEE; color:#B42318; }
 .wf-motif{ margin-top:8px; font-size:12px; color:#B42318; }
 .wf-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-.wf-meta{ font-size:11.5px; color:var(--text-dim); margin-top:6px; }
+.wf-meta{ font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.6; }
+.wf-attente{ margin-top:8px; }
+.wf-tour{ display:inline-block; font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:999px; background:var(--surface-2); color:var(--text-dim); }
+.wf-tour-moi{ background:var(--accent-soft); color:var(--accent-2); }
+.wf-clos{ display:inline-block; font-size:11.5px; font-weight:700; color:var(--success); }
 </style>
 </head>
 <body class="sidebar-collapsed">
@@ -6337,17 +6341,36 @@ function renderWorkflowTache(){
     boutons.push(`<button class="btn" onclick="wfValiderPrefacture()">🧾 Valider la pré-facture</button>`);
   }
 
-  const auteur = [];
-  if(t.realisee_le) auteur.push(`Déclarés faits le ${fmtDate(String(t.realisee_le).slice(0,10))}`);
-  if(t.validee_le) auteur.push(`Validés le ${fmtDate(String(t.validee_le).slice(0,10))}`);
+  /* Qui a fait quoi : un identifiant ne dit rien, on affiche le nom. */
+  const histoire = [];
+  if(t.realisee_le){
+    histoire.push(`Déclarés faits par <b>${esc(window.nomIntervenant(t.realisee_par))}</b> le ${fmtDate(String(t.realisee_le).slice(0,10))}`);
+  }
+  if(t.validee_le){
+    histoire.push(`Validés par <b>${esc(window.nomIntervenant(t.validee_par))}</b> le ${fmtDate(String(t.validee_le).slice(0,10))}`);
+  }
+  if(statut === 'refusee' && t.validee_par){
+    histoire.push(`Refusés par <b>${esc(window.nomIntervenant(t.validee_par))}</b>`);
+  }
+
+  /* À qui le tour : c'est la question qu'on se pose en ouvrant la fiche. */
+  const acteur = window.prochainActeur(statut);
+  const cestMonTour = (statut === 'realisee' && droits.peutArbitrer)
+    || ((statut === 'planifiee' || statut === 'refusee') && droits.peutCloturer);
+  const attente = statut === 'validee'
+    ? '<span class="wf-clos">✓ Circuit terminé pour cette tâche</span>'
+    : (cestMonTour
+        ? `<span class="wf-tour wf-tour-moi">⏳ À vous de jouer — ${esc(acteur)}</span>`
+        : `<span class="wf-tour">⏳ En attente de ${esc(acteur)}</span>`);
 
   zone.innerHTML = `<div class="wf-bandeau">
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
     ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
-    ${auteur.length ? `<div class="wf-meta">${esc(auteur.join(' · '))}</div>` : ''}
+    ${histoire.length ? `<div class="wf-meta">${histoire.join('<br>')}</div>` : ''}
+    <div class="wf-attente">${attente}</div>
     ${boutons.length
       ? `<div class="wf-actions">${boutons.join('')}</div>`
-      : `<div class="wf-meta">Aucune action disponible pour votre rôle à cette étape.</div>`}
+      : `<div class="wf-meta">Aucune action ouverte à votre rôle à cette étape.</div>`}
   </div>`;
 }
 

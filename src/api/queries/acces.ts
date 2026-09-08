@@ -63,3 +63,42 @@ export async function aPermission(
   }
   return data === true;
 }
+
+// ============ ANNUAIRE DES PERSONNES ============
+
+export interface Intervenant {
+  id: Uuid;
+  nom: string;
+  role: RoleMembre | null;
+}
+
+/**
+ * Qui a fait quoi : les tâches référencent un `profile_id`, l'interface doit
+ * afficher un nom et un rôle.
+ *
+ * Le rôle vient de `membres_societe` : la même personne peut être conducteur
+ * chez une société et technicien chez une autre, la question n'a de sens que
+ * rapportée à une société.
+ */
+export async function listIntervenants(societeId: Uuid): Promise<Intervenant[]> {
+  const { data, error } = await supabase
+    .from("membres_societe")
+    .select("role, profiles(id, nom, email)")
+    .eq("societe_id", societeId);
+
+  if (error) {
+    throw new SupabaseError("Failed to list intervenants", error.code, error);
+  }
+
+  return ((data ?? []) as unknown as {
+    role: RoleMembre | null;
+    profiles: { id: Uuid; nom: string | null; email: string | null } | null;
+  }[])
+    .filter((m) => m.profiles)
+    .map((m) => ({
+      id: m.profiles!.id,
+      // Le nom peut manquer sur un compte fraîchement créé
+      nom: m.profiles!.nom || m.profiles!.email || "—",
+      role: m.role,
+    }));
+}
