@@ -25,6 +25,8 @@ import {
   PERIODICITES_EREPORTING,
   REGIMES_TVA,
   sansTva,
+  identifiantsLegaux,
+  mentionsLegales,
   sirenDuSiret,
   sirenValide,
   siretValide,
@@ -306,5 +308,66 @@ describe("Régime de TVA", () => {
       "trimestriel",
       "annuel",
     ]);
+  });
+});
+
+describe("Mentions du document", () => {
+  it("porte toujours les deux mentions imposées par le code de commerce", () => {
+    // Même sans rien de personnalisé : elles ne sont pas optionnelles
+    const m = mentionsLegales({});
+    expect(m[0]).toContain("retard de paiement");
+    expect(m[1]).toContain("40.00 €");
+  });
+
+  it("respecte une formulation personnalisée des pénalités", () => {
+    const m = mentionsLegales({ mentionPenalitesRetard: "Trois fois le taux légal." });
+    expect(m[0]).toBe("Trois fois le taux légal.");
+  });
+
+  it("reprend l'indemnité de recouvrement choisie", () => {
+    expect(mentionsLegales({ indemniteRecouvrement: "55" })[1]).toContain("55.00 €");
+  });
+
+  it("n'ajoute une mention que si elle s'applique", () => {
+    // Une mention inutile affaiblit celles qui engagent
+    expect(mentionsLegales({}).join(" ")).not.toContain("Autoliquidation");
+    expect(
+      mentionsLegales({ autoliquidationBatiment: true }).join(" ")
+    ).toContain("283-2 nonies");
+  });
+
+  it("annonce la franchise en base quand c'est le régime", () => {
+    expect(mentionsLegales({ regimeTva: "franchise_en_base" }).join(" ")).toContain(
+      "art. 293 B du CGI"
+    );
+  });
+
+  it("cite la police d'assurance décennale quand elle est connue", () => {
+    const m = mentionsLegales({
+      assuranceDecennaleNom: "AXA",
+      assuranceDecennalePolice: "12345",
+    }).join(" ");
+    expect(m).toContain("AXA");
+    expect(m).toContain("police n° 12345");
+  });
+
+  it("ne produit aucune ligne vide pour un identifiant absent", () => {
+    expect(identifiantsLegaux({})).toEqual([]);
+    expect(identifiantsLegaux({ siret: SIRET_REEL })).toEqual([`SIRET ${SIRET_REEL}`]);
+  });
+
+  it("préfère le SIRET au SIREN, et formate le capital", () => {
+    const l = identifiantsLegaux({
+      formeJuridique: "SASU",
+      siret: SIRET_REEL,
+      siren: SIREN_REEL,
+      capitalSocial: 5000,
+      rcsNumero: "840320014",
+      rcsVille: "Grenoble",
+    });
+    expect(l[0]).toBe("SASU");
+    expect(l.some((x) => x.startsWith("SIREN"))).toBe(false);
+    expect(l.some((x) => x.startsWith("Capital"))).toBe(true);
+    expect(l).toContain("RCS Grenoble 840320014");
   });
 });

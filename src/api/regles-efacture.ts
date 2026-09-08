@@ -478,6 +478,86 @@ export function completudeSociete(societe: EntiteFacturable): Anomalie[] {
   return manques(societe, CHAMPS_SOCIETE_ATTENDUS);
 }
 
+// ============ MENTIONS DU DOCUMENT ============
+
+const PENALITES_PAR_DEFAUT =
+  "En cas de retard de paiement, pénalités au taux d'intérêt légal majoré de 10 points.";
+
+export interface MentionsEmetteur {
+  mentionPenalitesRetard?: string | null;
+  indemniteRecouvrement?: number | string | null;
+  autoliquidationBatiment?: boolean | null;
+  tvaSurEncaissements?: boolean | null;
+  assuranceDecennaleNom?: string | null;
+  assuranceDecennalePolice?: string | null;
+  regimeTva?: string | null;
+}
+
+/**
+ * Mentions obligatoires au pied d'une facture.
+ *
+ * Les deux premières ne sont pas optionnelles : le code de commerce impose
+ * d'indiquer les pénalités de retard et l'indemnité forfaitaire de
+ * recouvrement, même quand l'émetteur ne les a pas personnalisées. Les
+ * suivantes ne s'affichent que si elles s'appliquent — une mention inutile
+ * affaiblit celles qui comptent.
+ */
+export function mentionsLegales(e: MentionsEmetteur): string[] {
+  const lignes: string[] = [];
+
+  lignes.push((e?.mentionPenalitesRetard ?? "").trim() || PENALITES_PAR_DEFAUT);
+
+  const indemnite = Number(e?.indemniteRecouvrement);
+  const montant = Number.isFinite(indemnite) && indemnite > 0
+    ? indemnite
+    : INDEMNITE_RECOUVREMENT_EUR;
+  lignes.push(
+    `Indemnité forfaitaire pour frais de recouvrement : ${montant.toFixed(2)} €.`
+  );
+
+  if (sansTva(e?.regimeTva)) lignes.push(MENTION_FRANCHISE_EN_BASE + ".");
+  if (e?.autoliquidationBatiment) {
+    lignes.push("Autoliquidation de la TVA par le preneur — article 283-2 nonies du CGI.");
+  }
+  if (e?.tvaSurEncaissements) lignes.push("TVA exigible à l'encaissement.");
+  if (e?.assuranceDecennaleNom) {
+    const police = e.assuranceDecennalePolice
+      ? ` — police n° ${e.assuranceDecennalePolice}`
+      : "";
+    lignes.push(`Assurance décennale : ${e.assuranceDecennaleNom}${police}.`);
+  }
+
+  return lignes;
+}
+
+/**
+ * Identifiants légaux de l'émetteur, en une ligne par mention renseignée.
+ *
+ * Rien n'est inventé : un identifiant absent ne produit pas de ligne vide.
+ */
+export function identifiantsLegaux(e: {
+  formeJuridique?: string | null;
+  siret?: string | null;
+  siren?: string | null;
+  tvaIntracom?: string | null;
+  capitalSocial?: number | string | null;
+  rcsNumero?: string | null;
+  rcsVille?: string | null;
+  codeNaf?: string | null;
+}): string[] {
+  const capital = Number(e?.capitalSocial);
+  return [
+    e?.formeJuridique || "",
+    e?.siret ? `SIRET ${e.siret}` : e?.siren ? `SIREN ${e.siren}` : "",
+    e?.tvaIntracom ? `TVA ${e.tvaIntracom}` : "",
+    Number.isFinite(capital) && capital > 0
+      ? `Capital ${capital.toLocaleString("fr-FR")} €`
+      : "",
+    e?.rcsNumero ? `RCS ${[e.rcsVille, e.rcsNumero].filter(Boolean).join(" ")}` : "",
+    e?.codeNaf ? `APE ${e.codeNaf}` : "",
+  ].filter(Boolean);
+}
+
 export function messageAnomalies(anomalies: Anomalie[]): string {
   const liste = anomalies ?? [];
   if (!liste.length) return "";

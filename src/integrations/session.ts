@@ -18,6 +18,8 @@ import {
   adresseElectroniqueParDefaut,
   cadreSuggere,
   CADRES_FACTURATION,
+  identifiantsLegaux,
+  mentionsLegales,
   completudeClient,
   completudeSociete,
   INDEMNITE_RECOUVREMENT_EUR,
@@ -407,6 +409,8 @@ export function injecterSession() {
   w.PERIODICITES_EREPORTING = PERIODICITES_EREPORTING;
   w.sansTva = sansTva;
   w.MENTION_FRANCHISE_EN_BASE = MENTION_FRANCHISE_EN_BASE;
+  w.mentionsLegales = mentionsLegales;
+  w.identifiantsLegaux = identifiantsLegaux;
   w.INDEMNITE_RECOUVREMENT_EUR = INDEMNITE_RECOUVREMENT_EUR;
 
   // Lecture automatique des bons de commande

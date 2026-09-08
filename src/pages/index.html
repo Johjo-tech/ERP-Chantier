@@ -1007,6 +1007,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   .p-badge-origine{ background:#E9A23B !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .p-sans-prix td{ background:#FFF1F0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+/* Conditions de règlement et mentions du code de commerce, en pied de facture. */
+.p-conditions{ width:100%; margin-top:6mm; break-inside:avoid; page-break-inside:avoid; }
+.p-conditions td{ width:50%; vertical-align:top; font-size:8.5pt; color:#3C4757; padding-right:6mm; }
+.p-conditions b{ display:block; font-size:8pt; text-transform:uppercase; letter-spacing:.4px; color:#6B7686; margin-bottom:1mm; }
+.p-mentions{ margin-top:5mm; padding-top:2.5mm; border-top:.5px solid #E2E6ED; font-size:7.8pt; color:#6B7686; line-height:1.45; break-inside:avoid; page-break-inside:avoid; }
+.p-mentions .p-label{ margin-bottom:1mm; }
 .p-totals{ width:65mm; margin-left:auto; margin-top:5mm; }
 .p-totals td{ padding:1.6mm 0; font-size:9.5pt; }
 .p-totals td.label{ color:#6B7686; }
@@ -3498,10 +3504,57 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     </table>
     <table class="p-sign"><tr>
       <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
-      <td>Pour ${esc(socName)} :<div class="p-sigline"></div></td>
+      <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
     </tr></table>
-    <div class="p-footer">${esc(socName)}${s.siret? ' — SIRET '+esc(s.siret):''}${s.adresse? ' — '+esc(s.adresse):''}</div>
+    ${blocConditionsHTML(type, doc, s, hidePrices)}
+    ${blocMentionsHTML(type, s)}
+    <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
   `;
+}
+
+/**
+ * Conditions de règlement et coordonnées bancaires.
+ *
+ * L'IBAN suit le réglage « afficher l'IBAN », qui existait sans rien piloter.
+ * Il disparaît en mode sans prix : une facture sans montants n'a pas à porter
+ * de quoi la payer.
+ */
+function blocConditionsHTML(type, doc, s, hidePrices){
+  const r = (s.reglages && s.reglages.documents) || {};
+  const conditions = type==='devis'
+    ? (r.conditionsDevis||'').trim()
+    : (doc.conditionsReglement||'').trim();
+  const avecIban = (r.afficherIban !== false) && !hidePrices && (s.iban || s.bic);
+  if(!conditions && !avecIban) return '';
+
+  return `<table class="p-conditions"><tr>
+    <td>${conditions? `<b>Conditions</b><div>${esc(conditions)}</div>` : ''}</td>
+    <td>${avecIban? `<b>Règlement par virement</b><div>${s.iban? 'IBAN '+esc(s.iban):''}${s.iban&&s.bic? ' — ':''}${s.bic? 'BIC '+esc(s.bic):''}</div>` : ''}</td>
+  </tr></table>`;
+}
+
+/* Les mentions du code de commerce ne concernent que la facture : les faire
+   figurer sur un devis affaiblirait celles qui engagent réellement. */
+function blocMentionsHTML(type, s){
+  if(type !== 'facture') return '';
+  const mentions = window.mentionsLegales(s);
+  const complement = ((s.reglages && s.reglages.documents && s.reglages.documents.mentionsComplementaires)||'').trim();
+  if(!mentions.length && !complement) return '';
+
+  return `<div class="p-mentions">
+    <div class="p-label">Mentions légales</div>
+    ${mentions.map(m=>`<div>${esc(m)}</div>`).join('')}
+    ${complement? `<div style="white-space:pre-wrap;">${esc(complement)}</div>`:''}
+  </div>`;
+}
+
+/* Le pied reprend l'identité légale : c'est là que se lisent la forme
+   juridique, le capital et le RCS, obligatoires sur tout document commercial. */
+function piedDePageHTML(em, s){
+  const identifiants = window.identifiantsLegaux({ ...s, siret: em.siret, tvaIntracom: em.tva });
+  const perso = ((s.reglages && s.reglages.documents && s.reglages.documents.piedDePage)||'').trim();
+  if(perso) return perso;
+  return [em.nom, ...identifiants, em.adresse].filter(Boolean).join(' — ');
 }
 function printDocument(type, id, action){
   action = action || 'open';
