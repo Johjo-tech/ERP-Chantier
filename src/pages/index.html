@@ -1561,7 +1561,10 @@ function heureOptions(current){
 
 let state = {
   societeId: 'kta', tab: 'dashboard', plusTab: 'clients', reglagesTab: 'organisation', currentRole: null, devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
-  devisConducteurFilter: '', factureConducteurFilter: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
+  devisConducteurFilter: '', factureConducteurFilter: '',
+  factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
+  factureMetierFilter: '', factureReglementFilter: '',
+  facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], articles: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]}
@@ -2603,18 +2606,21 @@ function renderDashboard(){
     </div>
   `;
 }
-function devisSearchHaystack(d){
-  const t = computeDocTotals(d);
-  return [d.client, d.numero, d.adresse, d.adresseLocataire, d.numeroLogement, d.occupant, d.interlocuteur, d.ancienLocataire, d.statut, money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)].filter(Boolean).join(' ').toLowerCase();
+/* Les montants dépendent des totaux et de la remise, calculés ici ; le reste
+   du texte cherchable vient du module. */
+function montantsCherchables(doc){
+  const t = computeDocTotals(doc);
+  return [money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)];
 }
-function factureSearchHaystack(f){
-  const t = computeDocTotals(f);
-  return [f.client, f.numero, f.adresse, f.adresseLocataire, f.numeroLogement, f.occupant, f.interlocuteur, f.ancienLocataire, f.statut, money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)].filter(Boolean).join(' ').toLowerCase();
-}
+function devisSearchHaystack(d){ return window.texteDocument(d, montantsCherchables(d)); }
+function factureSearchHaystack(f){ return window.texteDocument(f, montantsCherchables(f)); }
 function interventionSearchHaystack(i){
-  const r = i.rapport || {};
   const metierLabel = (METIERS.find(m=>m.value===i.typePanne)||{}).label || '';
-  return [i.client, i.numero, i.adresse, i.adresseLocataire, i.numeroLogement, i.occupant, i.interlocuteur, i.ancienLocataire, i.typePanne, metierLabel, i.statut, r.constatations, r.preconisations].filter(Boolean).join(' ').toLowerCase();
+  return window.texteDocument(i, [metierLabel]);
+}
+function bonCommandeSearchHaystack(b){
+  const montant = parseFloat(b.montant) || 0;
+  return window.texteDocument(b, [money(montant), montant.toFixed(2)]);
 }
 function globalSearchResultsList(q){
   const query = (q||'').trim().toLowerCase();
@@ -3476,19 +3482,24 @@ function renderDevis(){
     ${state.formOpen.devis ? '' : `<div id="devisListZone">${renderDevisListHTML(list)}</div>`}
   `;
 }
-function sansAccents(s){
-  return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-function multiWordMatch(haystack, query){
-  const tokens = sansAccents((query||'').trim().toLowerCase()).split(/\s+/).filter(Boolean);
-  if(!tokens.length) return true;
-  const hs = sansAccents(haystack);
-  return tokens.every(t => hs.includes(t));
-}
+/* `sansAccents` et `multiWordMatch` viennent de src/integrations/recherche.ts,
+   publiés sur window par le pont. Les redéfinir ici ferait diverger la
+   recherche des écrans de celle du tableau de bord — c'est exactement ce qui
+   s'était produit. */
+function sansAccents(s){ return window.sansAccents(s); }
+function multiWordMatch(haystack, query){ return window.multiWordMatch(haystack, query); }
 function searchEnterCycle(ev, type){
   if(ev.key !== 'Enter') return;
   ev.preventDefault();
+  /* La liste des bons dépend de l'écran : sur Factures, seuls ceux de la vue
+     courante sont dans le DOM. */
+  const bonsVisibles = () => {
+    const vue = state.facturesView || 'liste';
+    if(state.tab==='factures' && (vue==='validation' || vue==='afacturer')) return bonsDeLaVue(vue);
+    return state.bonsCommande.filter(b=>b.societeId===state.societeId);
+  };
   const configs = {
+    bonCommande: { list: bonsVisibles(), matchFn: bonCommandeMatchesSearch, prefix: 'bonCommande-card-' },
     devis: { list: state.devis.filter(d=>d.societeId===state.societeId), matchFn: devisMatchesSearch, prefix: 'devis-card-' },
     facture: { list: state.factures.filter(f=>f.societeId===state.societeId), matchFn: factureMatchesSearch, prefix: 'facture-card-' },
     intervention: { list: state.interventions.filter(i=>i.societeId===state.societeId), matchFn: interventionMatchesSearch, prefix: 'intervention-card-' }
@@ -3512,13 +3523,7 @@ function searchEnterCycle(ev, type){
   }
 }
 function devisMatchesSearch(d, q){
-  if(!q) return true;
-  const t = computeDocTotals(d);
-  const haystack = [
-    d.client, d.numero, d.occupant, d.interlocuteur, d.adresse, d.adresseLocataire, d.ancienLocataire, d.numeroLogement,
-    money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)
-  ].filter(Boolean).join(' ').toLowerCase();
-  return multiWordMatch(haystack, q);
+  return !q || multiWordMatch(devisSearchHaystack(d), q);
 }
 function filterDevisList(value){
   state.devisSearch = value;
@@ -4072,45 +4077,213 @@ function renderFactures(){
       <button class="plus-subnav-btn ${view==='reglements'?'active':''}" onclick="setFacturesView('reglements')">Règlements</button>
     </div>
     <div class="page-head"><h1>${view==='reglements'?'Règlements':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : '<button class="btn primary" onclick="openForm(\'facture\')">+ Nouvelle facture</button>'}</div>
-    ${(state.formOpen.facture || view!=='liste') ? '' : `<div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
-      <input type="text" id="factureSearchInput" style="flex:1; min-width:220px;" value="${esc(state.factureSearch||'')}" placeholder="Rechercher : client, locataire, interlocuteur, adresse, prix HT/TTC…" oninput="filterFacturesList(this.value)" onkeydown="searchEnterCycle(event,'facture')">
-      <select style="width:auto; min-width:180px;" onchange="filterFactureConducteur(this.value)">${conducteurFilterOptions(state.factureConducteurFilter)}</select>
-      <select style="width:auto; min-width:170px;" onchange="filterFactureLogement(this.value)">${logementFilterOptions(state.factureLogementFilter)}</select>
-      <select style="width:auto; min-width:170px;" onchange="filterFactureClient(this.value)">${planningUnschedClientOptions(state.factureClientFilter)}</select>
-      <select style="width:auto; min-width:190px;" onchange="filterFactureInterlocuteur(this.value)">${planningUnschedInterlocuteurOptions(state.factureInterlocuteurFilter, state.factureClientFilter)}</select>
-    </div>`}
+    ${(state.formOpen.facture || view==='reglements') ? '' : barreFiltresFactures(view)}
     ${view==='liste'? `<div id="formZoneFacture">${state.formOpen.facture? factureForm() : ''}</div>
     ${state.formOpen.facture ? '' : `<div id="factureListZone">${renderFacturesListHTML(list)}</div>`}` : ''}
     ${view==='validation'? `<div class="card-sub" style="margin-bottom:14px;">Bons de commande validés par le conducteur de travaux, en attente de validation par le directeur.</div>
-    <div id="bonCommandeListZone">${renderDossiersClients(enValidation, 'validation')}</div>` : ''}
+    <div id="facturesWorkflowZone">${renderDossiersClients(enValidation, 'validation')}</div>` : ''}
     ${view==='afacturer'? `<div class="card-sub" style="margin-bottom:14px;">Bons de commande validés par le directeur — à facturer et envoyer au client.</div>
-    <div id="bonCommandeListZone">${renderDossiersClients(aFacturer, 'afacturer')}</div>` : ''}
+    <div id="facturesWorkflowZone">${renderDossiersClients(aFacturer, 'afacturer')}</div>` : ''}
     ${view==='reglements'? renderReglements(true) : ''}
   `;
 }
+/* ---------- Barre de recherche et de filtres des Factures ----------
+   Les trois vues partagent la même barre et le même état : basculer de
+   Factures à À facturer conserve la lentille en cours. Le descripteur dit
+   quels filtres chaque vue affiche — la règle métier vit là, et non dans des
+   conditions éparpillées dans le gabarit. */
+const FILTRES_FACTURES = {
+  liste:      ['recherche','client','interlocuteur','conducteur','logement','reglement','periode'],
+  validation: ['recherche','client','interlocuteur','conducteur','metier','periode'],
+  afacturer:  ['recherche','client','interlocuteur','conducteur','metier','periode'],
+};
+const CLE_ETAT_FILTRE = {
+  recherche:'factureSearch', client:'factureClientFilter', interlocuteur:'factureInterlocuteurFilter',
+  conducteur:'factureConducteurFilter', logement:'factureLogementFilter',
+  metier:'factureMetierFilter', reglement:'factureReglementFilter', periode:'facturePeriode',
+};
+
+/* Un filtre que la vue n'affiche pas ne doit jamais s'appliquer : sinon un
+   statut de règlement posé sur la liste viderait la vue Validation sans que
+   rien à l'écran ne l'explique. */
+function critereFactures(cle, vue){
+  return (FILTRES_FACTURES[vue]||[]).includes(cle) ? (state[CLE_ETAT_FILTRE[cle]] || '') : '';
+}
+
+function criteresFactures(vue){
+  const periode = critereFactures('periode', vue) || 'tout';
+  return {
+    recherche: critereFactures('recherche', vue),
+    client: critereFactures('client', vue),
+    interlocuteur: critereFactures('interlocuteur', vue),
+    conducteur: critereFactures('conducteur', vue),
+    logement: critereFactures('logement', vue),
+    metier: critereFactures('metier', vue),
+    reglement: critereFactures('reglement', vue),
+    periode,
+    du: state.facturePeriodeDebut || '',
+    au: state.facturePeriodeFin || '',
+  };
+}
+
+function filtrageFacturesActif(vue){
+  const c = criteresFactures(vue);
+  return !!(c.recherche || c.client || c.interlocuteur || c.conducteur || c.logement
+    || c.metier || c.reglement || (c.periode && c.periode !== 'tout'));
+}
+
+function champFiltreFactures(cle, vue){
+  const v = critereFactures(cle, vue);
+  switch(cle){
+    case 'recherche':
+      return `<input type="text" id="factureSearchInput" style="flex:1; min-width:240px;" value="${esc(v)}"
+        placeholder="Rechercher : client, n°, adresse, locataire, prestation, montant…"
+        oninput="filterFacturesList(this.value)" onkeydown="searchEnterCycle(event,'${vue==='liste'?'facture':'bonCommande'}')">`;
+    case 'client':
+      return `<select style="width:auto; min-width:170px;" onchange="filterFactureClient(this.value)">${planningUnschedClientOptions(v)}</select>`;
+    case 'interlocuteur':
+      return `<select id="factureInterlocuteurSelect" style="width:auto; min-width:190px;" onchange="filterFactureCritere('interlocuteur', this.value)">${planningUnschedInterlocuteurOptions(v, critereFactures('client', vue))}</select>`;
+    case 'conducteur':
+      return `<select style="width:auto; min-width:180px;" onchange="filterFactureCritere('conducteur', this.value)">${conducteurFilterOptions(v)}</select>`;
+    case 'logement':
+      return `<select style="width:auto; min-width:170px;" onchange="filterFactureCritere('logement', this.value)">${logementFilterOptions(v)}</select>`;
+    case 'metier':
+      return `<select style="width:auto; min-width:160px;" onchange="filterFactureCritere('metier', this.value)">${metierPersoFilterOptions(v)}</select>`;
+    case 'reglement':
+      return `<select style="width:auto; min-width:170px;" onchange="filterFactureCritere('reglement', this.value)">
+        ${[['','Tous les règlements'],['payee','✅ Payées'],['partiel','🟡 Partielles'],['impayee','🔴 Impayées'],['retard','⏰ En retard']]
+          .map(([k,l])=>`<option value="${k}" ${k===v?'selected':''}>${l}</option>`).join('')}
+      </select>`;
+    case 'periode':
+      return `<select style="width:auto; min-width:170px;" onchange="filterFacturePeriode(this.value)">
+        ${[['tout',"Toute la période"],['mois','Ce mois-ci'],['annee','Cette année'],['plage','Période personnalisée…']]
+          .map(([k,l])=>`<option value="${k}" ${k===(v||'tout')?'selected':''}>${l}</option>`).join('')}
+      </select>
+      ${v==='plage'? `<input type="date" style="width:auto;" value="${esc(state.facturePeriodeDebut)}" onchange="filterFactureBorne('debut', this.value)" title="Du">
+        <input type="date" style="width:auto;" value="${esc(state.facturePeriodeFin)}" onchange="filterFactureBorne('fin', this.value)" title="Au">` : ''}`;
+    default: return '';
+  }
+}
+
+function barreFiltresFactures(vue){
+  return `<div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+    ${(FILTRES_FACTURES[vue]||[]).map(c=>champFiltreFactures(c, vue)).join('')}
+    ${filtrageFacturesActif(vue)? `<button class="btn small ghost" onclick="reinitialiserFiltresFactures()" title="Tout réafficher">✕ Effacer</button>` : ''}
+  </div>`;
+}
+
+/* Sources de vérité des listes. `renderFactures` écartait les factures émises
+   par les sous-traitants, mais les gestionnaires de filtre reconstruisaient la
+   liste sans ce garde-fou : elles réapparaissaient dès la première frappe. */
+function facturesDeLaSociete(){
+  return state.factures.filter(f=>f.societeId===state.societeId && !f.sousTraitantEmetteur);
+}
+function bonsDeLaVue(vue){
+  const soc = state.societeId;
+  if(vue==='validation') return state.bonsCommande.filter(b=>b.societeId===soc && b.valideConducteur && !b.valideDirecteur);
+  if(vue==='afacturer') return state.bonsCommande.filter(b=>b.societeId===soc && b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
+  return [];
+}
+
+/* Contexte que le module de recherche ne peut pas calculer seul : les montants
+   dépendent de la remise, le statut de règlement des règlements enregistrés. */
+function contexteFacture(f){
+  const st = reglementStatutFacture(f);
+  const etiquettes = [st.label==='Payée'? 'payee' : st.label==='Partiel'? 'partiel' : 'impayee'];
+  // Une facture en retard reste impayée : les deux filtres doivent la trouver
+  if(st.reste > 0.01 && (joursDepuisEcheance(f)||0) > 0) etiquettes.push('retard');
+  return { extras: montantsCherchables(f), reglements: etiquettes };
+}
+function contexteBonCommande(b){
+  const montant = parseFloat(b.montant) || 0;
+  return { extras: [money(montant), montant.toFixed(2)], metiers: bcMetiersDuBC(b) };
+}
+
+/* Une seule injection ciblée pour tous les filtres : le champ de recherche
+   n'est jamais recréé, il garde donc son focus et son curseur. */
+function rafraichirZoneFactures(){
+  const vue = state.facturesView || 'liste';
+  if(vue === 'liste'){
+    const zone = document.getElementById('factureListZone');
+    if(zone) zone.innerHTML = renderFacturesListHTML(facturesDeLaSociete());
+    return;
+  }
+  const zone = document.getElementById('facturesWorkflowZone');
+  if(zone) zone.innerHTML = renderDossiersClients(bonsDeLaVue(vue), vue);
+}
+
+function filterFactureCritere(cle, valeur){
+  state[CLE_ETAT_FILTRE[cle]] = valeur;
+  rafraichirZoneFactures();
+}
+function filterFacturesList(valeur){ filterFactureCritere('recherche', valeur); }
+function filterFactureConducteur(v){ filterFactureCritere('conducteur', v); }
+function filterFactureLogement(v){ filterFactureCritere('logement', v); }
+function filterFactureInterlocuteur(v){ filterFactureCritere('interlocuteur', v); }
+
+/* Le choix d'interlocuteur appartient au client précédent : on le remet à zéro
+   et on régénère la seule liste dépendante, sans re-rendre tout l'écran. */
+function filterFactureClient(valeur){
+  state.factureClientFilter = valeur;
+  state.factureInterlocuteurFilter = '';
+  const sel = document.getElementById('factureInterlocuteurSelect');
+  if(sel) sel.innerHTML = planningUnschedInterlocuteurOptions('', valeur);
+  rafraichirZoneFactures();
+}
+
+function filterFacturePeriode(valeur){
+  state.facturePeriode = valeur;
+  // Les bornes n'ont de sens que sur une plage : les révéler impose un rendu
+  renderTab();
+}
+function filterFactureBorne(borne, valeur){
+  if(borne==='debut') state.facturePeriodeDebut = valeur; else state.facturePeriodeFin = valeur;
+  rafraichirZoneFactures();
+}
+function reinitialiserFiltresFactures(){
+  Object.values(CLE_ETAT_FILTRE).forEach(k=>{ state[k] = ''; });
+  state.facturePeriode = 'tout';
+  state.facturePeriodeDebut = ''; state.facturePeriodeFin = '';
+  renderTab();
+}
+
 function renderDossiersClients(list, workflowCtx){
-  if(!list.length) return `<div class="empty">${workflowCtx==='validation'? 'Aucun bon de commande en attente de validation.' : 'Aucun bon de commande à facturer.'}</div>`;
-  const parClient = {};
-  list.forEach(b=>{
-    const key = b.client || '— Sans client —';
-    if(!parClient[key]) parClient[key] = [];
-    parClient[key].push(b);
-  });
-  const clients = Object.keys(parClient).sort((a,b)=>a.localeCompare(b));
-  return clients.map(client=>{
-    const items = parClient[client];
+  const vide = workflowCtx==='validation'
+    ? 'Aucun bon de commande en attente de validation.'
+    : 'Aucun bon de commande à facturer.';
+  if(!list.length) return `<div class="empty">${vide}</div>`;
+
+  const criteres = criteresFactures(workflowCtx);
+  const actif = filtrageFacturesActif(workflowCtx);
+  const retenus = window.filtrerDocuments(list, criteres, contexteBonCommande);
+
+  /* Une file non vide dont rien ne correspond n'est pas une file vide : les
+     confondre ferait croire qu'il n'y a plus rien à traiter. */
+  if(!retenus.length){
+    return `<div class="empty">Aucun bon de commande ne correspond à votre recherche.</div>`;
+  }
+
+  const groupes = window.grouperParClient(retenus);
+  const synthese = actif
+    ? `<div class="card-sub" style="margin-bottom:10px;">${retenus.length} bon${retenus.length>1?'s':''} de commande · ${groupes.length} client${groupes.length>1?'s':''}</div>`
+    : '';
+
+  return synthese + groupes.map(({client, documents})=>{
     const cle = 'dossier:'+workflowCtx+':'+client;
-    const ouvert = state.dossierOuvert === cle;
-    const noms = items.map(b=>b.numeroBC).join(', ');
+    /* Pendant une recherche, la contrainte « un seul dossier ouvert » devient
+       nuisible : un dossier fermé ne rend pas ses cartes, on chercherait donc
+       dans du vide. */
+    const ouvert = actif || state.dossierOuvert === cle;
+    const noms = documents.map(b=>b.numeroBC).filter(Boolean).join(', ');
     return `<div class="dossier-client">
       <div class="dossier-header" onclick="toggleDossier('${jsAttr(cle)}')">
         <span class="dossier-icon">${ouvert? '📂':'📁'}</span>
         <span class="dossier-nom">${esc(client)}</span>
-        <span class="dossier-badge">${items.length}</span>
+        <span class="dossier-badge">${documents.length}</span>
         ${!ouvert? `<span class="dossier-apercu">${esc(noms)}</span>`:''}
         <span class="dossier-chevron">${ouvert? '▲':'▼'}</span>
       </div>
-      ${ouvert? `<div class="dossier-contenu">${items.map(b=>bonCommandeCardHTML(b, workflowCtx)).join('')}</div>` : ''}
+      ${ouvert? `<div class="dossier-contenu">${documents.map(b=>bonCommandeCardHTML(b, workflowCtx)).join('')}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -4256,13 +4429,7 @@ function setFacturesView(view){
   renderTab();
 }
 function factureMatchesSearch(f, q){
-  if(!q) return true;
-  const t = computeDocTotals(f);
-  const haystack = [
-    f.client, f.occupant, f.interlocuteur, f.adresse, f.adresseLocataire, f.numero, f.ancienLocataire, f.numeroLogement,
-    money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)
-  ].filter(Boolean).join(' ').toLowerCase();
-  return multiWordMatch(haystack, q);
+  return !q || multiWordMatch(factureSearchHaystack(f), q);
 }
 function filterFacturesList(value){
   state.factureSearch = value;
@@ -4290,13 +4457,8 @@ function filterFactureInterlocuteur(value){
   if(zone) zone.innerHTML = renderFacturesListHTML(state.factures.filter(f=>f.societeId===state.societeId));
 }
 function renderFacturesListHTML(list){
-  const q = (state.factureSearch||'').trim().toLowerCase();
-  const cf = state.factureConducteurFilter||'';
-  const lf = state.factureLogementFilter||'';
-  const clientFilter = state.factureClientFilter||'';
-  const interlocuteurFilter = state.factureInterlocuteurFilter||'';
-  const filtered = list.filter(f=>factureMatchesSearch(f, q) && (!cf || f.conducteur===cf) && (!lf || f.logementStatut===lf)
-    && (!clientFilter || f.client===clientFilter) && (!interlocuteurFilter || (f.interlocuteur||'')===interlocuteurFilter));
+  const criteres = criteresFactures('liste');
+  const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
   return filtered.map(f=>{
     const t = computeDocTotals(f);
     const devisOrigine = f.devisId ? state.devis.find(d=>d.id===f.devisId) : null;
@@ -4551,9 +4713,7 @@ function bonCommandeItemMatchesSearch(item, q){
   return bonCommandeMatchesSearch(item.data, q);
 }
 function bonCommandeMatchesSearch(b, q){
-  if(!q) return true;
-  const haystack = [b.numeroBC, b.client, b.adresse, b.numeroLogement, b.occupant, b.ancienLocataire, b.precisionCommune, b.statut, b.problemeDescription, b.referenceChantier, money(b.montant), (b.montant||0).toFixed(2)].filter(Boolean).join(' ').toLowerCase();
-  return multiWordMatch(haystack, q);
+  return !q || multiWordMatch(bonCommandeSearchHaystack(b), q);
 }
 function filterBonsCommandeList(value){
   state.bonCommandeSearch = value;
@@ -5319,9 +5479,17 @@ function filterPlanningLogement(value){
   state.planningLogementFilter = value;
   renderTab();
 }
+/* Les valeurs réelles de `logementStatut` sont occupé / vacant / commune.
+   « Problème » n'en est pas une : ce filtre ne remontait jamais rien sur les
+   devis, factures et rapports. Il garde du sens sur le Planning, où il est
+   interprété par `bcAProbleme` — d'où deux listes distinctes. */
 function logementFilterOptions(current){
-  return [['','Tous les logements'],['occupé','🏠 Logement occupé'],['vacant','🔑 Logement vacant'],['probleme','⚠️ Problème (ne répond pas)']]
+  return [['','Tous les logements'],['occupé','🏠 Logement occupé'],['vacant','🔑 Logement vacant'],['commune','🚪 Partie commune']]
     .map(([v,l])=>`<option value="${v}" ${v===current?'selected':''}>${l}</option>`).join('');
+}
+function planningLogementFilterOptions(current){
+  return logementFilterOptions(current).replace('</select>','')
+    + `<option value="probleme" ${current==='probleme'?'selected':''}>⚠️ Problème (ne répond pas)</option>`;
 }
 function bcAProbleme(b){
   return (b.tentativesContact||[]).length > 0;
@@ -5533,7 +5701,7 @@ function renderPlanningRealiseNonFacture(){
   const list = state.bonsCommande.filter(b=>b.societeId===soc && b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
   return `
     <div class="card-sub" style="margin-bottom:14px;">Bons de commande ayant franchi toutes les étapes de validation (tâches, conducteur, directeur), pour lesquels aucune facture n'a encore été créée.</div>
-    <div id="bonCommandeListZone">${list.length? list.map(b=>bonCommandeCardHTML(b, true)).join('') : '<div class="empty">Aucun bon de commande validé en attente de facturation.</div>'}</div>
+    <div>${list.length? list.map(b=>bonCommandeCardHTML(b, true)).join('') : '<div class="empty">Aucun bon de commande validé en attente de facturation.</div>'}</div>
   `;
 }
 function renderPlanningEnAttente(mode){
@@ -5544,7 +5712,7 @@ function renderPlanningEnAttente(mode){
     (!q || multiWordMatch([b.client, b.numeroBC, b.conducteur, b.sousTraitant, b.adresse, b.numeroLogement, b.interlocuteur].filter(Boolean).join(' ').toLowerCase(), q)));
   return `
     <div class="card-sub" style="margin-bottom:12px;">${mode==='soustraitant'? 'Bons de commande assignés à un sous-traitant, en attente de validation.' : 'Bons de commande gérés en interne (techniciens), en attente de validation.'}</div>
-    <div id="bonCommandeListZone">${list.length? list.map(b=>bonCommandeCardHTML(b,'attente')).join('') : '<div class="empty">Aucun bon de commande ne correspond.</div>'}</div>
+    <div>${list.length? list.map(b=>bonCommandeCardHTML(b,'attente')).join('') : '<div class="empty">Aucun bon de commande ne correspond.</div>'}</div>
   `;
 }
 function filterPlanningAssignee(field, value){
@@ -5598,7 +5766,7 @@ function renderPlanningCalendar(assigneeField){
         <div id="planningUnschedFilterPanel" style="display:${state.planningUnschedFilterOpen?'flex':'none'}; flex-direction:column; gap:6px; margin-bottom:10px;">
           <select style="width:100%;" onchange="filterPlanningUnschedClient(this.value)">${planningUnschedClientOptions(state.planningUnschedClientFilter)}</select>
           <select style="width:100%;" onchange="filterPlanningUnschedInterlocuteur(this.value)">${planningUnschedInterlocuteurOptions(state.planningUnschedInterlocuteurFilter, state.planningUnschedClientFilter)}</select>
-          <select style="width:100%;" onchange="filterPlanningLogement(this.value)">${logementFilterOptions(state.planningLogementFilter)}</select>
+          <select style="width:100%;" onchange="filterPlanningLogement(this.value)">${planningLogementFilterOptions(state.planningLogementFilter)}</select>
         </div>
         <div class="planning-unsched-list" ondragover="allowDropUnsched(event)" ondrop="dropUnsched(event)">
           ${unscheduled.length? unscheduled.map(b=>planningCardHTML(b, true, assigneeField, af)).join('') : '<div class="empty">Tout est planifié.</div>'}
@@ -7078,13 +7246,7 @@ function renderInterventions(){
   `;
 }
 function interventionMatchesSearch(i, q){
-  if(!q) return true;
-  const r = i.rapport || {};
-  const metierLabel = (METIERS.find(m=>m.value===i.typePanne)||{}).label || '';
-  const haystack = [
-    i.client, i.numero, i.adresse, i.adresseLocataire, i.occupant, i.interlocuteur, i.ancienLocataire, i.numeroLogement, i.statut, metierLabel, r.constatations, r.preconisations
-  ].filter(Boolean).join(' ').toLowerCase();
-  return multiWordMatch(haystack, q);
+  return !q || multiWordMatch(interventionSearchHaystack(i), q);
 }
 function filterInterventionsList(value){
   state.interventionSearch = value;
@@ -9901,7 +10063,7 @@ function renderPiecesCommande(){
     <div class="page-head"><h1>Pièces en commande</h1></div>
     <div class="card-sub" style="margin-bottom:14px;">Bons de commande pour lesquels un technicien a signalé une pièce à commander. Une fois la date de commande renseignée, la pièce est classée dans le dossier de son fournisseur.</div>
     <div class="section-title-row"><span class="section-title" style="margin:0;">📦 À commander ${aCommander.length? `<span class="dossier-badge" style="margin-left:6px;">${aCommander.length}</span>`:''}</span></div>
-    <div id="bonCommandeListZone">${aCommander.length? aCommander.map(b=>bonCommandeCardHTML(b,'pieceCommande')).join('') : '<div class="empty">Aucune pièce en attente de commande.</div>'}</div>
+    <div>${aCommander.length? aCommander.map(b=>bonCommandeCardHTML(b,'pieceCommande')).join('') : '<div class="empty">Aucune pièce en attente de commande.</div>'}</div>
     <div class="section-title-row" style="margin-top:24px;"><span class="section-title" style="margin:0;">🚚 Commandées — par fournisseur ${commandees.length? `<span class="dossier-badge" style="margin-left:6px;">${commandees.length}</span>`:''}</span></div>
     ${renderDossiersFournisseurs(commandees)}
   `;
