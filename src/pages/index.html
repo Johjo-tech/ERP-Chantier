@@ -1999,7 +1999,48 @@ function renderShell(){
     </button>`;
   }).join('');
 }
-function setTab(id){ state.tab = id; renderShell(); renderTab(); }
+/* ---------- Historique du navigateur ----------
+   Sans entrée d'historique, « Précédent » sort de l'application. On en pose
+   une à chaque changement d'onglet et à chaque ouverture de formulaire : le
+   bouton Précédent ramène alors au listing plutôt qu'à la page de connexion. */
+
+function etatNavigation(){
+  const form = Object.keys(state.formOpen).find(k => state.formOpen[k]) || null;
+  return { tab: state.tab, form };
+}
+
+function pousserHistorique(remplacer){
+  const e = etatNavigation();
+  const url = '#' + e.tab + (e.form ? '/' + e.form : '');
+  history[remplacer ? 'replaceState' : 'pushState'](e, '', url);
+}
+
+/* Restaure un état sans le repousser : on répond ici à un Précédent. */
+function appliquerEtatNavigation(e){
+  state.tab = e.tab || 'dashboard';
+  Object.keys(state.formOpen).forEach(k => state.formOpen[k] = false);
+  if(e.form){
+    state.formOpen[e.form] = true;
+  } else {
+    state.editing = { type:null, id:null, lignes:[] };
+  }
+  renderShell();
+  renderTab();
+}
+
+window.addEventListener('popstate', ev => {
+  // Une entrée sans état vient d'ailleurs que de l'app : on la laisse passer
+  if(ev.state) appliquerEtatNavigation(ev.state);
+});
+
+function setTab(id){
+  if(state.tab === id && !etatNavigation().form){ return; }
+  state.tab = id;
+  Object.keys(state.formOpen).forEach(k => state.formOpen[k] = false);
+  pousserHistorique();
+  renderShell();
+  renderTab();
+}
 function openAttachmentPreviewFor(kind, id){
   const resolved = resolvePlanningItem(kind, id);
   if(!resolved || !resolved.bc.pieceJointeData) return;
@@ -2658,12 +2699,18 @@ function openForm(type, prefill){
   }
   Object.keys(state.formOpen).forEach(k=> state.formOpen[k] = false);
   state.formOpen[type] = true;
+  pousserHistorique();
   document.body.classList.add('sidebar-collapsed');
   renderTab();
   const zoneId = 'formZone' + type.charAt(0).toUpperCase() + type.slice(1);
   setTimeout(()=>{ const el = document.getElementById(zoneId); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); },50);
 }
-function closeForm(type){ state.formOpen[type] = false; state.editing = {type:null,id:null,lignes:[]}; renderTab(); }
+function closeForm(type){
+  state.formOpen[type] = false;
+  state.editing = {type:null,id:null,lignes:[]};
+  pousserHistorique(true);
+  renderTab();
+}
 function ligneRow(l,i){
   const hasComment = !!(l.commentaire && l.commentaire.trim());
   const isOpen = hasComment || state.ligneCommentOuvert===i;
@@ -11598,6 +11645,8 @@ async function saveDocument(){
     return;
   }
   await loadAll();
+  // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
+  pousserHistorique(true);
   renderShell();
   renderTab();
   if(!hasRealStorage){

@@ -189,6 +189,13 @@
   <script type="module">
     import { supabase, demanderReinitialisation } from '@/api/client';
 
+    // Session déjà ouverte : on n'affiche pas un formulaire de connexion à
+    // quelqu'un de connecté, même s'il arrive ici par « Précédent ».
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) window.location.replace('/');
+    })();
+
     const form = document.getElementById('loginForm');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
@@ -224,8 +231,10 @@
         }
 
         if (data.session) {
-          // Rediriger vers l'app
-          window.location.href = '/';
+          // `replace` et non `href` : sans quoi la page de connexion reste dans
+          // l'historique, et « Précédent » y ramène — ce qui donne l'illusion
+          // d'une déconnexion alors que la session est toujours valide.
+          window.location.replace('/');
         }
       } catch (err) {
         const message = err.message || 'Erreur de connexion. Vérifiez vos identifiants.';

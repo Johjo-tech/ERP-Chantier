@@ -16,7 +16,8 @@ export async function protectRoute(): Promise<boolean> {
     if (!session) {
       // Pas de session → rediriger vers login
       console.log("No session - redirecting to login");
-      window.location.href = "/login.html";
+      // `replace` : la page protégée ne doit pas rester joignable par « Précédent »
+      window.location.replace("/login.html");
       return false;
     }
 
@@ -24,7 +25,7 @@ export async function protectRoute(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error("Auth check failed:", error);
-    window.location.href = "/login.html";
+    window.location.replace("/login.html");
     return false;
   }
 }
@@ -39,7 +40,7 @@ export function watchAuthState(onSignOut?: () => void) {
 
     if (event === "SIGNED_OUT" || !session) {
       onSignOut?.();
-      window.location.href = "/login.html";
+      window.location.replace("/login.html");
     }
   });
 
@@ -81,7 +82,7 @@ export async function logout() {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
 
-    window.location.href = "/login.html";
+    window.location.replace("/login.html");
   } catch (err) {
     console.error("Logout error:", err);
   }
