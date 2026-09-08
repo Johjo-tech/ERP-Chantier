@@ -168,3 +168,76 @@ suite("Commande de pièces", () => {
     expect(relu.pieceACommander).toBe(false);
   });
 });
+
+suite("Circuit sous-traitant", () => {
+  /**
+   * L'app désigne le sous-traitant par son nom et pose les dates
+   * supplémentaires sur le bon. La base référence un uuid sur la tâche, et
+   * traite chaque date comme une tâche de plus.
+   */
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const demain = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  let societeId: Uuid;
+  let bcId: Uuid;
+  let cle: string;
+  let nomST: string | null = null;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    societeId = societe!.id;
+
+    const sts = await queries.listSousTraitants(societeId);
+    nomST = sts[0]?.nom ?? null;
+
+    const bc = await queries.createBonCommande(societeId, {
+      client_nom: "CLIENT DE TEST",
+      date: aujourdhui,
+      date_planifiee: aujourdhui,
+      metiers: ["ETANCHEITE"],
+    });
+    bcId = bc.id;
+    cle = `bonCommande:${bcId}`;
+    await relire();
+  });
+
+  it("crée une tâche par journée quand on ajoute une date", async () => {
+    const bc = (await stGet(cle)) as Record<string, unknown>;
+    await stSet(cle, {
+      ...bc,
+      metiersFait: { ETANCHEITE: true },
+      datesSupplementaires: [{ date: demain, heure: "08:00", duree: 2 }],
+    });
+
+    const taches = await queries.listTachesBonCommande(bcId);
+    expect(taches.map((t) => t.date_tache).sort()).toEqual([aujourdhui, demain]);
+  });
+
+  it("relit la date supplémentaire, sans confondre avec la date d'origine", async () => {
+    const bc = (await relire()).find((b) => b.id === bcId)!;
+    const dates = bc.datesSupplementaires as { date: string; fait: boolean }[];
+    expect(dates).toHaveLength(1);
+    expect(dates[0].date).toBe(demain);
+    // La journée d'origine est pointée, la supplémentaire non
+    expect(dates[0].fait).toBe(false);
+  });
+
+  it("assigne le sous-traitant par son nom", async () => {
+    if (!nomST) return; // aucune fiche sous-traitant dans cette société
+    const bc = (await stGet(cle)) as Record<string, unknown>;
+    await stSet(cle, { ...bc, sousTraitant: nomST });
+
+    const taches = await queries.listTachesBonCommande(bcId);
+    expect(taches.every((t) => t.sous_traitant_id)).toBe(true);
+
+    const relu = (await relire()).find((b) => b.id === bcId)!;
+    expect(relu.sousTraitant).toBe(nomST);
+  });
+
+  it("ignore un sous-traitant inconnu plutôt que d'écrire n'importe quoi", async () => {
+    const bc = (await stGet(cle)) as Record<string, unknown>;
+    await stSet(cle, { ...bc, sousTraitant: "ENTREPRISE QUI N'EXISTE PAS" });
+
+    const relu = (await relire()).find((b) => b.id === bcId)!;
+    expect(relu.sousTraitant).not.toBe("ENTREPRISE QUI N'EXISTE PAS");
+  });
+});

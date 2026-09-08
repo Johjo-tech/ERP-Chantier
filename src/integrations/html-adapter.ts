@@ -224,6 +224,8 @@ const inconnusSignales = new Set<string>();
 /* Champs du circuit de validation : sans colonne, mais traduits en
    transitions par `appliquerWorkflow` — les signaler serait trompeur. */
 const CHAMPS_TRADUITS = new Set([
+  "sous_traitant",
+  "dates_supplementaires",
   "piece_a_commander",
   "piece_a_commander_detail",
   "piece_a_commander_fournisseur",
@@ -468,12 +470,37 @@ interface TacheBC {
   piece_description: string | null;
   piece_fournisseur: string | null;
   piece_date_commande: string | null;
+  sous_traitant_id: Uuid | null;
+  date_tache: string | null;
+}
+
+/** Noms des sous-traitants, indexés par uuid. L'app les désigne par leur nom. */
+let sousTraitantsParUuid: Map<Uuid, string> | null = null;
+
+async function annuaireSousTraitants(): Promise<Map<Uuid, string>> {
+  if (sousTraitantsParUuid) return sousTraitantsParUuid;
+  const { data, error } = await dyn().from("sous_traitants").select("id, nom");
+  if (error) {
+    console.error("Annuaire des sous-traitants indisponible", error);
+    return new Map();
+  }
+  sousTraitantsParUuid = new Map(
+    ((data ?? []) as { id: Uuid; nom: string }[]).map((s) => [s.id, s.nom])
+  );
+  return sousTraitantsParUuid;
+}
+
+async function uuidSousTraitant(nom: string): Promise<Uuid | null> {
+  const annuaire = await annuaireSousTraitants();
+  for (const [uuid, n] of annuaire) if (n === nom) return uuid;
+  return null;
 }
 
 /** Colonnes du circuit, lues d'un bloc pour toute la collection. */
 const CHAMPS_TACHE =
   "id, bon_commande_id, metier, statut, validee_le, realisee_le, commentaire," +
-  " croquis, piece_a_commander, piece_description, piece_fournisseur, piece_date_commande";
+  " croquis, piece_a_commander, piece_description, piece_fournisseur," +
+  " piece_date_commande, sous_traitant_id, date_tache";
 
 /** Complète les bons de commande chargés avec l'état réel du circuit. */
 async function reconstituerWorkflow(
@@ -492,6 +519,7 @@ async function reconstituerWorkflow(
     return;
   }
 
+  const annuaireST = await annuaireSousTraitants();
   const parBC = new Map<Uuid, TacheBC[]>();
   for (const t of (data ?? []) as TacheBC[]) {
     if (!t.bon_commande_id) continue;
@@ -534,6 +562,30 @@ async function reconstituerWorkflow(
     const avecCommentaire = taches.find((t) => t.commentaire);
     bc.technicienCommentaire = avecCommentaire?.commentaire ?? "";
     bc.technicienDessin = taches.find((t) => t.croquis)?.croquis ?? null;
+
+    /* Le planning sous-traitant filtre sur un nom ; la base référence un uuid. */
+    const avecST = taches.find((t) => t.sous_traitant_id);
+    bc.sousTraitant = avecST?.sous_traitant_id
+      ? annuaireST.get(avecST.sous_traitant_id) ?? ""
+      : "";
+
+    /* Une date supplémentaire est une tâche de plus sur une autre journée. */
+    const dateOrigine = bc.datePlanifiee as string | undefined;
+    const autresDates = [
+      ...new Set(
+        taches
+          .map((t) => t.date_tache)
+          .filter((d): d is string => !!d && d !== dateOrigine)
+      ),
+    ].sort();
+    bc.datesSupplementaires = autresDates.map((date) => ({
+      date,
+      heure: "08:00",
+      duree: 1,
+      fait: taches
+        .filter((t) => t.date_tache === date)
+        .every((t) => t.statut === "realisee" || t.statut === "validee"),
+    }));
   }
 }
 
@@ -578,12 +630,26 @@ async function appliquerWorkflow(
     (c) => (avant[c] ?? "") !== (valeur[c] ?? "")
   );
 
+  const stModifie = (avant.sousTraitant ?? "") !== (valeur.sousTraitant ?? "");
+
+  /* Dates supplémentaires ajoutées depuis la vignette du planning. */
+  const datesAvant = new Set(
+    ((avant.datesSupplementaires as { date: string }[]) ?? []).map((d) => d.date)
+  );
+  const datesAjoutees = (
+    (valeur.datesSupplementaires as { date: string }[]) ?? []
+  )
+    .map((d) => d.date)
+    .filter((d) => d && !datesAvant.has(d));
+
   if (
     !metiersCoches.length &&
     !conducteurFranchi &&
     !directeurFranchi &&
     !dateFranchie &&
-    !terrainModifie
+    !terrainModifie &&
+    !stModifie &&
+    !datesAjoutees.length
   ) {
     return;
   }
@@ -679,6 +745,42 @@ async function appliquerWorkflow(
         if (croquis !== undefined) maj.croquis = croquis || null;
 
         await queries.updateTache(cible, maj);
+      }
+    }
+
+    /* Assigner un sous-traitant vaut pour tout le bon : la vignette du
+       planning en porte un seul, et la base le référence par uuid. */
+    if (stModifie) {
+      const nom = (valeur.sousTraitant as string) || "";
+      const stId = nom ? await uuidSousTraitant(nom) : null;
+      if (nom && !stId) {
+        console.warn(`Sous-traitant inconnu, assignation ignorée : ${nom}`);
+      } else {
+        const cible = taches.length
+          ? taches.map((t) => t.id)
+          : [await tachePourMetier((valeur.metier as string) || null)].filter(
+              (x): x is Uuid => !!x
+            );
+        for (const id of cible) {
+          await queries.updateTache(id, { sous_traitant_id: stId });
+        }
+      }
+    }
+
+    /* Une date supplémentaire devient une tâche sur cette journée-là. */
+    if (datesAjoutees.length && societeUuid) {
+      const metiers = (valeur.metiers as string[])?.length
+        ? (valeur.metiers as string[])
+        : [(valeur.metier as string) || null];
+      for (const date of datesAjoutees) {
+        for (const metier of metiers) {
+          await queries.planifierTache(societeUuid, {
+            bon_commande_id: bcUuid,
+            libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
+            date_tache: date,
+            metier,
+          });
+        }
       }
     }
 
