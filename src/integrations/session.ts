@@ -14,6 +14,25 @@ import type { PlanningTache, Uuid } from "@/api/types";
 import type { RoleMembre, Societe } from "@/api/types";
 import { rechercherAdresse } from "./adresse";
 import { rechercherEntreprise } from "./entreprise";
+import {
+  adresseElectroniqueParDefaut,
+  cadreSuggere,
+  CADRES_FACTURATION,
+  completudeClient,
+  completudeSociete,
+  INDEMNITE_RECOUVREMENT_EUR,
+  messageAnomalies,
+  MENTION_FRANCHISE_EN_BASE,
+  PERIODICITES_EREPORTING,
+  REGIMES_TVA,
+  sansTva,
+  SCHEMAS_ADRESSE_ELECTRONIQUE,
+  sectionsEfactureVisibles,
+  sirenDuSiret,
+  siretValide,
+  tvaIntracomFr,
+  verifierEntite,
+} from "@/api/regles-efacture";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
 import { extraireBonCommande, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import {
@@ -33,6 +52,16 @@ import {
   REGLAGES_DEFAUT,
   UNITES_DEFAUT,
 } from "./reglages";
+import {
+  blocagesChiffrage,
+  blocagesValidationConducteur,
+  messageBlocages,
+} from "@/api/regles-bc";
+import {
+  badgeOrigine,
+  comptesRendusTerrain,
+  lignesDocumentDirecteur,
+} from "./prefacture";
 import { estRoleConnu, navAutorisee, peutSurNav, voitLesPrix } from "./permissions";
 import type { Action, ModuleId } from "./permissions";
 import { peut } from "./permissions";
@@ -336,6 +365,8 @@ export function injecterSession() {
   w.nomIntervenant = nomIntervenant;
   w.prochainActeur = prochainActeur;
   w.validerPrefacture = queries.validerPrefacture;
+  w.validerChiffrage = queries.validerChiffrage;
+  w.validerAffaireConducteur = queries.validerAffaireConducteur;
   w.emettreFacture = queries.emettreFacture;
   w.sauvegarderTerrain = queries.sauvegarderTerrain;
   w.marquerRealisee = queries.marquerRealisee;
@@ -348,7 +379,35 @@ export function injecterSession() {
   w.ajouterTravailSupplementaire = queries.ajouterTravailSupplementaire;
   w.supprimerTravailSupplementaire = queries.supprimerTravailSupplementaire;
   w.chiffrerTravailSupplementaire = queries.chiffrerTravailSupplementaire;
+
+  // Validation directeur : ce qui bloque, et le document qui le montre
+  w.blocagesChiffrage = blocagesChiffrage;
+  w.blocagesValidationConducteur = blocagesValidationConducteur;
+  w.messageBlocages = messageBlocages;
+  w.lignesDocumentDirecteur = lignesDocumentDirecteur;
+  w.comptesRendusTerrain = comptesRendusTerrain;
+  w.badgeOrigine = badgeOrigine;
+
   w.rechercherEntreprise = rechercherEntreprise;
+
+  // Facturation électronique : ce qui est mal formé, et ce qui manquera à l'émission
+  w.verifierEntite = verifierEntite;
+  w.completudeClient = completudeClient;
+  w.completudeSociete = completudeSociete;
+  w.messageAnomalies = messageAnomalies;
+  w.tvaIntracomFr = tvaIntracomFr;
+  w.sirenDuSiret = sirenDuSiret;
+  w.siretValide = siretValide;
+  w.adresseElectroniqueParDefaut = adresseElectroniqueParDefaut;
+  w.cadreSuggere = cadreSuggere;
+  w.sectionsEfactureVisibles = sectionsEfactureVisibles;
+  w.CADRES_FACTURATION = CADRES_FACTURATION;
+  w.SCHEMAS_ADRESSE_ELECTRONIQUE = SCHEMAS_ADRESSE_ELECTRONIQUE;
+  w.REGIMES_TVA = REGIMES_TVA;
+  w.PERIODICITES_EREPORTING = PERIODICITES_EREPORTING;
+  w.sansTva = sansTva;
+  w.MENTION_FRANCHISE_EN_BASE = MENTION_FRANCHISE_EN_BASE;
+  w.INDEMNITE_RECOUVREMENT_EUR = INDEMNITE_RECOUVREMENT_EUR;
 
   // Lecture automatique des bons de commande
   w.extraireBonCommande = extraireBonCommande;

@@ -21,6 +21,12 @@ import {
   SupabaseError,
   updateOne,
 } from "../client";
+import {
+  blocagesChiffrage,
+  blocagesValidationConducteur,
+  messageBlocages,
+} from "../regles-bc";
+import { listBonCommandeLignes } from "./bonCommande";
 import type {
   PlanningTache,
   PlanningTacheInsert,
@@ -190,6 +196,42 @@ export async function validerTache(
 }
 
 /**
+ * Le conducteur clôt l'affaire : toutes les tâches, ou aucune.
+ *
+ * Une affaire porte souvent plusieurs métiers, faits par des équipes
+ * différentes et à des dates différentes. Valider « le bon » alors qu'un métier
+ * n'est pas pointé laisserait passer au directeur des travaux que personne n'a
+ * déclarés terminés — c'est ce que faisait l'ancien chemin, en ignorant
+ * silencieusement les tâches non pointées.
+ */
+export async function validerAffaireConducteur(bcId: Uuid): Promise<void> {
+  const [bc, taches] = await Promise.all([
+    getOne("bons_commande", bcId),
+    listTachesBonCommande(bcId),
+  ]);
+  if (!bc) throw new Error("Bon de commande introuvable.");
+
+  /* Les métiers annoncés sur le bon font partie du périmètre : un métier
+     jamais planifié n'a aucune tâche, et passerait donc inaperçu.
+     `metiers` est une colonne Json — l'app y met un tableau, la prudence reste. */
+  const listeMetiers = Array.isArray(bc.metiers)
+    ? bc.metiers.filter((m): m is string => typeof m === "string")
+    : [];
+  const metiers = listeMetiers.length
+    ? listeMetiers
+    : [bc.metier].filter((m): m is string => !!m);
+
+  const blocages = blocagesValidationConducteur(taches, metiers);
+  if (blocages.length) throw new Error(messageBlocages(blocages));
+
+  /* Les tâches déjà validées sont laissées telles quelles : les revalider
+     réécrirait leur horodatage et leur auteur. */
+  for (const t of taches.filter((x) => x.statut === "realisee")) {
+    await validerTache(t.id, true);
+  }
+}
+
+/**
  * Travaux terminés et validés : le bon de commande peut être chiffré.
  *
  * Refuse tant qu'une tâche reste en attente : chiffrer avant arbitrage
@@ -213,7 +255,58 @@ export async function passerPretAChiffrer(bcId: Uuid): Promise<void> {
 }
 
 /**
- * Validation de la pré-facture : génère la facture brouillon.
+ * Le geste du directeur : il arrête le chiffrage, sans facturer.
+ *
+ * C'est ici que le montant est engagé — d'où le contrôle de tout ce qui
+ * resterait à décider : une tâche non arbitrée, un travail supplémentaire non
+ * chiffré, une ligne sans prix. Les règles sont partagées avec l'écran qui les
+ * affiche (`regles-bc`), pour que le motif montré et le refus réel ne puissent
+ * pas diverger.
+ *
+ * La facture reste au geste suivant, celui de la secrétaire : la générer ici
+ * ferait disparaître le bon de l'onglet « À facturer ».
+ */
+export async function validerChiffrage(bcId: Uuid): Promise<void> {
+  const bc = await getOne("bons_commande", bcId);
+  if (!bc) throw new Error("Bon de commande introuvable.");
+
+  const [taches, travaux, lignes] = await Promise.all([
+    listTachesBonCommande(bcId),
+    listTravauxSupplementaires(bcId),
+    listBonCommandeLignes(bcId),
+  ]);
+
+  const blocages = blocagesChiffrage({
+    statutWorkflow: bc.statut_workflow,
+    taches,
+    travaux,
+    lignes: lignes.map((l) => ({
+      type: l.type,
+      designation: l.designation,
+      prixUnitaire: l.prix_unitaire,
+    })),
+  });
+  if (blocages.length) throw new Error(messageBlocages(blocages));
+
+  /* La base impose la séquence en_cours → pret_a_chiffrer → chiffre. Le premier
+     passage découle mécaniquement de l'état des tâches : on le franchit ici
+     plutôt que d'imposer un clic intermédiaire sans décision métier derrière. */
+  if (!bc.statut_workflow || bc.statut_workflow === "en_cours") {
+    await passerPretAChiffrer(bcId);
+  }
+
+  /* Relire l'état plutôt que de se fier à la valeur d'avant la transition. */
+  const apres = await getOne("bons_commande", bcId);
+  if (apres?.statut_workflow === "chiffre") return;
+
+  const { error } = await supabase.rpc("bc_chiffrage_valide", { p_bc_id: bcId });
+  if (error) {
+    throw new SupabaseError("Validation du chiffrage refusée", error.code, error);
+  }
+}
+
+/**
+ * Validation de la pré-facture : chiffrage validé, puis facture brouillon.
  *
  * Dernière étape avant émission. Réservée à l'administrateur — c'est le
  * moment où les travaux supplémentaires chiffrés entrent dans le montant
@@ -222,43 +315,7 @@ export async function passerPretAChiffrer(bcId: Uuid): Promise<void> {
  * Renvoie l'identifiant de la facture générée.
  */
 export async function validerPrefacture(bcId: Uuid): Promise<Uuid> {
-  const bc = await getOne("bons_commande", bcId);
-  if (!bc) throw new Error("Bon de commande introuvable.");
-
-  if (bc.statut_workflow === "facture") {
-    throw new Error("Ce bon de commande a déjà été facturé.");
-  }
-
-  const taches = await listTachesBonCommande(bcId);
-  const enAttente = taches.filter((t) => (t.statut ?? "planifiee") !== "validee");
-  if (enAttente.length) {
-    throw new Error(
-      `${enAttente.length} tâche(s) ne sont pas encore validées par le conducteur.`
-    );
-  }
-
-  const aChiffrer = (await listTravauxSupplementaires(bcId)).filter(
-    (t) => t.statut === "a_chiffrer"
-  );
-  if (aChiffrer.length) {
-    throw new Error(
-      `${aChiffrer.length} travail(aux) supplémentaire(s) restent à chiffrer.`
-    );
-  }
-
-  /* La base impose la séquence en_cours → pret_a_chiffrer → chiffre → facture.
-     Les deux premiers passages découlent mécaniquement de l'état des tâches et
-     du chiffrage : on les franchit ici plutôt que d'imposer des clics
-     intermédiaires sans décision métier derrière. */
-  if (!bc.statut_workflow || bc.statut_workflow === "en_cours") {
-    await passerPretAChiffrer(bcId);
-  }
-  if (bc.statut_workflow !== "chiffre") {
-    const { error } = await supabase.rpc("bc_chiffrage_valide", { p_bc_id: bcId });
-    if (error) {
-      throw new SupabaseError("Validation du chiffrage refusée", error.code, error);
-    }
-  }
+  await validerChiffrage(bcId);
 
   const { data, error } = await supabase.rpc("bc_generer_facture", {
     p_bc_id: bcId,

@@ -994,6 +994,19 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-chapitre td{ padding-top:5mm; font-weight:700; font-size:9.5pt; color:#C24E00; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #FFE7D6; }
 .p-comment td{ font-style:italic; color:#6B7686; font-size:9pt; border-bottom:none; }
 .p-subtotal td{ font-size:8.5pt; color:#6B7686; padding-top:1mm; padding-bottom:4mm; border-bottom:none; }
+/* Ce que le technicien ou le conducteur a ajouté pendant le chantier : le
+   directeur doit le distinguer de ce qui était commandé au départ. */
+.p-ajout td{ background:#FFF7E8; }
+.p-ajout td:first-child{ box-shadow:inset 3px 0 0 #E9A23B; }
+.p-badge-origine{ display:inline-block; margin-right:6px; padding:1px 6px; border-radius:8px; background:#E9A23B; color:#fff; font-size:7.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.3px; vertical-align:middle; }
+/* Un prix manquant est ce qui bloque la validation : il doit se voir. */
+.p-sans-prix td{ background:#FFF1F0; }
+.p-sans-prix td:last-child{ color:#C0392B; font-weight:700; }
+@media print{
+  .p-ajout td{ background:#FFF7E8 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .p-badge-origine{ background:#E9A23B !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .p-sans-prix td{ background:#FFF1F0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 .p-totals{ width:65mm; margin-left:auto; margin-top:5mm; }
 .p-totals td{ padding:1.6mm 0; font-size:9.5pt; }
 .p-totals td.label{ color:#6B7686; }
@@ -1036,6 +1049,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .wf-meta{ font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.6; }
 .wf-attente{ margin-top:8px; }
 .wf-tour{ display:inline-block; font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:999px; background:var(--surface-2); color:var(--text-dim); }
+/* Ce qui empêche le directeur de valider doit se lire avant le document. */
+.wf-banner{ border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.55; }
+.wf-banner.ok{ background:#E8F5EC; color:#1E6B37; border:1px solid #BFE3CB; }
+.wf-banner.alerte{ background:#FDECEE; color:#B42318; border:1px solid #F5C2C7; }
+/* Le document rendu dans la modale : mêmes styles d'impression, cadre à l'écran. */
+.print-preview{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; overflow-x:auto; font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; }
+.print-preview table{ width:100%; border-collapse:collapse; }
 .wf-tour-moi{ background:var(--accent-soft); color:var(--accent-2); }
 .wf-clos{ display:inline-block; font-size:11.5px; font-weight:700; color:var(--success); }
 </style>
@@ -1322,7 +1342,7 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 <div id="validationConducteurModal" class="view-modal">
   <div class="view-modal-panel" style="max-width:560px;">
     <button class="view-modal-close" onclick="closeValidationConducteurModal()">✕</button>
-    <h3 style="margin-top:0;" id="validationModalTitre">Valider ce bon de commande</h3>
+    <h3 style="margin-top:0;">Valider ce bon de commande</h3>
     <p class="card-sub" id="validationConducteurInfo"></p>
     <div class="section-title" style="margin-top:14px;">✅ Travaux réalisés</div>
     <div id="validationConducteurTaches"></div>
@@ -1334,8 +1354,22 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     </div>
     <div id="validationConducteurTravauxSup" style="margin-top:8px;"></div>
     <div style="display:flex; gap:10px; margin-top:18px;">
-      <button class="btn primary" onclick="confirmerValidationConducteur()" id="validationModalConfirmBtn">✓ Confirmer la validation</button>
+      <button class="btn primary" id="validationConducteurConfirmBtn" onclick="confirmerValidationConducteur()">✓ Confirmer la validation</button>
       <button class="btn ghost" onclick="closeValidationConducteurModal()">Annuler</button>
+    </div>
+  </div>
+</div>
+<!-- Le directeur engage le montant facturé : il doit voir le document entier,
+     pas une liste de métiers. -->
+<div id="validationDirecteurModal" class="view-modal">
+  <div class="view-modal-panel" style="max-width:960px;">
+    <button class="view-modal-close" onclick="closeValidationDirecteurModal()">✕</button>
+    <h3 style="margin-top:0;">Validation de la pré-facture</h3>
+    <p class="card-sub" id="validationDirecteurInfo"></p>
+    <div id="validationDirecteurCorps"></div>
+    <div style="display:flex; gap:10px; margin-top:18px; align-items:center;">
+      <button class="btn primary" id="validationDirecteurConfirmBtn" onclick="confirmerValidationDirecteur()">✓ Valider le chiffrage</button>
+      <button class="btn ghost" onclick="closeValidationDirecteurModal()">Annuler</button>
     </div>
   </div>
 </div>
@@ -2730,6 +2764,9 @@ function openForm(type, prefill){
   renderTab();
   const zoneId = 'formZone' + type.charAt(0).toUpperCase() + type.slice(1);
   setTimeout(()=>{ const el = document.getElementById(zoneId); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); },50);
+  /* Le cadre de facturation décide des blocs visibles : sans ce premier
+     passage, la fiche s'ouvrirait avec tous les blocs affichés. */
+  if(type === 'client') majSectionsEfacture();
 }
 function closeForm(type){
   state.formOpen[type] = false;
@@ -3262,16 +3299,20 @@ function printableLignesRows(lignes, hidePrices){
   let html = '', running = 0, sawChap = false;
   (lignes||[]).forEach(l=>{
     const t = l.type || 'ligne';
+    // `classe` et `badge` marquent ce qui a été ajouté en cours de chantier
+    const cls = l.classe ? ' '+esc(l.classe) : '';
+    const badge = l.badge ? `<span class="p-badge-origine">${esc(l.badge)}</span> ` : '';
     if(t === 'chapitre'){
       if(sawChap && hasChap) html += `<tr class="p-subtotal"><td colspan="5">Sous-total HT du chapitre</td><td class="num">${fmt(running)}</td></tr>`;
       running = 0; sawChap = true;
-      html += `<tr class="p-chapitre"><td colspan="6">${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-chapitre${cls}"><td colspan="6">${esc(l.designation)}</td></tr>`;
     } else if(t === 'commentaire'){
-      html += `<tr class="p-comment"><td colspan="6">${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-comment${cls}"><td colspan="6">${badge}${esc(l.designation)}</td></tr>`;
     } else {
       const lht = (parseFloat(l.qte)||0) * (parseFloat(l.prixUnitaire)||0);
       running += lht;
-      html += `<tr><td>${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="num">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${l.tva}%</td><td class="num">${fmt(lht)}</td></tr>`;
+      const sansPrix = !(parseFloat(l.prixUnitaire) > 0) ? ' p-sans-prix' : '';
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="num">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${l.tva}%</td><td class="num">${fmt(lht)}</td></tr>`;
     }
   });
   if(sawChap && hasChap) html += `<tr class="p-subtotal"><td colspan="5">Sous-total HT du chapitre</td><td class="num">${fmt(running)}</td></tr>`;
@@ -3368,43 +3409,86 @@ function printInterventionDocument(id, action){
 function printInterventionDraft(action){
   generateInterventionPdf(state.editing, action);
 }
-function renderPrintDoc(type, id, hidePrices){
+/** Ce qu'un bon de commande porte en plus d'un devis : sa référence client et qui le suit. */
+function bonCommandeDocMetaHTML(b){
+  const metiers = bcMetiersDuBC(b).map(m=>metierDisplayLabel(m)).filter(Boolean);
+  return [
+    b.numeroBC && b.numeroInterne ? `Réf. client : <b>${esc(b.numeroBC)}</b>` : '',
+    b.dateReception ? `Reçu le : <b>${fmtDate(b.dateReception)}</b>` : '',
+    b.conducteur ? `Conducteur : <b>${esc(b.conducteur)}</b>` : '',
+    metiers.length ? `Métiers : <b>${esc(metiers.join(', '))}</b>` : ''
+  ].filter(Boolean).map(x=>'<br>'+x).join('');
+}
+/** Nom du PDF quand le document n'a pas de numéro. */
+const NOM_FICHIER_DEFAUT = { devis:'devis', facture:'facture', bonCommande:'bon-de-commande' };
+/**
+ * Résout un document imprimable et son titre.
+ *
+ * Un bon de commande porte les mêmes champs d'en-tête qu'un devis ou une
+ * facture ; seuls son numéro et sa date se lisent ailleurs. Le rendre ici évite
+ * la table artisanale de la pré-facture, qui masquait chapitres et commentaires.
+ */
+function documentImprimable(type, id){
+  if(type==='bonCommande'){
+    const b = (state.bonsCommande||[]).find(x=>x.id===id);
+    if(!b) return null;
+    return { doc: { ...b, numero: b.numeroInterne || b.numeroBC || '', date: b.dateReception || b.date }, titre: 'BON DE COMMANDE' };
+  }
   const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
-  if(!doc) return '<p>Document introuvable.</p>';
+  if(!doc) return null;
+  return { doc, titre: type==='devis' ? 'DEVIS' : 'FACTURE' };
+}
+function renderPrintDoc(type, id, hidePrices, lignesOverride){
+  const resolu = documentImprimable(type, id);
+  if(!resolu) return '<p>Document introuvable.</p>';
+  const doc = resolu.doc;
   const s = state.settings[state.societeId] || {};
   const socName = societeName(state.societeId);
-  const t = computeDocTotals(doc);
+  const lignes = lignesOverride || doc.lignes;
+  const t = computeTotalsAvecRemise(lignes, doc.remisePourcentage || 0);
   const fmt = hidePrices ? (()=>'•••') : money;
-  const title = type==='devis' ? 'DEVIS' : 'FACTURE';
+  const title = resolu.titre;
+
+  /* Une facture émise porte l'identité de son émetteur au jour de l'émission.
+     Les brouillons, eux, suivent les réglages courants. */
+  const em = {
+    nom: doc.emetteurNom || socName,
+    adresse: doc.emetteurAdresse || s.adresse,
+    siret: doc.emetteurSiret || s.siret,
+    tva: doc.emetteurTvaIntracom || s.tvaIntracom,
+    telephone: s.telephone,
+  };
   return `
     <table class="p-header"><tr>
       <td style="width:55%;">
-        <div class="p-company">${esc(socName)}</div>
-        ${s.adresse? `<div class="p-tagline">${esc(s.adresse)}</div>`:''}
+        <div class="p-company">${esc(em.nom)}</div>
+        ${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
-        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}</div>
+        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
       </td>
     </tr></table>
     <div class="p-rule"></div>
     <table class="p-parties"><tr>
       <td>
         <div class="p-label">Émetteur</div>
-        <div class="p-name">${esc(socName)}</div>
-        <div class="p-line">${s.adresse? esc(s.adresse)+'<br>':''}${s.siret? 'SIRET '+esc(s.siret)+'<br>':''}${s.telephone? 'Tél. '+esc(s.telephone):''}</div>
+        <div class="p-name">${esc(em.nom)}</div>
+        <div class="p-line">${em.adresse? esc(em.adresse)+'<br>':''}${em.siret? 'SIRET '+esc(em.siret)+'<br>':''}${em.tva? 'TVA '+esc(em.tva)+'<br>':''}${em.telephone? 'Tél. '+esc(em.telephone):''}</div>
       </td>
       <td>
         <div class="p-label">Client</div>
         <div class="p-name">${esc(doc.client)}</div>
         <div class="p-line">${esc(doc.adresse)}</div>
+        ${doc.clientSiret? `<div class="p-line">SIRET ${esc(doc.clientSiret)}</div>`:''}
+        ${doc.clientTvaIntracom? `<div class="p-line">TVA ${esc(doc.clientTvaIntracom)}</div>`:''}
         ${doc.interlocuteur? `<div class="p-line">À l'attention de ${esc(doc.interlocuteur)}</div>`:''}
         ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
       </td>
     </tr></table>
     <table class="p-lignes">
       <tr><th style="width:40%;">Désignation</th><th class="num">Qté</th><th class="num">Unité</th><th class="num">Prix U. HT</th><th class="num">TVA</th><th class="num">Total HT</th></tr>
-      ${printableLignesRows(doc.lignes, hidePrices)}
+      ${printableLignesRows(lignes, hidePrices)}
     </table>
     <table class="p-totals">
       <tr><td class="label">Total HT</td><td class="val">${fmt(t.htAvant)}</td></tr>
@@ -3413,7 +3497,7 @@ function renderPrintDoc(type, id, hidePrices){
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
     <table class="p-sign"><tr>
-      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Merci de votre confiance.'}<div class="p-sigline"></div></td>
+      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
       <td>Pour ${esc(socName)} :<div class="p-sigline"></div></td>
     </tr></table>
     <div class="p-footer">${esc(socName)}${s.siret? ' — SIRET '+esc(s.siret):''}${s.adresse? ' — '+esc(s.adresse):''}</div>
@@ -3421,7 +3505,8 @@ function renderPrintDoc(type, id, hidePrices){
 }
 function printDocument(type, id, action){
   action = action || 'open';
-  const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
+  const resolu = documentImprimable(type, id);
+  const doc = resolu && resolu.doc;
   const area = document.getElementById('printArea');
   if(!area || !doc) return;
   if(type==='facture') marquerFactureVerrouillee(id);
@@ -3436,7 +3521,7 @@ function printDocument(type, id, action){
   const fullWidth = Math.max(area.scrollWidth, area.offsetWidth);
   const opt = {
     margin: 0,
-    filename: `${doc.numero || (type==='devis'?'devis':'facture')}.pdf`,
+    filename: `${doc.numero || NOM_FICHIER_DEFAUT[type] || 'document'}.pdf`,
     image: { type:'jpeg', quality:0.98 },
     html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, height: fullHeight, windowHeight: fullHeight, width: fullWidth, windowWidth: fullWidth },
     jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
@@ -4901,10 +4986,23 @@ function toutesDatesValidees(b){
   const dates = bcToutesDatesDuBC(b);
   return dates.length===0 || dates.every(d=>d.fait);
 }
+/**
+ * L'affaire est-elle entièrement pointée par le terrain ?
+ *
+ * On se fie aux tâches réelles remontées par l'adaptateur, pas aux cases par
+ * métier : un bon PEINTURE+SOL n'a qu'une case par métier alors qu'il peut
+ * porter plusieurs tâches, à des dates différentes et pour des équipes
+ * différentes. Un bon sans aucune tâche n'est pas « terminé », il n'est pas
+ * commencé — l'ancienne version répondait « oui » et laissait franchir l'étape.
+ */
 function bcTachesTerminees(b){
+  if(typeof b.nbTaches === 'number'){
+    return b.nbTaches > 0 && (b.tachesNonPointees||[]).length === 0;
+  }
+  // Bon jamais rechargé depuis la base : on retombe sur les cases cochées
   const metiers = bcMetiersDuBC(b);
   const fait = b.metiersFait || {};
-  const metiersOk = metiers.length===0 || metiers.every(m=>fait[m]);
+  const metiersOk = metiers.length>0 && metiers.every(m=>fait[m]);
   return metiersOk && toutesDatesValidees(b);
 }
 function toggleTechFicheOuverte(id){
@@ -5029,39 +5127,83 @@ function bcWorkflowStepperHTML(b, ctx){
         `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}')">✓ Valider (conducteur)</button>`
         : `<div class="bc-attente-message">⏳ En attente — tous les métiers doivent être marqués comme réalisés par le technicien avant de pouvoir passer à la validation du conducteur.</div>`
       ) : ''}
-      ${ctx==='validation' && etape2 && !etape3? `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}','directeur')">✓ Valider (directeur)</button>` : ''}
+      ${ctx==='validation' && etape2 && !etape3 && (!window.actionsFacturation || window.actionsFacturation().peutValiderPrefacture)? `<button class="btn small primary" onclick="openValidationDirecteurModal('${b.id}')">✓ Valider (directeur)</button>` : ''}
       ${ctx==='attente' && etape2? `<button class="btn small ghost" onclick="devaliderBC('${b.id}')">↩ Réinitialiser les validations</button>` : ''}
     </div>
   </div>`;
 }
 let validationConducteurCtx = null;
-let validationModalMode = 'conducteur';
-function openValidationConducteurModal(bcId, mode){
+async function openValidationConducteurModal(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
-  validationModalMode = mode || 'conducteur';
-  if(validationModalMode==='conducteur' && !bcTachesTerminees(b)){ showToast('Tous les métiers doivent être marqués comme réalisés avant de pouvoir valider ce bon de commande.'); return; }
   validationConducteurCtx = bcId;
   document.getElementById('validationConducteurInfo').textContent = `${b.numeroBC||b.client} — ${b.client}`;
-  document.getElementById('validationModalTitre').textContent = validationModalMode==='directeur' ? 'Valider ce bon de commande (directeur)' : 'Valider ce bon de commande';
-  document.getElementById('validationModalConfirmBtn').textContent = validationModalMode==='directeur' ? '✓ Confirmer la validation (directeur)' : '✓ Confirmer la validation';
-  renderValidationConducteurTaches(b);
+  document.getElementById('validationConducteurTaches').innerHTML = '<div class="empty">Chargement des tâches…</div>';
   rafraichirTravauxSupplementaires(b.id, 'validationConducteurTravauxSup');
   document.getElementById('travailSupInput').value = '';
   document.getElementById('validationConducteurModal').style.display = 'flex';
+  // Rien n'est encore contrôlé : le bouton ne s'ouvre qu'après lecture des tâches
+  majBoutonValidationConducteur(false);
+
+  /* On lit les tâches réelles : la liste des métiers ne dit ni combien de
+     journées ont été planifiées, ni ce qui reste à pointer. */
+  try{
+    const taches = await window.listTachesBonCommande(bcId);
+    renderValidationConducteurTaches(taches, b);
+  }catch(err){
+    console.error('Tâches indisponibles', err);
+    document.getElementById('validationConducteurTaches').innerHTML =
+      `<div class="empty">Tâches indisponibles : ${esc(err.message||'erreur inconnue')}</div>`;
+  }
 }
 function closeValidationConducteurModal(){
   document.getElementById('validationConducteurModal').style.display = 'none';
   validationConducteurCtx = null;
 }
-function renderValidationConducteurTaches(b){
-  const metiers = bcMetiersDuBC(b);
-  document.getElementById('validationConducteurTaches').innerHTML = metiers.length? metiers.map(m=>{
-    return `<div class="achat-row" style="--cat-color:#5BC97A;">
-      <div class="achat-row-icon" style="background:#5BC97A22; color:#5BC97A;">✓</div>
-      <div class="achat-row-main"><div class="achat-designation">${esc(metierDisplayLabel(m))}</div></div>
+/* Une ligne par tâche réelle : sur une affaire PEINTURE+SOL, le sol et la
+   peinture sont faits par des équipes différentes, à des dates différentes.
+   Ce qui bloque la validation doit se voir ici. */
+const ETAT_TACHE = {
+  planifiee: { icone:'⏳', couleur:'#8B93A7', libelle:'à pointer par le technicien' },
+  realisee:  { icone:'✓',  couleur:'#5BC97A', libelle:'pointée — à arbitrer' },
+  validee:   { icone:'✓',  couleur:'#2E9E5B', libelle:'validée' },
+  refusee:   { icone:'✕',  couleur:'#C0392B', libelle:'refusée — à reprendre' },
+};
+function renderValidationConducteurTaches(taches, b){
+  const zone = document.getElementById('validationConducteurTaches');
+  if(!zone) return;
+  const liste = taches || [];
+
+  if(!liste.length){
+    zone.innerHTML = '<div class="empty">Aucune tâche planifiée : il n\'y a rien à valider sur cette affaire.</div>';
+    majBoutonValidationConducteur(false);
+    return;
+  }
+
+  zone.innerHTML = liste.map(t=>{
+    const etat = ETAT_TACHE[t.statut||'planifiee'] || ETAT_TACHE.planifiee;
+    const titre = metierDisplayLabel(t.metier||'') || t.libelle || 'Tâche';
+    const detail = [t.date_tache? fmtDate(t.date_tache):'', etat.libelle].filter(Boolean).join(' · ');
+    return `<div class="achat-row" style="--cat-color:${etat.couleur};">
+      <div class="achat-row-icon" style="background:${etat.couleur}22; color:${etat.couleur};">${etat.icone}</div>
+      <div class="achat-row-main">
+        <div class="achat-designation">${esc(titre)}</div>
+        <div class="achat-date">${esc(detail)}</div>
+      </div>
     </div>`;
-  }).join('') : '<div class="empty">Aucun métier renseigné pour ce bon de commande.</div>';
+  }).join('');
+
+  // Les métiers du bon comptent aussi : un métier jamais planifié n'a pas de tâche
+  const blocages = window.blocagesValidationConducteur(liste, b? bcMetiersDuBC(b) : []);
+  const bandeau = blocages.length
+    ? `<div class="wf-banner alerte" style="margin-top:10px;">⚠ ${esc(window.messageBlocages(blocages))}</div>`
+    : `<div class="wf-banner ok" style="margin-top:10px;">✓ Toutes les tâches sont pointées : l'affaire peut être validée.</div>`;
+  zone.insertAdjacentHTML('beforeend', bandeau);
+  majBoutonValidationConducteur(blocages.length === 0);
+}
+function majBoutonValidationConducteur(actif){
+  const btn = document.getElementById('validationConducteurConfirmBtn');
+  if(btn) btn.disabled = !actif;
 }
 function addTravailSupplementaireTechnicien(){
   addTravailSupplementaire(techModalCtx.bcId, 'techTravailSupInput', 'techTravailSupListe');
@@ -5085,8 +5227,8 @@ function renderTravauxSupplementairesListe(liste, bcId, containerId){
         <div class="achat-designation">${esc(t.libelle)}</div>
         <div class="achat-date">${esc(detail)} · constaté par ${esc(t.origine||'—')}</div>
       </div>
-      ${(!chiffre && prix) ? `<button class="btn small" onclick="chiffrerTravailSupplementaire('${esc(bcId)}','${esc(t.id)}','${esc(containerId)}')">💶</button>` : ''}
-      <button class="btn small danger" onclick="removeTravailSupplementaire('${esc(bcId)}','${esc(t.id)}','${esc(containerId)}')">✕</button>
+      ${(!chiffre && prix) ? `<button class="btn small" onclick="demanderPrixTravailSupplementaire('${jsAttr(bcId)}','${jsAttr(t.id)}','${jsAttr(containerId)}')">💶</button>` : ''}
+      <button class="btn small danger" onclick="removeTravailSupplementaire('${jsAttr(bcId)}','${jsAttr(t.id)}','${jsAttr(containerId)}')">✕</button>
     </div>`;
   }).join('') : '<div class="empty">Aucun travail supplémentaire.</div>';
 }
@@ -5128,8 +5270,12 @@ async function removeTravailSupplementaire(bcId, id, containerId){
   }
 }
 
-/* Chiffrage : réservé à ceux qui voient les prix. */
-async function chiffrerTravailSupplementaire(bcId, id, containerId){
+/* Chiffrage : réservé à ceux qui voient les prix.
+   Le nom diffère volontairement de `window.chiffrerTravailSupplementaire`, qui
+   est la requête injectée par le module : une fonction du script classique
+   portant le même nom serait écrasée au chargement du module, et le bouton 💶
+   appellerait la requête avec les mauvais arguments. */
+async function demanderPrixTravailSupplementaire(bcId, id, containerId){
   const saisie = prompt('Prix de vente HT :');
   if(saisie === null) return;
   const prix = parseFloat(String(saisie).replace(',', '.'));
@@ -5157,22 +5303,245 @@ async function rafraichirTravauxSupplementaires(bcId, containerId){
   }
 }
 
+/* Le conducteur clôt l'affaire entière. Le contrôle est fait par l'opération,
+   pas ici : le motif du refus vient de la base et nomme le métier en attente. */
 async function confirmerValidationConducteur(){
   const b = state.bonsCommande.find(x=>x.id===validationConducteurCtx);
   if(!b) return;
-  if(validationModalMode==='directeur'){
-    if(!b.valideConducteur){ showToast('La validation du conducteur est requise en premier.'); return; }
-    b.valideDirecteur = true; b.dateValideDirecteur = new Date().toISOString();
-  } else {
-    if(!bcTachesTerminees(b)){ showToast('Tous les métiers doivent être marqués comme réalisés avant de pouvoir confirmer.'); return; }
-    b.valideConducteur = true; b.dateValideConducteur = new Date().toISOString();
+
+  try{
+    await window.validerAffaireConducteur(b.id);
+    await loadAll();
+    closeValidationConducteurModal();
+    renderTab();
+    showToast('Affaire validée par le conducteur.', 'success');
+  }catch(err){
+    console.error('Validation conducteur refusée', err);
+    showToast(err.message || "Validation refusée.");
   }
-  const r = await stSet('bonCommande:'+b.id, b);
-  if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
-  closeValidationConducteurModal();
-  renderTab();
-  showToast(validationModalMode==='directeur' ? 'Bon de commande validé par le directeur.' : 'Bon de commande validé par le conducteur.', 'success');
+}
+
+/* ===== Validation directeur =====
+   Le directeur arrête le montant qui sera facturé. Il voit donc le bon comme un
+   document — informations, chapitres, lignes, totaux — avec en surbrillance ce
+   que le terrain a ajouté, et il ne peut valider que si plus rien n'est en
+   suspens : tâches arbitrées, travaux chiffrés, lignes valorisées.
+
+   Le contexte porte sa propre copie des lignes : `state.editing` est partagé
+   avec le formulaire du bon et l'éditeur de pré-facture, y toucher écraserait
+   une saisie en cours. */
+let validationDirecteurCtx = null;
+
+async function openValidationDirecteurModal(bcId){
+  const b = state.bonsCommande.find(x=>x.id===bcId);
+  if(!b) return;
+  if(window.actionsFacturation && !window.actionsFacturation().peutValiderPrefacture){
+    showToast("La validation de la pré-facture est réservée à l'administrateur.");
+    return;
+  }
+
+  const prixVisibles = window.affichePrix ? window.affichePrix() : true;
+  validationDirecteurCtx = {
+    bcId,
+    taches: [],
+    travaux: [],
+    lignes: JSON.parse(JSON.stringify(b.lignes || [])),
+    avecPrix: prixVisibles,
+    prixVisibles
+  };
+
+  document.getElementById('validationDirecteurInfo').textContent = `${b.numeroInterne||b.numeroBC||'sans numéro'} — ${b.client||''}`;
+  document.getElementById('validationDirecteurCorps').innerHTML = '<div class="empty">Chargement du dossier…</div>';
+  document.getElementById('validationDirecteurModal').style.display = 'flex';
+  // Rien n'est encore contrôlé : le bouton ne s'ouvre qu'après lecture du dossier
+  majBoutonValidationDirecteur(false);
+
+  try{
+    const [taches, travaux] = await Promise.all([
+      window.listTachesBonCommande(bcId),
+      window.listTravauxSupplementaires(bcId)
+    ]);
+    validationDirecteurCtx.taches = taches || [];
+    validationDirecteurCtx.travaux = travaux || [];
+    renderValidationDirecteur();
+  }catch(err){
+    console.error('Dossier de validation indisponible', err);
+    document.getElementById('validationDirecteurCorps').innerHTML =
+      `<div class="empty">Dossier indisponible : ${esc(err.message||'erreur inconnue')}. La validation reste bloquée tant qu'on ne peut pas contrôler l'état des tâches.</div>`;
+    majBoutonValidationDirecteur(false);
+  }
+}
+
+function closeValidationDirecteurModal(){
+  document.getElementById('validationDirecteurModal').style.display = 'none';
+  validationDirecteurCtx = null;
+}
+
+function majBoutonValidationDirecteur(actif){
+  const btn = document.getElementById('validationDirecteurConfirmBtn');
+  if(btn) btn.disabled = !actif;
+}
+
+function toggleValidationDirecteurPrix(coche){
+  if(!validationDirecteurCtx) return;
+  validationDirecteurCtx.avecPrix = !!coche;
+  renderValidationDirecteur();
+}
+
+function blocagesDirecteur(b, ctx){
+  return window.blocagesChiffrage({
+    statutWorkflow: b.statutWorkflow,
+    taches: ctx.taches,
+    travaux: ctx.travaux,
+    lignes: ctx.lignes
+  });
+}
+
+function blocagesDirecteurHTML(blocages){
+  if(!blocages.length){
+    return `<div class="wf-banner ok">✓ Rien ne reste en suspens : le chiffrage peut être validé.</div>`;
+  }
+  return `<div class="wf-banner alerte">
+    <div style="font-weight:700; margin-bottom:6px;">⚠ Validation impossible</div>
+    <ul style="margin:0; padding-left:18px;">
+      ${blocages.map(x=>`<li>${esc(x.libelle)}${x.details.length? ` <span class="card-sub">— ${esc(x.details.join(', '))}</span>`:''}</li>`).join('')}
+    </ul>
+  </div>`;
+}
+
+/* Chiffrage : toute ligne et tout travail supplémentaire y passe, pour que le
+   directeur valide chaque montant et pas seulement ceux qui manquent. */
+function chiffrageDirecteurHTML(ctx){
+  const lignes = (ctx.lignes||[])
+    .map((l,i)=>({l,i}))
+    .filter(x=>(x.l.type||'ligne')==='ligne');
+
+  const rows = lignes.map(({l,i})=>{
+    const manquant = !(parseFloat(l.prixUnitaire) > 0);
+    return `<tr class="${manquant?'p-sans-prix':''}">
+      <td>${esc(l.designation||'—')}</td>
+      <td class="num">${esc(l.qte||1)} ${esc(l.unite||'u')}</td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" style="width:100px; text-align:right;" onchange="majPrixLigneDirecteur(${i}, this.value)"></td>
+    </tr>`;
+  }).join('');
+
+  const travaux = (ctx.travaux||[]).map(t=>{
+    const manquant = t.statut !== 'chiffre';
+    return `<tr class="${manquant?'p-sans-prix':''}">
+      <td>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></td>
+      <td class="num">1 u</td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" style="width:100px; text-align:right;" onchange="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+    </tr>`;
+  }).join('');
+
+  if(!rows && !travaux) return '<div class="empty">Ce bon de commande ne porte aucune ligne à chiffrer.</div>';
+
+  return `<table class="lignes-table" style="margin-top:8px;">
+    <tr><th>Désignation</th><th class="num">Qté</th><th class="num">Prix U. HT</th></tr>
+    ${rows}
+    ${travaux? `<tr class="p-chapitre"><td colspan="3">Travaux supplémentaires</td></tr>${travaux}`:''}
+  </table>
+  <button class="btn primary" style="margin-top:10px;" onclick="enregistrerChiffrageDirecteur()">💾 Enregistrer les prix</button>`;
+}
+
+function comptesRendusHTML(ctx){
+  const rendus = window.comptesRendusTerrain(ctx.taches);
+  const total = (ctx.taches||[]).length;
+  if(!rendus.length){
+    return `<div class="empty">Aucun compte rendu de terrain sur les ${total} tâche(s) de ce bon.</div>`;
+  }
+  return rendus.map(r=>`<div class="achat-row" style="--cat-color:#E9A23B; align-items:flex-start;">
+    <div class="achat-row-icon" style="background:#E9A23B22; color:#E9A23B;">💬</div>
+    <div class="achat-row-main">
+      <div class="achat-designation">${esc(r.libelle||r.metier||'Tâche')}</div>
+      <div class="achat-date">${esc([r.date? fmtDate(r.date):'', r.heures, r.statut].filter(Boolean).join(' · '))}${r.valideePar? ' · validée par '+esc(window.nomIntervenant(r.valideePar)):''}</div>
+      ${r.commentaire? `<div style="margin-top:6px; white-space:pre-wrap;">${esc(r.commentaire)}</div>`:''}
+      ${r.croquis? `<img src="${esc(r.croquis)}" alt="Croquis du technicien" style="margin-top:8px; max-width:220px; border-radius:8px; border:1px solid #E4E8EE;">`:''}
+    </div>
+  </div>`).join('');
+}
+
+function renderValidationDirecteur(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return;
+
+  const lignesDoc = window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux);
+  const blocages = blocagesDirecteur(b, ctx);
+
+  document.getElementById('validationDirecteurCorps').innerHTML = `
+    ${blocagesDirecteurHTML(blocages)}
+    <label class="bc-tache-row" style="margin:12px 0;">
+      <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
+      <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
+    </label>
+    <div class="print-preview">${renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix, lignesDoc)}</div>
+    <div class="section-title" style="margin-top:18px;">💶 Chiffrage — chaque ligne au bon prix</div>
+    ${chiffrageDirecteurHTML(ctx)}
+    <div class="section-title" style="margin-top:18px;">💬 Comptes rendus du terrain</div>
+    ${comptesRendusHTML(ctx)}
+  `;
+  majBoutonValidationDirecteur(blocages.length === 0);
+}
+
+function majPrixLigneDirecteur(index, valeur){
+  if(!validationDirecteurCtx) return;
+  const ligne = validationDirecteurCtx.lignes[index];
+  if(!ligne) return;
+  ligne.prixUnitaire = parseFloat(String(valeur).replace(',', '.')) || 0;
+}
+
+function majPrixTravailDirecteur(id, valeur){
+  if(!validationDirecteurCtx) return;
+  const travail = validationDirecteurCtx.travaux.find(t=>t.id===id);
+  if(!travail) return;
+  travail.prix_vente_ht = parseFloat(String(valeur).replace(',', '.')) || 0;
+  travail.statut = 'chiffre';
+}
+
+/* Les prix sont enregistrés avant la validation, jamais en même temps : si un
+   enregistrement échoue, le directeur doit le savoir sans avoir rien validé. */
+async function enregistrerChiffrageDirecteur(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return;
+
+  try{
+    for(const t of ctx.travaux){
+      if(t.prix_vente_ht == null) continue;
+      await window.chiffrerTravailSupplementaire(t.id, Number(t.prix_vente_ht));
+    }
+    b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
+    b.montant = computeTotals(b.lignes).ht;
+    const r = await stSet('bonCommande:'+b.id, b);
+    if(!r){ showToast(saveFailedMessage()); return; }
+
+    ctx.travaux = await window.listTravauxSupplementaires(ctx.bcId);
+    renderValidationDirecteur();
+    showToast('Prix enregistrés.', 'success');
+  }catch(err){
+    console.error('Enregistrement du chiffrage refusé', err);
+    showToast(err.message || "Enregistrement impossible.");
+  }
+}
+
+async function confirmerValidationDirecteur(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+
+  try{
+    await window.validerChiffrage(ctx.bcId);
+    await loadAll();
+    closeValidationDirecteurModal();
+    renderTab();
+    showToast('Chiffrage validé — le bon passe à la facturation.', 'success');
+  }catch(err){
+    // Le motif vient de la base : le montrer, plutôt qu'un message générique
+    console.error('Validation directeur refusée', err);
+    showToast(err.message || "Validation refusée.");
+  }
 }
 function bcMetiersChecklistHTML(b){
   const metiers = bcMetiersDuBC(b);
@@ -5199,17 +5568,21 @@ async function toggleBCMetierFait(bcId, metier){
 async function validerBCEtape(bcId, etape){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
-  if(etape==='conducteur'){
-    if(!bcTachesTerminees(b)){ showToast('Tous les métiers doivent être marqués comme réalisés avant validation.'); return; }
-    b.valideConducteur = true; b.dateValideConducteur = new Date().toISOString();
-  } else if(etape==='directeur'){
-    if(!b.valideConducteur){ showToast('Validation conducteur requise en premier.'); return; }
-    b.valideDirecteur = true; b.dateValideDirecteur = new Date().toISOString();
+  /* L'étape directeur engage le montant : elle passe par l'écran qui montre le
+     document et par l'opération qui contrôle, jamais par un enregistrement
+     silencieux. */
+  if(etape==='directeur'){ await openValidationDirecteurModal(bcId); return; }
+
+  /* Même règle que dans la modale : toutes les tâches ou aucune. */
+  try{
+    await window.validerAffaireConducteur(bcId);
+    await loadAll();
+    renderTab();
+    showToast('Affaire validée par le conducteur.', 'success');
+  }catch(err){
+    console.error('Validation conducteur refusée', err);
+    showToast(err.message || "Validation refusée.");
   }
-  await stSet('bonCommande:'+bcId, b);
-  await loadAll();
-  renderTab();
-  showToast('Étape validée.', 'success');
 }
 async function devaliderBC(bcId){
   if(!confirm('Réinitialiser les validations conducteur et directeur pour ce bon de commande ?')) return;
@@ -7681,10 +8054,46 @@ function envoyerRapportEmail(){
   const body = `Client : ${e.client||''}\n${infosLogement.join('\n')}\nDate : ${fmtDate(e.date)}\n\nConstatations :\n${r.constatations||''}\n\nPréconisations :\n${r.preconisations||''}`;
   openEmailComposeModal({dest, subject, body, pdfAction: ()=> printInterventionDraft('save')});
 }
+/**
+ * Identité des deux parties, figée sur la facture.
+ *
+ * Jusqu'ici l'en-tête était recomposé à l'impression depuis les réglages
+ * courants : changer le SIRET de la société réécrivait l'en-tête de toutes les
+ * factures déjà émises. La facturation électronique l'interdit — une facture
+ * transmise doit rester ce qu'elle était le jour de son émission.
+ */
+function instantaneIdentite(f){
+  const s = state.settings[state.societeId] || {};
+  const client = (state.clients||[]).find(c => c.societeId===state.societeId && c.nom===f.client) || {};
+  const vide = (v) => (v===undefined || v===null || v==='') ? undefined : v;
+
+  return {
+    emetteurNom: vide(s.raisonSocialeLegale) || vide(societeName(state.societeId)),
+    emetteurSiren: vide(s.siren) || vide(window.sirenDuSiret(s.siret)),
+    emetteurSiret: vide(s.siret),
+    emetteurTvaIntracom: vide(s.tvaIntracom),
+    emetteurAdresse: vide(s.adresse),
+    emetteurCodePostal: vide(s.codePostal),
+    emetteurVille: vide(s.ville),
+    emetteurPaysCode: vide(s.paysCode) || 'FR',
+    emetteurIban: vide(s.iban),
+
+    clientSiren: vide(client.siren) || vide(window.sirenDuSiret(client.siret)),
+    clientSiret: vide(client.siret),
+    clientTvaIntracom: vide(client.tvaIntracom),
+    clientCodeRoutage: vide(client.codeRoutage),
+    clientCodeService: vide(client.codeService),
+    clientPaysCode: vide(client.paysCode) || 'FR',
+    cadreFacturation: vide(client.cadreFacturation),
+  };
+}
+
+/* Le verrouillage est le moment où la facture part : c'est là qu'on fige. */
 async function marquerFactureVerrouillee(id){
   const f = state.factures.find(x=>x.id===id);
   if(!f || f.verrouillee) return;
   f.verrouillee = true;
+  Object.assign(f, instantaneIdentite(f));
   await stSet('facture:'+id, f);
   await loadAll();
 }
@@ -8105,7 +8514,7 @@ function renderInfosEntrepriseSection(){
       <div class="field"><label>Ville</label><input type="text" id="ie_ville" value="${esc(s.ville)}"></div>
       <div class="field"><label>Téléphone</label><input type="text" id="ie_telephone" value="${esc(s.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="ie_email" value="${esc(s.email)}"></div>
-      ${champSiretHTML('ie_siret', s.siret, {adresse:'ie_adresse', codePostal:'ie_codePostal', ville:'ie_ville'})}
+      ${champSiretHTML('ie_siret', s.siret, CIBLES_ANNUAIRE_SOCIETE)}
       <div class="field"><label>Nom du gérant / représentant</label><input type="text" id="ie_gerant" value="${esc(s.gerant)}"></div>
       <div class="field"><label>Téléphone du gérant</label><input type="text" id="ie_gerantTelephone" value="${esc(s.gerantTelephone)}"></div>
     </div>
@@ -8114,8 +8523,120 @@ function renderInfosEntrepriseSection(){
       <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
       ${s.logo? `<div style="margin-top:8px;"><img src="${s.logo}" style="max-height:70px; max-width:220px;"></div>` : ''}
     </div>
+
+    ${sectionsEfactureSocieteHTML(s)}
+
+    <div id="ie_completude" style="margin-top:12px;"></div>
     <button class="btn primary" style="margin-top:12px;" onclick="saveInfosEntreprise()">Enregistrer</button>
   </div>`;
+}
+
+/* Champs que l'annuaire sait remplir sur la fiche de votre société. */
+const CIBLES_ANNUAIRE_SOCIETE = {
+  adresse:'ie_adresse', codePostal:'ie_codePostal', ville:'ie_ville',
+  siren:'ie_siren', tvaIntracom:'ie_tvaIntracom', codeNaf:'ie_codeNaf',
+  formeJuridique:'ie_formeJuridique',
+  adresseElectroniqueValeur:'ie_adresseElectroniqueValeur',
+  adresseElectroniqueSchema:'ie_adresseElectroniqueSchema',
+};
+
+/**
+ * Identité légale et facturation électronique de l'émetteur.
+ *
+ * Repliées : ces champs se renseignent une fois, alors que les coordonnées
+ * au-dessus sont consultées au quotidien. La section « réception » est ouverte
+ * par défaut — l'obligation de recevoir est en vigueur depuis le 01/09/2026.
+ */
+function sectionsEfactureSocieteHTML(s){
+  const schemas = (window.SCHEMAS_ADRESSE_ELECTRONIQUE||[]);
+  const coche = (v) => v===true ? 'checked' : '';
+  return `
+  <details style="margin-top:14px;">
+    <summary style="cursor:pointer; font-weight:700;">⚖️ Identité légale</summary>
+    <div class="field-grid" style="margin-top:10px;">
+      <div class="field full"><label>Raison sociale</label><input type="text" id="ie_raisonSocialeLegale" value="${esc(s.raisonSocialeLegale)}" placeholder="${esc(s.nom||'')}"></div>
+      <div class="field"><label>Forme juridique</label><input type="text" id="ie_formeJuridique" value="${esc(s.formeJuridique)}" placeholder="SASU, EURL…"></div>
+      <div class="field"><label>SIREN</label><input type="text" id="ie_siren" value="${esc(s.siren)}" inputmode="numeric" placeholder="9 chiffres"></div>
+      <div class="field">
+        <label>N° de TVA intracommunautaire</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="ie_tvaIntracom" value="${esc(s.tvaIntracom)}" placeholder="FR…" style="flex:1;">
+          <button type="button" class="btn small" onclick="calculerTvaSociete()" title="Calculer depuis le SIREN">∑</button>
+        </div>
+      </div>
+      <div class="field"><label>Code APE / NAF</label><input type="text" id="ie_codeNaf" value="${esc(s.codeNaf)}"></div>
+      <div class="field"><label>Capital social (€)</label><input type="number" step="0.01" min="0" id="ie_capitalSocial" value="${esc(s.capitalSocial)}"></div>
+      <div class="field"><label>N° RCS</label><input type="text" id="ie_rcsNumero" value="${esc(s.rcsNumero)}"></div>
+      <div class="field"><label>Ville du RCS</label><input type="text" id="ie_rcsVille" value="${esc(s.rcsVille)}"></div>
+      <div class="field"><label>Pays</label><input type="text" id="ie_paysCode" value="${esc(s.paysCode||'FR')}" maxlength="2"></div>
+    </div>
+  </details>
+
+  <details style="margin-top:8px;">
+    <summary style="cursor:pointer; font-weight:700;">💶 TVA et mentions obligatoires</summary>
+    <div class="field-grid" style="margin-top:10px;">
+      <div class="field">
+        <label>Régime de TVA</label>
+        <select id="ie_regimeTva" onchange="majMentionFranchise()">
+          <option value="">—</option>
+          ${(window.REGIMES_TVA||[]).map(r=>`<option value="${esc(r.code)}" ${s.regimeTva===r.code?'selected':''}>${esc(r.libelle)}</option>`).join('')}
+        </select>
+        <small id="ie_franchiseAide" style="color:#B85C00; font-size:11px;"></small>
+      </div>
+      <div class="field">
+        <label>Périodicité de l'e-reporting</label>
+        <select id="ie_ereportingRegime">
+          <option value="">—</option>
+          ${(window.PERIODICITES_EREPORTING||[]).map(x=>`<option value="${esc(x.code)}" ${s.ereportingRegime===x.code?'selected':''}>${esc(x.libelle)}</option>`).join('')}
+        </select>
+        <small style="color:var(--text-dim); font-size:11px;">À aligner sur votre fréquence de déclaration de TVA — à confirmer avec votre comptable.</small>
+      </div>
+      <div class="field full"><label class="bc-tache-row"><input type="checkbox" id="ie_tvaSurEncaissements" ${coche(s.tvaSurEncaissements)}><span>TVA exigible à l'encaissement (prestations de services)</span></label></div>
+      <div class="field full"><label class="bc-tache-row"><input type="checkbox" id="ie_autoliquidationBatiment" ${coche(s.autoliquidationBatiment)}><span>Autoliquidation de la TVA dans le bâtiment (sous-traitance, art. 283-2 nonies du CGI)</span></label></div>
+      <div class="field full"><label>Mention des pénalités de retard</label><input type="text" id="ie_mentionPenalitesRetard" value="${esc(s.mentionPenalitesRetard)}" placeholder="Ex : trois fois le taux d'intérêt légal"></div>
+      <div class="field"><label>Indemnité de recouvrement (€)</label><input type="number" step="1" min="0" id="ie_indemniteRecouvrement" value="${esc(s.indemniteRecouvrement !== '' && s.indemniteRecouvrement != null ? s.indemniteRecouvrement : (window.INDEMNITE_RECOUVREMENT_EUR||40))}"><small style="color:var(--text-dim); font-size:11px;">40 € par défaut — art. D. 441-5 du code de commerce.</small></div>
+      <div class="field"><label>Assurance décennale — assureur</label><input type="text" id="ie_assuranceDecennaleNom" value="${esc(s.assuranceDecennaleNom)}"></div>
+      <div class="field"><label>N° de police</label><input type="text" id="ie_assuranceDecennalePolice" value="${esc(s.assuranceDecennalePolice)}"></div>
+    </div>
+  </details>
+
+  <details style="margin-top:8px;" open>
+    <summary style="cursor:pointer; font-weight:700;">📧 Réception des factures fournisseurs</summary>
+    <div class="card-sub" style="margin:8px 0;">Obligatoire depuis le 1<sup>er</sup> septembre 2026 : c'est l'adresse que vos fournisseurs et sous-traitants utiliseront pour vous facturer. Elle vous est attribuée par votre plateforme de dématérialisation.</div>
+    <div class="field-grid">
+      <div class="field">
+        <label>Schéma de l'adresse</label>
+        <select id="ie_adresseElectroniqueSchema">
+          <option value="">—</option>
+          ${schemas.map(x=>`<option value="${esc(x.code)}" ${s.adresseElectroniqueSchema===x.code?'selected':''}>${esc(x.code)} — ${esc(x.libelle)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Adresse électronique</label><input type="text" id="ie_adresseElectroniqueValeur" value="${esc(s.adresseElectroniqueValeur)}" placeholder="déduite du SIRET"></div>
+      <div class="field"><label>IBAN</label><input type="text" id="ie_iban" value="${esc(s.iban)}" placeholder="FR76…"></div>
+      <div class="field"><label>BIC</label><input type="text" id="ie_bic" value="${esc(s.bic)}"></div>
+    </div>
+  </details>`;
+}
+
+/* La franchise en base interdit de facturer de la TVA et impose une mention
+   précise : c'est le seul régime qui change le document lui-même. */
+function majMentionFranchise(){
+  const zone = document.getElementById('ie_franchiseAide');
+  const select = document.getElementById('ie_regimeTva');
+  if(!zone || !select) return;
+  zone.textContent = window.sansTva(select.value)
+    ? `Vos factures porteront « ${window.MENTION_FRANCHISE_EN_BASE} » et aucune TVA.`
+    : '';
+}
+
+function calculerTvaSociete(){
+  const champ = document.getElementById('ie_tvaIntracom');
+  if(!champ) return;
+  const siren = (document.getElementById('ie_siren')||{}).value
+    || window.sirenDuSiret((document.getElementById('ie_siret')||{}).value);
+  const tva = window.tvaIntracomFr(siren);
+  if(!tva){ showToast('Renseignez d\'abord un SIRET ou un SIREN.'); return; }
+  champ.value = tva;
 }
 const TYPES_DOC_LEGAUX = ['KBIS','Assurance décennale','Assurance RC Pro','Attestation de vigilance URSSAF','Qualibat','Attestation fiscale','Autre'];
 /* ---------- Réglages : sections par onglet ----------
@@ -8396,16 +8917,52 @@ async function handleLogoUpload(file){
 }
 async function saveInfosEntreprise(){
   const s = state.settings[state.societeId] || {};
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  const coche = (id) => { const el = document.getElementById(id); return el ? el.checked : undefined; };
+
   const obj = { ...s,
-    adresse: document.getElementById('ie_adresse').value,
-    codePostal: document.getElementById('ie_codePostal').value,
-    ville: document.getElementById('ie_ville').value,
-    telephone: document.getElementById('ie_telephone').value,
-    email: document.getElementById('ie_email').value,
-    siret: document.getElementById('ie_siret').value,
-    gerant: document.getElementById('ie_gerant').value,
-    gerantTelephone: document.getElementById('ie_gerantTelephone').value,
+    adresse: v('ie_adresse'),
+    codePostal: v('ie_codePostal'),
+    ville: v('ie_ville'),
+    telephone: v('ie_telephone'),
+    email: v('ie_email'),
+    siret: v('ie_siret'),
+    gerant: v('ie_gerant'),
+    gerantTelephone: v('ie_gerantTelephone'),
+
+    /* Identité légale et facturation électronique. Chacun de ces noms doit
+       figurer dans CHAMPS_SOCIETE, sinon il part dans le jsonb au lieu de sa
+       colonne — un test de garde le vérifie. */
+    raisonSocialeLegale: v('ie_raisonSocialeLegale'),
+    formeJuridique: v('ie_formeJuridique'),
+    siren: v('ie_siren'),
+    tvaIntracom: v('ie_tvaIntracom'),
+    codeNaf: v('ie_codeNaf'),
+    capitalSocial: v('ie_capitalSocial'),
+    rcsNumero: v('ie_rcsNumero'),
+    rcsVille: v('ie_rcsVille'),
+    paysCode: v('ie_paysCode'),
+    regimeTva: v('ie_regimeTva'),
+    ereportingRegime: v('ie_ereportingRegime'),
+    tvaSurEncaissements: coche('ie_tvaSurEncaissements'),
+    autoliquidationBatiment: coche('ie_autoliquidationBatiment'),
+    mentionPenalitesRetard: v('ie_mentionPenalitesRetard'),
+    indemniteRecouvrement: v('ie_indemniteRecouvrement'),
+    assuranceDecennaleNom: v('ie_assuranceDecennaleNom'),
+    assuranceDecennalePolice: v('ie_assuranceDecennalePolice'),
+    adresseElectroniqueSchema: v('ie_adresseElectroniqueSchema'),
+    adresseElectroniqueValeur: v('ie_adresseElectroniqueValeur'),
+    iban: v('ie_iban'),
+    bic: v('ie_bic'),
   };
+
+  /* Un champ absent de l'écran vaut « inchangé », pas « effacé » : les onglets
+     de réglages ne rendent pas tous les mêmes champs. */
+  for (const [k, val] of Object.entries(obj)) if (val === undefined) delete obj[k];
+
+  const anomalies = window.verifierEntite(obj);
+  if(anomalies.length){ alert(window.messageAnomalies(anomalies)); return; }
+
   state.settings[state.societeId] = obj;
   const r = await stSet('settings:'+state.societeId, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
@@ -11101,12 +11658,41 @@ async function saveInterlocuteur(clientId){
   await loadAll();
   closeForm('interlocuteur');
 }
+/* Champs que l'annuaire sait remplir sur la fiche client. */
+const CIBLES_ANNUAIRE_CLIENT = {
+  nom:'c_nom', adresse:'c_adresse', codePostal:'c_codePostal', ville:'c_ville',
+  siren:'c_siren', tvaIntracom:'c_tvaIntracom',
+  adresseElectroniqueValeur:'c_adresseElectroniqueValeur',
+  adresseElectroniqueSchema:'c_adresseElectroniqueSchema',
+};
+
+/**
+ * Le cadre de facturation ouvre le formulaire, il ne le referme pas.
+ *
+ * Un particulier n'a ni SIRET, ni TVA, ni adresse électronique — le B2C relève
+ * de l'e-reporting. Sa fiche est donc plus courte qu'avant. À l'inverse, une
+ * administration réclame le bloc marché public. Tous les blocs sont rendus et
+ * l'on ne bascule que leur affichage : le formulaire ne se re-rend pas, et un
+ * `renderTab()` effacerait la saisie en cours.
+ */
 function clientForm(){
   const e = state.editing;
+  const cadre = e.cadreFacturation || 'B2B_national';
+  const schemas = (window.SCHEMAS_ADRESSE_ELECTRONIQUE||[]);
   return `
   <div class="form-panel">
     <h3>${e.id?'Modifier le client':'Nouveau client'}</h3>
+
     <div class="field-grid">
+      <div class="field full">
+        <label>Type de client</label>
+        <select id="c_cadreFacturation" onchange="majSectionsEfacture()">
+          ${(window.CADRES_FACTURATION||[]).map(c=>`<option value="${esc(c.code)}" ${cadre===c.code?'selected':''}>${esc(c.libelle)}</option>`).join('')}
+        </select>
+        <small id="c_cadreAide" style="color:var(--text-dim); font-size:11px;"></small>
+        <small id="c_cadreSuggestion" style="color:#B85C00; font-size:11px; font-weight:600;"></small>
+      </div>
+
       <div class="field" style="position:relative;">
         <label>Nom / raison sociale</label>
         <input type="text" id="c_nom" value="${esc(e.nom)}" autocomplete="off" placeholder="Ex : syndic, bailleur social, société…" oninput="searchEntreprise(this.value)" onkeydown="if(event.key==='Enter'){ event.preventDefault(); const b=document.getElementById('clientSuggestions'); if(b) b.style.display='none'; this.blur(); }" onblur="setTimeout(()=>{const b=document.getElementById('clientSuggestions'); if(b) b.style.display='none';},150)">
@@ -11114,7 +11700,21 @@ function clientForm(){
       </div>
       <div class="field"><label>Téléphone</label><input type="tel" id="c_tel" value="${esc(e.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="c_email" value="${esc(e.email)}" placeholder="contact@client.fr"></div>
-      ${champSiretHTML('c_siret', e.siret, {nom:'c_nom', adresse:'c_adresse', codePostal:'c_codePostal', ville:'c_ville'})}
+    </div>
+
+    <div id="sec_immatriculation" class="field-grid">
+      ${champSiretHTML('c_siret', e.siret, CIBLES_ANNUAIRE_CLIENT)}
+      <div class="field"><label>SIREN</label><input type="text" id="c_siren" value="${esc(e.siren)}" placeholder="9 chiffres" inputmode="numeric" onchange="majCompletudeClient()"></div>
+      <div class="field">
+        <label>N° de TVA intracommunautaire</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="c_tvaIntracom" value="${esc(e.tvaIntracom)}" placeholder="FR…" style="flex:1;">
+          <button type="button" class="btn small" onclick="calculerTvaClient()" title="Calculer depuis le SIREN">∑</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-grid">
       <div class="field full" style="position:relative;">
         <label>Adresse</label>
         <input type="text" id="c_adresse" autocomplete="off" value="${esc(e.adresse)}" data-suggest="clientAdresseSuggestions"
@@ -11124,14 +11724,147 @@ function clientForm(){
       </div>
       <div class="field"><label>Code postal</label><input type="text" id="c_codePostal" value="${esc(e.codePostal)}"></div>
       <div class="field"><label>Ville</label><input type="text" id="c_ville" value="${esc(e.ville)}"></div>
+      <div class="field" id="sec_pays"><label>Pays</label><input type="text" id="c_paysCode" value="${esc(e.paysCode||'FR')}" maxlength="2" placeholder="FR" onchange="majSectionsEfacture()"></div>
+    </div>
+
+    <div id="sec_efacture" class="field-grid">
+      <div class="field full section-title" style="margin:12px 0 0;">📧 Facture électronique</div>
+      <div class="field">
+        <label>Schéma de l'adresse</label>
+        <select id="c_adresseElectroniqueSchema">
+          <option value="">—</option>
+          ${schemas.map(s=>`<option value="${esc(s.code)}" ${e.adresseElectroniqueSchema===s.code?'selected':''}>${esc(s.code)} — ${esc(s.libelle)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Adresse électronique</label><input type="text" id="c_adresseElectroniqueValeur" value="${esc(e.adresseElectroniqueValeur)}" placeholder="déduite du SIRET"></div>
+      <div class="field"><label>Code de routage</label><input type="text" id="c_codeRoutage" value="${esc(e.codeRoutage)}" placeholder="facultatif"></div>
+      <div class="field"><label>Référence acheteur</label><input type="text" id="c_referenceAcheteur" value="${esc(e.referenceAcheteur)}" placeholder="réf. interne exigée par le client"></div>
+      <div class="field full"><small style="color:var(--text-dim); font-size:11px;">L'adresse électronique se déduit du SIRET. Ne la modifiez que si votre client vous en a communiqué une autre.</small></div>
+    </div>
+
+    <div id="sec_marche" class="field-grid">
+      <div class="field full section-title" style="margin:12px 0 0;">🏛 Marché public</div>
+      <div class="field"><label>Code service exécutant</label><input type="text" id="c_codeService" value="${esc(e.codeService)}" onchange="majCompletudeClient()"></div>
+      <div class="field"><label>N° d'engagement</label><input type="text" id="c_referenceEngagement" value="${esc(e.referenceEngagement)}" onchange="majCompletudeClient()"></div>
+      <div class="field"><label>N° de marché</label><input type="text" id="c_numeroMarche" value="${esc(e.numeroMarche)}"></div>
+    </div>
+
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:13px;">Adresses de facturation et de livraison différentes</summary>
+      <div class="field-grid" style="margin-top:8px;">
+        <div class="field full"><label>Adresse de facturation</label><input type="text" id="c_facturationAdresse" value="${esc(e.facturationAdresse)}"></div>
+        <div class="field"><label>Code postal</label><input type="text" id="c_facturationCodePostal" value="${esc(e.facturationCodePostal)}"></div>
+        <div class="field"><label>Ville</label><input type="text" id="c_facturationVille" value="${esc(e.facturationVille)}"></div>
+        <div class="field full"><label>Adresse de livraison</label><input type="text" id="c_livraisonAdresse" value="${esc(e.livraisonAdresse)}"></div>
+        <div class="field"><label>Code postal</label><input type="text" id="c_livraisonCodePostal" value="${esc(e.livraisonCodePostal)}"></div>
+        <div class="field"><label>Ville</label><input type="text" id="c_livraisonVille" value="${esc(e.livraisonVille)}"></div>
+      </div>
+    </details>
+
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:13px;">Service comptabilité</summary>
+      <div class="field-grid" style="margin-top:8px;">
+        <div class="field"><label>Nom</label><input type="text" id="c_contactNom" value="${esc(e.contactNom)}"></div>
+        <div class="field"><label>Email</label><input type="email" id="c_contactEmail" value="${esc(e.contactEmail)}"></div>
+        <div class="field"><label>Téléphone</label><input type="tel" id="c_contactTelephone" value="${esc(e.contactTelephone)}"></div>
+        <div class="field full"><small style="color:var(--text-dim); font-size:11px;">Destinataire des factures. Les interlocuteurs restent l'annuaire opérationnel du chantier.</small></div>
+      </div>
+    </details>
+
+    <div class="field-grid" style="margin-top:8px;">
       <div class="field full"><label>Notes</label><input type="text" id="c_notes" value="${esc(e.notes)}"></div>
     </div>
-    <div class="field full" style="margin-top:-6px;"><small style="color:var(--text-dim); font-size:11px;">Tapez un nom (3 lettres min.), un SIREN (9 chiffres) ou un SIRET (14) : nom officiel, adresse et SIRET sont renseignés automatiquement. Les établissements fermés sont signalés.</small></div>
+
+    <div class="field full" style="margin-top:-6px;"><small style="color:var(--text-dim); font-size:11px;">Tapez un nom (3 lettres min.), un SIREN (9 chiffres) ou un SIRET (14) : nom officiel, adresse, SIREN et n° de TVA sont renseignés automatiquement. Les établissements fermés sont signalés.</small></div>
+    <div id="c_completude" style="margin-top:8px;"></div>
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="btn primary" onclick="saveClient()">Enregistrer</button>
       <button class="btn ghost" onclick="closeForm('client')">Annuler</button>
     </div>
   </div>`;
+}
+
+/* Le cadre décide de ce qui est visible. On ne touche qu'au display : le
+   formulaire n'est jamais re-rendu, sinon la saisie en cours serait perdue. */
+function majSectionsEfacture(){
+  const select = document.getElementById('c_cadreFacturation');
+  if(!select) return;
+  const cadre = select.value;
+  const visibles = window.sectionsEfactureVisibles(cadre);
+
+  const bascule = (id, cle) => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = visibles.includes(cle) ? '' : 'none';
+  };
+  bascule('sec_immatriculation','immatriculation');
+  bascule('sec_efacture','efacture');
+  bascule('sec_marche','marche');
+  bascule('sec_pays','pays');
+
+  const aide = (window.CADRES_FACTURATION||[]).find(c=>c.code===cadre);
+  const zoneAide = document.getElementById('c_cadreAide');
+  if(zoneAide) zoneAide.textContent = aide ? aide.aide : '';
+
+  majCompletudeClient();
+}
+
+/** Objet client reconstruit depuis le DOM, pour les contrôles à la volée. */
+function clientDepuisFormulaire(){
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  return {
+    nom: v('c_nom'), telephone: v('c_tel'), email: v('c_email'),
+    siret: v('c_siret'), siren: v('c_siren'), tvaIntracom: v('c_tvaIntracom'),
+    adresse: v('c_adresse'), codePostal: v('c_codePostal'), ville: v('c_ville'),
+    paysCode: v('c_paysCode') || 'FR',
+    cadreFacturation: v('c_cadreFacturation'),
+    adresseElectroniqueSchema: v('c_adresseElectroniqueSchema'),
+    adresseElectroniqueValeur: v('c_adresseElectroniqueValeur'),
+    codeRoutage: v('c_codeRoutage'), referenceAcheteur: v('c_referenceAcheteur'),
+    codeService: v('c_codeService'), referenceEngagement: v('c_referenceEngagement'),
+    numeroMarche: v('c_numeroMarche'),
+    facturationAdresse: v('c_facturationAdresse'), facturationCodePostal: v('c_facturationCodePostal'),
+    facturationVille: v('c_facturationVille'),
+    livraisonAdresse: v('c_livraisonAdresse'), livraisonCodePostal: v('c_livraisonCodePostal'),
+    livraisonVille: v('c_livraisonVille'),
+    contactNom: v('c_contactNom'), contactEmail: v('c_contactEmail'), contactTelephone: v('c_contactTelephone'),
+    notes: v('c_notes'),
+  };
+}
+
+/* Informatif, jamais bloquant : on dit ce qui manquera le jour de l'émission. */
+function majCompletudeClient(){
+  const zone = document.getElementById('c_completude');
+  if(!zone) return;
+  const manques = window.completudeClient(clientDepuisFormulaire());
+  zone.innerHTML = manques.length
+    ? `<div class="wf-banner alerte">${esc(window.messageAnomalies(manques))}</div>`
+    : `<div class="wf-banner ok">✓ Cette fiche est complète pour la facture électronique.</div>`;
+}
+
+function calculerTvaClient(){
+  const champ = document.getElementById('c_tvaIntracom');
+  if(!champ) return;
+  const siren = (document.getElementById('c_siren')||{}).value
+    || window.sirenDuSiret((document.getElementById('c_siret')||{}).value);
+  const tva = window.tvaIntracomFr(siren);
+  if(!tva){ showToast('Renseignez d\'abord un SIRET ou un SIREN.'); return; }
+  champ.value = tva;
+}
+
+/* L'annuaire connaît la catégorie juridique : elle dit si l'acheteur est public.
+   On le suggère, on ne l'applique pas — le cadre change le canal de transmission. */
+function majApresAnnuaire(etab){
+  const zone = document.getElementById('c_cadreSuggestion');
+  if(!zone) return;
+  const select = document.getElementById('c_cadreFacturation');
+  const suggestion = window.cadreSuggere({
+    paysCode: (document.getElementById('c_paysCode')||{}).value || 'FR',
+    natureJuridique: etab && etab.formeJuridique,
+  });
+  zone.textContent = (suggestion && select && select.value !== suggestion.cadre)
+    ? `${suggestion.motif} Type suggéré : ${(window.CADRES_FACTURATION.find(c=>c.code===suggestion.cadre)||{}).libelle}.`
+    : '';
+  majCompletudeClient();
 }
 let entrepriseSearchTimer = null;
 let entrepriseResults = [];
@@ -11173,15 +11906,14 @@ function searchEntreprise(query){
 
 /* Renseigne le formulaire client depuis l'annuaire : nom, adresse découpée
    et SIRET, que la base sait stocker. */
+/* Une seule voie de remplissage : l'autocomplétion sur le nom délègue au même
+   code que le bouton SIRET, sinon les deux chemins divergent au premier champ
+   ajouté — c'est ce qui faisait perdre le SIREN et le code APE. */
 function selectEntreprise(i){
   const r = entrepriseResults[i];
   if(!r) return;
-  const set = (id, v) => { const el = document.getElementById(id); if(el && v != null) el.value = v; };
-  set('c_nom', r.nom);
-  set('c_adresse', r.adresse);
-  set('c_codePostal', r.codePostal);
-  set('c_ville', r.ville);
-  set('c_siret', r.siret);
+  siretCibles = CIBLES_ANNUAIRE_CLIENT;
+  appliquerEtablissement(r, 'c_siret');
   const box = document.getElementById('clientSuggestions');
   if(box){ box.innerHTML=''; box.style.display='none'; }
 }
@@ -11254,14 +11986,36 @@ function choisirEtablissement(i, idChamp){
 
 /* Ne remplit que les champs déclarés par l'appelant : chaque formulaire a ses
    propres identifiants. */
+/* Un clic dans l'annuaire remplit tout ce qu'il sait, y compris l'identité
+   fiscale : SIREN, code APE, forme juridique et n° de TVA (calculé, l'annuaire
+   ne le renvoie pas). L'adresse électronique s'en déduit également.
+   Les champs déjà saisis ne sont jamais écrasés — une surcharge manuelle de
+   l'adresse électronique doit survivre à une nouvelle recherche. */
 function appliquerEtablissement(etab, idChamp){
   const c = siretCibles || {};
   const set = (id, v) => { const el = id && document.getElementById(id); if(el && v != null) el.value = v; };
+  const setSiVide = (id, v) => {
+    const el = id && document.getElementById(id);
+    if(el && v != null && !String(el.value||'').trim()) el.value = v;
+  };
   set(idChamp, etab.siret);
   set(c.nom, etab.nom);
   set(c.adresse, etab.adresse);
   set(c.codePostal, etab.codePostal);
   set(c.ville, etab.ville);
+
+  set(c.siren, etab.siren);
+  setSiVide(c.tvaIntracom, etab.tvaIntracom);
+  setSiVide(c.codeNaf, etab.activite);
+  setSiVide(c.formeJuridique, etab.formeJuridique);
+
+  const adr = window.adresseElectroniqueParDefaut(etab);
+  if(adr){
+    setSiVide(c.adresseElectroniqueValeur, adr.valeur);
+    setSiVide(c.adresseElectroniqueSchema, adr.schema);
+  }
+
+  if(typeof majApresAnnuaire === 'function') majApresAnnuaire(etab);
 }
 
 /* ---------- Autocomplétion d'adresse (Base Adresse Nationale) ---------- */
@@ -11304,17 +12058,26 @@ function selectAdresse(i, boxId){
 
 async function saveClient(){
   const e = state.editing;
-  const nom = document.getElementById('c_nom').value.trim();
-  if(!nom){ alert('Le nom du client est requis.'); return; }
+  const saisi = clientDepuisFormulaire();
+  if(!saisi.nom){ alert('Le nom du client est requis.'); return; }
+
+  /* On refuse ce qui est mal formé — un SIRET dont la clé est fausse — jamais
+     ce qui manque : un client sans SIRET reste parfaitement enregistrable. */
+  const anomalies = window.verifierEntite(saisi);
+  if(anomalies.length){ alert(window.messageAnomalies(anomalies)); return; }
+
   const id = e.id || uid();
-  const obj = { id, societeId: state.societeId, nom,
-    telephone: document.getElementById('c_tel').value,
-    email: document.getElementById('c_email').value,
-    siret: document.getElementById('c_siret').value,
-    codePostal: document.getElementById('c_codePostal').value,
-    ville: document.getElementById('c_ville').value,
-    adresse: document.getElementById('c_adresse').value,
-    notes: document.getElementById('c_notes').value };
+  const obj = {
+    ...saisi,
+    id,
+    societeId: state.societeId,
+    /* Écrits par la vérification annuaire, sans champ de saisie : sans ce
+       report explicite, chaque enregistrement les effacerait. */
+    eligibiliteStatut: e.eligibiliteStatut,
+    eligibiliteMessage: e.eligibiliteMessage,
+    eligibiliteVerifieLe: e.eligibiliteVerifieLe,
+  };
+
   const r = await stSet('client:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await loadAll();
@@ -11499,7 +12262,10 @@ function sousTraitantForm(){
     <h3>${e.id? 'Modifier le sous-traitant' : 'Nouveau sous-traitant'}</h3>
     <div class="field-grid">
       <div class="field full"><label>Nom / Entreprise</label><input type="text" id="st_nom" value="${esc(e.nom)}" placeholder="Ex : SARL Toiture Plus"></div>
-      ${champSiretHTML('st_siret', e.siret, {nom:'st_nom', adresse:'st_adresse', codePostal:'st_codePostal', ville:'st_ville'})}
+      ${champSiretHTML('st_siret', e.siret, {nom:'st_nom', adresse:'st_adresse', codePostal:'st_codePostal', ville:'st_ville', siren:'st_siren', tvaIntracom:'st_tvaIntracom'})}
+      <div class="field"><label>SIREN</label><input type="text" id="st_siren" value="${esc(e.siren)}" inputmode="numeric" placeholder="9 chiffres"></div>
+      <div class="field"><label>N° de TVA intracommunautaire</label><input type="text" id="st_tvaIntracom" value="${esc(e.tvaIntracom)}" placeholder="FR…"></div>
+      <div class="field full"><small style="color:var(--text-dim); font-size:11px;">Le SIREN sert à rapprocher automatiquement les factures que ce sous-traitant vous adresse.</small></div>
       <div class="field full"><label>Adresse</label><input type="text" id="st_adresse" value="${esc(e.adresse)}"></div>
       <div class="field"><label>Code postal</label><input type="text" id="st_codePostal" value="${esc(e.codePostal)}"></div>
       <div class="field"><label>Ville</label><input type="text" id="st_ville" value="${esc(e.ville)}"></div>
@@ -11577,14 +12343,22 @@ async function saveSousTraitant(){
   if(!nom){ alert('Le nom du sous-traitant est requis.'); return; }
   const id = e.id || uid();
   const metiers = getCheckedMetiers('st');
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const obj = { id, societeId: state.societeId, nom,
-    telephone: document.getElementById('st_telephone').value,
-    email: document.getElementById('st_email').value,
-    siret: document.getElementById('st_siret').value,
-    adresse: document.getElementById('st_adresse').value,
-    codePostal: document.getElementById('st_codePostal').value,
-    ville: document.getElementById('st_ville').value,
+    telephone: v('st_telephone'),
+    email: v('st_email'),
+    siret: v('st_siret'),
+    // Clé de rapprochement avec factures_entrantes.emetteur_siren
+    siren: v('st_siren'),
+    tvaIntracom: v('st_tvaIntracom'),
+    adresse: v('st_adresse'),
+    codePostal: v('st_codePostal'),
+    ville: v('st_ville'),
     metiers, metier: metiers[0]||'', documents: e.documents || [] };
+
+  const anomalies = window.verifierEntite(obj);
+  if(anomalies.length){ alert(window.messageAnomalies(anomalies)); return; }
+
   const r = await stSet('sousTraitant:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await loadAll();

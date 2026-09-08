@@ -7,6 +7,8 @@
  * du siège et des établissements, et rejet des établissements fermés.
  */
 
+import { tvaIntracomFr } from "@/api/regles-efacture";
+
 export interface EtablissementTrouve {
   siret: string;
   siren: string;
@@ -14,8 +16,19 @@ export interface EtablissementTrouve {
   adresse: string;
   codePostal: string;
   ville: string;
+  /** Code APE/NAF de l'activité principale. */
   activite: string;
   estSiege: boolean;
+  /** Catégorie juridique INSEE — elle porte le caractère public de l'acheteur. */
+  formeJuridique: string;
+  /**
+   * N° de TVA intracommunautaire, déduit du SIREN.
+   *
+   * L'annuaire ne le renvoie pas : la clé française se calcule. Le proposer ici
+   * évite de le faire saisir, donc de se tromper — quitte à le corriger si
+   * l'entreprise n'est pas assujettie.
+   */
+  tvaIntracom: string;
 }
 
 export type ResultatEntreprise =
@@ -69,7 +82,8 @@ function mapper(
   etab: EtabApi,
   siren: string,
   nom: string,
-  estSiege: boolean
+  estSiege: boolean,
+  formeJuridique: string
 ): EtablissementTrouve {
   const codePostal = etab.code_postal ?? "";
   const ville = etab.libelle_commune ?? "";
@@ -82,6 +96,8 @@ function mapper(
     ville,
     activite: etab.activite_principale ?? "",
     estSiege,
+    formeJuridique,
+    tvaIntracom: tvaIntracomFr(siren) ?? "",
   };
 }
 
@@ -121,7 +137,9 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
     }
     const etablissements = results
       .filter((e) => e.siege)
-      .map((e) => mapper(e.siege!, e.siren ?? "", e.nom_complet ?? "", true));
+      .map((e) =>
+        mapper(e.siege!, e.siren ?? "", e.nom_complet ?? "", true, e.nature_juridique ?? "")
+      );
     return etablissements.length
       ? { type: "nom", etablissements }
       : { type: "erreur", code: "NON_TROUVE", message: "Aucun résultat" };
@@ -144,11 +162,11 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
   if (chiffres.length === 9) {
     const etablissements: EtablissementTrouve[] = [];
     if (siege?.etat_administratif === "A") {
-      etablissements.push(mapper(siege, siren, `${nom} (Siège)`, true));
+      etablissements.push(mapper(siege, siren, `${nom} (Siège)`, true, formeJuridique));
     }
     for (const etab of autres) {
       if (etab.etat_administratif === "A" && etab.est_siege !== true) {
-        etablissements.push(mapper(etab, siren, nom, false));
+        etablissements.push(mapper(etab, siren, nom, false, formeJuridique));
       }
     }
     return etablissements.length
@@ -187,6 +205,6 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
   return {
     type: "siret",
     formeJuridique,
-    etablissement: mapper(trouve.etab, siren, nom, trouve.estSiege),
+    etablissement: mapper(trouve.etab, siren, nom, trouve.estSiege, formeJuridique),
   };
 }

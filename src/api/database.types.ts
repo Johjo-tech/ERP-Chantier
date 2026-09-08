@@ -1000,6 +1000,7 @@ export type Database = {
           notes: string | null
           numero_marche: string | null
           pays_code: string | null
+          reference_acheteur: string | null
           reference_engagement: string | null
           siren: string | null
           siret: string | null
@@ -1041,6 +1042,7 @@ export type Database = {
           notes?: string | null
           numero_marche?: string | null
           pays_code?: string | null
+          reference_acheteur?: string | null
           reference_engagement?: string | null
           siren?: string | null
           siret?: string | null
@@ -1082,6 +1084,7 @@ export type Database = {
           notes?: string | null
           numero_marche?: string | null
           pays_code?: string | null
+          reference_acheteur?: string | null
           reference_engagement?: string | null
           siren?: string | null
           siret?: string | null
@@ -3876,6 +3879,8 @@ export type Database = {
       sous_traitants: {
         Row: {
           adresse: string | null
+          adresse_electronique_schema: string | null
+          adresse_electronique_valeur: string | null
           code_postal: string | null
           contact_email: string | null
           contact_nom: string | null
@@ -3888,13 +3893,18 @@ export type Database = {
           metier: string | null
           metiers: string[]
           nom: string
+          pays_code: string | null
+          siren: string | null
           siret: string | null
           societe_id: string
           telephone: string | null
+          tva_intracom: string | null
           ville: string | null
         }
         Insert: {
           adresse?: string | null
+          adresse_electronique_schema?: string | null
+          adresse_electronique_valeur?: string | null
           code_postal?: string | null
           contact_email?: string | null
           contact_nom?: string | null
@@ -3907,13 +3917,18 @@ export type Database = {
           metier?: string | null
           metiers?: string[]
           nom: string
+          pays_code?: string | null
+          siren?: string | null
           siret?: string | null
           societe_id: string
           telephone?: string | null
+          tva_intracom?: string | null
           ville?: string | null
         }
         Update: {
           adresse?: string | null
+          adresse_electronique_schema?: string | null
+          adresse_electronique_valeur?: string | null
           code_postal?: string | null
           contact_email?: string | null
           contact_nom?: string | null
@@ -3926,9 +3941,12 @@ export type Database = {
           metier?: string | null
           metiers?: string[]
           nom?: string
+          pays_code?: string | null
+          siren?: string | null
           siret?: string | null
           societe_id?: string
           telephone?: string | null
+          tva_intracom?: string | null
           ville?: string | null
         }
         Relationships: [
