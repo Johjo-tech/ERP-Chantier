@@ -222,6 +222,26 @@ export async function listByParent<T extends TableName>(
  * Évite le N+1 : charger 100 devis avec leurs lignes doit coûter deux requêtes,
  * pas cent une. Le résultat est groupé par identifiant de parent.
  */
+/** Parents adressés par requête : un uuid coûte ~40 octets dans l'URL. */
+export const LOT_PARENTS = 100;
+
+/**
+ * Découpe une liste d'identifiants en lots interrogeables.
+ *
+ * PostgREST passe le filtre `in` dans l'URL. Au-delà de quelques centaines
+ * d'uuid, la requête dépasse la limite d'en-têtes du serveur (16 Ko) et est
+ * rejetée par une erreur réseau qui ne dit rien de sa cause. La limite se
+ * franchit avec la croissance des données, pas avec un changement de code :
+ * mieux vaut ne jamais l'approcher.
+ */
+export function enLots<T>(items: T[], taille = LOT_PARENTS): T[][] {
+  const lots: T[][] = [];
+  for (let i = 0; i < items.length; i += taille) {
+    lots.push(items.slice(i, i + taille));
+  }
+  return lots;
+}
+
 export async function listByParents<T extends TableName>(
   table: T,
   parentColumn: string,
@@ -231,19 +251,25 @@ export async function listByParents<T extends TableName>(
   const groupes = new Map<Uuid, Tables<T>[]>();
   if (!parentIds.length) return groupes;
 
-  const { data, error } = await dyn()
-    .from(table)
-    .select("*")
-    .in(parentColumn, parentIds)
-    .order(orderBy, { ascending: true });
+  const reponses = await Promise.all(
+    enLots(parentIds).map((lot) =>
+      dyn()
+        .from(table)
+        .select("*")
+        .in(parentColumn, lot)
+        .order(orderBy, { ascending: true })
+    )
+  );
 
-  if (error) throw new SupabaseError(`Failed to list ${table}`, error.code, error);
+  for (const { data, error } of reponses) {
+    if (error) throw new SupabaseError(`Failed to list ${table}`, error.code, error);
 
-  for (const ligne of (data ?? []) as Record<string, unknown>[]) {
-    const parent = ligne[parentColumn] as Uuid;
-    const liste = groupes.get(parent);
-    if (liste) liste.push(ligne as Tables<T>);
-    else groupes.set(parent, [ligne as Tables<T>]);
+    for (const ligne of (data ?? []) as Record<string, unknown>[]) {
+      const parent = ligne[parentColumn] as Uuid;
+      const liste = groupes.get(parent);
+      if (liste) liste.push(ligne as Tables<T>);
+      else groupes.set(parent, [ligne as Tables<T>]);
+    }
   }
   return groupes;
 }
