@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { actionsTache } from "@/integrations/session";
+import { actionsFacturation, actionsTache } from "@/integrations/session";
 import {
   MODULE_PAR_NAV,
   navAutorisee,
@@ -77,34 +77,68 @@ describe("Onglets de navigation", () => {
   });
 });
 
-describe("Actions ouvertes sur une tâche de planning", () => {
-  // La règle qui compte : personne n'arbitre son propre travail.
+describe("Répartition des rôles sur le circuit", () => {
+  // Qui clôture, qui arbitre, qui planifie — à chaque étape.
   const cas = [
-    { role: "technicien", statut: "planifiee", terminer: true, arbitrer: false },
-    { role: "technicien", statut: "realisee", terminer: false, arbitrer: false },
-    { role: "technicien", statut: "refusee", terminer: true, arbitrer: false },
-    { role: "conducteur", statut: "realisee", terminer: false, arbitrer: true },
-    { role: "conducteur", statut: "planifiee", terminer: true, arbitrer: false },
-    { role: "admin", statut: "realisee", terminer: false, arbitrer: true },
-    { role: "secretaire", statut: "realisee", terminer: false, arbitrer: false },
-    { role: "lecture", statut: "planifiee", terminer: false, arbitrer: false },
+    { role: "technicien", statut: "planifiee", cloturer: true, arbitrer: false, planifier: false },
+    { role: "technicien", statut: "realisee", cloturer: false, arbitrer: false, planifier: false },
+    { role: "technicien", statut: "refusee", cloturer: true, arbitrer: false, planifier: false },
+    { role: "sous_traitant", statut: "planifiee", cloturer: true, arbitrer: false, planifier: false },
+    { role: "conducteur", statut: "realisee", cloturer: false, arbitrer: true, planifier: true },
+    { role: "conducteur", statut: "planifiee", cloturer: true, arbitrer: false, planifier: true },
+    { role: "admin", statut: "realisee", cloturer: false, arbitrer: true, planifier: true },
+    { role: "secretaire", statut: "realisee", cloturer: false, arbitrer: false, planifier: false },
+    { role: "lecture", statut: "planifiee", cloturer: false, arbitrer: false, planifier: false },
   ] as const;
 
-  it.each(cas)("$role sur une tâche $statut", ({ role, statut, terminer, arbitrer }) => {
-    const droits = actionsTache(statut, role);
-    expect(droits.peutTerminer).toBe(terminer);
-    expect(droits.peutArbitrer).toBe(arbitrer);
+  it.each(cas)("$role sur une tâche $statut", ({ role, statut, cloturer, arbitrer, planifier }) => {
+    const d = actionsTache(statut, role);
+    expect(d.peutCloturer).toBe(cloturer);
+    expect(d.peutArbitrer).toBe(arbitrer);
+    expect(d.peutPlanifier).toBe(planifier);
+  });
+
+  it("interdit au technicien d'arbitrer, à toute étape", () => {
+    for (const statut of ["planifiee", "realisee", "validee", "refusee"]) {
+      expect(actionsTache(statut, "technicien").peutArbitrer).toBe(false);
+    }
   });
 
   it("verrouille une tâche validée, même pour un administrateur", () => {
-    const droits = actionsTache("validee", "admin");
-    expect(droits.peutSaisir).toBe(false);
-    expect(droits.peutTerminer).toBe(false);
-    expect(droits.peutArbitrer).toBe(false);
+    const d = actionsTache("validee", "admin");
+    expect(d.peutSaisir).toBe(false);
+    expect(d.peutCloturer).toBe(false);
+    expect(d.peutArbitrer).toBe(false);
   });
 
   it("n'ouvre rien sans rôle", () => {
-    const droits = actionsTache("realisee", null);
-    expect(droits).toEqual({ peutSaisir: false, peutTerminer: false, peutArbitrer: false });
+    const d = actionsTache("realisee", null);
+    expect(d.peutPlanifier).toBe(false);
+    expect(d.peutSaisir).toBe(false);
+    expect(d.peutCloturer).toBe(false);
+    expect(d.peutArbitrer).toBe(false);
+  });
+});
+
+describe("Facturation", () => {
+  it("réserve la validation de la pré-facture à l'administrateur", () => {
+    expect(actionsFacturation("admin").peutValiderPrefacture).toBe(true);
+    for (const role of ["conducteur", "secretaire", "technicien", "lecture"] as const) {
+      expect(actionsFacturation(role).peutValiderPrefacture).toBe(false);
+    }
+  });
+
+  it("laisse la secrétaire reprendre puis émettre", () => {
+    const d = actionsFacturation("secretaire");
+    expect(d.peutModifierPrefacture).toBe(true);
+    expect(d.peutFacturer).toBe(true);
+  });
+
+  it("tient le terrain à l'écart de la facturation", () => {
+    for (const role of ["technicien", "sous_traitant"] as const) {
+      const d = actionsFacturation(role);
+      expect(d.peutModifierPrefacture).toBe(false);
+      expect(d.peutFacturer).toBe(false);
+    }
   });
 });

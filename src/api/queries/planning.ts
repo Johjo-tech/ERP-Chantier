@@ -212,6 +212,43 @@ export async function passerPretAChiffrer(bcId: Uuid): Promise<void> {
   }
 }
 
+/**
+ * Validation de la pré-facture : génère la facture brouillon.
+ *
+ * Dernière étape avant émission. Réservée à l'administrateur — c'est le
+ * moment où les travaux supplémentaires chiffrés entrent dans le montant
+ * facturable. La secrétaire prend le relais sur la facture ainsi créée.
+ *
+ * Renvoie l'identifiant de la facture générée.
+ */
+export async function validerPrefacture(bcId: Uuid): Promise<Uuid> {
+  const bc = await getOne("bons_commande", bcId);
+  if (!bc) throw new Error("Bon de commande introuvable.");
+
+  if (bc.statut_workflow !== "pret_a_chiffrer" && bc.statut_workflow !== "chiffre") {
+    throw new Error(
+      `Pré-facture non validable depuis l'état « ${bc.statut_workflow ?? "en_cours"} » : les tâches doivent d'abord être validées.`
+    );
+  }
+
+  const aChiffrer = (await listTravauxSupplementaires(bcId)).filter(
+    (t) => t.statut === "a_chiffrer"
+  );
+  if (aChiffrer.length) {
+    throw new Error(
+      `${aChiffrer.length} travail(aux) supplémentaire(s) restent à chiffrer.`
+    );
+  }
+
+  const { data, error } = await supabase.rpc("bc_generer_facture", {
+    p_bc_id: bcId,
+  });
+  if (error) {
+    throw new SupabaseError("Génération de la facture refusée", error.code, error);
+  }
+  return data as Uuid;
+}
+
 /** Intervention sans suite facturable (geste commercial, erreur d'appel…). */
 export async function cloturerGratuit(bcId: Uuid, motif?: string): Promise<void> {
   const { error } = await supabase.rpc("bc_cloturer_gratuit", {

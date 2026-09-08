@@ -180,31 +180,66 @@ export async function tacheDuBonCommande(
 }
 
 export interface ActionsTache {
+  /** Poser une tâche au planning, l'affecter, la déplacer. */
+  peutPlanifier: boolean;
+  /** Renseigner constats, photos et travaux supplémentaires. */
   peutSaisir: boolean;
-  peutTerminer: boolean;
+  /** Déclarer les travaux faits — le terrain clôture, il n'arbitre pas. */
+  peutCloturer: boolean;
+  /** Valider ou refuser ce que le terrain a déclaré. */
   peutArbitrer: boolean;
 }
 
 /**
- * Actions ouvertes sur une tâche, selon le rôle et l'état.
+ * Répartition des rôles sur le circuit :
+ *
+ *   technicien   clôture sa tâche ; ne planifie pas, n'arbitre pas
+ *   conducteur   planifie et arbitre
+ *   admin        planifie, arbitre, et valide la pré-facture
+ *   secrétaire   lit les tâches, reprend la pré-facture et facture
  *
  * Le rôle est un paramètre plutôt qu'une lecture implicite : c'est ce qui rend
- * la règle vérifiable sans monter une session.
+ * la règle vérifiable sans monter de session.
  */
 export function actionsTache(
   statut: string | null,
   role: RoleMembre | null = roleEffectif()
 ): ActionsTache {
-  const estTerrain = role === "technicien" || role === "sous_traitant";
-  const estEncadrant = role === "admin" || role === "conducteur" || role === "secretaire";
+  const etat = statut ?? "planifiee";
+  const terrain = role === "technicien" || role === "sous_traitant";
+  const encadrement = role === "admin" || role === "conducteur";
 
   return {
-    // Tant que le conducteur n'a pas validé, le terrain peut corriger
-    peutSaisir: (estTerrain || estEncadrant) && statut !== "validee",
-    peutTerminer:
-      (estTerrain || estEncadrant) && (statut === "planifiee" || statut === "refusee"),
-    // Arbitrer son propre travail n'aurait pas de sens
-    peutArbitrer: (role === "admin" || role === "conducteur") && statut === "realisee",
+    peutPlanifier: encadrement,
+    // Une tâche validée est close : plus personne n'y touche
+    peutSaisir: (terrain || encadrement) && etat !== "validee",
+    peutCloturer:
+      (terrain || encadrement) && (etat === "planifiee" || etat === "refusee"),
+    // On n'arbitre que ce que le terrain a déclaré fait
+    peutArbitrer: encadrement && etat === "realisee",
+  };
+}
+
+export interface ActionsFacturation {
+  /** Chiffrer les travaux supplémentaires et valider la pré-facture. */
+  peutValiderPrefacture: boolean;
+  /** Reprendre la pré-facture avant émission. */
+  peutModifierPrefacture: boolean;
+  /** Émettre la facture. */
+  peutFacturer: boolean;
+}
+
+/**
+ * La validation de la pré-facture engage le montant facturé : elle revient au
+ * seul administrateur. La secrétaire reprend ensuite le document et l'émet.
+ */
+export function actionsFacturation(
+  role: RoleMembre | null = roleEffectif()
+): ActionsFacturation {
+  return {
+    peutValiderPrefacture: role === "admin",
+    peutModifierPrefacture: role === "admin" || role === "secretaire",
+    peutFacturer: role === "admin" || role === "secretaire",
   };
 }
 
@@ -232,6 +267,8 @@ export function injecterSession() {
   // Circuit de validation des tâches
   w.tacheDuBonCommande = tacheDuBonCommande;
   w.actionsTache = actionsTache;
+  w.actionsFacturation = actionsFacturation;
+  w.validerPrefacture = queries.validerPrefacture;
   w.sauvegarderTerrain = queries.sauvegarderTerrain;
   w.marquerRealisee = queries.marquerRealisee;
   w.validerTache = queries.validerTache;

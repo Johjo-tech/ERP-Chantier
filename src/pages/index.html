@@ -6275,15 +6275,19 @@ function renderWorkflowTache(){
   if(droits.peutSaisir){
     boutons.push(`<button class="btn" onclick="wfEnregistrerConstats()">💾 Enregistrer mes constats</button>`);
   }
-  if(droits.peutTerminer){
+  if(droits.peutCloturer){
     boutons.push(`<button class="btn primary" onclick="wfMarquerRealisee()">✓ Travaux terminés</button>`);
   }
   if(droits.peutArbitrer){
     boutons.push(`<button class="btn primary" onclick="wfValider(true)">✓ Valider</button>`);
     boutons.push(`<button class="btn ghost" onclick="wfValider(false)">✕ Refuser</button>`);
   }
-  if(statut === 'validee'){
+  // Étape suivante : le chiffrage, puis la pré-facture réservée à l'admin
+  if(statut === 'validee' && droits.peutArbitrer){
     boutons.push(`<button class="btn" onclick="wfPretAChiffrer()">💶 Prêt à chiffrer</button>`);
+  }
+  if(statut === 'validee' && window.actionsFacturation().peutValiderPrefacture){
+    boutons.push(`<button class="btn" onclick="wfValiderPrefacture()">🧾 Valider la pré-facture</button>`);
   }
 
   const auteur = [];
@@ -6354,6 +6358,22 @@ async function wfValider(ok){
     showToast(ok ? 'Travaux validés.' : 'Travaux renvoyés au technicien.', 'success');
   }catch(err){
     console.error('Validation refusée', err);
+    showToast(err.message || 'Action refusée.');
+  }
+}
+
+/* Génère la facture brouillon : la secrétaire prend le relais pour l'émettre. */
+async function wfValiderPrefacture(){
+  if(!confirm('Valider la pré-facture et générer la facture brouillon ?')) return;
+  try{
+    const factureId = await window.validerPrefacture(wfTacheCourante.bon_commande_id);
+    showToast('Facture brouillon générée — à émettre depuis Factures.', 'success', 5000);
+    await loadAll();
+    closeTechnicienInterventionModal();
+    setTab('factures');
+    console.log('Facture générée :', factureId);
+  }catch(err){
+    console.error('Validation de la pré-facture refusée', err);
     showToast(err.message || 'Action refusée.');
   }
 }
