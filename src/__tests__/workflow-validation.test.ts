@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import * as queries from "@/api/queries";
 import { supabase } from "@/api/client";
+import { loadAllData } from "@/integrations/html-adapter";
 import type { Uuid } from "@/api/types";
 import { AUTH_DISPONIBLE, TEST_SOCIETE_CODE } from "./setup";
 
@@ -329,5 +330,47 @@ suite("Transitions interdites", () => {
 
     const bc = await queries.getBonCommande(bcId);
     expect(bc?.statut_workflow).toBe("pret_a_chiffrer");
+  });
+});
+
+suite("Interlocuteurs", () => {
+  /**
+   * `interlocuteurs` dépend de son client et n'a pas de `societe_id`. Le pont
+   * l'ajoutait pourtant : PostgREST rejetait alors l'insertion entière
+   * (PGRST204) et aucun interlocuteur ne pouvait être enregistré.
+   */
+  let societeId: Uuid;
+  let clientId: Uuid;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    if (!societe) throw new Error("Société de test introuvable");
+    societeId = societe.id;
+    clientId = (await queries.resolveClientByNom(societeId, "CLIENT DE TEST")).id;
+  });
+
+  it("enregistre un interlocuteur rattaché à son client", async () => {
+    const interlocuteur = await queries.createInterlocuteur({
+      client_id: clientId,
+      nom: "Marie Dupont",
+      fonction: "Gestionnaire de patrimoine",
+      telephone: "0476000000",
+    });
+
+    expect(interlocuteur.id).toBeTruthy();
+    expect(interlocuteur.client_id).toBe(clientId);
+    expect(interlocuteur.fonction).toBe("Gestionnaire de patrimoine");
+
+    const liste = await queries.listInterlocuteurs(clientId);
+    expect(liste.map((i) => i.id)).toContain(interlocuteur.id);
+
+    await queries.deleteInterlocuteur(interlocuteur.id);
+  });
+
+  it("remonte la société depuis le client, pour le filtrage de l'app", async () => {
+    // L'app filtre sur `societeId` : sans cette remontée, la liste est vide
+    const data = await loadAllData(TEST_SOCIETE_CODE);
+    const inconnus = data.interlocuteurs.filter((i) => !i.client_id);
+    expect(inconnus).toEqual([]);
   });
 });

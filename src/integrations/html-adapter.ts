@@ -272,8 +272,13 @@ async function versDb(
     row[colonne] = normaliser(collection.table, colonne, v);
   }
 
+  /* Toutes les tables ne sont pas cloisonnées : `interlocuteurs` dépend de son
+     client et n'a pas de `societe_id`. L'ajouter ferait rejeter l'insertion
+     entière (PGRST204), d'où le même filtre que pour les autres champs. */
   const code = valeur.societeId as string | undefined;
-  if (code) row.societe_id = await resolveSocieteId(code);
+  if (code && (!colonnes || colonnes.has("societe_id"))) {
+    row.societe_id = await resolveSocieteId(code);
+  }
 
   if (collection.client) row.client_nom = (valeur.client as string) ?? "";
 
