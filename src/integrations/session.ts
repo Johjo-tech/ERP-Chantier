@@ -17,6 +17,17 @@ import { rechercherEntreprise } from "./entreprise";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
 import { extraireBonCommande, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import {
+  correspond,
+  dansLaPeriode,
+  dateDocument,
+  filtrerDocuments,
+  grouperParClient,
+  lignesHaystack,
+  multiWordMatch,
+  sansAccents,
+  texteDocument,
+} from "./recherche";
+import {
   fusionnerReglages,
   LIBELLES_SEUILS,
   REGLAGES_DEFAUT,
@@ -310,6 +321,17 @@ export function injecterSession() {
   w.tacheDuBonCommande = tacheDuBonCommande;
   w.actionsTache = actionsTache;
   w.actionsFacturation = actionsFacturation;
+  // Recherche et filtrage : une seule définition pour tous les écrans
+  w.sansAccents = sansAccents;
+  w.multiWordMatch = multiWordMatch;
+  w.lignesHaystack = lignesHaystack;
+  w.texteDocument = texteDocument;
+  w.correspond = correspond;
+  w.dateDocument = dateDocument;
+  w.dansLaPeriode = dansLaPeriode;
+  w.filtrerDocuments = filtrerDocuments;
+  w.grouperParClient = grouperParClient;
+
   w.chargerIntervenants = chargerIntervenants;
   w.nomIntervenant = nomIntervenant;
   w.prochainActeur = prochainActeur;
