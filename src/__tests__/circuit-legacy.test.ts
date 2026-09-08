@@ -100,3 +100,71 @@ suite("Circuit de validation de l'app historique", () => {
     expect((await relire()).find((b) => b.id === bcId)!.valideDirecteur).toBe(true);
   });
 });
+
+suite("Commande de pièces", () => {
+  /**
+   * L'app signale la pièce sur le bon de commande (`pieceACommander`), la base
+   * la porte sur la tâche (`planning_taches.piece_*`). Sans traduction, tout le
+   * circuit pièces reste muet : rien n'arrive dans « Pièces en commande ».
+   */
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  let bcId: Uuid;
+  let cle: string;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    const bc = await queries.createBonCommande(societe!.id, {
+      client_nom: "CLIENT DE TEST",
+      date: aujourdhui,
+      date_planifiee: aujourdhui,
+      metiers: ["PLOMBERIE"],
+    });
+    bcId = bc.id;
+    cle = `bonCommande:${bcId}`;
+    await relire();
+  });
+
+  it("enregistre la pièce signalée par le technicien", async () => {
+    const bc = (await stGet(cle)) as Record<string, unknown>;
+    await stSet(cle, {
+      ...bc,
+      pieceACommander: true,
+      pieceACommanderDetail: "Mitigeur thermostatique Grohe",
+      technicienCommentaire: "Fuite au niveau du raccord",
+    });
+
+    const taches = await queries.listTachesBonCommande(bcId);
+    expect(taches).toHaveLength(1);
+    expect(taches[0].piece_a_commander).toBe(true);
+    expect(taches[0].piece_description).toBe("Mitigeur thermostatique Grohe");
+    expect(taches[0].commentaire).toBe("Fuite au niveau du raccord");
+  });
+
+  it("remonte la pièce au rechargement, pour l'onglet Pièces en commande", async () => {
+    const bc = (await relire()).find((b) => b.id === bcId)!;
+    expect(bc.pieceACommander).toBe(true);
+    expect(bc.pieceACommanderDetail).toBe("Mitigeur thermostatique Grohe");
+    expect(bc.technicienCommentaire).toBe("Fuite au niveau du raccord");
+  });
+
+  it("enregistre le fournisseur et la date de commande", async () => {
+    const bc = (await stGet(cle)) as Record<string, unknown>;
+    await stSet(cle, {
+      ...bc,
+      pieceACommanderFournisseur: "Cedeo",
+      pieceACommanderDateCommande: aujourdhui,
+    });
+
+    const relu = (await relire()).find((b) => b.id === bcId)!;
+    expect(relu.pieceACommanderFournisseur).toBe("Cedeo");
+    expect(relu.pieceACommanderDateCommande).toBe(aujourdhui);
+  });
+
+  it("lève le signalement quand la pièce est arrivée", async () => {
+    const bc = (await stGet(cle)) as Record<string, unknown>;
+    await stSet(cle, { ...bc, pieceACommander: false });
+
+    const relu = (await relire()).find((b) => b.id === bcId)!;
+    expect(relu.pieceACommander).toBe(false);
+  });
+});
