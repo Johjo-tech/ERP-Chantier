@@ -14,7 +14,9 @@ import {
   updateOne,
 } from "../client";
 import type {
+  Compteur,
   SocieteSettings,
+  TypeDocument,
   TablesInsert,
   TablesUpdate,
   Uuid,
@@ -77,6 +79,76 @@ export async function saveSocieteSettings(
 
   if (error) throw new SupabaseError("Failed to save settings", error.code, error);
   return data;
+}
+
+// ============ NUMÉROTATION ============
+
+/**
+ * Séries numérotées par la société.
+ *
+ * Les bons de commande n'y figurent pas : leur numéro vient du document du
+ * client. Seuls les documents que nous émettons ont une série.
+ */
+export const SERIES_NUMEROTATION: { type: TypeDocument; label: string; prefixe: string }[] = [
+  { type: "devis", label: "Devis", prefixe: "DEV" },
+  { type: "facture", label: "Facture", prefixe: "FAC" },
+  { type: "intervention", label: "Rapport d'intervention", prefixe: "RAP" },
+  { type: "sav", label: "SAV", prefixe: "SAV" },
+];
+
+export async function listCompteurs(
+  societeId: Uuid,
+  annee: number = new Date().getFullYear()
+): Promise<Compteur[]> {
+  const { data, error } = await supabase
+    .from("compteurs")
+    .select("*")
+    .eq("societe_id", societeId)
+    .eq("annee", annee);
+
+  if (error) throw new SupabaseError("Failed to list compteurs", error.code, error);
+  return data ?? [];
+}
+
+/**
+ * Règle le préfixe et le point de départ d'une série.
+ *
+ * `valeur` est le **dernier numéro attribué** : le prochain sera `valeur + 1`.
+ * La baisser réattribuerait des numéros déjà utilisés, d'où le garde-fou.
+ */
+export async function reglerCompteur(
+  societeId: Uuid,
+  type: TypeDocument,
+  prefixe: string,
+  valeur: number,
+  annee: number = new Date().getFullYear()
+): Promise<Compteur> {
+  if (!Number.isFinite(valeur) || valeur < 0) {
+    throw new Error("Le dernier numéro doit être un entier positif.");
+  }
+
+  const { data, error } = await supabase
+    .from("compteurs")
+    .upsert(
+      {
+        societe_id: societeId,
+        type,
+        annee,
+        prefixe: prefixe.trim(),
+        valeur: Math.floor(valeur),
+      },
+      { onConflict: "societe_id,type,annee" }
+    )
+    .select()
+    .single();
+
+  if (error) throw new SupabaseError("Failed to save compteur", error.code, error);
+  return data;
+}
+
+/** Le prochain numéro tel qu'il sera attribué, pour l'aperçu des réglages. */
+export function apercuNumero(prefixe: string, valeur: number, annee: number): string {
+  return `${prefixe.trim() || "DOC"}-${annee}-${String(valeur + 1).padStart(4, "0")}`;
 }
 
 // ============ MÉTIERS ============

@@ -256,6 +256,12 @@ export function injecterSession() {
   w.alertesDocument = alertesDocument;
   w.trierAlertes = trierAlertes;
 
+  // Numérotation des documents
+  w.SERIES_NUMEROTATION = queries.SERIES_NUMEROTATION;
+  w.listCompteurs = queries.listCompteurs;
+  w.reglerCompteur = queries.reglerCompteur;
+  w.apercuNumero = queries.apercuNumero;
+
   // Réglages par société
   w.fusionnerReglages = fusionnerReglages;
   w.REGLAGES_DEFAUT = REGLAGES_DEFAUT;

@@ -7938,21 +7938,87 @@ function renderNotificationsSection(){
   </div>`;
 }
 
-/* Compteurs de numérotation : ils vivent dans la table `compteurs`, incrémentés
-   par la fonction SQL `prochain_numero`. L'écran les montre sans les modifier —
-   les éditer à la main provoquerait des doublons de numéros. */
+/* ---------- Numérotation ----------
+   Les compteurs vivent dans la table `compteurs` et sont incrémentés par la
+   fonction SQL `prochain_numero()`, de façon atomique : deux personnes qui
+   créent un devis en même temps ne peuvent pas obtenir le même numéro.
+   L'écran règle le préfixe et le point de départ, il n'attribue rien. */
+
+let compteursCharges = null;
+
+async function rafraichirNumerotation(){
+  const zone = document.getElementById('zoneNumerotation');
+  if(!zone) return;
+  try{
+    compteursCharges = await window.listCompteurs(window.societeActive().uuid);
+    zone.innerHTML = tableauNumerotation();
+  }catch(err){
+    console.error('Compteurs indisponibles', err);
+    zone.innerHTML = '<div class="empty">Compteurs indisponibles.</div>';
+  }
+}
+
+function tableauNumerotation(){
+  const annee = new Date().getFullYear();
+  const modifiable = window.autorise ? window.autorise('reglages', 'modifier') : true;
+
+  return `<table class="table">
+    <thead><tr><th>Document</th><th style="width:110px;">Préfixe</th><th style="width:140px;">Dernier n° attribué</th><th>Prochain</th></tr></thead>
+    <tbody>
+      ${window.SERIES_NUMEROTATION.map(s=>{
+        const c = (compteursCharges||[]).find(x=> x.type===s.type && x.annee===annee);
+        const prefixe = (c && c.prefixe) || s.prefixe;
+        const valeur = c ? c.valeur : 0;
+        return `<tr>
+          <td>${esc(s.label)}</td>
+          <td><input type="text" id="num_p_${esc(s.type)}" value="${esc(prefixe)}" maxlength="8" style="width:90px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${esc(s.type)}')"></td>
+          <td><input type="number" min="0" id="num_v_${esc(s.type)}" value="${valeur}" style="width:110px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${esc(s.type)}')"></td>
+          <td><code id="num_a_${esc(s.type)}">${esc(window.apercuNumero(prefixe, valeur, annee))}</code></td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+  ${modifiable? `<div style="margin-top:14px;"><button class="btn primary" onclick="saveNumerotation()">Enregistrer la numérotation</button></div>` : ''}`;
+}
+
+function majApercuNumero(type){
+  const annee = new Date().getFullYear();
+  const p = document.getElementById('num_p_'+type).value;
+  const v = parseInt(document.getElementById('num_v_'+type).value, 10) || 0;
+  document.getElementById('num_a_'+type).textContent = window.apercuNumero(p, v, annee);
+}
+
+async function saveNumerotation(){
+  const annee = new Date().getFullYear();
+  const uuid = window.societeActive().uuid;
+  try{
+    for(const s of window.SERIES_NUMEROTATION){
+      const prefixe = document.getElementById('num_p_'+s.type).value;
+      const valeur = parseInt(document.getElementById('num_v_'+s.type).value, 10) || 0;
+      const actuel = (compteursCharges||[]).find(x=> x.type===s.type && x.annee===annee);
+
+      /* Baisser le compteur réattribuerait des numéros déjà émis : on prévient
+         plutôt que de créer des doublons en silence. */
+      if(actuel && valeur < actuel.valeur){
+        if(!confirm(`${s.label} : passer de ${actuel.valeur} à ${valeur} réattribuera des numéros déjà utilisés. Continuer ?`)) return;
+      }
+      await window.reglerCompteur(uuid, s.type, prefixe, valeur, annee);
+    }
+    await rafraichirNumerotation();
+    showToast('Numérotation enregistrée.', 'success');
+  }catch(err){
+    console.error('Enregistrement de la numérotation refusé', err);
+    showToast(err.message || 'Enregistrement impossible.');
+  }
+}
+
 function renderNumerotationSection(){
+  rafraichirNumerotation();
   return `<div class="card">
     <div class="card-title" style="margin-bottom:10px;">🔢 Numérotation</div>
-    <div class="card-sub" style="margin-bottom:12px;">Les numéros sont attribués par la base, de façon atomique : deux utilisateurs qui créent un devis en même temps ne peuvent pas obtenir le même numéro.</div>
-    <table class="table">
-      <thead><tr><th>Document</th><th>Format</th></tr></thead>
-      <tbody>
-        ${[['Devis','DEV'],['Facture','FAC'],['Rapport d\'intervention','RAP'],['Bon de commande','BC'],['SAV','SAV']]
-          .map(([nom,code])=>`<tr><td>${esc(nom)}</td><td><code>${code}-${new Date().getFullYear()}-0001</code></td></tr>`).join('')}
-      </tbody>
-    </table>
-    <small style="display:block; margin-top:10px; color:var(--text-dim); font-size:11px;">Les compteurs se réinitialisent chaque année civile.</small>
+    <div class="card-sub" style="margin-bottom:12px;">Préfixe et point de départ de chaque série, pour ${esc(societeName(state.societeId))} en ${new Date().getFullYear()}. Les numéros sont attribués par la base de façon atomique — deux personnes ne peuvent pas obtenir le même.</div>
+    <div id="zoneNumerotation"><div class="empty">Chargement…</div></div>
+    <small style="display:block; margin-top:12px; color:var(--text-dim); font-size:11px;">Les bons de commande n'ont pas de série : leur numéro figure sur le document du client. Les compteurs repartent de zéro chaque année civile.</small>
   </div>`;
 }
 

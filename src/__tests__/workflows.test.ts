@@ -5,7 +5,8 @@
  * (voir setup.ts), toute la suite est ignorée plutôt que rouge.
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { getNextNumero } from "@/api/client";
 import * as workflows from "@/api/operations/workflows";
 import * as queries from "@/api/queries";
 import type { Uuid } from "@/api/types";
@@ -236,5 +237,58 @@ suite("Numérotation des bons de commande", () => {
     expect(sav.numero_bc).toMatch(/^SAV-/);
     expect(sav.bon_commande_parent_id).toBe(origine.id);
     expect(sav.probleme_description).toBe("Fuite persistante");
+  });
+});
+
+suite("Numérotation configurable", () => {
+  /**
+   * Le préfixe et le point de départ vivent dans `compteurs` ; c'est
+   * `prochain_numero()` qui les applique. Régler la série depuis les réglages
+   * doit donc changer les numéros réellement attribués.
+   */
+  const SERIE = "sav" as const;
+  let societeId: Uuid;
+  let etatInitial: { prefixe: string; valeur: number };
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    societeId = societe!.id;
+    const compteurs = await queries.listCompteurs(societeId);
+    const c = compteurs.find((x) => x.type === SERIE);
+    etatInitial = { prefixe: c?.prefixe ?? "", valeur: c?.valeur ?? 0 };
+  });
+
+  afterAll(async () => {
+    // On rend la série dans l'état où on l'a trouvée
+    await queries.reglerCompteur(
+      societeId,
+      SERIE,
+      etatInitial.prefixe,
+      etatInitial.valeur
+    );
+  });
+
+  it("calcule l'aperçu du prochain numéro", () => {
+    expect(queries.apercuNumero("DEV", 41, 2026)).toBe("DEV-2026-0042");
+    // Un préfixe vide ne doit pas produire « -2026-0001 »
+    expect(queries.apercuNumero("  ", 0, 2026)).toBe("DOC-2026-0001");
+  });
+
+  it("applique le préfixe et le point de départ réglés", async () => {
+    await queries.reglerCompteur(societeId, SERIE, "ZQX", 500);
+
+    const numero = await getNextNumero(societeId, SERIE);
+    expect(numero).toBe(`ZQX-${new Date().getFullYear()}-0501`);
+  });
+
+  it("poursuit la série au numéro suivant", async () => {
+    const numero = await getNextNumero(societeId, SERIE);
+    expect(numero).toBe(`ZQX-${new Date().getFullYear()}-0502`);
+  });
+
+  it("refuse un point de départ négatif", async () => {
+    await expect(
+      queries.reglerCompteur(societeId, SERIE, "ZQX", -1)
+    ).rejects.toThrow(/positif/);
   });
 });
