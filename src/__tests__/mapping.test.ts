@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import {
+  CHAMPS_SOCIETE,
   ligneVersDb,
   ligneVersLegacy,
   toCamel,
@@ -150,5 +151,37 @@ describe("Tri antéchronologique des documents", () => {
       ["date"]
     );
     expect(tri.map((d) => d.id)).toEqual(["date", "sansDate"]);
+  });
+});
+
+describe("Réglages de la société", () => {
+  /**
+   * `CHAMPS_SOCIETE` est une liste blanche : un champ qui n'y figure pas part
+   * dans le jsonb `infos_entreprise` au lieu de sa colonne, sans avertissement.
+   * Une faute de frappe dans un nom de colonne produit donc une donnée
+   * silencieusement perdue — c'est ce que ce test rend impossible.
+   */
+  it("chaque champ vise une colonne réelle de societes", () => {
+    const colonnes = colonnesDe("societes")!;
+    expect(colonnes).toBeTruthy();
+
+    for (const [champ, def] of Object.entries(CHAMPS_SOCIETE)) {
+      expect(colonnes.has(def.colonne), `${champ} → ${def.colonne} n'existe pas`).toBe(
+        true
+      );
+    }
+  });
+
+  it("porte les champs exigés par la facturation électronique", () => {
+    const colonnes = Object.values(CHAMPS_SOCIETE).map((d) => d.colonne);
+    for (const attendue of [
+      "siren",
+      "tva_intracom",
+      "raison_sociale_legale",
+      "adresse_electronique_valeur",
+      "iban",
+    ]) {
+      expect(colonnes).toContain(attendue);
+    }
   });
 });

@@ -18,6 +18,7 @@
 
 import {
   dyn,
+  enLots,
   estUuid,
   getNextNumero,
   listByParents,
@@ -234,6 +235,8 @@ const CHAMPS_TRADUITS = new Set([
   "technicien_dessin",
   "metiers_fait",
   "date_origine_fait",
+  "nb_taches",
+  "taches_non_pointees",
   "valide_conducteur",
   "date_valide_conducteur",
   "valide_directeur",
@@ -509,15 +512,18 @@ async function reconstituerWorkflow(
   const ids = [...bcsParUuid.keys()];
   if (!ids.length) return;
 
-  const { data, error } = await dyn()
-    .from("planning_taches")
-    .select(CHAMPS_TACHE)
-    .in("bon_commande_id", ids);
+  const reponses = await Promise.all(
+    enLots(ids).map((lot) =>
+      dyn().from("planning_taches").select(CHAMPS_TACHE).in("bon_commande_id", lot)
+    )
+  );
 
-  if (error) {
-    console.error("Circuit de validation indisponible", error);
+  const refus = reponses.find((r) => r.error);
+  if (refus) {
+    console.error("Circuit de validation indisponible", refus.error);
     return;
   }
+  const data = reponses.flatMap((r) => r.data ?? []);
 
   const annuaireST = await annuaireSousTraitants();
   const parBC = new Map<Uuid, TacheBC[]>();
@@ -540,6 +546,15 @@ async function reconstituerWorkflow(
 
     // Sans tâche rattachée, le bon n'a simplement pas encore été planifié
     bc.dateOrigineFait = taches.length > 0 && taches.every(faite);
+
+    /* Le circuit se décide sur les tâches réelles, pas sur les cases cochées :
+       un bon PEINTURE+SOL n'a qu'une case par métier, alors qu'il peut porter
+       plusieurs tâches par métier, à des dates différentes. L'écran a besoin de
+       savoir combien il en reste et lesquelles, sans requête de son côté. */
+    bc.nbTaches = taches.length;
+    bc.tachesNonPointees = taches
+      .filter((t) => !faite(t))
+      .map((t) => t.metier || t.date_tache || "tâche non planifiée");
 
     const toutesValidees =
       taches.length > 0 && taches.every((t) => t.statut === "validee");
@@ -592,13 +607,26 @@ async function reconstituerWorkflow(
 /**
  * Traduit les changements du circuit historique en transitions réelles.
  *
- * L'écran coche `metiersFait`, puis pousse `valideConducteur` et
- * `valideDirecteur`. Chacun correspond à une transition que la base sait
- * horodater et attribuer : on la déclenche au lieu de tenter d'écrire des
- * champs qui n'ont pas de colonne.
+ * Ce qui reste ici, ce sont les gestes du terrain : cocher un métier réalisé,
+ * pointer une date, signaler une pièce ou un constat. Chacun correspond à une
+ * transition que la base sait horodater et attribuer.
  *
  * On compare à l'état précédent : sans ça, chaque enregistrement du bon
  * rejouerait des transitions déjà franchies.
+ *
+ * `valideConducteur` et `valideDirecteur` sont délibérément absents. Tous deux
+ * sont **dérivés** de l'état des tâches (`reconstituerWorkflow`) et n'ont aucune
+ * colonne ; surtout, tous deux exigent des contrôles dont l'échec doit être
+ * **montré** :
+ *
+ * - le conducteur ne clôt une affaire que si **toutes** ses tâches sont pointées.
+ *   Déclenché d'ici, le geste validait le sous-ensemble déjà pointé et ignorait
+ *   le reste en silence — sur un bon PEINTURE+SOL, le sol partait validé pendant
+ *   que la peinture restait planifiée.
+ * - le directeur engage le montant facturé.
+ *
+ * Ils passent désormais par `queries.validerAffaireConducteur` et
+ * `queries.validerChiffrage`, appelés explicitement par leurs écrans.
  */
 async function appliquerWorkflow(
   bcUuid: Uuid,
@@ -609,8 +637,6 @@ async function appliquerWorkflow(
 
   const metiersAvant = (avant.metiersFait as Record<string, boolean>) ?? {};
   const metiersApres = (valeur.metiersFait as Record<string, boolean>) ?? {};
-  const conducteurFranchi = !avant.valideConducteur && !!valeur.valideConducteur;
-  const directeurFranchi = !avant.valideDirecteur && !!valeur.valideDirecteur;
 
   const metiersCoches = Object.keys(metiersApres).filter(
     (m) => metiersApres[m] && !metiersAvant[m]
@@ -644,8 +670,6 @@ async function appliquerWorkflow(
 
   if (
     !metiersCoches.length &&
-    !conducteurFranchi &&
-    !directeurFranchi &&
     !dateFranchie &&
     !terrainModifie &&
     !stModifie &&
@@ -715,12 +739,6 @@ async function appliquerWorkflow(
       }
     }
 
-    if (conducteurFranchi) {
-      for (const t of taches.filter((x) => x.statut === "realisee")) {
-        await queries.validerTache(t.id, true);
-      }
-    }
-
     /* Les constats vont sur la tâche du bon. La pièce est signalée pour
        l'ensemble : on la porte sur la première tâche, qui suffit à la faire
        remonter dans « Pièces en commande ». */
@@ -784,16 +802,8 @@ async function appliquerWorkflow(
       }
     }
 
-    if (directeurFranchi) {
-      // Le passage à « chiffré » est la signature du directeur avant facturation
-      await queries.passerPretAChiffrer(bcUuid).catch(() => undefined);
-      const { error: err } = await supabase.rpc("bc_chiffrage_valide", {
-        p_bc_id: bcUuid,
-      });
-      if (err) throw err;
-    }
   } catch (err) {
-    console.error("Circuit de validation : transition refusée", err);
+    console.error(`Circuit de validation : transition refusée sur ${cle}`, err);
   }
 }
 
@@ -804,18 +814,24 @@ async function attacher(
   champ: "lignes" | "photos",
   mapper: (row: Record<string, unknown>) => unknown
 ) {
-  const { data, error } = await dyn()
-    .from(enfant.table)
-    .select("*")
-    .in(enfant.fk, [...uuidParPrefixe.keys()])
-    .order("position", { ascending: true });
+  const reponses = await Promise.all(
+    enLots([...uuidParPrefixe.keys()]).map((lot) =>
+      dyn()
+        .from(enfant.table)
+        .select("*")
+        .in(enfant.fk, lot)
+        .order("position", { ascending: true })
+    )
+  );
 
-  if (error) {
-    console.error(`Chargement de ${enfant.table} impossible:`, error);
+  const refus = reponses.find((r) => r.error);
+  if (refus) {
+    console.error(`Chargement de ${enfant.table} impossible:`, refus.error);
     return;
   }
+  const data = reponses.flatMap((r) => r.data ?? []);
 
-  for (const row of (data ?? []) as Record<string, unknown>[]) {
+  for (const row of data as Record<string, unknown>[]) {
     const cle = uuidParPrefixe.get(row[enfant.fk] as Uuid);
     const parent = cle ? cache.get(cle) : undefined;
     if (!parent) continue;
@@ -1012,15 +1028,67 @@ export async function nextSAVNumero(code: string): Promise<string> {
  * `societe_settings.infos_entreprise`. On recompose donc à la lecture, et on
  * réoriente chaque champ vers sa destination à l'écriture.
  */
-const CHAMPS_SOCIETE: Record<string, string> = {
-  adresse: "adresse",
-  codePostal: "code_postal",
-  ville: "ville",
-  telephone: "telephone",
-  email: "email",
-  siret: "siret",
-  nom: "nom",
+interface ChampSociete {
+  colonne: string;
+  /** Un `<input>` rend toujours une chaîne ; la colonne, elle, est typée. */
+  type?: "nombre" | "booleen";
+}
+
+/**
+ * Liste blanche : tout champ absent d'ici part dans le jsonb `infos_entreprise`
+ * au lieu de sa colonne, **sans le moindre avertissement**. C'est le seul
+ * endroit de ce module où une faute de frappe se perd en silence — d'où le test
+ * de garde qui vérifie que chaque colonne visée existe vraiment.
+ */
+export const CHAMPS_SOCIETE: Record<string, ChampSociete> = {
+  adresse: { colonne: "adresse" },
+  codePostal: { colonne: "code_postal" },
+  ville: { colonne: "ville" },
+  telephone: { colonne: "telephone" },
+  email: { colonne: "email" },
+  siret: { colonne: "siret" },
+  nom: { colonne: "nom" },
+
+  // Identité légale — mentions obligatoires sur une facture
+  siren: { colonne: "siren" },
+  tvaIntracom: { colonne: "tva_intracom" },
+  raisonSocialeLegale: { colonne: "raison_sociale_legale" },
+  formeJuridique: { colonne: "forme_juridique" },
+  codeNaf: { colonne: "code_naf" },
+  capitalSocial: { colonne: "capital_social", type: "nombre" },
+  rcsNumero: { colonne: "rcs_numero" },
+  rcsVille: { colonne: "rcs_ville" },
+  paysCode: { colonne: "pays_code" },
+
+  // TVA
+  regimeTva: { colonne: "regime_tva" },
+  ereportingRegime: { colonne: "ereporting_regime" },
+  tvaSurEncaissements: { colonne: "tva_sur_encaissements", type: "booleen" },
+  autoliquidationBatiment: { colonne: "autoliquidation_batiment", type: "booleen" },
+
+  // Mentions de règlement et garanties
+  indemniteRecouvrement: { colonne: "indemnite_recouvrement", type: "nombre" },
+  mentionPenalitesRetard: { colonne: "mention_penalites_retard" },
+  assuranceDecennaleNom: { colonne: "assurance_decennale_nom" },
+  assuranceDecennalePolice: { colonne: "assurance_decennale_police" },
+
+  // Réception des factures fournisseurs — obligatoire depuis le 01/09/2026
+  adresseElectroniqueSchema: { colonne: "adresse_electronique_schema" },
+  adresseElectroniqueValeur: { colonne: "adresse_electronique_valeur" },
+  iban: { colonne: "iban" },
+  bic: { colonne: "bic" },
 };
+
+/** Un champ vide vaut « non renseigné », pas zéro ni faux. */
+function convertirChampSociete(type: ChampSociete["type"], v: unknown): unknown {
+  if (v === "" || v === null || v === undefined) return null;
+  if (type === "nombre") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (type === "booleen") return v === true || v === "true" || v === "on";
+  return v;
+}
 
 async function lireSettings(code: string): Promise<Record<string, unknown>> {
   const societeId = await resolveSocieteId(code);
@@ -1031,8 +1099,10 @@ async function lireSettings(code: string): Promise<Record<string, unknown>> {
 
   const plat: Record<string, unknown> = {};
   if (societe) {
-    for (const [champ, colonne] of Object.entries(CHAMPS_SOCIETE)) {
-      plat[champ] = (societe as unknown as Record<string, unknown>)[colonne] ?? "";
+    for (const [champ, def] of Object.entries(CHAMPS_SOCIETE)) {
+      const v = (societe as unknown as Record<string, unknown>)[def.colonne];
+      // Un booléen doit rester booléen : `?? ""` cocherait une case à `false`
+      plat[champ] = def.type === "booleen" ? v === true : v ?? "";
     }
   }
 
@@ -1056,8 +1126,8 @@ async function ecrireSettings(
     const libres: Record<string, unknown> = {};
     for (const [champ, v] of Object.entries(valeur)) {
       if (champ === "notifsTraitees") continue;
-      const colonne = CHAMPS_SOCIETE[champ];
-      if (colonne) colonnes[colonne] = v === "" ? null : v;
+      const def = CHAMPS_SOCIETE[champ];
+      if (def) colonnes[def.colonne] = convertirChampSociete(def.type, v);
       else libres[champ] = v;
     }
 

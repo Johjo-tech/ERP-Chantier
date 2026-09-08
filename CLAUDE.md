@@ -11,6 +11,7 @@ src/api/database.types.ts   ← GÉNÉRÉ depuis Postgres, ne jamais éditer
 src/api/columns.ts          ← GÉNÉRÉ, colonnes et énumérations réelles
 src/api/types.ts            ← alias sur les types générés, rien de manuscrit
 src/api/client.ts           ← client Supabase typé + helpers génériques
+src/api/regles-*.ts         ← règles métier pures, sans accès base
 src/api/queries/*.ts        ← une table (et ses filles) par fichier
 src/api/operations/         ← enchaînements métier
 src/integrations/*.ts       ← pont vers le HTML, session, droits, annuaires
@@ -19,6 +20,10 @@ src/pages/index.html        ← l'application (monolithe hérité, ~11 000 ligne
 
 Les dépendances vont dans un seul sens : `pages` → `integrations` → `queries`
 → `client`. Jamais l'inverse.
+
+`regles-*.ts` est une feuille : il n'importe que des types. C'est ce qui permet
+à `queries` **et** à `integrations` de partager une même règle — un refus et le
+message qui l'explique ne doivent pas pouvoir diverger.
 
 ## Base de données — la source de vérité
 
