@@ -40,10 +40,14 @@ const TVA_CONSTANTE = 12;
  * Schémas de codification de l'adresse électronique de facturation.
  * Codes de la liste ISO/IEC 6523 retenus par la réforme française.
  */
+export const SCHEMA_SIRET = "0009";
+export const SCHEMA_SIREN = "0225";
+export const SCHEMA_IMMATRICULATION_LEGALE = "0002";
+
 export const SCHEMAS_ADRESSE_ELECTRONIQUE = [
-  { code: "0009", libelle: "SIRET" },
-  { code: "0225", libelle: "SIREN" },
-  { code: "0002", libelle: "Immatriculation légale" },
+  { code: SCHEMA_SIRET, libelle: "SIRET" },
+  { code: SCHEMA_SIREN, libelle: "SIREN" },
+  { code: SCHEMA_IMMATRICULATION_LEGALE, libelle: "Immatriculation légale" },
 ] as const;
 
 export type CadreFacturation =
@@ -189,7 +193,7 @@ export function cleTvaFr(siren: string | null | undefined): string | null {
 export function tvaIntracomFr(siren: string | null | undefined): string | null {
   const n = chiffres(siren);
   const cle = cleTvaFr(n);
-  return cle ? `FR${cle}${n}` : null;
+  return cle ? `${PAYS_DEFAUT}${cle}${n}` : null;
 }
 
 export interface TvaAnalysee {
@@ -209,7 +213,7 @@ export function analyserTvaIntracom(
 
   const pays = brut.slice(0, 2);
   const reste = brut.slice(2);
-  if (pays !== "FR") {
+  if (pays !== PAYS_DEFAUT) {
     return { pays, cle: "", siren: reste, cleNumerique: false, cleCoherente: true };
   }
 
@@ -244,10 +248,10 @@ export function adresseElectroniqueParDefaut(entite: {
   siren?: string | null;
 }): AdresseElectronique | null {
   const siret = chiffres(entite?.siret);
-  if (siret.length === LONGUEUR_SIRET) return { schema: "0009", valeur: siret };
+  if (siret.length === LONGUEUR_SIRET) return { schema: SCHEMA_SIRET, valeur: siret };
 
   const siren = chiffres(entite?.siren) || sirenDuSiret(entite?.siret) || "";
-  if (siren.length === LONGUEUR_SIREN) return { schema: "0225", valeur: siren };
+  if (siren.length === LONGUEUR_SIREN) return { schema: SCHEMA_SIREN, valeur: siren };
 
   return null;
 }

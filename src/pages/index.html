@@ -3523,6 +3523,10 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
  * n'apparaissait sur aucun document imprimé — seul l'export Word du PPSPS
  * s'en servait. Il vit en data-URL, donc html2pdf le rend sans requête réseau.
  */
+/* Le pays par défaut vient du module de règles. Le repli n'existe que pour la
+   fraction de seconde avant l'injection du pont : une seule occurrence, ici. */
+function paysDefaut(){ return window.PAYS_DEFAUT || 'FR'; }
+
 function logoHTML(s){
   return s && s.logo ? `<img class="p-logo" src="${esc(s.logo)}" alt="">` : '';
 }
@@ -8143,7 +8147,7 @@ function instantaneIdentite(f){
     emetteurAdresse: vide(s.adresse),
     emetteurCodePostal: vide(s.codePostal),
     emetteurVille: vide(s.ville),
-    emetteurPaysCode: vide(s.paysCode) || 'FR',
+    emetteurPaysCode: vide(s.paysCode) || paysDefaut(),
     emetteurIban: vide(s.iban),
 
     clientSiren: vide(client.siren) || vide(window.sirenDuSiret(client.siret)),
@@ -8151,7 +8155,7 @@ function instantaneIdentite(f){
     clientTvaIntracom: vide(client.tvaIntracom),
     clientCodeRoutage: vide(client.codeRoutage),
     clientCodeService: vide(client.codeService),
-    clientPaysCode: vide(client.paysCode) || 'FR',
+    clientPaysCode: vide(client.paysCode) || paysDefaut(),
     cadreFacturation: vide(client.cadreFacturation),
   };
 }
@@ -8636,7 +8640,7 @@ function sectionsEfactureSocieteHTML(s){
       <div class="field"><label>Capital social (€)</label><input type="number" step="0.01" min="0" id="ie_capitalSocial" value="${esc(s.capitalSocial)}"></div>
       <div class="field"><label>N° RCS</label><input type="text" id="ie_rcsNumero" value="${esc(s.rcsNumero)}"></div>
       <div class="field"><label>Ville du RCS</label><input type="text" id="ie_rcsVille" value="${esc(s.rcsVille)}"></div>
-      <div class="field"><label>Pays</label><input type="text" id="ie_paysCode" value="${esc(s.paysCode||'FR')}" maxlength="2"></div>
+      <div class="field"><label>Pays</label><input type="text" id="ie_paysCode" value="${esc(s.paysCode||paysDefaut())}" maxlength="2"></div>
     </div>
   </details>
 
@@ -11792,7 +11796,7 @@ function clientForm(){
       </div>
       <div class="field"><label>Code postal</label><input type="text" id="c_codePostal" value="${esc(e.codePostal)}"></div>
       <div class="field"><label>Ville</label><input type="text" id="c_ville" value="${esc(e.ville)}"></div>
-      <div class="field" id="sec_pays"><label>Pays</label><input type="text" id="c_paysCode" value="${esc(e.paysCode||'FR')}" maxlength="2" placeholder="FR" onchange="majSectionsEfacture()"></div>
+      <div class="field" id="sec_pays"><label>Pays</label><input type="text" id="c_paysCode" value="${esc(e.paysCode||paysDefaut())}" maxlength="2" placeholder="${esc(paysDefaut())}" onchange="majSectionsEfacture()"></div>
     </div>
 
     <div id="sec_efacture" class="field-grid">
@@ -11883,7 +11887,7 @@ function clientDepuisFormulaire(){
     nom: v('c_nom'), telephone: v('c_tel'), email: v('c_email'),
     siret: v('c_siret'), siren: v('c_siren'), tvaIntracom: v('c_tvaIntracom'),
     adresse: v('c_adresse'), codePostal: v('c_codePostal'), ville: v('c_ville'),
-    paysCode: v('c_paysCode') || 'FR',
+    paysCode: v('c_paysCode') || paysDefaut(),
     cadreFacturation: v('c_cadreFacturation'),
     adresseElectroniqueSchema: v('c_adresseElectroniqueSchema'),
     adresseElectroniqueValeur: v('c_adresseElectroniqueValeur'),
@@ -11926,7 +11930,7 @@ function majApresAnnuaire(etab){
   if(!zone) return;
   const select = document.getElementById('c_cadreFacturation');
   const suggestion = window.cadreSuggere({
-    paysCode: (document.getElementById('c_paysCode')||{}).value || 'FR',
+    paysCode: (document.getElementById('c_paysCode')||{}).value || paysDefaut(),
     natureJuridique: etab && etab.formeJuridique,
   });
   zone.textContent = (suggestion && select && select.value !== suggestion.cadre)

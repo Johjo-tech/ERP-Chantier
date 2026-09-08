@@ -25,6 +25,7 @@ import {
   INDEMNITE_RECOUVREMENT_EUR,
   messageAnomalies,
   MENTION_FRANCHISE_EN_BASE,
+  PAYS_DEFAUT,
   PERIODICITES_EREPORTING,
   REGIMES_TVA,
   sansTva,
@@ -412,6 +413,7 @@ export function injecterSession() {
   w.mentionsLegales = mentionsLegales;
   w.identifiantsLegaux = identifiantsLegaux;
   w.INDEMNITE_RECOUVREMENT_EUR = INDEMNITE_RECOUVREMENT_EUR;
+  w.PAYS_DEFAUT = PAYS_DEFAUT;
 
   // Lecture automatique des bons de commande
   w.extraireBonCommande = extraireBonCommande;
