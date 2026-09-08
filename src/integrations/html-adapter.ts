@@ -221,6 +221,17 @@ const inconnusSignales = new Set<string>();
  * chaîne vide sur une énumération, une date ou un numérique : on la traduit en
  * `null`, sauf sur les colonnes non nulles qui attendent bien du texte.
  */
+/* Champs du circuit de validation : sans colonne, mais traduits en
+   transitions par `appliquerWorkflow` — les signaler serait trompeur. */
+const CHAMPS_TRADUITS = new Set([
+  "metiers_fait",
+  "date_origine_fait",
+  "valide_conducteur",
+  "date_valide_conducteur",
+  "valide_directeur",
+  "date_valide_directeur",
+]);
+
 const VIDE_AUTORISE = new Set(["client_nom", "designation", "nom", "libelle"]);
 
 function normaliser(table: string, colonne: string, v: unknown): unknown {
@@ -264,7 +275,7 @@ async function versDb(
     // Un champ sans colonne ferait rejeter l'insertion entière par PostgREST
     if (colonnes && !colonnes.has(colonne)) {
       const signature = `${collection.table}.${colonne}`;
-      if (!inconnusSignales.has(signature)) {
+      if (!inconnusSignales.has(signature) && !CHAMPS_TRADUITS.has(colonne)) {
         inconnusSignales.add(signature);
         console.warn(`Champ sans colonne, ignoré : ${signature}`);
       }
@@ -409,7 +420,204 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
     );
   }
 
+  if (prefixe === "bonCommande" && cles.length) {
+    const bcsParUuid = new Map<Uuid, Record<string, unknown>>();
+    for (const [uuid, cle] of uuidParPrefixe) {
+      const valeur = cache.get(cle);
+      if (valeur) bcsParUuid.set(uuid, valeur as Record<string, unknown>);
+    }
+    await reconstituerWorkflow(bcsParUuid);
+  }
+
   return cles;
+}
+
+/* ---------- Circuit de validation ----------
+ * L'application historique porte son circuit sur `valideConducteur`,
+ * `valideDirecteur` et `metiersFait`, posés sur l'objet bon de commande.
+ * Ces champs vivaient dans le JSON de kv_store ; aucune colonne ne leur
+ * correspond dans le schéma relationnel, ils étaient donc perdus à chaque
+ * enregistrement — le stepper repartait indéfiniment à l'étape 1.
+ *
+ * La base porte le même circuit sous une autre forme : `planning_taches`
+ * (une tâche par métier, statut planifiee → realisee → validee) et
+ * `bons_commande.statut_workflow`. On traduit dans les deux sens plutôt que
+ * d'ajouter des colonnes qui feraient doublon.
+ *
+ *   metiersFait[m]     ⟷  la tâche du métier m est réalisée ou validée
+ *   valideConducteur   ⟷  toutes les tâches du bon sont validées
+ *   valideDirecteur    ⟷  statut_workflow vaut « chiffre » ou « facture »
+ */
+
+interface TacheBC {
+  id: Uuid;
+  bon_commande_id: Uuid | null;
+  metier: string | null;
+  statut: string | null;
+  validee_le: string | null;
+  realisee_le: string | null;
+}
+
+/** Complète les bons de commande chargés avec l'état réel du circuit. */
+async function reconstituerWorkflow(
+  bcsParUuid: Map<Uuid, Record<string, unknown>>
+): Promise<void> {
+  const ids = [...bcsParUuid.keys()];
+  if (!ids.length) return;
+
+  const { data, error } = await dyn()
+    .from("planning_taches")
+    .select("id, bon_commande_id, metier, statut, validee_le, realisee_le")
+    .in("bon_commande_id", ids);
+
+  if (error) {
+    console.error("Circuit de validation indisponible", error);
+    return;
+  }
+
+  const parBC = new Map<Uuid, TacheBC[]>();
+  for (const t of (data ?? []) as TacheBC[]) {
+    if (!t.bon_commande_id) continue;
+    const liste = parBC.get(t.bon_commande_id);
+    if (liste) liste.push(t);
+    else parBC.set(t.bon_commande_id, [t]);
+  }
+
+  for (const [uuid, bc] of bcsParUuid) {
+    const taches = parBC.get(uuid) ?? [];
+    const faite = (t: TacheBC) => t.statut === "realisee" || t.statut === "validee";
+
+    const metiersFait: Record<string, boolean> = {};
+    for (const t of taches) {
+      if (t.metier) metiersFait[t.metier] = faite(t);
+    }
+    bc.metiersFait = metiersFait;
+
+    // Sans tâche rattachée, le bon n'a simplement pas encore été planifié
+    bc.dateOrigineFait = taches.length > 0 && taches.every(faite);
+
+    const toutesValidees =
+      taches.length > 0 && taches.every((t) => t.statut === "validee");
+    bc.valideConducteur = toutesValidees;
+    bc.dateValideConducteur = toutesValidees
+      ? taches.map((t) => t.validee_le).filter(Boolean).sort().pop() ?? null
+      : null;
+
+    const etat = bc.statutWorkflow as string | undefined;
+    bc.valideDirecteur = etat === "chiffre" || etat === "facture";
+  }
+}
+
+/**
+ * Traduit les changements du circuit historique en transitions réelles.
+ *
+ * L'écran coche `metiersFait`, puis pousse `valideConducteur` et
+ * `valideDirecteur`. Chacun correspond à une transition que la base sait
+ * horodater et attribuer : on la déclenche au lieu de tenter d'écrire des
+ * champs qui n'ont pas de colonne.
+ *
+ * On compare à l'état précédent : sans ça, chaque enregistrement du bon
+ * rejouerait des transitions déjà franchies.
+ */
+async function appliquerWorkflow(
+  bcUuid: Uuid,
+  cle: string,
+  valeur: Record<string, unknown>
+): Promise<void> {
+  const avant = (cache.get(cle) ?? {}) as Record<string, unknown>;
+
+  const metiersAvant = (avant.metiersFait as Record<string, boolean>) ?? {};
+  const metiersApres = (valeur.metiersFait as Record<string, boolean>) ?? {};
+  const conducteurFranchi = !avant.valideConducteur && !!valeur.valideConducteur;
+  const directeurFranchi = !avant.valideDirecteur && !!valeur.valideDirecteur;
+
+  const metiersCoches = Object.keys(metiersApres).filter(
+    (m) => metiersApres[m] && !metiersAvant[m]
+  );
+  const dateFranchie = !avant.dateOrigineFait && !!valeur.dateOrigineFait;
+
+  if (!metiersCoches.length && !conducteurFranchi && !directeurFranchi && !dateFranchie) {
+    return;
+  }
+
+  const { data, error } = await dyn()
+    .from("planning_taches")
+    .select("id, metier, statut")
+    .eq("bon_commande_id", bcUuid);
+
+  if (error) {
+    console.error("Circuit de validation : lecture des tâches impossible", error);
+    return;
+  }
+  const taches = (data ?? []) as { id: Uuid; metier: string | null; statut: string | null }[];
+
+  /* L'app historique ne crée pas de tâche : elle coche un métier sur le bon.
+     On matérialise la tâche au premier pointage, faute de quoi le circuit
+     n'aurait rien sur quoi s'appuyer. */
+  const societeUuid = await resolveSocieteId(valeur.societeId as string);
+  const libelleBase =
+    (valeur.numeroBC as string) || (valeur.client as string) || "Intervention";
+  const dateTache =
+    (valeur.datePlanifiee as string) || (valeur.dateReception as string) || todayISO();
+
+  async function tachePourMetier(metier: string | null): Promise<Uuid | null> {
+    const existante = taches.find((t) => t.metier === metier);
+    if (existante) return existante.id;
+    if (!societeUuid) return null;
+
+    const creee = await queries.planifierTache(societeUuid, {
+      bon_commande_id: bcUuid,
+      libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
+      date_tache: dateTache,
+      metier,
+    });
+    taches.push({ id: creee.id, metier, statut: creee.statut });
+    return creee.id;
+  }
+
+  try {
+    for (const metier of metiersCoches) {
+      const tacheId = await tachePourMetier(metier);
+      const tache = taches.find((t) => t.id === tacheId);
+      // Une tâche déjà validée est close : la rouvrir effacerait l'arbitrage
+      if (tacheId && tache?.statut !== "realisee" && tache?.statut !== "validee") {
+        await queries.marquerRealisee(tacheId);
+        if (tache) tache.statut = "realisee";
+      }
+    }
+
+    /* « Cette date est terminée » vaut pointage de tout ce qui reste ouvert. */
+    if (dateFranchie) {
+      const metiers = (valeur.metiers as string[])?.length
+        ? (valeur.metiers as string[])
+        : [(valeur.metier as string) || null];
+      for (const metier of metiers) {
+        const tacheId = await tachePourMetier(metier);
+        const tache = taches.find((t) => t.id === tacheId);
+        if (tacheId && tache?.statut !== "realisee" && tache?.statut !== "validee") {
+          await queries.marquerRealisee(tacheId);
+          if (tache) tache.statut = "realisee";
+        }
+      }
+    }
+
+    if (conducteurFranchi) {
+      for (const t of taches.filter((x) => x.statut === "realisee")) {
+        await queries.validerTache(t.id, true);
+      }
+    }
+
+    if (directeurFranchi) {
+      // Le passage à « chiffré » est la signature du directeur avant facturation
+      await queries.passerPretAChiffrer(bcUuid).catch(() => undefined);
+      const { error: err } = await supabase.rpc("bc_chiffrage_valide", {
+        p_bc_id: bcUuid,
+      });
+      if (err) throw err;
+    }
+  } catch (err) {
+    console.error("Circuit de validation : transition refusée", err);
+  }
 }
 
 /** Rattache les lignes filles en une requête pour toute la collection. */
@@ -527,6 +735,10 @@ export async function stSet(
           position,
         }))
       );
+    }
+
+    if (prefixe === "bonCommande") {
+      await appliquerWorkflow(parentId, cle, valeur);
     }
 
     cache.set(cle, { ...valeur, id });
