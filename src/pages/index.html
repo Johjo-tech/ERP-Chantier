@@ -1396,6 +1396,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 window.__erpBridgeReady = new Promise(function(resolve, reject){
   window.__erpBridge = { resolve: resolve, reject: reject };
 });
+/* Un module qui n'arrive pas à se charger ne déclenche aucun rejet : sans ça,
+   l'attente serait infinie et l'écran resterait blanc. */
+window.addEventListener('error', function(ev){
+  if(ev.target && ev.target.tagName === 'SCRIPT' && window.__erpBridge){
+    window.__erpBridge.reject(new Error('Le script ' + (ev.target.src || 'de démarrage') + " n'a pas pu être chargé."));
+  }
+}, true);
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -11708,9 +11715,16 @@ async function saveDocument(){
   // Attendre que stGet/stSet/stListKeys/nextNumero pointent sur les tables
   // Supabase : sans ça, on lirait l'ancienne implémentation kv_store.
   try{
-    // Le pont fournit les sociétés que la RLS rend visibles, et le rôle
-    // que la base attribue : ni l'une ni l'autre ne sont décidées ici.
-    const societes = await window.__erpBridgeReady;
+    /* Le pont fournit les sociétés que la RLS rend visibles, et le rôle que la
+       base attribue. Le délai d'attente est indispensable : si le module ne se
+       charge pas — identifiants Supabase absents du déploiement, script bloqué —
+       la promesse ne se résout jamais et l'écran resterait vide et muet. */
+    const societes = await Promise.race([
+      window.__erpBridgeReady,
+      new Promise((_, rej)=> setTimeout(
+        ()=> rej(new Error("La couche de données n'a pas répondu. Vérifiez que VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY sont définies dans l'environnement de déploiement.")),
+        15000)),
+    ]);
     if(Array.isArray(societes) && societes.length){
       SOCIETES = societes.map(s => ({ id: s.id, nom: s.nom }));
       if(!societes.some(s => s.id === state.societeId)){
@@ -11724,9 +11738,10 @@ async function saveDocument(){
     if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
   }catch(e){
     console.error('Couche données indisponible', e);
-    document.body.innerHTML = '<div style="padding:32px;font:14px system-ui;line-height:1.5">'
-      + '<b>Accès impossible.</b><br>'
-      + esc(e && e.message ? e.message : 'Vérifiez votre session puis rechargez la page.')
+    document.body.innerHTML = '<div style="max-width:640px; margin:56px auto; padding:24px; border:1px solid #E2E6ED; border-radius:12px; font:14px/1.6 system-ui; color:#1F2937;">'
+      + '<div style="font-size:17px; font-weight:700; margin-bottom:8px;">Application indisponible</div>'
+      + '<p style="margin:0 0 14px;">' + esc(e && e.message ? e.message : 'Vérifiez votre session puis rechargez la page.') + '</p>'
+      + '<p style="margin:0; color:#6B7686; font-size:12.5px;">Le détail technique est dans la console du navigateur (F12).</p>'
       + '</div>';
     return;
   }
