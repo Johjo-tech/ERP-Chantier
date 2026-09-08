@@ -269,6 +269,7 @@ export function injecterSession() {
   w.actionsTache = actionsTache;
   w.actionsFacturation = actionsFacturation;
   w.validerPrefacture = queries.validerPrefacture;
+  w.emettreFacture = queries.emettreFacture;
   w.sauvegarderTerrain = queries.sauvegarderTerrain;
   w.marquerRealisee = queries.marquerRealisee;
   w.validerTache = queries.validerTache;

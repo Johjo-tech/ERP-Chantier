@@ -225,9 +225,15 @@ export async function validerPrefacture(bcId: Uuid): Promise<Uuid> {
   const bc = await getOne("bons_commande", bcId);
   if (!bc) throw new Error("Bon de commande introuvable.");
 
-  if (bc.statut_workflow !== "pret_a_chiffrer" && bc.statut_workflow !== "chiffre") {
+  if (bc.statut_workflow === "facture") {
+    throw new Error("Ce bon de commande a déjà été facturé.");
+  }
+
+  const taches = await listTachesBonCommande(bcId);
+  const enAttente = taches.filter((t) => (t.statut ?? "planifiee") !== "validee");
+  if (enAttente.length) {
     throw new Error(
-      `Pré-facture non validable depuis l'état « ${bc.statut_workflow ?? "en_cours"} » : les tâches doivent d'abord être validées.`
+      `${enAttente.length} tâche(s) ne sont pas encore validées par le conducteur.`
     );
   }
 
@@ -238,6 +244,20 @@ export async function validerPrefacture(bcId: Uuid): Promise<Uuid> {
     throw new Error(
       `${aChiffrer.length} travail(aux) supplémentaire(s) restent à chiffrer.`
     );
+  }
+
+  /* La base impose la séquence en_cours → pret_a_chiffrer → chiffre → facture.
+     Les deux premiers passages découlent mécaniquement de l'état des tâches et
+     du chiffrage : on les franchit ici plutôt que d'imposer des clics
+     intermédiaires sans décision métier derrière. */
+  if (!bc.statut_workflow || bc.statut_workflow === "en_cours") {
+    await passerPretAChiffrer(bcId);
+  }
+  if (bc.statut_workflow !== "chiffre") {
+    const { error } = await supabase.rpc("bc_chiffrage_valide", { p_bc_id: bcId });
+    if (error) {
+      throw new SupabaseError("Validation du chiffrage refusée", error.code, error);
+    }
   }
 
   const { data, error } = await supabase.rpc("bc_generer_facture", {

@@ -375,3 +375,94 @@ suite("Interlocuteurs", () => {
     expect(inconnus).toEqual([]);
   });
 });
+
+suite("Pré-facture", () => {
+  /**
+   * La base impose en_cours → pret_a_chiffrer → chiffre → facture.
+   * `validerPrefacture` franchit les deux passages intermédiaires, qui
+   * découlent de l'état des tâches et du chiffrage, et refuse tant qu'une
+   * décision métier manque.
+   */
+  const NOM_CLIENT = "CLIENT DE TEST";
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  let societeId: Uuid;
+  let bcId: Uuid;
+  let tacheId: Uuid;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    societeId = societe!.id;
+
+    const bc = await queries.createBonCommande(
+      societeId,
+      { client_nom: NOM_CLIENT, date: aujourdhui, montant: 480 },
+      [{ type: "ligne", designation: "Dépose et pose", quantite: 4, prix_unitaire: 120, tva: 10 }]
+    );
+    bcId = bc.id;
+
+    tacheId = (
+      await queries.planifierTache(societeId, {
+        bon_commande_id: bcId,
+        libelle: "Intervention",
+        date_tache: aujourdhui,
+      })
+    ).id;
+  });
+
+  it("refuse tant que la tâche n'est pas validée", async () => {
+    await expect(queries.validerPrefacture(bcId)).rejects.toThrow(/pas encore validées/);
+  });
+
+  it("refuse tant qu'un travail supplémentaire n'est pas chiffré", async () => {
+    await queries.marquerRealisee(tacheId);
+    await queries.validerTache(tacheId, true);
+
+    const trav = await queries.ajouterTravailSupplementaire(societeId, {
+      bon_commande_id: bcId,
+      libelle: "Reprise d'étanchéité",
+      origine: "technicien",
+    });
+
+    await expect(queries.validerPrefacture(bcId)).rejects.toThrow(/à chiffrer/);
+
+    // Une fois chiffré, l'obstacle tombe
+    await queries.chiffrerTravailSupplementaire(trav.id, 150, 10);
+  });
+
+  let factureId: Uuid;
+
+  it("génère un brouillon sans numéro et clôt le bon de commande", async () => {
+    factureId = await queries.validerPrefacture(bcId);
+
+    const facture = await queries.getFactureComplete(factureId);
+    expect(facture?.bon_commande_id).toBe(bcId);
+    expect(facture?.statut).toBe("brouillon");
+    // Le numéro n'est attribué qu'à l'émission : un brouillon n'en consomme pas
+    expect(facture?.numero).toBeNull();
+
+    // Le travail supplémentaire chiffré rejoint les lignes du bon de commande
+    expect(facture?.lignes).toHaveLength(2);
+    expect(facture?.lignes.map((l) => l.designation)).toContain("Reprise d'étanchéité");
+
+    const bc = await queries.getBonCommande(bcId);
+    expect(bc?.statut_workflow).toBe("facture");
+  });
+
+  it("attribue le numéro à l'émission, avec les corrections de la secrétaire", async () => {
+    const emise = await queries.emettreFacture(factureId, {
+      adresse: "Service comptabilité, 4 rue du Change",
+    });
+
+    expect(emise.numero).toMatch(/^FAC-/);
+    expect(emise.statut).toBe("impayée");
+    expect(emise.adresse).toBe("Service comptabilité, 4 rue du Change");
+  });
+
+  it("refuse de réémettre une facture déjà numérotée", async () => {
+    await expect(queries.emettreFacture(factureId)).rejects.toThrow(/déjà émise/);
+  });
+
+  it("refuse de facturer deux fois le même bon", async () => {
+    await expect(queries.validerPrefacture(bcId)).rejects.toThrow(/déjà été facturé/);
+  });
+});

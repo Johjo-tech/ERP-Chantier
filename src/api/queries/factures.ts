@@ -20,6 +20,7 @@ import {
   updateOne,
 } from "../client";
 import type {
+  Facture,
   FactureComplete,
   FactureInsert,
   FactureLigneInsert,
@@ -135,6 +136,35 @@ export async function replaceFactureLignes(
       position: ligne.position ?? i,
     }))
   );
+}
+
+/**
+ * Émission d'une facture brouillon.
+ *
+ * La pré-facture validée par l'administrateur produit un brouillon **sans
+ * numéro** : la secrétaire peut encore corriger l'adresse de facturation, le
+ * numéro de bon de commande ou les taux de TVA. Le numéro n'est attribué qu'ici,
+ * au moment de l'envoi — c'est ce qui évite de consommer une référence pour un
+ * document qui ne partira jamais.
+ */
+export async function emettreFacture(
+  id: Uuid,
+  corrections: FactureUpdate = {}
+): Promise<Facture> {
+  const facture = await getFacture(id);
+  if (!facture) throw new Error("Facture introuvable.");
+
+  if (facture.numero) {
+    throw new Error(`Facture déjà émise sous le numéro ${facture.numero}.`);
+  }
+
+  const numero = await getNextNumero(facture.societe_id, "facture");
+
+  return updateFacture(id, {
+    ...corrections,
+    numero,
+    statut: "impayée",
+  });
 }
 
 export function deleteFacture(id: Uuid) {

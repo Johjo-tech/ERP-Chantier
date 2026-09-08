@@ -6289,10 +6289,8 @@ function renderWorkflowTache(){
     boutons.push(`<button class="btn primary" onclick="wfValider(true)">✓ Valider</button>`);
     boutons.push(`<button class="btn ghost" onclick="wfValider(false)">✕ Refuser</button>`);
   }
-  // Étape suivante : le chiffrage, puis la pré-facture réservée à l'admin
-  if(statut === 'validee' && droits.peutArbitrer){
-    boutons.push(`<button class="btn" onclick="wfPretAChiffrer()">💶 Prêt à chiffrer</button>`);
-  }
+  // Une fois les tâches validées, l'admin chiffre et valide la pré-facture.
+  // Le passage à « prêt à chiffrer » est déduit, pas cliqué.
   if(statut === 'validee' && window.actionsFacturation().peutValiderPrefacture){
     boutons.push(`<button class="btn" onclick="wfValiderPrefacture()">🧾 Valider la pré-facture</button>`);
   }
