@@ -89,6 +89,15 @@ export function listSAV(bcId: Uuid) {
 
 // ============ ÉCRITURE ============
 
+/**
+ * Crée un bon de commande.
+ *
+ * Le numéro n'est **pas** généré : un bon de commande est émis par le client,
+ * son numéro figure sur son document. L'app enregistre « Sans BC » ou « En
+ * attente de BC » quand il n'y en a pas. Numéroter nous-mêmes produirait des
+ * références qui n'existent chez personne — seul un SAV, que nous émettons,
+ * reçoit un numéro de notre série.
+ */
 export async function createBonCommande(
   societeId: Uuid,
   input: NouveauBonCommande,
@@ -97,8 +106,6 @@ export async function createBonCommande(
   const bc = await insertOne("bons_commande", {
     ...input,
     societe_id: societeId,
-    numero_bc:
-      input.numero_bc ?? (await getNextNumero(societeId, "bon_commande")),
   });
 
   return {

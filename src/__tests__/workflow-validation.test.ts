@@ -81,7 +81,8 @@ suite("Circuit de validation devis → facture", () => {
       );
 
       bcId = bc.id;
-      expect(bc.numero_bc).toBeTruthy();
+      // Le numéro vient du client, pas de nous : il reste vide ici
+      expect(bc.numero_bc).toBeNull();
       expect(bc.lignes).toHaveLength(1);
     });
   });

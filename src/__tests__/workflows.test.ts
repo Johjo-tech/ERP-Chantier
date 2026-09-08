@@ -195,3 +195,46 @@ suite("Workflows métier", () => {
     });
   });
 });
+
+suite("Numérotation des bons de commande", () => {
+  /**
+   * Un bon de commande est émis par le client : son numéro figure sur son
+   * document. En générer un produirait une référence qui n'existe nulle part —
+   * les vrais numéros ressemblent à « 2025-3232 » ou « Sans BC ».
+   */
+  it("n'invente pas de numéro", async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    const bc = await queries.createBonCommande(societe!.id, {
+      client_nom: "CLIENT DE TEST",
+      date: new Date().toISOString().slice(0, 10),
+    });
+
+    expect(bc.numero_bc).toBeNull();
+  });
+
+  it("conserve le numéro porté par le document du client", async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    const bc = await queries.createBonCommande(societe!.id, {
+      client_nom: "CLIENT DE TEST",
+      numero_bc: "2025-3232",
+      date: new Date().toISOString().slice(0, 10),
+    });
+
+    expect(bc.numero_bc).toBe("2025-3232");
+  });
+
+  it("numérote en revanche les SAV, que nous émettons", async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    const origine = await queries.createBonCommande(societe!.id, {
+      client_nom: "CLIENT DE TEST",
+      numero_bc: "BC-CLIENT-77",
+      date: new Date().toISOString().slice(0, 10),
+    });
+
+    const sav = await queries.createSAV(societe!.id, origine.id, "Fuite persistante");
+
+    expect(sav.numero_bc).toMatch(/^SAV-/);
+    expect(sav.bon_commande_parent_id).toBe(origine.id);
+    expect(sav.probleme_description).toBe("Fuite persistante");
+  });
+});
