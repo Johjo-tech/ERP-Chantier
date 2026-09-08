@@ -1,220 +1,128 @@
-/**
- * Devis CRUD operations
- * Remplace: saveDevis(), editDevis(), removeDevis(), etc. du HTML
- */
+/** Devis et lignes (`devis`, `devis_lignes`, vue `v_devis_totaux`). */
 
-import { supabase, SupabaseError, uid, getNextNumero } from "../client";
-import type { Devis } from "../types";
+import {
+  getNextNumero,
+  getOne,
+  insertMany,
+  insertOne,
+  listByParent,
+  listByParents,
+  listBySociete,
+  remove,
+  removeByParent,
+  supabase,
+  SupabaseError,
+  updateOne,
+} from "../client";
+import type {
+  DevisComplet,
+  DevisInsert,
+  DevisLigneInsert,
+  DevisStatut,
+  DevisTotaux,
+  DevisUpdate,
+  Uuid,
+} from "../types";
 
-// ============ READ ============
+/** Une ligne fournie par l'appelant : le rattachement au devis est implicite. */
+export type LigneDevisInput = Omit<DevisLigneInsert, "devis_id">;
 
-/**
- * Récupérer un devis par ID
- */
-export async function getDevis(id: string): Promise<Devis | null> {
-  const { data, error } = await supabase
-    .from("devis")
-    .select("*")
-    .eq("id", id)
-    .single();
+/** `numero` et `societe_id` sont posés par la couche data. */
+export type NouveauDevis = Omit<DevisInsert, "societe_id" | "numero"> & {
+  numero?: string;
+};
 
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError("Failed to fetch devis", error.code, error);
-  }
+// ============ LECTURE ============
 
-  return data || null;
+export function listDevis(societeId: Uuid) {
+  return listBySociete("devis", societeId);
 }
 
-/**
- * Lister tous les devis d'une société
- * Optionnel: filtrer par statut, client, période
- */
-export async function listDevis(
-  societeId: string,
-  filters?: {
-    statut?: string;
-    client?: string;
-    dateFrom?: string;
-    dateTo?: string;
-  }
-): Promise<Devis[]> {
-  let query = supabase
-    .from("devis")
-    .select("*")
-    .eq("societe_id", societeId);
-
-  if (filters?.statut) {
-    query = query.eq("statut", filters.statut);
-  }
-  if (filters?.client) {
-    query = query.ilike("client", `%${filters.client}%`);
-  }
-  if (filters?.dateFrom) {
-    query = query.gte("date", filters.dateFrom);
-  }
-  if (filters?.dateTo) {
-    query = query.lte("date", filters.dateTo);
-  }
-
-  const { data, error } = await query.order("date", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to list devis", error.code, error);
-  }
-
-  return data || [];
+export function getDevis(id: Uuid) {
+  return getOne("devis", id);
 }
 
-/**
- * Chercher des devis (par client, numéro)
- */
-export async function searchDevis(
-  societeId: string,
-  query: string
-): Promise<Devis[]> {
-  const { data, error } = await supabase
-    .from("devis")
-    .select("*")
-    .eq("societe_id", societeId)
-    .or(`numero.ilike.%${query}%,client.ilike.%${query}%`)
-    .order("date", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to search devis", error.code, error);
-  }
-
-  return data || [];
+export function listDevisLignes(devisId: Uuid) {
+  return listByParent("devis_lignes", "devis_id", devisId);
 }
 
-// ============ CREATE ============
-
-/**
- * Créer un nouveau devis
- * Génère automatiquement le numéro
- */
-export async function createDevis(
-  societeId: string,
-  devisData: Omit<Devis, "id" | "created_at" | "numero">
-): Promise<Devis> {
-  // Générer le numéro atomiquement
-  const numero = await getNextNumero(societeId, "devis");
-
-  const devis: Omit<Devis, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    numero,
-    statut: "brouillon",
-    remise_pourcentage: 0,
-    ...devisData,
-  };
-
-  const { data, error } = await supabase
-    .from("devis")
-    .insert([devis])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create devis", error.code, error);
-  }
-
-  return data;
-}
-
-// ============ UPDATE ============
-
-/**
- * Mettre à jour un devis
- */
-export async function updateDevis(
-  id: string,
-  updates: Partial<Omit<Devis, "id" | "created_at" | "societe_id">>
-): Promise<Devis> {
-  const { data, error } = await supabase
-    .from("devis")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update devis", error.code, error);
-  }
-
-  return data;
-}
-
-/**
- * Changer le statut d'un devis
- */
-export async function updateDevisStatut(
-  id: string,
-  statut: "brouillon" | "envoyé" | "accepté" | "refusé"
-): Promise<Devis> {
-  return updateDevis(id, { statut });
-}
-
-// ============ DELETE ============
-
-/**
- * Supprimer un devis (brouillon uniquement)
- */
-export async function deleteDevis(id: string): Promise<void> {
-  // Vérifier que le devis est en brouillon
+export async function getDevisComplet(id: Uuid): Promise<DevisComplet | null> {
   const devis = await getDevis(id);
-  if (!devis) {
-    throw new SupabaseError("Devis not found", "DEVIS_NOT_FOUND");
-  }
-  if (devis.statut !== "brouillon") {
-    throw new SupabaseError(
-      "Cannot delete non-draft devis",
-      "DEVIS_NOT_DRAFT"
-    );
-  }
-
-  const { error } = await supabase.from("devis").delete().eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete devis", error.code, error);
-  }
+  if (!devis) return null;
+  return { ...devis, lignes: await listDevisLignes(id) };
 }
 
-// ============ MÉTIER ============
-
-/**
- * Dupliquer un devis
- */
-export async function duplicateDevis(
-  societeId: string,
-  devisId: string
-): Promise<Devis> {
-  const original = await getDevis(devisId);
-  if (!original) {
-    throw new SupabaseError("Devis not found", "DEVIS_NOT_FOUND");
-  }
-
-  const { numero, created_at, id, ...devisData } = original;
-
-  return createDevis(societeId, devisData);
+export async function listDevisComplets(societeId: Uuid): Promise<DevisComplet[]> {
+  const devis = await listDevis(societeId);
+  // Deux requêtes au total, quel que soit le nombre de devis
+  const lignes = await listByParents(
+    "devis_lignes",
+    "devis_id",
+    devis.map((d) => d.id)
+  );
+  return devis.map((d) => ({ ...d, lignes: lignes.get(d.id) ?? [] }));
 }
 
-/**
- * Obtenir les totaux d'un devis (depuis la vue)
- */
-export async function getDevisTotaux(devisId: string) {
+/** Totaux calculés en base plutôt que recomposés côté client. */
+export async function getDevisTotaux(id: Uuid): Promise<DevisTotaux | null> {
   const { data, error } = await supabase
     .from("v_devis_totaux")
     .select("*")
-    .eq("id", devisId)
-    .single();
+    .eq("devis_id", id)
+    .maybeSingle();
 
-  if (error) {
-    throw new SupabaseError(
-      "Failed to fetch devis totaux",
-      error.code,
-      error
-    );
-  }
-
+  if (error) throw new SupabaseError("Failed to get devis totals", error.code, error);
   return data;
+}
+
+// ============ ÉCRITURE ============
+
+export async function createDevis(
+  societeId: Uuid,
+  input: NouveauDevis,
+  lignes: LigneDevisInput[] = []
+): Promise<DevisComplet> {
+  // Numéro fourni (reprise de données) sinon généré atomiquement côté serveur
+  const numero = input.numero ?? (await getNextNumero(societeId, "devis"));
+
+  const devis = await insertOne("devis", {
+    ...input,
+    societe_id: societeId,
+    numero,
+  });
+
+  return { ...devis, lignes: await replaceDevisLignes(devis.id, lignes) };
+}
+
+export function updateDevis(id: Uuid, updates: DevisUpdate) {
+  return updateOne("devis", id, updates);
+}
+
+export function updateDevisStatut(id: Uuid, statut: DevisStatut) {
+  return updateDevis(id, { statut });
+}
+
+/**
+ * Remplace l'intégralité des lignes du devis.
+ *
+ * L'app édite un document comme un tout : on réécrit le jeu de lignes plutôt
+ * que de différencier ligne à ligne, et `position` suit l'ordre du tableau reçu.
+ */
+export async function replaceDevisLignes(devisId: Uuid, lignes: LigneDevisInput[]) {
+  await removeByParent("devis_lignes", "devis_id", devisId);
+  if (!lignes.length) return [];
+
+  return insertMany(
+    "devis_lignes",
+    lignes.map((ligne, i) => ({
+      ...ligne,
+      devis_id: devisId,
+      position: ligne.position ?? i,
+    }))
+  );
+}
+
+/** Les lignes suivent par cascade côté base. */
+export function deleteDevis(id: Uuid) {
+  return remove("devis", id);
 }

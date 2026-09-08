@@ -1,123 +1,100 @@
 /**
- * Types du domaine ERP Chantier
+ * Types du domaine ERP Chantier.
  *
- * Mapping exact vers les 46 tables Supabase (tjhljjuvfosmnpmzgbnl)
- * Aucun nom de table/colonne n'est changé — c'est un refactoring de la couche data
+ * Ce fichier ne décrit plus le schéma : il l'aliase. La source de vérité est
+ * `database.types.ts`, régénéré depuis Postgres par
+ *
+ *     npx supabase gen types typescript --linked > src/api/database.types.ts
+ *
+ * Toute colonne ajoutée en base apparaît donc ici sans intervention, et une
+ * colonne supprimée casse la compilation au lieu de casser à l'exécution.
  */
 
-export type SocieteId = string; // uuid
-export type Statut = string;
+import type {
+  Database,
+  Json,
+  Tables,
+  TablesInsert,
+  TablesUpdate,
+} from "./database.types";
 
-// ============ BASE ============
+export type { Database, Json, Tables, TablesInsert, TablesUpdate };
 
-export interface BaseEntity {
-  id: string;
-  societe_id: SocieteId;
-  created_at: string;
-}
+export type Uuid = string;
+
+/** Nom de table utilisable par les helpers génériques de `client.ts`. */
+export type TableName = keyof Database["public"]["Tables"];
+
+// ============ ÉNUMÉRATIONS ============
+
+type Enums = Database["public"]["Enums"];
+
+export type DevisStatut = Enums["devis_statut"];
+export type FactureStatut = Enums["facture_statut"];
+export type LigneType = Enums["ligne_type"];
+export type LogementStatut = Enums["logement_statut"];
+export type MetierType = Enums["metier_type"];
+export type ModePaiement = Enums["mode_paiement"];
+export type RoleMembre = Enums["role_membre"];
+export type DocumentFamille = Enums["document_famille"];
+
+/** Types de document numérotés par la RPC `prochain_numero`. */
+export type TypeDocument =
+  | "devis"
+  | "facture"
+  | "intervention"
+  | "bon_commande"
+  | "sav";
+
+// ============ ORGANISATION ============
+
+export type Societe = Tables<"societes">;
+export type SocieteSettings = Tables<"societe_settings">;
+export type MembreSociete = Tables<"membres_societe">;
+export type Profile = Tables<"profiles">;
+export type Compteur = Tables<"compteurs">;
+export type Metier = Tables<"metiers">;
+
+// ============ TIERS ET CATALOGUE ============
+
+export type Client = Tables<"clients">;
+export type ClientInsert = TablesInsert<"clients">;
+export type ClientUpdate = TablesUpdate<"clients">;
+
+export type Interlocuteur = Tables<"interlocuteurs">;
+export type InterlocuteurInsert = TablesInsert<"interlocuteurs">;
+
+export type Article = Tables<"articles">;
+export type ArticleInsert = TablesInsert<"articles">;
+export type ArticleUpdate = TablesUpdate<"articles">;
 
 // ============ COMMERCIAL ============
 
-export type DevisStatut = "brouillon" | "envoyé" | "accepté" | "refusé";
+export type Devis = Tables<"devis">;
+export type DevisInsert = TablesInsert<"devis">;
+export type DevisUpdate = TablesUpdate<"devis">;
+export type DevisLigne = Tables<"devis_lignes">;
+export type DevisLigneInsert = TablesInsert<"devis_lignes">;
 
-export interface Devis extends BaseEntity {
-  numero: string;
-  client: string;
-  interlocuteur?: string;
-  date: string;
-  adresse?: string;
-  code_postal?: string;
-  ville?: string;
-  logement_statut?: string;
-  occupant?: string;
-  etage?: string;
-  numero_logement?: string;
-  precision_commune?: string;
-  ancien_locataire?: string;
-  adresse_locataire?: string;
-  remise_pourcentage: number;
-  statut: DevisStatut;
-  conducteur?: string;
-  intervention_id: string | null;
-  chantier_id: string | null;
-}
+export type Facture = Tables<"factures">;
+export type FactureInsert = TablesInsert<"factures">;
+export type FactureUpdate = TablesUpdate<"factures">;
+export type FactureLigne = Tables<"facture_lignes">;
+export type FactureLigneInsert = TablesInsert<"facture_lignes">;
 
-export type FactureStatut = "impayée" | "envoyée" | "payée";
-
-export interface Facture extends BaseEntity {
-  numero: string;
-  client: string;
-  interlocuteur?: string;
-  date: string;
-  echeance?: string;
-  remise_pourcentage: number;
-  statut: FactureStatut;
-  conducteur?: string;
-  verrouillee: boolean;
-  devis_id: string | null;
-  intervention_id: string | null;
-  bon_commande_id: string | null;
-  chantier_id: string | null;
-}
-
-export interface Reglement extends BaseEntity {
-  facture_id: string;
-  date: string;
-  montant: number;
-  mode: string;
-  reference?: string;
-}
-
-export type LigneType = "ligne" | "chapitre" | "commentaire";
-
-export interface Ligne {
-  id?: string;
-  type?: LigneType;
-  designation: string;
-  quantite?: number;
-  prix_unitaire?: number;
-  unite?: string;
-  tva?: number;
-}
+export type Reglement = Tables<"reglements">;
+export type ReglementInsert = TablesInsert<"reglements">;
 
 // ============ BONS DE COMMANDE ============
 
-export interface BonCommande extends BaseEntity {
-  numero_bc: string;
-  client: string;
-  date?: string;
-  date_planifiee?: string;
-  date_planifiee_fin?: string;
-  heure_planifiee?: string;
-  duree_heures?: number;
-  date_fin_travaux?: string;
-  statut?: string;
-  metier?: string;
-  metiers?: string[];
-  heure_dernier_jour?: string;
-  duree_dernier_jour?: number;
-  technicien?: string;
-  notes?: string;
-  montant?: number;
-  montant_total?: number;
-  montant_par_metier?: Record<string, number>;
-  sans_bc: boolean;
-  en_attente_bc: boolean;
-  bon_commande_id: string | null; // Pour SAV
-  devis_id: string | null;
-  probleme_description?: string;
-  photos?: string[];
-  interlocuteur?: string;
-  date_reception?: string;
-  conducteur?: string;
-  // Adresse logement
-  adresse?: string;
-  code_postal?: string;
-  ville?: string;
-  logement_statut?: string;
-  occupant?: string;
-}
+export type BonCommande = Tables<"bons_commande">;
+export type BonCommandeInsert = TablesInsert<"bons_commande">;
+export type BonCommandeUpdate = TablesUpdate<"bons_commande">;
+export type BonCommandeLigne = Tables<"bon_commande_lignes">;
+export type BonCommandeLigneInsert = TablesInsert<"bon_commande_lignes">;
+export type BonCommandePhoto = Tables<"bon_commande_photos">;
 
+/** Planning d'un métier, stocké en jsonb dans `schedule_par_metier`. */
 export interface ScheduleParMetier {
   technicien?: string;
   sous_traitant?: string;
@@ -131,248 +108,139 @@ export interface ScheduleParMetier {
 
 // ============ INTERVENTIONS ============
 
-export interface Intervention extends BaseEntity {
-  client: string;
-  numero?: string;
-  interlocuteur?: string;
-  statut?: string;
-  date: string;
-  type_panne?: string;
-  controles?: Record<string, boolean>;
-  controle_autre_texte?: string;
-  rapport?: {
-    constatations: string;
-    preconisations: string;
-  };
-  photos?: string[];
-  signature?: string;
-  conducteur?: string;
-  // Adresse
-  adresse?: string;
-  code_postal?: string;
-  ville?: string;
-  logement_statut?: string;
-  occupant?: string;
-}
+export type Intervention = Tables<"interventions">;
+export type InterventionInsert = TablesInsert<"interventions">;
+export type InterventionUpdate = TablesUpdate<"interventions">;
+export type InterventionPhoto = Tables<"intervention_photos">;
+export type InterventionControle = Tables<"intervention_controles">;
 
-// ============ CLIENTS ============
+// ============ PLANNING ET VALIDATION ============
 
-export interface Client extends BaseEntity {
-  nom: string;
-  adresse?: string;
-  code_postal?: string;
-  ville?: string;
-  contact?: string;
-  email?: string;
-  telephone?: string;
-  type?: string;
-}
+/** Cycle de vie d'une tâche de planning. */
+export type StatutTache = "planifiee" | "realisee" | "validee" | "refusee";
 
-export interface Interlocuteur extends BaseEntity {
-  client_id: string;
-  nom: string;
-  fonction?: string;
-  email?: string;
-  telephone?: string;
-}
+/** Cycle de vie d'un bon de commande, du terrain à la facture. */
+export type StatutWorkflowBC =
+  | "en_cours"
+  | "pret_a_chiffrer"
+  | "chiffre"
+  | "facture"
+  | "cloture_gratuit";
 
-// ============ ARTICLES ============
+export type PlanningTache = Tables<"planning_taches">;
+export type PlanningTacheInsert = TablesInsert<"planning_taches">;
+export type PlanningTacheUpdate = TablesUpdate<"planning_taches">;
 
-export interface Article extends BaseEntity {
-  code: string;
-  designation: string;
-  prix_achat?: number;
-  prix_vente?: number;
-  unite?: string;
-  quantite_stock?: number;
-  fournisseur?: string;
-}
-
-// ============ RH ============
-
-export interface Salarie extends BaseEntity {
-  nom: string;
-  prenom?: string;
-  email?: string;
-  telephone?: string;
-  fonction?: string;
-  date_embauche?: string;
-  date_depart?: string;
-  contrat_type?: string;
-  // Congés
-  solde_cp?: number;
-  solde_cp_pris?: number;
-  // Certifications
-  carte_btp_validite?: string;
-  visite_medicale_prochaine?: string;
-  habilitations?: Habilitation[];
-}
-
-export interface Habilitation {
-  id: string;
-  nom?: string;
-  date_expiration?: string;
-}
-
-export interface Absence extends BaseEntity {
-  salarie_id: string;
-  date_debut: string;
-  date_fin: string;
-  type: string; // "congé", "maladie", "formation", etc.
-  notes?: string;
-}
-
-// ============ RESSOURCES ============
-
-export interface Conducteur extends BaseEntity {
-  nom: string;
-  email?: string;
-  telephone?: string;
-  metiers?: string[];
-}
-
-export interface Technicien extends BaseEntity {
-  nom1: string;
-  nom2?: string;
-  nom3?: string;
-  type: "seul" | "binome" | "trinome";
-  email?: string;
-  telephone?: string;
-  metiers?: string[];
-}
-
-export interface SousTraitant extends BaseEntity {
-  nom: string;
-  adresse?: string;
-  code_postal?: string;
-  ville?: string;
-  email?: string;
-  telephone?: string;
-  metiers?: string[];
-  documents?: PieceJointe[];
-}
-
-export interface Vehicule extends BaseEntity {
-  nom: string;
-  immatriculation?: string;
-  type?: string;
-  date_acquisition?: string;
-  prochain_ct?: string;
-  vendu: boolean;
-}
-
-export interface Materiel extends BaseEntity {
-  nom: string;
-  type?: string;
-  date_acquisition?: string;
-  date_prochain_entretien?: string;
-  notes?: string;
-}
-
-// ============ PARAMETRES ============
-
-export interface MetierPerso extends BaseEntity {
-  nom: string;
-  couleur?: string;
-}
-
-export interface DocumentLegal extends BaseEntity {
-  nom: string;
-  type: string; // "RC", "DAPS", "Assurance", etc.
-  date_expiration?: string;
-  reference?: string;
-}
-
-export interface FournisseurControle extends BaseEntity {
-  nom: string;
-  type_controle?: string;
-  email?: string;
-  telephone?: string;
-}
+/** Travail constaté sur le terrain, à chiffrer avant facturation. */
+export type TravailSupplementaire = Tables<"tache_travaux_supplementaires">;
+export type TravailSupplementaireInsert =
+  TablesInsert<"tache_travaux_supplementaires">;
 
 // ============ CHANTIERS ============
 
-export interface DpgfLigne {
-  id: string;
-  unite?: string;
-  type: "ligne" | "chapitre";
-  designation: string;
-  quantite: number;
-  prix_unitaire: number;
-  avancement_cumule: number; // 0-100
-  devis_source_id?: string;
+export type Chantier = Tables<"chantiers">;
+export type ChantierInsert = TablesInsert<"chantiers">;
+export type ChantierUpdate = TablesUpdate<"chantiers">;
+export type ChantierDpgfLigne = Tables<"chantier_dpgf_lignes">;
+export type ChantierTodo = Tables<"chantier_todos">;
+export type ChantierDocument = Tables<"chantier_documents">;
+export type ChantierAchat = Tables<"chantier_achats">;
+export type ChantierInspection = Tables<"chantier_inspections">;
+export type ChantierCompteRendu = Tables<"chantier_comptes_rendus">;
+export type ChantierDevisComplementaire = Tables<"chantier_devis_complementaires">;
+
+// ============ RH ============
+
+export type Salarie = Tables<"salaries">;
+export type SalarieInsert = TablesInsert<"salaries">;
+export type SalarieUpdate = TablesUpdate<"salaries">;
+export type SalarieHabilitation = Tables<"salarie_habilitations">;
+export type SalarieAbsence = Tables<"salarie_absences">;
+export type SalarieContrat = Tables<"salarie_contrats">;
+export type SalarieDocument = Tables<"salarie_documents">;
+export type SalarieFormation = Tables<"salarie_formations">;
+
+// ============ RESSOURCES ============
+
+export type Conducteur = Tables<"conducteurs">;
+export type Technicien = Tables<"techniciens">;
+export type SousTraitant = Tables<"sous_traitants">;
+export type SousTraitantDocument = Tables<"sous_traitant_documents">;
+
+export type Vehicule = Tables<"vehicules">;
+export type VehiculeInsert = TablesInsert<"vehicules">;
+export type VehiculeUpdate = TablesUpdate<"vehicules">;
+export type VehiculeControlePeriodique = Tables<"vehicule_controles_periodiques">;
+export type VehiculeDocument = Tables<"vehicule_documents">;
+export type VehiculeEntretien = Tables<"vehicule_entretiens">;
+
+export type Materiel = Tables<"materiels">;
+export type FournisseurControle = Tables<"fournisseurs_controle">;
+export type DocumentLegal = Tables<"documents_legaux">;
+
+// ============ VUES DE CALCUL ============
+
+/** Les totaux et soldes sont calculés en base, pas côté client. */
+type Views = Database["public"]["Views"];
+
+export type DevisTotaux = Views["v_devis_totaux"]["Row"];
+export type FactureTotaux = Views["v_facture_totaux"]["Row"];
+export type FactureSolde = Views["v_facture_solde"]["Row"];
+export type ChantierAvancement = Views["v_chantier_avancement"]["Row"];
+
+// ============ AGRÉGATS CÔTÉ CLIENT ============
+
+export interface DevisComplet extends Devis {
+  lignes: DevisLigne[];
 }
 
-export interface PieceJointe {
-  id?: string;
-  nom?: string;
-  fichier_nom?: string;
-  fichier_data?: string; // base64 (legacy)
-  date?: string;
+export interface FactureComplete extends Facture {
+  lignes: FactureLigne[];
 }
 
-export interface Todo {
-  id: string;
-  texte: string;
-  date?: string;
-  salarie_id?: string;
-  notes?: string;
-  statut?: string;
+export interface BonCommandeComplet extends BonCommande {
+  lignes: BonCommandeLigne[];
+  photos: BonCommandePhoto[];
 }
 
-export interface Chantier extends BaseEntity {
-  nom: string;
-  type?: string;
-  date_debut?: string;
-  date_fin?: string;
-  adresse?: string;
-  code_postal?: string;
-  ville?: string;
-  client?: string;
-  conducteur?: string;
-  dpgf_lignes: DpgfLigne[];
-  comptes_rendus: PieceJointe[];
-  todo_list: Todo[];
-  achats: PieceJointe[];
-  devis_complementaires: PieceJointe[];
-  inspections: PieceJointe[];
-  infos_diverses?: string;
-  // 7 familles documentaires
-  documents_dpgf?: PieceJointe[];
-  documents_cctp?: PieceJointe[];
-  documents_ppsps?: PieceJointe[];
-  documents_doe?: PieceJointe[];
-  documents_ccap?: PieceJointe[];
-  documents_avenants?: PieceJointe[];
-  documents_dgd?: PieceJointe[];
+export interface InterventionComplete extends Intervention {
+  photos: InterventionPhoto[];
+  controles: InterventionControle[];
 }
 
-// ============ DONNÉES GLOBALES ============
-
-export interface Settings {
-  notifications_traitees?: string[];
-  documents_legaux?: DocumentLegal[];
-  [key: string]: unknown;
+export interface ChantierComplet extends Chantier {
+  dpgf_lignes: ChantierDpgfLigne[];
+  todos: ChantierTodo[];
+  documents: ChantierDocument[];
+  achats: ChantierAchat[];
+  inspections: ChantierInspection[];
 }
 
+export interface SalarieComplet extends Salarie {
+  habilitations: SalarieHabilitation[];
+  absences: SalarieAbsence[];
+}
+
+/** Instantané complet d'une société. */
 export interface TerrainData {
-  devis: Devis[];
-  factures: Facture[];
-  interventions: Intervention[];
-  bons_commande: BonCommande[];
+  societe: Societe | null;
+  settings: SocieteSettings | null;
   clients: Client[];
-  articles: Article[];
-  documents: DocumentLegal[];
-  reglements: Reglement[];
   interlocuteurs: Interlocuteur[];
+  articles: Article[];
+  metiers: Metier[];
+  devis: DevisComplet[];
+  factures: FactureComplete[];
+  reglements: Reglement[];
+  bons_commande: BonCommandeComplet[];
+  interventions: InterventionComplete[];
+  chantiers: ChantierComplet[];
+  salaries: SalarieComplet[];
   conducteurs: Conducteur[];
   techniciens: Technicien[];
-  metiers_perso: MetierPerso[];
   sous_traitants: SousTraitant[];
-  chantiers: Chantier[];
-  salaries: Salarie[];
   vehicules: Vehicule[];
-  fournisseurs_controle: FournisseurControle[];
   materiels: Materiel[];
-  settings: Record<string, Settings>;
+  fournisseurs_controle: FournisseurControle[];
+  documents_legaux: DocumentLegal[];
 }

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "ERP Gestion Terrain - Devis, Factures, Bons de Commande, RH",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,7 +13,10 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:types": "supabase gen types typescript --linked > src/api/database.types.ts && npm run db:columns",
+    "db:pull": "supabase db pull",
+    "db:columns": "node scripts/gen-columns.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",

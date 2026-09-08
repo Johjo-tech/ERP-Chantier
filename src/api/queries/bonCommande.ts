@@ -1,341 +1,197 @@
 /**
- * Bons de Commande CRUD operations
- * Workflow critique: créer BC → planifier → valider → facturer
+ * Bons de commande (`bons_commande`, `bon_commande_lignes`,
+ * `bon_commande_photos`).
+ *
+ * Un SAV est un bon de commande qui pointe vers son BC d'origine par
+ * `bon_commande_parent_id` et porte `probleme_description`.
  */
 
-import { supabase, SupabaseError, uid, getNextNumero } from "../client";
-import type { BonCommande, ScheduleParMetier } from "../types";
+import {
+  getNextNumero,
+  getOne,
+  insertMany,
+  insertOne,
+  listByParent,
+  listByParents,
+  listBySociete,
+  remove,
+  removeByParent,
+  updateOne,
+} from "../client";
+import type {
+  Json,
+  BonCommandeComplet,
+  BonCommandeInsert,
+  BonCommandeLigneInsert,
+  BonCommandeUpdate,
+  ScheduleParMetier,
+  Uuid,
+} from "../types";
 
-// ============ READ ============
+export type LigneBCInput = Omit<BonCommandeLigneInsert, "bon_commande_id">;
 
-export async function getBonCommande(id: string): Promise<BonCommande | null> {
-  const { data, error } = await supabase
-    .from("bons_commande")
-    .select("*")
-    .eq("id", id)
-    .single();
+export type NouveauBonCommande = Omit<BonCommandeInsert, "societe_id">;
 
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError(
-      "Failed to fetch bon de commande",
-      error.code,
-      error
-    );
-  }
+// ============ LECTURE ============
 
-  return data || null;
+export function listBonsCommande(societeId: Uuid) {
+  return listBySociete("bons_commande", societeId);
 }
 
-export async function listBonsCommande(
-  societeId: string,
-  filters?: {
-    statut?: string;
-    client?: string;
-    metier?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    enRetard?: boolean;
-  }
-): Promise<BonCommande[]> {
-  let query = supabase
-    .from("bons_commande")
-    .select("*")
-    .eq("societe_id", societeId);
-
-  if (filters?.statut) {
-    query = query.eq("statut", filters.statut);
-  }
-  if (filters?.client) {
-    query = query.ilike("client", `%${filters.client}%`);
-  }
-  if (filters?.metier) {
-    query = query.contains("metiers", [filters.metier]);
-  }
-  if (filters?.dateFrom) {
-    query = query.gte("date_fin_travaux", filters.dateFrom);
-  }
-  if (filters?.dateTo) {
-    query = query.lte("date_fin_travaux", filters.dateTo);
-  }
-
-  const { data, error } = await query.order("date_planifiee", {
-    ascending: true,
-  });
-
-  if (error) {
-    throw new SupabaseError(
-      "Failed to list bons de commande",
-      error.code,
-      error
-    );
-  }
-
-  let results = data || [];
-
-  // Filtrer en retard côté client si nécessaire
-  if (filters?.enRetard) {
-    const today = new Date().toISOString().split("T")[0];
-    results = results.filter((bc) => bc.date_fin_travaux && bc.date_fin_travaux < today);
-  }
-
-  return results;
+export function getBonCommande(id: Uuid) {
+  return getOne("bons_commande", id);
 }
 
-export async function searchBonsCommande(
-  societeId: string,
-  query: string
-): Promise<BonCommande[]> {
-  const { data, error } = await supabase
-    .from("bons_commande")
-    .select("*")
-    .eq("societe_id", societeId)
-    .or(`numero_bc.ilike.%${query}%,client.ilike.%${query}%`)
-    .order("date_planifiee", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError(
-      "Failed to search bons de commande",
-      error.code,
-      error
-    );
-  }
-
-  return data || [];
+export function listBonCommandeLignes(bcId: Uuid) {
+  return listByParent("bon_commande_lignes", "bon_commande_id", bcId);
 }
 
-// ============ CREATE ============
+export function listBonCommandePhotos(bcId: Uuid) {
+  return listByParent("bon_commande_photos", "bon_commande_id", bcId);
+}
 
+export async function getBonCommandeComplet(
+  id: Uuid
+): Promise<BonCommandeComplet | null> {
+  const bc = await getBonCommande(id);
+  if (!bc) return null;
+
+  const [lignes, photos] = await Promise.all([
+    listBonCommandeLignes(id),
+    listBonCommandePhotos(id),
+  ]);
+  return { ...bc, lignes, photos };
+}
+
+export async function listBonsCommandeComplets(
+  societeId: Uuid
+): Promise<BonCommandeComplet[]> {
+  const bcs = await listBonsCommande(societeId);
+  const ids = bcs.map((bc) => bc.id);
+
+  // Trois requêtes au total plutôt que deux par bon de commande
+  const [lignes, photos] = await Promise.all([
+    listByParents("bon_commande_lignes", "bon_commande_id", ids),
+    listByParents("bon_commande_photos", "bon_commande_id", ids),
+  ]);
+
+  return bcs.map((bc) => ({
+    ...bc,
+    lignes: lignes.get(bc.id) ?? [],
+    photos: photos.get(bc.id) ?? [],
+  }));
+}
+
+/** SAV rattachés à un bon de commande. */
+export function listSAV(bcId: Uuid) {
+  return listByParent("bons_commande", "bon_commande_parent_id", bcId, "cree_le");
+}
+
+// ============ ÉCRITURE ============
+
+/**
+ * Crée un bon de commande.
+ *
+ * Le numéro n'est **pas** généré : un bon de commande est émis par le client,
+ * son numéro figure sur son document. L'app enregistre « Sans BC » ou « En
+ * attente de BC » quand il n'y en a pas. Numéroter nous-mêmes produirait des
+ * références qui n'existent chez personne — seul un SAV, que nous émettons,
+ * reçoit un numéro de notre série.
+ */
 export async function createBonCommande(
-  societeId: string,
-  bcData: Omit<BonCommande, "id" | "created_at" | "numero_bc">
-): Promise<BonCommande> {
-  const numero = await getNextNumero(societeId, "bonCommande");
-
-  const bc: Omit<BonCommande, "created_at"> = {
-    id: uid(),
+  societeId: Uuid,
+  input: NouveauBonCommande,
+  lignes: LigneBCInput[] = []
+): Promise<BonCommandeComplet> {
+  const bc = await insertOne("bons_commande", {
+    ...input,
     societe_id: societeId,
-    numero_bc: numero,
-    sans_bc: false,
-    en_attente_bc: false,
-    bon_commande_id: null,
-    devis_id: null,
-    ...bcData,
-  };
-
-  const { data, error } = await supabase
-    .from("bons_commande")
-    .insert([bc])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError(
-      "Failed to create bon de commande",
-      error.code,
-      error
-    );
-  }
-
-  return data;
-}
-
-/**
- * Créer un SAV (bon de commande lié à un précédent)
- */
-export async function createSAVBonCommande(
-  societeId: string,
-  originalBcId: string,
-  probleme: string,
-  photos?: string[]
-): Promise<BonCommande> {
-  const original = await getBonCommande(originalBcId);
-  if (!original) {
-    throw new SupabaseError("Original BC not found", "BC_NOT_FOUND");
-  }
-
-  const sav = await createBonCommande(societeId, {
-    client: original.client,
-    interlocuteur: original.interlocuteur,
-    adresse: original.adresse,
-    code_postal: original.code_postal,
-    ville: original.ville,
-    metier: original.metier,
-    metiers: original.metiers,
-    bon_commande_id: originalBcId,
-    probleme_description: probleme,
-    photos,
   });
-
-  return sav;
-}
-
-// ============ UPDATE ============
-
-export async function updateBonCommande(
-  id: string,
-  updates: Partial<Omit<BonCommande, "id" | "created_at" | "societe_id">>
-): Promise<BonCommande> {
-  const { data, error } = await supabase
-    .from("bons_commande")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError(
-      "Failed to update bon de commande",
-      error.code,
-      error
-    );
-  }
-
-  return data;
-}
-
-// ============ PLANIFICATION ============
-
-/**
- * Planifier un BC pour un technicien/date
- * (simple ou par métier)
- */
-export async function scheduleBC(
-  id: string,
-  datePlanifiee: string,
-  datePlanifieeFin: string,
-  heurePlanifiee: string,
-  dureeHeures: number,
-  technicien?: string
-): Promise<BonCommande> {
-  return updateBonCommande(id, {
-    date_planifiee: datePlanifiee,
-    date_planifiee_fin: datePlanifieeFin,
-    heure_planifiee: heurePlanifiee,
-    duree_heures: dureeHeures,
-    technicien,
-  });
-}
-
-/**
- * Planifier un BC multi-métiers
- */
-export async function scheduleBCByMetier(
-  id: string,
-  scheduleParMetier: Record<string, ScheduleParMetier>
-): Promise<BonCommande> {
-  return updateBonCommande(id, {
-    schedule_par_metier: scheduleParMetier,
-  });
-}
-
-/**
- * Planifier le dernier jour d'un BC
- */
-export async function scheduleBCLastDay(
-  id: string,
-  heureDernierJour: string,
-  dureeDernierJour: number
-): Promise<BonCommande> {
-  return updateBonCommande(id, {
-    heure_dernier_jour: heureDernierJour,
-    duree_dernier_jour: dureeDernierJour,
-  });
-}
-
-// ============ RÉCEPTION ============
-
-/**
- * Marquer un BC comme reçu
- */
-export async function markBCReceived(
-  id: string,
-  dateReception: string
-): Promise<BonCommande> {
-  return updateBonCommande(id, {
-    date_reception: dateReception,
-    statut: "reçu",
-  });
-}
-
-/**
- * Ajouter des photos de suivi
- */
-export async function addBCPhotos(id: string, photos: string[]): Promise<BonCommande> {
-  const bc = await getBonCommande(id);
-  if (!bc) {
-    throw new SupabaseError("BC not found", "BC_NOT_FOUND");
-  }
-
-  const allPhotos = [...(bc.photos || []), ...photos];
-  return updateBonCommande(id, { photos: allPhotos });
-}
-
-/**
- * Ajouter des notes
- */
-export async function addBCNotes(id: string, notes: string): Promise<BonCommande> {
-  return updateBonCommande(id, { notes });
-}
-
-// ============ DELETE ============
-
-export async function deleteBonCommande(id: string): Promise<void> {
-  const bc = await getBonCommande(id);
-  if (!bc) {
-    throw new SupabaseError("BC not found", "BC_NOT_FOUND");
-  }
-
-  const { error } = await supabase
-    .from("bons_commande")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    throw new SupabaseError(
-      "Failed to delete bon de commande",
-      error.code,
-      error
-    );
-  }
-}
-
-// ============ CALCULS ============
-
-/**
- * Calculer les totaux d'un BC (depuis la vue)
- */
-export async function getBCTotaux(bcId: string) {
-  // TODO: créer vue v_boncommande_totaux en Supabase
-  // Pour l'instant, on retourne les champs du BC
-  const bc = await getBonCommande(bcId);
-  if (!bc) {
-    throw new SupabaseError("BC not found", "BC_NOT_FOUND");
-  }
 
   return {
-    id: bcId,
-    montant_total: bc.montant_total || bc.montant || 0,
-    montant_par_metier: bc.montant_par_metier || null,
+    ...bc,
+    lignes: await replaceBonCommandeLignes(bc.id, lignes),
+    photos: [],
   };
 }
 
+/** Crée un SAV en recopiant l'en-tête du bon de commande d'origine. */
+export async function createSAV(
+  societeId: Uuid,
+  bcOrigineId: Uuid,
+  problemeDescription: string,
+  overrides: Partial<NouveauBonCommande> = {}
+): Promise<BonCommandeComplet> {
+  const origine = await getBonCommande(bcOrigineId);
+  if (!origine) throw new Error(`Bon de commande ${bcOrigineId} introuvable`);
+
+  const { id, cree_le, maj_le, societe_id, legacy_id, numero_bc, ...entete } =
+    origine;
+
+  return createBonCommande(societeId, {
+    ...entete,
+    numero_bc: await getNextNumero(societeId, "sav"),
+    bon_commande_parent_id: bcOrigineId,
+    probleme_description: problemeDescription,
+    ...overrides,
+  });
+}
+
+export function updateBonCommande(id: Uuid, updates: BonCommandeUpdate) {
+  return updateOne("bons_commande", id, updates);
+}
+
+export function markBCReceived(id: Uuid, dateReception: string) {
+  return updateBonCommande(id, { date_reception: dateReception });
+}
+
 /**
- * Obtenir l'avancement d'un chantier depuis ses BCs
+ * Écrase le planning par métier.
+ *
+ * La colonne est un `jsonb` : le schéma généré la type en `Json`, on refranchit
+ * donc la frontière ici plutôt que d'affaiblir `ScheduleParMetier`.
  */
-export async function getChantierAvancement(chantierId: string) {
-  const { data, error } = await supabase
-    .from("v_chantier_avancement")
-    .select("*")
-    .eq("id", chantierId)
-    .single();
+export function setScheduleParMetier(
+  id: Uuid,
+  schedule: Record<string, ScheduleParMetier>
+) {
+  return updateBonCommande(id, {
+    schedule_par_metier: schedule as unknown as Json,
+  });
+}
 
-  if (error) {
-    throw new SupabaseError(
-      "Failed to fetch chantier avancement",
-      error.code,
-      error
-    );
-  }
+export async function replaceBonCommandeLignes(
+  bcId: Uuid,
+  lignes: LigneBCInput[]
+) {
+  await removeByParent("bon_commande_lignes", "bon_commande_id", bcId);
+  if (!lignes.length) return [];
 
-  return data;
+  return insertMany(
+    "bon_commande_lignes",
+    lignes.map((ligne, i) => ({
+      ...ligne,
+      bon_commande_id: bcId,
+      position: ligne.position ?? i,
+    }))
+  );
+}
+
+/** `chemins` sont des chemins de bucket Storage, pas des data-URL. */
+export async function replaceBonCommandePhotos(bcId: Uuid, chemins: string[]) {
+  await removeByParent("bon_commande_photos", "bon_commande_id", bcId);
+  if (!chemins.length) return [];
+
+  return insertMany(
+    "bon_commande_photos",
+    chemins.map((chemin, position) => ({
+      bon_commande_id: bcId,
+      chemin,
+      position,
+    }))
+  );
+}
+
+export function deleteBonCommande(id: Uuid) {
+  return remove("bons_commande", id);
 }

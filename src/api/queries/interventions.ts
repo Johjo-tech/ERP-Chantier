@@ -1,142 +1,149 @@
 /**
- * Interventions/Rapports CRUD
+ * Interventions (`interventions`, `intervention_photos`,
+ * `intervention_controles`).
+ *
+ * Le rapport est aplati en deux colonnes (`constatations`, `preconisations`)
+ * et la grille de contrôles vit dans une table fille clé/valeur.
  */
 
-import { supabase, SupabaseError, uid, getNextNumero } from "../client";
-import type { Intervention } from "../types";
+import {
+  getNextNumero,
+  getOne,
+  insertMany,
+  insertOne,
+  listByParent,
+  listByParents,
+  listBySociete,
+  remove,
+  removeByParent,
+  updateOne,
+} from "../client";
+import type {
+  InterventionComplete,
+  InterventionInsert,
+  InterventionUpdate,
+  Uuid,
+} from "../types";
 
-export async function getIntervention(id: string): Promise<Intervention | null> {
-  const { data, error } = await supabase
-    .from("interventions")
-    .select("*")
-    .eq("id", id)
-    .single();
+export type NouvelleIntervention = Omit<InterventionInsert, "societe_id">;
 
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError("Failed to fetch intervention", error.code, error);
-  }
+// ============ LECTURE ============
 
-  return data || null;
+export function listInterventions(societeId: Uuid) {
+  return listBySociete("interventions", societeId);
 }
 
-export async function listInterventions(
-  societeId: string,
-  filters?: {
-    statut?: string;
-    client?: string;
-    dateFrom?: string;
-    dateTo?: string;
-  }
-): Promise<Intervention[]> {
-  let query = supabase
-    .from("interventions")
-    .select("*")
-    .eq("societe_id", societeId);
-
-  if (filters?.statut) {
-    query = query.eq("statut", filters.statut);
-  }
-  if (filters?.client) {
-    query = query.ilike("client", `%${filters.client}%`);
-  }
-  if (filters?.dateFrom) {
-    query = query.gte("date", filters.dateFrom);
-  }
-  if (filters?.dateTo) {
-    query = query.lte("date", filters.dateTo);
-  }
-
-  const { data, error } = await query.order("date", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to list interventions", error.code, error);
-  }
-
-  return data || [];
+export function getIntervention(id: Uuid) {
+  return getOne("interventions", id);
 }
+
+export function listInterventionPhotos(id: Uuid) {
+  return listByParent("intervention_photos", "intervention_id", id);
+}
+
+export function listInterventionControles(id: Uuid) {
+  return listByParent("intervention_controles", "intervention_id", id, "cle");
+}
+
+export async function getInterventionComplete(
+  id: Uuid
+): Promise<InterventionComplete | null> {
+  const intervention = await getIntervention(id);
+  if (!intervention) return null;
+
+  const [photos, controles] = await Promise.all([
+    listInterventionPhotos(id),
+    listInterventionControles(id),
+  ]);
+  return { ...intervention, photos, controles };
+}
+
+export async function listInterventionsCompletes(
+  societeId: Uuid
+): Promise<InterventionComplete[]> {
+  const interventions = await listInterventions(societeId);
+  const ids = interventions.map((i) => i.id);
+
+  const [photos, controles] = await Promise.all([
+    listByParents("intervention_photos", "intervention_id", ids),
+    listByParents("intervention_controles", "intervention_id", ids, "cle"),
+  ]);
+
+  return interventions.map((i) => ({
+    ...i,
+    photos: photos.get(i.id) ?? [],
+    controles: controles.get(i.id) ?? [],
+  }));
+}
+
+// ============ ÉCRITURE ============
 
 export async function createIntervention(
-  societeId: string,
-  interventionData: Omit<Intervention, "id" | "created_at">
-): Promise<Intervention> {
-  // Générer le numéro si pas fourni
-  const numero = interventionData.numero || (await getNextNumero(societeId, "intervention"));
-
-  const intervention: Omit<Intervention, "created_at"> = {
-    id: uid(),
+  societeId: Uuid,
+  input: NouvelleIntervention
+) {
+  return insertOne("interventions", {
+    ...input,
     societe_id: societeId,
-    numero,
-    ...interventionData,
-  };
-
-  const { data, error } = await supabase
-    .from("interventions")
-    .insert([intervention])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create intervention", error.code, error);
-  }
-
-  return data;
+    numero: input.numero ?? (await getNextNumero(societeId, "intervention")),
+  });
 }
 
-export async function updateIntervention(
-  id: string,
-  updates: Partial<Omit<Intervention, "id" | "created_at" | "societe_id">>
-): Promise<Intervention> {
-  const { data, error } = await supabase
-    .from("interventions")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update intervention", error.code, error);
-  }
-
-  return data;
+export function updateIntervention(id: Uuid, updates: InterventionUpdate) {
+  return updateOne("interventions", id, updates);
 }
 
-export async function deleteIntervention(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("interventions")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete intervention", error.code, error);
-  }
-}
-
-export async function addInterventionPhotos(
-  id: string,
-  photos: string[]
-): Promise<Intervention> {
-  const intervention = await getIntervention(id);
-  if (!intervention) {
-    throw new SupabaseError("Intervention not found", "INTERVENTION_NOT_FOUND");
-  }
-
-  const allPhotos = [...(intervention.photos || []), ...photos];
-  return updateIntervention(id, { photos: allPhotos });
-}
-
-export async function signIntervention(
-  id: string,
-  signature: string
-): Promise<Intervention> {
-  return updateIntervention(id, { signature });
-}
-
-export async function updateInterventionRapport(
-  id: string,
+export function updateInterventionRapport(
+  id: Uuid,
   constatations: string,
   preconisations: string
-): Promise<Intervention> {
-  return updateIntervention(id, {
-    rapport: { constatations, preconisations },
-  });
+) {
+  return updateIntervention(id, { constatations, preconisations });
+}
+
+/** `chemin` pointe vers le bucket Storage. */
+export function signIntervention(id: Uuid, chemin: string) {
+  return updateIntervention(id, { signature_chemin: chemin });
+}
+
+export async function replaceInterventionPhotos(
+  interventionId: Uuid,
+  chemins: string[]
+) {
+  await removeByParent("intervention_photos", "intervention_id", interventionId);
+  if (!chemins.length) return [];
+
+  return insertMany(
+    "intervention_photos",
+    chemins.map((chemin, position) => ({
+      intervention_id: interventionId,
+      chemin,
+      position,
+    }))
+  );
+}
+
+/** Remplace la grille de contrôles, fournie sous forme de map clé → coché. */
+export async function replaceInterventionControles(
+  interventionId: Uuid,
+  controles: Record<string, boolean>,
+  precisionAutre?: string
+) {
+  await removeByParent("intervention_controles", "intervention_id", interventionId);
+  const entrees = Object.entries(controles);
+  if (!entrees.length) return [];
+
+  return insertMany(
+    "intervention_controles",
+    entrees.map(([cle, coche]) => ({
+      intervention_id: interventionId,
+      cle,
+      coche,
+      precision_autre: cle === "autre" ? precisionAutre ?? null : null,
+    }))
+  );
+}
+
+export function deleteIntervention(id: Uuid) {
+  return remove("interventions", id);
 }

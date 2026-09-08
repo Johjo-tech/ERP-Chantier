@@ -1,290 +1,253 @@
 /**
- * Paramètres & Ressources CRUD
- * Documents légaux, Sous-traitants, Métiers personnalisés, etc.
+ * Paramétrage (`societes`, `societe_settings`, `metiers`, `sous_traitants`,
+ * `fournisseurs_controle`, `documents_legaux`).
  */
 
-import { supabase, SupabaseError, uid } from "../client";
-import type { DocumentLegal, SousTraitant, MetierPerso, FournisseurControle } from "../types";
+import {
+  getOne,
+  insertOne,
+  listByParent,
+  listBySociete,
+  remove,
+  supabase,
+  SupabaseError,
+  updateOne,
+} from "../client";
+import type {
+  Compteur,
+  SocieteSettings,
+  TypeDocument,
+  TablesInsert,
+  TablesUpdate,
+  Uuid,
+} from "../types";
 
-// ============ DOCUMENTS LÉGAUX ============
+// ============ SOCIÉTÉS ============
 
-export async function listDocuments(societeId: string): Promise<DocumentLegal[]> {
+export function getSociete(id: Uuid) {
+  return getOne("societes", id);
+}
+
+/**
+ * Résout une société par son code court.
+ *
+ * L'app historique identifie les sociétés par un code (« kta », …) alors que
+ * les clés étrangères pointent vers l'uuid.
+ */
+export async function getSocieteByCode(code: string) {
   const { data, error } = await supabase
-    .from("documents")
+    .from("societes")
+    .select("*")
+    .eq("code", code)
+    .maybeSingle();
+
+  if (error) {
+    throw new SupabaseError("Failed to resolve societe", error.code, error);
+  }
+  return data;
+}
+
+export function updateSociete(id: Uuid, updates: TablesUpdate<"societes">) {
+  return updateOne("societes", id, updates);
+}
+
+// ============ RÉGLAGES ============
+
+/** Une ligne par société : notifications traitées, infos d'entête. */
+export async function getSocieteSettings(
+  societeId: Uuid
+): Promise<SocieteSettings | null> {
+  const { data, error } = await supabase
+    .from("societe_settings")
     .select("*")
     .eq("societe_id", societeId)
-    .order("date_expiration", { ascending: true });
+    .maybeSingle();
 
-  if (error) {
-    throw new SupabaseError("Failed to list documents", error.code, error);
-  }
-
-  return data || [];
-}
-
-export async function createDocument(
-  societeId: string,
-  document: Omit<DocumentLegal, "id" | "created_at">
-): Promise<DocumentLegal> {
-  const newDocument: Omit<DocumentLegal, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...document,
-  };
-
-  const { data, error } = await supabase
-    .from("documents")
-    .insert([newDocument])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create document", error.code, error);
-  }
-
+  if (error) throw new SupabaseError("Failed to get settings", error.code, error);
   return data;
 }
 
-export async function updateDocument(
-  id: string,
-  updates: Partial<Omit<DocumentLegal, "id" | "created_at" | "societe_id">>
-): Promise<DocumentLegal> {
+export async function saveSocieteSettings(
+  societeId: Uuid,
+  updates: Omit<TablesInsert<"societe_settings">, "societe_id">
+): Promise<SocieteSettings> {
   const { data, error } = await supabase
-    .from("documents")
-    .update(updates)
-    .eq("id", id)
+    .from("societe_settings")
+    .upsert({ ...updates, societe_id: societeId }, { onConflict: "societe_id" })
     .select()
     .single();
 
-  if (error) {
-    throw new SupabaseError("Failed to update document", error.code, error);
-  }
-
+  if (error) throw new SupabaseError("Failed to save settings", error.code, error);
   return data;
 }
 
-export async function deleteDocument(id: string): Promise<void> {
-  const { error } = await supabase.from("documents").delete().eq("id", id);
+// ============ NUMÉROTATION ============
 
-  if (error) {
-    throw new SupabaseError("Failed to delete document", error.code, error);
+/**
+ * Séries numérotées par la société.
+ *
+ * Les bons de commande n'y figurent pas : leur numéro vient du document du
+ * client. Seuls les documents que nous émettons ont une série.
+ */
+export const SERIES_NUMEROTATION: { type: TypeDocument; label: string; prefixe: string }[] = [
+  { type: "devis", label: "Devis", prefixe: "DEV" },
+  { type: "facture", label: "Facture", prefixe: "FAC" },
+  { type: "intervention", label: "Rapport d'intervention", prefixe: "RAP" },
+  { type: "sav", label: "SAV", prefixe: "SAV" },
+];
+
+export async function listCompteurs(
+  societeId: Uuid,
+  annee: number = new Date().getFullYear()
+): Promise<Compteur[]> {
+  const { data, error } = await supabase
+    .from("compteurs")
+    .select("*")
+    .eq("societe_id", societeId)
+    .eq("annee", annee);
+
+  if (error) throw new SupabaseError("Failed to list compteurs", error.code, error);
+  return data ?? [];
+}
+
+/**
+ * Règle le préfixe et le point de départ d'une série.
+ *
+ * `valeur` est le **dernier numéro attribué** : le prochain sera `valeur + 1`.
+ * La baisser réattribuerait des numéros déjà utilisés, d'où le garde-fou.
+ */
+export async function reglerCompteur(
+  societeId: Uuid,
+  type: TypeDocument,
+  prefixe: string,
+  valeur: number,
+  annee: number = new Date().getFullYear()
+): Promise<Compteur> {
+  if (!Number.isFinite(valeur) || valeur < 0) {
+    throw new Error("Le dernier numéro doit être un entier positif.");
   }
+
+  const { data, error } = await supabase
+    .from("compteurs")
+    .upsert(
+      {
+        societe_id: societeId,
+        type,
+        annee,
+        prefixe: prefixe.trim(),
+        valeur: Math.floor(valeur),
+      },
+      { onConflict: "societe_id,type,annee" }
+    )
+    .select()
+    .single();
+
+  if (error) throw new SupabaseError("Failed to save compteur", error.code, error);
+  return data;
+}
+
+/** Le prochain numéro tel qu'il sera attribué, pour l'aperçu des réglages. */
+export function apercuNumero(prefixe: string, valeur: number, annee: number): string {
+  return `${prefixe.trim() || "DOC"}-${annee}-${String(valeur + 1).padStart(4, "0")}`;
+}
+
+// ============ MÉTIERS ============
+
+export function listMetiers(societeId: Uuid) {
+  return listBySociete("metiers", societeId);
+}
+
+export function createMetier(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"metiers">, "societe_id">
+) {
+  return insertOne("metiers", { ...input, societe_id: societeId });
+}
+
+export function updateMetier(id: Uuid, updates: TablesUpdate<"metiers">) {
+  return updateOne("metiers", id, updates);
+}
+
+export function deleteMetier(id: Uuid) {
+  return remove("metiers", id);
 }
 
 // ============ SOUS-TRAITANTS ============
 
-export async function getSousTraitant(id: string): Promise<SousTraitant | null> {
-  const { data, error } = await supabase
-    .from("sous_traitants")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError("Failed to fetch sous-traitant", error.code, error);
-  }
-
-  return data || null;
+export function listSousTraitants(societeId: Uuid) {
+  return listBySociete("sous_traitants", societeId);
 }
 
-export async function listSousTraitants(societeId: string): Promise<SousTraitant[]> {
-  const { data, error } = await supabase
-    .from("sous_traitants")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list sous-traitants", error.code, error);
-  }
-
-  return data || [];
+export function listSousTraitantDocuments(sousTraitantId: Uuid) {
+  return listByParent(
+    "sous_traitant_documents",
+    "sous_traitant_id",
+    sousTraitantId,
+    "cree_le"
+  );
 }
 
-export async function createSousTraitant(
-  societeId: string,
-  sousTraitant: Omit<SousTraitant, "id" | "created_at">
-): Promise<SousTraitant> {
-  const newSousTraitant: Omit<SousTraitant, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    documents: [],
-    ...sousTraitant,
-  };
-
-  const { data, error } = await supabase
-    .from("sous_traitants")
-    .insert([newSousTraitant])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create sous-traitant", error.code, error);
-  }
-
-  return data;
+export function createSousTraitant(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"sous_traitants">, "societe_id">
+) {
+  return insertOne("sous_traitants", { ...input, societe_id: societeId });
 }
 
-export async function updateSousTraitant(
-  id: string,
-  updates: Partial<Omit<SousTraitant, "id" | "created_at" | "societe_id">>
-): Promise<SousTraitant> {
-  const { data, error } = await supabase
-    .from("sous_traitants")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update sous-traitant", error.code, error);
-  }
-
-  return data;
+export function updateSousTraitant(
+  id: Uuid,
+  updates: TablesUpdate<"sous_traitants">
+) {
+  return updateOne("sous_traitants", id, updates);
 }
 
-export async function deleteSousTraitant(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("sous_traitants")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete sous-traitant", error.code, error);
-  }
+export function deleteSousTraitant(id: Uuid) {
+  return remove("sous_traitants", id);
 }
 
-// ============ MÉTIERS PERSONNALISÉS ============
-
-export async function listMetiersPerso(societeId: string): Promise<MetierPerso[]> {
-  const { data, error } = await supabase
-    .from("metiers_perso")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list métiers", error.code, error);
-  }
-
-  return data || [];
-}
-
-export async function createMetierPerso(
-  societeId: string,
-  metier: Omit<MetierPerso, "id" | "created_at">
-): Promise<MetierPerso> {
-  const newMetier: Omit<MetierPerso, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...metier,
-  };
-
-  const { data, error } = await supabase
-    .from("metiers_perso")
-    .insert([newMetier])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create métier", error.code, error);
-  }
-
-  return data;
-}
-
-export async function updateMetierPerso(
-  id: string,
-  updates: Partial<Omit<MetierPerso, "id" | "created_at" | "societe_id">>
-): Promise<MetierPerso> {
-  const { data, error } = await supabase
-    .from("metiers_perso")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update métier", error.code, error);
-  }
-
-  return data;
-}
-
-export async function deleteMetierPerso(id: string): Promise<void> {
-  const { error } = await supabase.from("metiers_perso").delete().eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete métier", error.code, error);
-  }
+export function addSousTraitantDocument(
+  input: TablesInsert<"sous_traitant_documents">
+) {
+  return insertOne("sous_traitant_documents", input);
 }
 
 // ============ FOURNISSEURS DE CONTRÔLE ============
 
-export async function listFournisseursControle(
-  societeId: string
-): Promise<FournisseurControle[]> {
-  const { data, error } = await supabase
-    .from("fournisseurs_controle")
-    .select("*")
-    .eq("societe_id", societeId)
-    .order("nom", { ascending: true });
-
-  if (error) {
-    throw new SupabaseError("Failed to list fournisseurs de contrôle", error.code, error);
-  }
-
-  return data || [];
+export function listFournisseursControle(societeId: Uuid) {
+  return listBySociete("fournisseurs_controle", societeId);
 }
 
-export async function createFournisseurControle(
-  societeId: string,
-  fournisseur: Omit<FournisseurControle, "id" | "created_at">
-): Promise<FournisseurControle> {
-  const newFournisseur: Omit<FournisseurControle, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    ...fournisseur,
-  };
-
-  const { data, error } = await supabase
-    .from("fournisseurs_controle")
-    .insert([newFournisseur])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create fournisseur", error.code, error);
-  }
-
-  return data;
+export function createFournisseurControle(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"fournisseurs_controle">, "societe_id">
+) {
+  return insertOne("fournisseurs_controle", { ...input, societe_id: societeId });
 }
 
-export async function updateFournisseurControle(
-  id: string,
-  updates: Partial<Omit<FournisseurControle, "id" | "created_at" | "societe_id">>
-): Promise<FournisseurControle> {
-  const { data, error } = await supabase
-    .from("fournisseurs_controle")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update fournisseur", error.code, error);
-  }
-
-  return data;
+export function deleteFournisseurControle(id: Uuid) {
+  return remove("fournisseurs_controle", id);
 }
 
-export async function deleteFournisseurControle(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("fournisseurs_controle")
-    .delete()
-    .eq("id", id);
+// ============ DOCUMENTS LÉGAUX ============
 
-  if (error) {
-    throw new SupabaseError("Failed to delete fournisseur", error.code, error);
-  }
+export function listDocumentsLegaux(societeId: Uuid) {
+  return listBySociete("documents_legaux", societeId);
+}
+
+export function createDocumentLegal(
+  societeId: Uuid,
+  input: Omit<TablesInsert<"documents_legaux">, "societe_id">
+) {
+  return insertOne("documents_legaux", { ...input, societe_id: societeId });
+}
+
+export function updateDocumentLegal(
+  id: Uuid,
+  updates: TablesUpdate<"documents_legaux">
+) {
+  return updateOne("documents_legaux", id, updates);
+}
+
+export function deleteDocumentLegal(id: Uuid) {
+  return remove("documents_legaux", id);
 }

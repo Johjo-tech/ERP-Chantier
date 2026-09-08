@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nouveau mot de passe — ERP Chantier</title>
+<style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .login-header h1 {
+      margin: 0;
+      color: #182233;
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .login-header p {
+      margin: 8px 0 0;
+      color: #6B7686;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: #182233;
+      font-weight: 600;
+      font-size: 13.5px;
+    }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #E2E6ED;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 11px 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 10px;
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .success-message {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #E8F5EC;
+      color: #1E6B37;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .success-message.show { display: block; }
+    .error-message {
+      color: #D9363E;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: #6B7686;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-header">
+      <h1>Nouveau mot de passe</h1>
+      <p>Choisissez un mot de passe d'au moins 8 caractères.</p>
+    </div>
+
+    <form id="pwdForm">
+      <div class="form-group">
+        <label for="password">Nouveau mot de passe</label>
+        <input type="password" id="password" required autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label for="confirmation">Confirmation</label>
+        <input type="password" id="confirmation" required autocomplete="new-password" placeholder="••••••••">
+      </div>
+
+      <button type="submit" class="btn-login" id="btnSave">Enregistrer</button>
+
+      <div class="error-message" id="errorMessage"></div>
+      <div class="success-message" id="successMessage"></div>
+      <div class="loading" id="loading">Enregistrement…</div>
+    </form>
+
+    <div style="margin-top: 22px; text-align: center;">
+      <a href="/login.html" style="color:#6B7686; font-size:13px;">Retour à la connexion</a>
+    </div>
+  </div>
+
+  <script type="module">
+    /* Supabase pose une session « recovery » en arrivant sur cette page :
+       il suffit alors d'appeler updateUser({ password }). Sans cette session,
+       le lien est expiré ou déjà consommé. */
+    import { supabase, definirMotDePasse } from '@/api/client';
+
+    const form = document.getElementById('pwdForm');
+    const password = document.getElementById('password');
+    const confirmation = document.getElementById('confirmation');
+    const btnSave = document.getElementById('btnSave');
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+    const loading = document.getElementById('loading');
+
+    function showError(m){ successMessage.classList.remove('show'); errorMessage.textContent = m; errorMessage.classList.add('show'); }
+    function showSuccess(m){ errorMessage.classList.remove('show'); successMessage.textContent = m; successMessage.classList.add('show'); }
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        showError("Ce lien est expiré ou déjà utilisé. Demandez-en un nouveau depuis la page de connexion.");
+        btnSave.disabled = true;
+      }
+    })();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (password.value.length < 8) { showError('8 caractères minimum.'); return; }
+      if (password.value !== confirmation.value) { showError('Les deux saisies diffèrent.'); return; }
+
+      btnSave.disabled = true;
+      loading.classList.add('show');
+      try {
+        await definirMotDePasse(password.value);
+        showSuccess('Mot de passe enregistré. Redirection…');
+        setTimeout(() => { window.location.href = '/'; }, 1200);
+      } catch (err) {
+        showError(err.message || 'Enregistrement impossible.');
+        btnSave.disabled = false;
+      } finally {
+        loading.classList.remove('show');
+      }
+    });
+  </script>
+</body>
+</html>

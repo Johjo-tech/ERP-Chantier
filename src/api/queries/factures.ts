@@ -1,337 +1,267 @@
 /**
- * Factures CRUD operations
+ * Factures, lignes et règlements
+ * (`factures`, `facture_lignes`, `reglements`, vues `v_facture_totaux` et
+ *  `v_facture_solde`).
  */
 
-import { supabase, SupabaseError, uid, getNextNumero } from "../client";
-import type { Facture, Reglement } from "../types";
+import {
+  getNextNumero,
+  todayISO,
+  getOne,
+  insertMany,
+  insertOne,
+  listByParent,
+  listByParents,
+  listBySociete,
+  remove,
+  removeByParent,
+  supabase,
+  SupabaseError,
+  updateOne,
+} from "../client";
+import type {
+  Facture,
+  FactureComplete,
+  FactureInsert,
+  FactureLigneInsert,
+  FactureSolde,
+  FactureStatut,
+  FactureTotaux,
+  FactureUpdate,
+  ReglementInsert,
+  Uuid,
+} from "../types";
+import { getDevisComplet } from "./devis";
+import { getBonCommandeComplet } from "./bonCommande";
 
-// ============ READ ============
+export type LigneFactureInput = Omit<FactureLigneInsert, "facture_id">;
 
-export async function getFacture(id: string): Promise<Facture | null> {
-  const { data, error } = await supabase
-    .from("factures")
-    .select("*")
-    .eq("id", id)
-    .single();
+export type NouvelleFacture = Omit<FactureInsert, "societe_id" | "numero"> & {
+  numero?: string;
+};
 
-  if (error && error.code !== "PGRST116") {
-    throw new SupabaseError("Failed to fetch facture", error.code, error);
-  }
+// ============ LECTURE ============
 
-  return data || null;
+export function listFactures(societeId: Uuid) {
+  return listBySociete("factures", societeId);
 }
 
-export async function listFactures(
-  societeId: string,
-  filters?: {
-    statut?: string;
-    client?: string;
-    dateFrom?: string;
-    dateTo?: string;
-  }
-): Promise<Facture[]> {
-  let query = supabase
-    .from("factures")
-    .select("*")
-    .eq("societe_id", societeId);
-
-  if (filters?.statut) {
-    query = query.eq("statut", filters.statut);
-  }
-  if (filters?.client) {
-    query = query.ilike("client", `%${filters.client}%`);
-  }
-  if (filters?.dateFrom) {
-    query = query.gte("date", filters.dateFrom);
-  }
-  if (filters?.dateTo) {
-    query = query.lte("date", filters.dateTo);
-  }
-
-  const { data, error } = await query.order("date", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to list factures", error.code, error);
-  }
-
-  return data || [];
+export function getFacture(id: Uuid) {
+  return getOne("factures", id);
 }
 
-export async function searchFactures(
-  societeId: string,
-  query: string
-): Promise<Facture[]> {
-  const { data, error } = await supabase
-    .from("factures")
-    .select("*")
-    .eq("societe_id", societeId)
-    .or(`numero.ilike.%${query}%,client.ilike.%${query}%`)
-    .order("date", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to search factures", error.code, error);
-  }
-
-  return data || [];
+export function listFactureLignes(factureId: Uuid) {
+  return listByParent("facture_lignes", "facture_id", factureId);
 }
 
-// ============ CREATE ============
-
-export async function createFacture(
-  societeId: string,
-  factureData: Omit<Facture, "id" | "created_at" | "numero">
-): Promise<Facture> {
-  const numero = await getNextNumero(societeId, "facture");
-
-  const facture: Omit<Facture, "created_at"> = {
-    id: uid(),
-    societe_id: societeId,
-    numero,
-    statut: "impayée",
-    remise_pourcentage: 0,
-    verrouillee: false,
-    ...factureData,
-  };
-
-  const { data, error } = await supabase
-    .from("factures")
-    .insert([facture])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to create facture", error.code, error);
-  }
-
-  return data;
-}
-
-/**
- * Créer une facture à partir d'un devis
- */
-export async function createFactureFromDevis(
-  societeId: string,
-  devisId: string,
-  overrides?: Partial<Facture>
-): Promise<Facture> {
-  const { data: devis, error: devisError } = await supabase
-    .from("devis")
-    .select("*")
-    .eq("id", devisId)
-    .single();
-
-  if (devisError || !devis) {
-    throw new SupabaseError("Devis not found", devisError?.code);
-  }
-
-  const facture: Omit<Facture, "id" | "created_at" | "numero"> = {
-    societe_id: societeId,
-    client: devis.client,
-    interlocuteur: devis.interlocuteur,
-    date: new Date().toISOString().split("T")[0],
-    remise_pourcentage: devis.remise_pourcentage,
-    statut: "impayée",
-    conducteur: devis.conducteur,
-    verrouillee: false,
-    devis_id: devisId,
-    intervention_id: devis.intervention_id,
-    bon_commande_id: null,
-    chantier_id: devis.chantier_id,
-    // Adresse
-    adresse: devis.adresse,
-    code_postal: devis.code_postal,
-    ville: devis.ville,
-    logement_statut: devis.logement_statut,
-    occupant: devis.occupant,
-    ...overrides,
-  };
-
-  return createFacture(societeId, facture);
-}
-
-/**
- * Créer une facture à partir d'un bon de commande
- */
-export async function createFactureFromBC(
-  societeId: string,
-  bcId: string,
-  overrides?: Partial<Facture>
-): Promise<Facture> {
-  const { data: bc, error: bcError } = await supabase
-    .from("bons_commande")
-    .select("*")
-    .eq("id", bcId)
-    .single();
-
-  if (bcError || !bc) {
-    throw new SupabaseError("Bon de commande not found", bcError?.code);
-  }
-
-  const facture: Omit<Facture, "id" | "created_at" | "numero"> = {
-    societe_id: societeId,
-    client: bc.client,
-    interlocuteur: bc.interlocuteur,
-    date: new Date().toISOString().split("T")[0],
-    remise_pourcentage: 0,
-    statut: "impayée",
-    conducteur: bc.conducteur,
-    verrouillee: false,
-    devis_id: bc.devis_id,
-    intervention_id: null,
-    bon_commande_id: bcId,
-    chantier_id: null,
-    // Adresse
-    adresse: bc.adresse,
-    code_postal: bc.code_postal,
-    ville: bc.ville,
-    logement_statut: bc.logement_statut,
-    occupant: bc.occupant,
-    ...overrides,
-  };
-
-  return createFacture(societeId, facture);
-}
-
-// ============ UPDATE ============
-
-export async function updateFacture(
-  id: string,
-  updates: Partial<Omit<Facture, "id" | "created_at" | "societe_id">>
-): Promise<Facture> {
-  const { data, error } = await supabase
-    .from("factures")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to update facture", error.code, error);
-  }
-
-  return data;
-}
-
-export async function updateFactureStatut(
-  id: string,
-  statut: "impayée" | "envoyée" | "payée"
-): Promise<Facture> {
-  return updateFacture(id, { statut });
-}
-
-export async function lockFacture(id: string): Promise<Facture> {
-  return updateFacture(id, { verrouillee: true });
-}
-
-export async function unlockFacture(id: string): Promise<Facture> {
-  return updateFacture(id, { verrouillee: false });
-}
-
-// ============ DELETE ============
-
-export async function deleteFacture(id: string): Promise<void> {
+export async function getFactureComplete(id: Uuid): Promise<FactureComplete | null> {
   const facture = await getFacture(id);
-  if (!facture) {
-    throw new SupabaseError("Facture not found", "FACTURE_NOT_FOUND");
-  }
-
-  const { error } = await supabase.from("factures").delete().eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete facture", error.code, error);
-  }
+  if (!facture) return null;
+  return { ...facture, lignes: await listFactureLignes(id) };
 }
 
-// ============ RÉGLEMENTS ============
-
-export async function addReglement(
-  factureId: string,
-  montant: number,
-  mode: string,
-  date: string,
-  reference?: string
-): Promise<Reglement> {
-  const reglement: Omit<Reglement, "id" | "created_at"> = {
-    societe_id: (await getFacture(factureId))?.societe_id || "",
-    facture_id: factureId,
-    montant,
-    mode,
-    date,
-    reference,
-  };
-
-  const { data, error } = await supabase
-    .from("reglements")
-    .insert([reglement])
-    .select()
-    .single();
-
-  if (error) {
-    throw new SupabaseError("Failed to add reglement", error.code, error);
-  }
-
-  return data;
+export async function listFacturesCompletes(
+  societeId: Uuid
+): Promise<FactureComplete[]> {
+  const factures = await listFactures(societeId);
+  const lignes = await listByParents(
+    "facture_lignes",
+    "facture_id",
+    factures.map((f) => f.id)
+  );
+  return factures.map((f) => ({ ...f, lignes: lignes.get(f.id) ?? [] }));
 }
 
-export async function listReglements(factureId: string): Promise<Reglement[]> {
-  const { data, error } = await supabase
-    .from("reglements")
-    .select("*")
-    .eq("facture_id", factureId)
-    .order("date", { ascending: false });
-
-  if (error) {
-    throw new SupabaseError("Failed to list reglements", error.code, error);
-  }
-
-  return data || [];
-}
-
-export async function deleteReglement(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("reglements")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    throw new SupabaseError("Failed to delete reglement", error.code, error);
-  }
-}
-
-// ============ CALCULS ============
-
-export async function getFactureTotaux(factureId: string) {
+export async function getFactureTotaux(id: Uuid): Promise<FactureTotaux | null> {
   const { data, error } = await supabase
     .from("v_facture_totaux")
     .select("*")
-    .eq("id", factureId)
-    .single();
+    .eq("facture_id", id)
+    .maybeSingle();
 
-  if (error) {
-    throw new SupabaseError(
-      "Failed to fetch facture totaux",
-      error.code,
-      error
-    );
-  }
-
+  if (error) throw new SupabaseError("Failed to get totals", error.code, error);
   return data;
 }
 
-export async function getFactureSolde(factureId: string) {
+/** Solde, encaissé et retard, calculés en base. */
+export async function getFactureSolde(id: Uuid): Promise<FactureSolde | null> {
   const { data, error } = await supabase
     .from("v_facture_solde")
     .select("*")
-    .eq("id", factureId)
-    .single();
+    .eq("facture_id", id)
+    .maybeSingle();
 
-  if (error) {
-    throw new SupabaseError(
-      "Failed to fetch facture solde",
-      error.code,
-      error
-    );
+  if (error) throw new SupabaseError("Failed to get solde", error.code, error);
+  return data;
+}
+
+// ============ ÉCRITURE ============
+
+export async function createFacture(
+  societeId: Uuid,
+  input: NouvelleFacture,
+  lignes: LigneFactureInput[] = []
+): Promise<FactureComplete> {
+  const numero = input.numero ?? (await getNextNumero(societeId, "facture"));
+
+  const facture = await insertOne("factures", {
+    ...input,
+    societe_id: societeId,
+    numero,
+  });
+
+  return { ...facture, lignes: await replaceFactureLignes(facture.id, lignes) };
+}
+
+export function updateFacture(id: Uuid, updates: FactureUpdate) {
+  return updateOne("factures", id, updates);
+}
+
+export function updateFactureStatut(id: Uuid, statut: FactureStatut) {
+  return updateFacture(id, { statut });
+}
+
+export async function replaceFactureLignes(
+  factureId: Uuid,
+  lignes: LigneFactureInput[]
+) {
+  await removeByParent("facture_lignes", "facture_id", factureId);
+  if (!lignes.length) return [];
+
+  return insertMany(
+    "facture_lignes",
+    lignes.map((ligne, i) => ({
+      ...ligne,
+      facture_id: factureId,
+      position: ligne.position ?? i,
+    }))
+  );
+}
+
+/**
+ * Émission d'une facture brouillon.
+ *
+ * La pré-facture validée par l'administrateur produit un brouillon **sans
+ * numéro** : la secrétaire peut encore corriger l'adresse de facturation, le
+ * numéro de bon de commande ou les taux de TVA. Le numéro n'est attribué qu'ici,
+ * au moment de l'envoi — c'est ce qui évite de consommer une référence pour un
+ * document qui ne partira jamais.
+ */
+export async function emettreFacture(
+  id: Uuid,
+  corrections: FactureUpdate = {}
+): Promise<Facture> {
+  const facture = await getFacture(id);
+  if (!facture) throw new Error("Facture introuvable.");
+
+  if (facture.numero) {
+    throw new Error(`Facture déjà émise sous le numéro ${facture.numero}.`);
   }
 
-  return data;
+  const numero = await getNextNumero(facture.societe_id, "facture");
+
+  return updateFacture(id, {
+    ...corrections,
+    numero,
+    statut: "impayée",
+  });
+}
+
+export function deleteFacture(id: Uuid) {
+  return remove("factures", id);
+}
+
+// ============ DÉRIVATION ============
+
+/** Recopie l'en-tête et les lignes du devis dans une nouvelle facture. */
+export async function createFactureFromDevis(
+  societeId: Uuid,
+  devisId: Uuid,
+  overrides: Partial<NouvelleFacture> = {}
+): Promise<FactureComplete> {
+  const devis = await getDevisComplet(devisId);
+  if (!devis) throw new Error(`Devis ${devisId} introuvable`);
+
+  return createFacture(
+    societeId,
+    {
+      client_nom: devis.client_nom,
+      client_id: devis.client_id,
+      interlocuteur: devis.interlocuteur,
+      conducteur: devis.conducteur,
+      date: todayISO(),
+      remise_pourcentage: devis.remise_pourcentage,
+      devis_id: devisId,
+      intervention_id: devis.intervention_id,
+      chantier_id: devis.chantier_id,
+      adresse: devis.adresse,
+      code_postal: devis.code_postal,
+      ville: devis.ville,
+      etage: devis.etage,
+      numero_logement: devis.numero_logement,
+      logement_statut: devis.logement_statut,
+      occupant: devis.occupant,
+      precision_commune: devis.precision_commune,
+      ancien_locataire: devis.ancien_locataire,
+      adresse_locataire: devis.adresse_locataire,
+      ...overrides,
+    },
+    devis.lignes.map(({ id, cree_le, devis_id, ...ligne }) => ligne)
+  );
+}
+
+/** Recopie l'en-tête et les lignes du bon de commande dans une facture. */
+export async function createFactureFromBC(
+  societeId: Uuid,
+  bcId: Uuid,
+  overrides: Partial<NouvelleFacture> = {}
+): Promise<FactureComplete> {
+  const bc = await getBonCommandeComplet(bcId);
+  if (!bc) throw new Error(`Bon de commande ${bcId} introuvable`);
+
+  return createFacture(
+    societeId,
+    {
+      client_nom: bc.client_nom,
+      client_id: bc.client_id,
+      interlocuteur: bc.interlocuteur,
+      conducteur: bc.conducteur,
+      date: todayISO(),
+      bon_commande_id: bcId,
+      devis_id: bc.devis_id,
+      adresse: bc.adresse,
+      code_postal: bc.code_postal,
+      ville: bc.ville,
+      etage: bc.etage,
+      numero_logement: bc.numero_logement,
+      logement_statut: bc.logement_statut,
+      occupant: bc.occupant,
+      precision_commune: bc.precision_commune,
+      ancien_locataire: bc.ancien_locataire,
+      adresse_locataire: bc.adresse_locataire,
+      ...overrides,
+    },
+    bc.lignes.map(({ id, cree_le, bon_commande_id, ...ligne }) => ligne)
+  );
+}
+
+// ============ RÈGLEMENTS ============
+
+export function listReglements(societeId: Uuid) {
+  return listBySociete("reglements", societeId);
+}
+
+export function listReglementsFacture(factureId: Uuid) {
+  return listByParent("reglements", "facture_id", factureId, "date");
+}
+
+export function addReglement(
+  societeId: Uuid,
+  input: Omit<ReglementInsert, "societe_id">
+) {
+  return insertOne("reglements", { ...input, societe_id: societeId });
+}
+
+export function deleteReglement(id: Uuid) {
+  return remove("reglements", id);
 }
