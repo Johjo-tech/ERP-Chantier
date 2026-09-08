@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { actionsFacturation, actionsTache } from "@/integrations/session";
+import {
+  actionsFacturation,
+  actionsTache,
+  nomIntervenant,
+  prochainActeur,
+} from "@/integrations/session";
 import {
   MODULE_PAR_NAV,
   navAutorisee,
@@ -140,5 +145,36 @@ describe("Facturation", () => {
       expect(d.peutModifierPrefacture).toBe(false);
       expect(d.peutFacturer).toBe(false);
     }
+  });
+});
+
+describe("À qui le tour", () => {
+  // La question qu'on se pose en ouvrant une fiche : qui doit agir maintenant.
+  it.each([
+    ["planifiee", "le technicien"],
+    ["refusee", "le technicien, pour reprise"],
+    ["realisee", "le conducteur de travaux"],
+    ["validee", "l'administrateur, pour la pré-facture"],
+  ])("une tâche %s attend %s", (statut, attendu) => {
+    expect(prochainActeur(statut)).toBe(attendu);
+  });
+
+  it("traite une tâche sans statut comme planifiée", () => {
+    // Les lignes créées hors de l'application peuvent avoir un statut nul
+    expect(prochainActeur(null)).toBe("le technicien");
+  });
+});
+
+describe("Nom d'un intervenant", () => {
+  it("ne rend rien pour un auteur absent", () => {
+    expect(nomIntervenant(null)).toBe("");
+    expect(nomIntervenant(undefined)).toBe("");
+  });
+
+  it("reste lisible quand l'annuaire ne connaît pas l'identifiant", () => {
+    // Un membre retiré de la société laisse des tâches derrière lui
+    expect(nomIntervenant("00000000-0000-0000-0000-000000000000")).toBe(
+      "un utilisateur"
+    );
   });
 });

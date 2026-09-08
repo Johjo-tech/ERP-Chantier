@@ -12,6 +12,7 @@ import { getCurrentSession } from "./api/client";
 import { injectGlobalFunctions, viderCache } from "./integrations/html-adapter";
 import { protectRoute, watchAuthState } from "./integrations/auth-guard";
 import {
+  chargerIntervenants,
   chargerSession,
   injecterSession,
   roleReel,
@@ -40,6 +41,8 @@ async function init() {
     console.log("📝 Connecté :", session?.user.email);
 
     const societes = await chargerSession();
+  // Noms des intervenants : l'écran de validation en a besoin dès l'ouverture
+  await chargerIntervenants();
     if (!societes.length) {
       throw new Error(
         "Ce compte n'est rattaché à aucune société. Demandez une invitation à un administrateur."

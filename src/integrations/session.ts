@@ -220,6 +220,48 @@ export function actionsTache(
   };
 }
 
+/**
+ * Annuaire des intervenants de la société active, indexé par identifiant.
+ *
+ * Chargé une fois : l'écran de validation le consulte pour chaque tâche, et
+ * une requête par tâche serait absurde.
+ */
+let annuaire: Map<Uuid, { nom: string; role: RoleMembre | null }> | null = null;
+
+export async function chargerIntervenants(): Promise<void> {
+  const societe = societeActive();
+  if (!societe) return;
+  try {
+    const liste = await queries.listIntervenants(societe.uuid);
+    annuaire = new Map(liste.map((i) => [i.id, { nom: i.nom, role: i.role }]));
+  } catch (err) {
+    console.error("Annuaire des intervenants indisponible", err);
+    annuaire = new Map();
+  }
+}
+
+/** Nom lisible d'un intervenant ; son identifiant ne dit rien à personne. */
+export function nomIntervenant(id: string | null | undefined): string {
+  if (!id) return "";
+  return annuaire?.get(id as Uuid)?.nom ?? "un utilisateur";
+}
+
+/** Qui doit agir à cette étape, en clair. */
+export function prochainActeur(statut: string | null): string {
+  switch (statut ?? "planifiee") {
+    case "planifiee":
+      return "le technicien";
+    case "refusee":
+      return "le technicien, pour reprise";
+    case "realisee":
+      return "le conducteur de travaux";
+    case "validee":
+      return "l'administrateur, pour la pré-facture";
+    default:
+      return "";
+  }
+}
+
 export interface ActionsFacturation {
   /** Chiffrer les travaux supplémentaires et valider la pré-facture. */
   peutValiderPrefacture: boolean;
@@ -268,6 +310,9 @@ export function injecterSession() {
   w.tacheDuBonCommande = tacheDuBonCommande;
   w.actionsTache = actionsTache;
   w.actionsFacturation = actionsFacturation;
+  w.chargerIntervenants = chargerIntervenants;
+  w.nomIntervenant = nomIntervenant;
+  w.prochainActeur = prochainActeur;
   w.validerPrefacture = queries.validerPrefacture;
   w.emettreFacture = queries.emettreFacture;
   w.sauvegarderTerrain = queries.sauvegarderTerrain;
