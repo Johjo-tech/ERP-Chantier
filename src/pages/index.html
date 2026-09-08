@@ -214,6 +214,15 @@ body.sidebar-collapsed #content, body.sidebar-collapsed #content.content-wide{ m
 .planning-unschedule{position:absolute; top:2px; right:2px; background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:13px; padding:2px 4px; line-height:1; z-index:2;}
 .planning-shift-left{position:absolute; left:2px; bottom:2px; background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text-dim); cursor:pointer; font-size:12px; padding:1px 5px; line-height:1.4; z-index:3;}
 .planning-shift-left:hover{background:var(--accent); color:#fff; border-color:var(--accent);}
+.planning-etape{
+  display:inline-block; font-size:9.5px; font-weight:800; letter-spacing:.02em;
+  padding:1px 7px; border-radius:999px; margin-top:3px; border:1px solid transparent;
+}
+.planning-etape-terrain{ background:#FDE7E9; color:#B4232F; border-color:#F6BCC2; }
+.planning-etape-conducteur{ background:#E3EEFB; color:#1C5FA8; border-color:#B9D3F0; }
+.planning-etape-directeur{ background:#FFEDE0; color:#B85C00; border-color:#F5CBA8; }
+.planning-etape-aFacturer,
+.planning-etape-facture{ background:#E1F5EC; color:#0F7548; border-color:#B3E2C9; }
 .planning-card-fait{ opacity:.55; filter:grayscale(.6); }
 .planning-card-fait:hover{ opacity:.85; }
 .planning-piece-badge{ font-size:12px; margin-left:4px; }
@@ -4658,7 +4667,12 @@ function bonCommandeCardHTML(b, workflowCtx){
       </div>`:''}
       </div>
       ${b.logementStatut? `<div style="flex:0 0 auto; align-self:center; text-align:center; padding:0 6px;">${logementBadge(b.logementStatut)}</div>`:''}
-      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(b.montant)}</div><span class="badge ${badgeClass(b.statut)}" style="margin-top:5px;display:inline-block;">${esc(b.statut)}</span></div>
+      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(b.montant)}</div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:5px;">
+          ${isSAV? '' : badgeWorkflow(b)}
+          <span class="badge ${badgeClass(b.statut)}">${esc(b.statut)}</span>
+        </div>
+      </div>
     </div>
     ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
     ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
@@ -4805,6 +4819,28 @@ function bcInterventionFaite(b){
   const datesOk = dates.length===0 || datesFaitReel;
   return metiersOk && datesOk && (metiersFaitReel || datesFaitReel);
 }
+/* ---------- Étape du circuit, en un coup d'œil ----------
+   Le stepper détaillé ne s'affiche que dans les écrans de validation. Sur la
+   liste et sur le planning, une pastille suffit à dire à qui c'est le tour —
+   c'est ce qu'on cherche en balayant du regard. */
+function etapeWorkflow(b){
+  const bcId = b.bcId || b.id;
+  if(state.factures.some(f=>f.bonCommandeId===bcId))
+    return { cle:'facture', label:'Facturé', court:'Facturé', cls:'success' };
+  if(b.valideDirecteur)
+    return { cle:'aFacturer', label:'À facturer', court:'À facturer', cls:'success' };
+  if(b.valideConducteur)
+    return { cle:'directeur', label:'À valider — directeur', court:'Directeur', cls:'warn' };
+  if(bcTachesTerminees(b))
+    return { cle:'conducteur', label:'À valider — conducteur', court:'Conducteur', cls:'info' };
+  return { cle:'terrain', label:'Travaux à pointer', court:'À pointer', cls:'danger' };
+}
+
+function badgeWorkflow(b){
+  const e = etapeWorkflow(b);
+  return `<span class="badge ${e.cls}" title="Étape du circuit de validation">${esc(e.label)}</span>`;
+}
+
 function bcWorkflowStepperHTML(b, ctx){
   const etape1 = bcTachesTerminees(b);
   const etape2 = !!b.valideConducteur;
@@ -5394,6 +5430,8 @@ function planningItems(){
       const id = metierKey ? `${b.id}::${metierKey}` : b.id;
       items.push({
         kind:'bonCommande', id, metierKey, isSAV: !!b.bonCommandeId,
+        // `id` est composite sur un bon multi-métier : l'étape se lit sur le bon
+        bcId: b.id,
         client:b.client, numero: metierKey? `${b.numeroBC} (${metierDisplayLabel(metierKey)})` : b.numeroBC,
         conducteur:b.conducteur, interlocuteur:b.interlocuteur,
         pieceJointeNom:b.pieceJointeNom, pieceJointeData:b.pieceJointeData, problemeDescription:b.problemeDescription,
@@ -5402,6 +5440,8 @@ function planningItems(){
         technicien: schedField(b, metierKey, 'technicien'),
         sousTraitant: schedField(b, metierKey, 'sousTraitant'),
         metier: effectiveMetier, metiers: b.metiers, metiersFait: b.metiersFait, dateOrigineFait: b.dateOrigineFait,
+        // La vignette affiche l'étape du circuit : elle a besoin des validations
+        valideConducteur: b.valideConducteur, valideDirecteur: b.valideDirecteur,
         pieceACommander: b.pieceACommander, pieceACommanderDetail: b.pieceACommanderDetail, montantSousTraitant: b.montantSousTraitant,
         datePlanificationInitiale: b.datePlanificationInitiale,
         dateInterventionTerminee: b.dateInterventionTerminee,
@@ -6005,6 +6045,7 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
     <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
     ${planningContactZoneHTML(b)}
     <div class="planning-card-sub">${esc(b.numero)}</div>
+    ${b.isSAV? '' : `<div class="planning-etape planning-etape-${etapeWorkflow(b).cle}" title="${esc(etapeWorkflow(b).label)}">${esc(etapeWorkflow(b).court)}</div>`}
     ${b.interlocuteur? `<div class="planning-card-sub">👤 ${esc(b.interlocuteur)}</div>`:''}
     ${(b.conducteur || b.metier)? `<div class="planning-card-sub">${b.conducteur? '🦺 '+esc(b.conducteur):''}${b.conducteur && b.metier? ' · ':''}${b.metier? '🔧 '+esc(metierDisplayLabel(b.metier)):''}</div>`:''}
     ${b.adresse? `<div class="planning-card-sub">📍 ${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>`:''}
@@ -6100,6 +6141,7 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
     ${planningContactZoneHTML(b)}
     <div class="planning-card-sub">${esc(b.numero)}</div>
+    ${b.isSAV? '' : `<div class="planning-etape planning-etape-${etapeWorkflow(b).cle}" title="${esc(etapeWorkflow(b).label)}">${esc(etapeWorkflow(b).court)}</div>`}
     ${b.interlocuteur? `<div class="planning-card-sub">👤 ${esc(b.interlocuteur)}</div>`:''}
     ${(b.conducteur || b.metier)? `<div class="planning-card-sub">${b.conducteur? '🦺 '+esc(b.conducteur):''}${b.conducteur && b.metier? ' · ':''}${b.metier? '🔧 '+esc(metierDisplayLabel(b.metier)):''}</div>`:''}
     ${b.adresse? `<div class="planning-card-sub">📍 ${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>`:''}
