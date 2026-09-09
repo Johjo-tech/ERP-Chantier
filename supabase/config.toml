@@ -414,3 +414,17 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# --- Fonctions edge ---------------------------------------------------------
+#
+# `extraire-bc` lit un bon de commande scanné via Gemini. Elle tourne en
+# production depuis le 2026-05, mais son code ne vivait que sur les serveurs
+# Supabase : il n'était versionné nulle part. Récupéré le 2026-09-09 par
+# `supabase functions download`.
+#
+# Elle est déployée avec `verify_jwt = false`, alors que son propre en-tête
+# affirme le contraire. N'importe qui connaissant l'URL consomme donc le quota
+# Gemini du projet. La déclaration ci-dessous ferme la porte au prochain
+# déploiement.
+[functions.extraire-bc]
+verify_jwt = true
