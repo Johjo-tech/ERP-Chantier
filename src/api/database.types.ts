@@ -3969,6 +3969,52 @@ export type Database = {
           },
         ]
       }
+      tache_intervenants: {
+        Row: {
+          cree_le: string
+          id: string
+          profile_id: string
+          societe_id: string
+          tache_id: string
+        }
+        Insert: {
+          cree_le?: string
+          id?: string
+          profile_id: string
+          societe_id: string
+          tache_id: string
+        }
+        Update: {
+          cree_le?: string
+          id?: string
+          profile_id?: string
+          societe_id?: string
+          tache_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tache_intervenants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tache_intervenants_societe_id_fkey"
+            columns: ["societe_id"]
+            isOneToOne: false
+            referencedRelation: "societes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tache_intervenants_tache_id_fkey"
+            columns: ["tache_id"]
+            isOneToOne: false
+            referencedRelation: "planning_taches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tache_travaux_supplementaires: {
         Row: {
           bon_commande_id: string
@@ -5087,6 +5133,7 @@ export type Database = {
         Args: { p_chantier_id: string }
         Returns: boolean
       }
+      est_de_l_equipe: { Args: { p_tache_id: string }; Returns: boolean }
       est_membre: { Args: { p_societe: string }; Returns: boolean }
       mes_societes: { Args: never; Returns: string[] }
       mon_role: {
@@ -5104,6 +5151,7 @@ export type Database = {
       }
       rls_table_racine: { Args: { p_table: string }; Returns: undefined }
       role_dans_societe: { Args: { p_societe_id: string }; Returns: string }
+      tache_a_une_equipe: { Args: { p_tache_id: string }; Returns: boolean }
       tache_marquer_realisee: {
         Args: {
           p_commentaire?: string
@@ -5345,3 +5393,4 @@ export const Constants = {
     },
   },
 } as const
+

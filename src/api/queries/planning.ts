@@ -76,6 +76,53 @@ export async function listTachesTechnicien(
   return data ?? [];
 }
 
+/**
+ * Équipe affectée à une tâche.
+ *
+ * Une tâche est confiée à plusieurs personnes, et il suffit qu'une d'entre
+ * elles la déclare faite : on ne demande pas à toute l'équipe de se prononcer.
+ * C'est ce que la base vérifie dans `tache_marquer_realisee`.
+ */
+export async function listEquipeTache(tacheId: Uuid): Promise<
+  { profileId: Uuid; nom: string | null }[]
+> {
+  const { data, error } = await supabase
+    .from("tache_intervenants")
+    .select("profile_id, profiles(nom)")
+    .eq("tache_id", tacheId);
+
+  if (error) throw new SupabaseError("Équipe indisponible", error.code, error);
+  return (data ?? []).map((l) => ({
+    profileId: l.profile_id as Uuid,
+    nom: (l.profiles as { nom: string | null } | null)?.nom ?? null,
+  }));
+}
+
+/** Affecte quelqu'un à une tâche. Réservé à l'encadrement par la RLS. */
+export async function affecterATache(
+  societeId: Uuid,
+  tacheId: Uuid,
+  profileId: Uuid
+): Promise<void> {
+  const { error } = await supabase
+    .from("tache_intervenants")
+    .upsert(
+      { societe_id: societeId, tache_id: tacheId, profile_id: profileId },
+      { onConflict: "tache_id,profile_id" }
+    );
+  if (error) throw new SupabaseError("Affectation refusée", error.code, error);
+}
+
+/** Retire quelqu'un de l'équipe d'une tâche. */
+export async function retirerDeTache(tacheId: Uuid, profileId: Uuid): Promise<void> {
+  const { error } = await supabase
+    .from("tache_intervenants")
+    .delete()
+    .eq("tache_id", tacheId)
+    .eq("profile_id", profileId);
+  if (error) throw new SupabaseError("Retrait refusé", error.code, error);
+}
+
 /** Tâches en attente d'arbitrage du conducteur. */
 export async function listTachesAValider(societeId: Uuid): Promise<PlanningTache[]> {
   const { data, error } = await supabase

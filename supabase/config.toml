@@ -67,8 +67,10 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-# Les données réelles du projet distant, jamais versionnées (voir .gitignore).
-sql_paths = ["./data-cloud.sql"]
+# Les données réelles du projet distant, jamais versionnées (voir .gitignore),
+# puis les comptes de rôle des tests, eux versionnés — un test qui dépend d'un
+# compte fabriqué à la main n'est pas reproductible.
+sql_paths = ["./data-cloud.sql", "./seed-tests.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

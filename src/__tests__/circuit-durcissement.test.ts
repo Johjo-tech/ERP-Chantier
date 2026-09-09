@@ -148,11 +148,16 @@ suite("Durcissement du circuit", () => {
       }
     }
 
+    /* Appel direct de la fonction : `passerPretAChiffrer` refuse d'abord côté
+       client, et c'est son message qu'on lirait. Ici on veut savoir ce que la
+       base répond quand on la sollicite sans passer par ce filet. */
     it("refuse un bon déjà facturé", async () => {
       if (!bcFactureId) return;
-      expect(await motifDuRefus(queries.passerPretAChiffrer(bcFactureId))).toMatch(
-        /Transition interdite/i
-      );
+      const { error } = await supabase.rpc("bc_passer_pret_a_chiffrer", {
+        p_bc_id: bcFactureId,
+      });
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/Transition interdite/i);
     });
 
     it("refuse un bon sans aucune tâche", async () => {
