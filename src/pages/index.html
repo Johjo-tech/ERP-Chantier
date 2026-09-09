@@ -1034,6 +1034,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   body{background:#fff; color:#182233;}
 }
 #printArea.is-landscape{ width:297mm; }
+/* html2canvas mesure le cadre de capture sur la position d'origine de la zone,
+   mais rend son clone après recalcul de la mise en page. Le `translateX(-50%)`
+   qui la centre à l'écran décale donc les deux d'une demi-page : la capture
+   commence au milieu du document et toute la colonne de gauche — désignation,
+   émetteur, début des mentions — est rognée. Le temps de la capture, la zone
+   est posée à plat en haut à gauche. */
+#printArea.is-capturing{ left:0; transform:none; }
 .p-print-grid{ width:100%; border-collapse:collapse; table-layout:fixed; }
 .p-print-grid th, .p-print-grid td{ border:1px solid #C7CDD6; vertical-align:top; padding:2mm; }
 .p-print-grid th{ background:#182233; color:#fff; font-size:9pt; text-transform:uppercase; letter-spacing:.3px; padding:2.5mm 2mm; }
@@ -3368,6 +3375,44 @@ function renderPrintIntervention(it){
     <div class="p-footer">${esc(socName)}${s.siret? ' — SIRET '+esc(s.siret):''}${s.adresse? ' — '+esc(s.adresse):''}</div>
   `;
 }
+/**
+ * Fabrique le PDF de la zone d'impression et le remet à l'utilisateur.
+ *
+ * `save` télécharge sous le nom du document. `open` ouvre un aperçu par URL
+ * blob : le visionneur du navigateur n'y lit aucun nom de fichier et propose
+ * l'UUID du blob à l'enregistrement — c'est de là que venaient les
+ * « c6ca4058-….pdf » dans les téléchargements. Un nom correct suppose donc un
+ * vrai téléchargement, jamais un aperçu.
+ */
+function lancerGenerationPdf(area, nomFichier, action){
+  const hauteur = Math.max(area.scrollHeight, area.offsetHeight);
+  const largeur = Math.max(area.scrollWidth, area.offsetWidth);
+  const opt = {
+    margin: 0,
+    filename: `${nomFichier}.pdf`,
+    image: { type:'jpeg', quality:0.98 },
+    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, scrollX:0, scrollY:0, height: hauteur, windowHeight: hauteur, width: largeur, windowWidth: largeur },
+    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+    pagebreak: { mode: ['css','legacy'] }
+  };
+  const terminer = () => { area.classList.remove('is-capturing'); area.style.display = 'none'; };
+  const echouer = (err, message) => { terminer(); console.error('PDF generation error', err); showToast(message); };
+
+  area.classList.add('is-capturing');
+  // Laisser un cycle de rendu au navigateur avant la capture (sinon page blanche)
+  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
+    if(action === 'save'){
+      html2pdf().set(opt).from(area).save().then(terminer).catch((err)=>
+        echouer(err, "Impossible d'enregistrer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page."));
+      return;
+    }
+    html2pdf().set(opt).from(area).toPdf().output('bloburl').then((url)=>{
+      terminer();
+      window.open(url, '_blank');
+    }).catch((err)=>
+      echouer(err, "Impossible de générer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page."));
+  }); });
+}
 function generateInterventionPdf(it, action){
   action = action || 'open';
   const area = document.getElementById('printArea');
@@ -3379,36 +3424,7 @@ function generateInterventionPdf(it, action){
   area.innerHTML = renderPrintIntervention(it);
   area.style.display = 'block';
   showToast(action==='save' ? 'Enregistrement du PDF…' : 'Génération du PDF…', 'success');
-  const fullHeight = Math.max(area.scrollHeight, area.offsetHeight);
-  const fullWidth = Math.max(area.scrollWidth, area.offsetWidth);
-  const opt = {
-    margin: 0,
-    filename: `${it.numero || 'rapport'}.pdf`,
-    image: { type:'jpeg', quality:0.98 },
-    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, height: fullHeight, windowHeight: fullHeight, width: fullWidth, windowWidth: fullWidth },
-    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-    pagebreak: { mode: ['css','legacy'] }
-  };
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-    if(action === 'save'){
-      html2pdf().set(opt).from(area).save().then(()=>{
-        area.style.display = 'none';
-      }).catch((err)=>{
-        area.style.display = 'none';
-        console.error('PDF generation error', err);
-        showToast("Impossible d'enregistrer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-      });
-      return;
-    }
-    html2pdf().set(opt).from(area).toPdf().output('bloburl').then((url)=>{
-      area.style.display = 'none';
-      window.open(url, '_blank');
-    }).catch((err)=>{
-      area.style.display = 'none';
-      console.error('PDF generation error', err);
-      showToast("Impossible de générer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-    });
-  }); });
+  lancerGenerationPdf(area, it.numero || 'rapport', action);
 }
 function printInterventionDocument(id, action){
   const it = state.interventions.find(x=>x.id===id);
@@ -3589,37 +3605,7 @@ function printDocument(type, id, action){
   area.innerHTML = renderPrintDoc(type, id);
   area.style.display = 'block';
   showToast(action==='save' ? 'Enregistrement du PDF…' : 'Génération du PDF…', 'success');
-  const fullHeight = Math.max(area.scrollHeight, area.offsetHeight);
-  const fullWidth = Math.max(area.scrollWidth, area.offsetWidth);
-  const opt = {
-    margin: 0,
-    filename: `${doc.numero || NOM_FICHIER_DEFAUT[type] || 'document'}.pdf`,
-    image: { type:'jpeg', quality:0.98 },
-    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, height: fullHeight, windowHeight: fullHeight, width: fullWidth, windowWidth: fullWidth },
-    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-    pagebreak: { mode: ['css','legacy'] }
-  };
-  // Laisser un cycle de rendu au navigateur avant la capture (sinon page blanche)
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-    if(action === 'save'){
-      html2pdf().set(opt).from(area).save().then(()=>{
-        area.style.display = 'none';
-      }).catch((err)=>{
-        area.style.display = 'none';
-        console.error('PDF generation error', err);
-        showToast("Impossible d'enregistrer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-      });
-      return;
-    }
-    html2pdf().set(opt).from(area).toPdf().output('bloburl').then((url)=>{
-      area.style.display = 'none';
-      window.open(url, '_blank');
-    }).catch((err)=>{
-      area.style.display = 'none';
-      console.error('PDF generation error', err);
-      showToast("Impossible de générer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-    });
-  }); });
+  lancerGenerationPdf(area, doc.numero || NOM_FICHIER_DEFAUT[type] || 'document', action);
 }
 
 /* ---------- Devis ---------- */
@@ -3731,7 +3717,7 @@ function renderDevisListHTML(list){
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('devis','${d.id}')">Modifier</button>
       <button class="btn small" onclick="dupliquerDevis('${d.id}')">Dupliquer</button>
-      <button class="btn small" onclick="printDocument('devis','${d.id}')">Imprimer / PDF</button>
+      <button class="btn small" onclick="printDocument('devis','${d.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('devis','${d.id}')">Envoyer par email</button>
       ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerEnFacture('${d.id}')">Transformer en facture</button>`}
       ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${d.id}')">Créer un bon de commande</button>`}
@@ -4567,7 +4553,7 @@ function factureSTCardHTML(f){
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ttc)}</div><span class="badge ${badgeClass(f.statut)}" style="margin-top:5px; display:inline-block;">${esc(f.statut)}</span></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="printDocument('facture','${f.id}','print')">Imprimer / PDF</button>
+      <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       ${f.statut==='impayée'? `<button class="btn small" onclick="marquerFactureSTPayee('${f.id}')">✓ Marquer payée</button>`:''}
     </div>
   </div>`;
@@ -4632,7 +4618,7 @@ function renderFacturesListHTML(list){
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
       <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
-      <button class="btn small" onclick="printDocument('facture','${f.id}')">Imprimer / PDF</button>
+      <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
     </div></div>`;
@@ -10326,7 +10312,7 @@ function chantierFacturesHTML(c){
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
         <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${f.id}')">🧾 ${esc(f.numero)} — ${moneyDisplay(t.ttc)} TTC</a>
         <span class="badge ${f.statut==='payée'?'success':f.statut==='impayée'?'danger':'info'}">${esc(f.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('facture','${f.id}')">Imprimer / PDF</button>
+        <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
         <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       </div>`;
     }).join('') : '<div class="empty">Aucune facture pour l\'instant.</div>'}
@@ -10353,7 +10339,7 @@ function chantierDevisComplHTML(c){
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
         <a href="javascript:void(0)" onclick="ouvrirDevisDepuisChantier('${d.id}')">📄 ${esc(d.numero)} — ${moneyDisplay(t.ht)} HT</a>
         <span class="badge ${d.statut==='accepté'?'success':d.statut==='refusé'?'danger':'info'}">${esc(d.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('devis','${d.id}')">Imprimer / PDF</button>
+        <button class="btn small" onclick="printDocument('devis','${d.id}','save')">Imprimer / PDF</button>
         <button class="btn small" onclick="envoyerDocumentEmail('devis','${d.id}')">Envoyer par email</button>
       </div>`;
     }).join('') : ''}
