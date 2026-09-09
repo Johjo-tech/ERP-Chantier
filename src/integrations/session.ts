@@ -70,7 +70,7 @@ import {
   comptesRendusTerrain,
   lignesDocumentDirecteur,
 } from "./prefacture";
-import { enrichirFactureX } from "./facturx-pont";
+import { enrichirFactureX, etatConnexionPdp, transmettre } from "./facturx-pont";
 import { estRoleConnu, navAutorisee, peutSurNav, voitLesPrix } from "./permissions";
 import type { Action, ModuleId } from "./permissions";
 import { peut } from "./permissions";
@@ -351,6 +351,8 @@ export function injecterSession() {
   w.prochainActeur = prochainActeur;
   w.validerPrefacture = queries.validerPrefacture;
   w.pdfFacturX = enrichirFactureX;
+  w.transmettreFacture = transmettre;
+  w.etatConnexionPdp = etatConnexionPdp;
   w.validerChiffrage = queries.validerChiffrage;
   w.validerAffaireConducteur = queries.validerAffaireConducteur;
   w.emettreFacture = queries.emettreFacture;

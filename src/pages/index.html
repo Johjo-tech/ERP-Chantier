@@ -3918,6 +3918,32 @@ function dupliquerDevis(devisId){
   });
   showToast('Devis dupliqué — modifiez-le puis enregistrez pour créer un nouveau devis.', 'success');
 }
+/**
+ * Dépose la facture sur la plateforme de dématérialisation.
+ *
+ * Le geste reste manuel : une facture transmise ne se rattrape pas, il faut
+ * émettre un avoir. On demande donc confirmation, et on montre ce qui bloque
+ * plutôt que d'échouer sans dire pourquoi.
+ */
+async function transmettreALaPlateforme(factureId){
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+  if(f.pdpIdentifiant){
+    showToast(`Déjà déposée sur la plateforme (${f.pdpIdentifiant}).`);
+    return;
+  }
+  if(!window.transmettreFacture){
+    showToast("La transmission n'est pas disponible.");
+    return;
+  }
+  if(!confirm(`Déposer la facture ${f.numero} sur la plateforme ?\n\nUne facture transmise ne peut plus être modifiée : il faudrait émettre un avoir.`)) return;
+
+  showToast('Transmission en cours…');
+  const r = await window.transmettreFacture(factureId);
+  showToast(r.message, r.depose ? 'success' : undefined);
+  if(r.depose){ await loadAll(); renderTab(); }
+}
+
 function dupliquerFacture(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
@@ -4683,6 +4709,7 @@ function renderFacturesListHTML(list){
       <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
+      ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
       <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
     </div></div>`;
   }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';

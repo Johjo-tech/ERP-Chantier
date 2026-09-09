@@ -14,6 +14,7 @@
 
 import { supabase, SupabaseError } from "../client";
 import { completerAdresse } from "../regles-adresse";
+import { versCII } from "../regles-cii";
 import * as queries from "../queries";
 import { calculerSoldeFacture } from "./workflows";
 import {
@@ -195,5 +196,57 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
       titulaire: emetteur.nom,
     }),
     manques: manquesPourEmettre(donnees, emetteur, destinataire, lignesEN),
+  };
+}
+
+/**
+ * Transmet une facture à la plateforme.
+ *
+ * Le document est fabriqué ici — charge EN 16931 puis CII — parce que ces
+ * règles sont écrites et testées dans ce dépôt. La fonction edge ne fait que
+ * transmettre, et elle recontrôle numéro et total contre la base avant
+ * d'envoyer : ce qui est vérifié dans un navigateur ne prouve rien.
+ *
+ * Rien ne part si quelque chose manque. Une facture rejetée par la plateforme
+ * porte déjà un numéro : il vaut mieux la retenir que devoir l'annuler.
+ */
+export async function transmettreFacture(
+  factureId: Uuid
+): Promise<{ depose: boolean; identifiant?: string; manques: ManqueEN16931[] }> {
+  const { charge, manques } = await preparerEmission(factureId);
+  if (manques.length) return { depose: false, manques };
+
+  const { data, error } = await supabase.functions.invoke<{
+    depose?: boolean;
+    identifiant?: string;
+    error?: string;
+  }>("pdp-emit-invoice", {
+    body: { facture_id: factureId, xml: versCII(charge) },
+  });
+
+  if (error) throw new Error(`Transmission refusée : ${error.message}`);
+  if (data?.error) throw new Error(data.error);
+
+  return { depose: !!data?.depose, identifiant: data?.identifiant, manques: [] };
+}
+
+/** L'état de la connexion à la plateforme, sans jamais toucher aux jetons. */
+export async function etatPlateforme(societeId: Uuid): Promise<{
+  connectee: boolean;
+  etat: string;
+  message: string | null;
+  environnement: string;
+}> {
+  const { data } = await supabase
+    .from("pdp_connexions")
+    .select("etat, message, environnement")
+    .eq("societe_id", societeId)
+    .maybeSingle();
+
+  return {
+    connectee: data?.etat === "connecte",
+    etat: data?.etat ?? "non_connecte",
+    message: data?.message ?? null,
+    environnement: data?.environnement ?? "sandbox",
   };
 }

@@ -12,7 +12,7 @@
  * téléchargement pour un champ manquant serait pire que le manque.
  */
 
-import { preparerEmission } from "@/api/operations/efacture";
+import { etatPlateforme, preparerEmission, transmettreFacture } from "@/api/operations/efacture";
 import { versCII } from "@/api/regles-cii";
 import type { Uuid } from "@/api/types";
 import { pdfFacturX } from "./facturx";
@@ -56,4 +56,36 @@ export async function enrichirFactureX(
       manques: [err instanceof Error ? err.message : "erreur inconnue"],
     };
   }
+}
+
+/**
+ * Transmet la facture, et rend un message prêt à afficher.
+ *
+ * L'écran n'a pas à connaître les codes de la norme : un manque `BT-49` ne dit
+ * rien à qui doit corriger une fiche client. On rend la phrase.
+ */
+export async function transmettre(factureId: Uuid): Promise<{
+  depose: boolean;
+  message: string;
+}> {
+  try {
+    const { depose, identifiant, manques } = await transmettreFacture(factureId);
+    if (depose) {
+      return { depose: true, message: `Facture déposée sur la plateforme (${identifiant}).` };
+    }
+    return {
+      depose: false,
+      message: `Transmission impossible : ${manques.map((m) => m.libelle).join(" ")}`,
+    };
+  } catch (err) {
+    return {
+      depose: false,
+      message: err instanceof Error ? err.message : "Transmission impossible.",
+    };
+  }
+}
+
+/** Ce que l'écran peut dire de la connexion, sans jamais voir un jeton. */
+export async function etatConnexionPdp(societeId: Uuid) {
+  return etatPlateforme(societeId);
 }
