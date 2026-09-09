@@ -103,3 +103,8 @@ begin
         actif         = excluded.actif;
 end;
 $$;
+
+/* Les migrations s'exécutent avant le chargement de la copie : la réparation
+   des adresses passerait sur une base vide. On la rejoue ici, une fois les
+   données en place, pour que le local reflète l'état du distant. */
+select * from public.reparer_adresses();

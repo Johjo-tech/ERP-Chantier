@@ -13,6 +13,7 @@
  */
 
 import { supabase, SupabaseError } from "../client";
+import { completerAdresse } from "../regles-adresse";
 import * as queries from "../queries";
 import { calculerSoldeFacture } from "./workflows";
 import {
@@ -83,14 +84,25 @@ function versDestinataire(
     adresse_electronique_valeur: string | null; reference_acheteur: string | null;
   } | null
 ): EntiteEN16931 {
+  /* BT-50 / BT-52 / BT-53 : la voie, la commune et le code postal se
+     transmettent séparément. Les clients repris de l'ancien magasin portent
+     tout dans un seul champ — on complète ce qui manque sans jamais remplacer
+     ce qui est saisi. */
+  const adresse = completerAdresse({
+    adresse: facture.facturation_adresse ?? facture.adresse ?? client?.adresse ?? null,
+    codePostal:
+      facture.facturation_code_postal ?? facture.code_postal ?? client?.code_postal ?? null,
+    ville: facture.facturation_ville ?? facture.ville ?? client?.ville ?? null,
+  });
+
   return {
     nom: facture.client_nom ?? client?.nom ?? null,
     siren: facture.client_siren ?? client?.siren ?? null,
     siret: facture.client_siret ?? client?.siret ?? null,
     tvaIntracom: facture.client_tva_intracom ?? client?.tva_intracom ?? null,
-    adresse: facture.facturation_adresse ?? facture.adresse ?? client?.adresse ?? null,
-    codePostal: facture.facturation_code_postal ?? facture.code_postal ?? client?.code_postal ?? null,
-    ville: facture.facturation_ville ?? facture.ville ?? client?.ville ?? null,
+    adresse: adresse.rue,
+    codePostal: adresse.codePostal,
+    ville: adresse.ville,
     paysCode: facture.facturation_pays_code ?? facture.client_pays_code ?? client?.pays_code ?? null,
     adresseElectroniqueSchema: client?.adresse_electronique_schema ?? null,
     adresseElectroniqueValeur: client?.adresse_electronique_valeur ?? null,
