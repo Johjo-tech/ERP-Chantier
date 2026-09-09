@@ -70,13 +70,36 @@ begin
     )
     on conflict do nothing;
 
-    insert into public.profiles (id, nom)
-    values ((v_compte->>'id')::uuid, v_compte->>'nom')
-    on conflict (id) do update set nom = excluded.nom;
+    -- L'email est ce que l'écran affiche pour désigner un compte : sans lui, la
+    -- liste de rattachement d'un salarié montrerait des lignes vides.
+    insert into public.profiles (id, nom, email)
+    values ((v_compte->>'id')::uuid, v_compte->>'nom', v_compte->>'email')
+    on conflict (id) do update set nom = excluded.nom, email = excluded.email;
 
     insert into public.membres_societe (profile_id, societe_id, role, actif)
     values ((v_compte->>'id')::uuid, v_societe, (v_compte->>'role')::role_membre, true)
     on conflict do nothing;
   end loop;
+
+  /* Une équipe, et les salariés qui la composent.
+     C'est la chaîne que la garde emprunte : compte → salarié → équipe → tâche.
+     A en fait partie, B non — c'est ce qui rend le refus vérifiable. Le salarié
+     sans compte est là pour prouver qu'il ne casse rien. */
+  insert into public.techniciens (id, societe_id, nom, metier, metiers)
+  values ('66666666-6666-6666-6666-666666666666', v_societe, 'Équipe de test', 'PEINTURE', array['PEINTURE'])
+  on conflict (id) do update set nom = excluded.nom;
+
+  insert into public.salaries (id, societe_id, nom, prenom, poste, profile_id, technicien_id, actif)
+  values
+    ('77777777-7777-7777-7777-777777777777', v_societe, 'A', 'Technicien', 'Peintre',
+     '11111111-1111-1111-1111-111111111111', '66666666-6666-6666-6666-666666666666', true),
+    ('88888888-8888-8888-8888-888888888888', v_societe, 'B', 'Technicien', 'Peintre',
+     '44444444-4444-4444-4444-444444444444', null, true),
+    ('99999999-9999-9999-9999-999999999999', v_societe, 'Sans compte', 'Salarié', 'Peintre',
+     null, '66666666-6666-6666-6666-666666666666', true)
+  on conflict (id) do update
+    set profile_id    = excluded.profile_id,
+        technicien_id = excluded.technicien_id,
+        actif         = excluded.actif;
 end;
 $$;

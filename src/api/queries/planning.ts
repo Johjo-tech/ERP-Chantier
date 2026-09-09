@@ -77,50 +77,52 @@ export async function listTachesTechnicien(
 }
 
 /**
- * Équipe affectée à une tâche.
+ * Membres de l'équipe affectée à une tâche.
  *
- * Une tâche est confiée à plusieurs personnes, et il suffit qu'une d'entre
- * elles la déclare faite : on ne demande pas à toute l'équipe de se prononcer.
- * C'est ce que la base vérifie dans `tache_marquer_realisee`.
+ * Une tâche est confiée à une équipe, et il suffit qu'un de ses membres la
+ * déclare faite : on ne demande pas à toute l'équipe de se prononcer. C'est ce
+ * que la base vérifie dans `tache_marquer_realisee`, en empruntant la chaîne
+ * compte → salarié → équipe → tâche.
+ *
+ * Un membre sans compte est renvoyé comme les autres : il fait partie de
+ * l'équipe, il ne peut simplement pas pointer lui-même.
  */
-export async function listEquipeTache(tacheId: Uuid): Promise<
-  { profileId: Uuid; nom: string | null }[]
-> {
+export async function listEquipeTache(
+  tacheId: Uuid
+): Promise<{ salarieId: Uuid; nom: string; profileId: Uuid | null }[]> {
+  const tache = await getTache(tacheId);
+  if (!tache?.technicien_id) return [];
+  return listMembresEquipe(tache.technicien_id as Uuid);
+}
+
+/** Membres d'une équipe, quelle que soit la tâche. */
+export async function listMembresEquipe(
+  equipeId: Uuid
+): Promise<{ salarieId: Uuid; nom: string; profileId: Uuid | null }[]> {
   const { data, error } = await supabase
-    .from("tache_intervenants")
-    .select("profile_id, profiles(nom)")
-    .eq("tache_id", tacheId);
+    .from("salaries")
+    .select("id, nom, prenom, profile_id")
+    .eq("technicien_id", equipeId)
+    .order("nom");
 
   if (error) throw new SupabaseError("Équipe indisponible", error.code, error);
-  return (data ?? []).map((l) => ({
-    profileId: l.profile_id as Uuid,
-    nom: (l.profiles as { nom: string | null } | null)?.nom ?? null,
+  return (data ?? []).map((s) => ({
+    salarieId: s.id as Uuid,
+    nom: [s.prenom, s.nom].filter(Boolean).join(" "),
+    profileId: (s.profile_id as Uuid | null) ?? null,
   }));
 }
 
-/** Affecte quelqu'un à une tâche. Réservé à l'encadrement par la RLS. */
-export async function affecterATache(
-  societeId: Uuid,
-  tacheId: Uuid,
-  profileId: Uuid
+/** Rattache un salarié à une équipe, ou l'en détache avec `null`. */
+export async function affecterSalarieAEquipe(
+  salarieId: Uuid,
+  equipeId: Uuid | null
 ): Promise<void> {
   const { error } = await supabase
-    .from("tache_intervenants")
-    .upsert(
-      { societe_id: societeId, tache_id: tacheId, profile_id: profileId },
-      { onConflict: "tache_id,profile_id" }
-    );
+    .from("salaries")
+    .update({ technicien_id: equipeId })
+    .eq("id", salarieId);
   if (error) throw new SupabaseError("Affectation refusée", error.code, error);
-}
-
-/** Retire quelqu'un de l'équipe d'une tâche. */
-export async function retirerDeTache(tacheId: Uuid, profileId: Uuid): Promise<void> {
-  const { error } = await supabase
-    .from("tache_intervenants")
-    .delete()
-    .eq("tache_id", tacheId)
-    .eq("profile_id", profileId);
-  if (error) throw new SupabaseError("Retrait refusé", error.code, error);
 }
 
 /** Tâches en attente d'arbitrage du conducteur. */

@@ -251,6 +251,10 @@ export function actionsTache(
  * une requête par tâche serait absurde.
  */
 let annuaire: Map<Uuid, { nom: string; role: RoleMembre | null }> | null = null;
+/* La liste plate double la table d'index : l'écran RH doit proposer les comptes
+   dans l'ordre pour rattacher un salarié au sien, ce qu'une Map ne garantit
+   pas. */
+let intervenants: { id: Uuid; nom: string; role: RoleMembre | null }[] = [];
 
 export async function chargerIntervenants(): Promise<void> {
   const societe = societeActive();
@@ -258,10 +262,18 @@ export async function chargerIntervenants(): Promise<void> {
   try {
     const liste = await queries.listIntervenants(societe.uuid);
     annuaire = new Map(liste.map((i) => [i.id, { nom: i.nom, role: i.role }]));
+    // `nom` retombe déjà sur l'email quand le compte n'en porte pas.
+    intervenants = [...liste].sort((a, b) => a.nom.localeCompare(b.nom));
   } catch (err) {
     console.error("Annuaire des intervenants indisponible", err);
     annuaire = new Map();
+    intervenants = [];
   }
+}
+
+/** Les comptes de la société, pour les écrans qui doivent y rattacher quelqu'un. */
+export function listeIntervenants() {
+  return intervenants;
 }
 
 /** Nom lisible d'un intervenant ; son identifiant ne dit rien à personne. */
@@ -334,6 +346,7 @@ export function injecterSession() {
 
   w.chargerIntervenants = chargerIntervenants;
   w.nomIntervenant = nomIntervenant;
+  w.listeIntervenants = listeIntervenants;
   w.prochainActeur = prochainActeur;
   w.validerPrefacture = queries.validerPrefacture;
   w.validerChiffrage = queries.validerChiffrage;

@@ -137,11 +137,26 @@ async function apercuPdf(page, type) {
   return { chemin, image: await pdfVersPng(chemin) };
 }
 
-/** Capture un onglet de l'application. */
-async function apercuEcran(page, onglet) {
+/**
+ * Capture un onglet de l'application.
+ *
+ * `rh:equipes` vise un sous-onglet : plusieurs écrans en ont, et sans ça on ne
+ * verrait jamais que leur première vue.
+ */
+async function apercuEcran(page, cible) {
+  const [onglet, sousVue] = cible.split(":");
   await page.evaluate((o) => window.setTab(o), onglet);
-  await page.waitForTimeout(1200);
-  const image = path.join(SORTIE, `ecran-${onglet}.png`);
+  await page.waitForTimeout(600);
+
+  if (sousVue) {
+    const bascules = { rh: "setRhView", factures: "setFacturesView", reglages: "setReglagesTab" };
+    const bascule = bascules[onglet];
+    if (!bascule) throw new Error(`Aucune sous-vue connue pour l'onglet « ${onglet} »`);
+    await page.evaluate(([f, v]) => window[f](v), [bascule, sousVue]);
+    await page.waitForTimeout(600);
+  }
+
+  const image = path.join(SORTIE, `ecran-${cible.replace(":", "-")}.png`);
   await page.screenshot({ path: image, fullPage: true });
   return { image };
 }

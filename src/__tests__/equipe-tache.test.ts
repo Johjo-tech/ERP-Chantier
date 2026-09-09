@@ -32,6 +32,9 @@ const suite = AUTH_DISPONIBLE && EN_LOCAL ? describe : describe.skip;
 const MOT_DE_PASSE = "motdepasse-test";
 const TECH_A = "11111111-1111-1111-1111-111111111111" as Uuid;
 const TECH_B = "44444444-4444-4444-4444-444444444444" as Uuid;
+/** L'équipe et ses salariés viennent de `supabase/seed-tests.sql`. */
+const EQUIPE = "66666666-6666-6666-6666-666666666666" as Uuid;
+const SALARIE_B = "88888888-8888-8888-8888-888888888888" as Uuid;
 
 /** Une session à part : le client partagé porte celle de l'administrateur. */
 async function ouvrirSession(email: string): Promise<SupabaseClient> {
@@ -66,9 +69,12 @@ suite("Équipe d'une tâche", () => {
     societeId = societe.id;
 
     const aujourdhui = new Date().toISOString().slice(0, 10);
+    /* L'équipe s'affecte à la création de la tâche : c'est `technicien_id` qui
+       la porte, pas une table de liaison. */
     const a = await queries.planifierTache(societeId, {
       libelle: "Tâche avec équipe",
       date_tache: aujourdhui,
+      technicien_id: EQUIPE,
     });
     const b = await queries.planifierTache(societeId, {
       libelle: "Tâche sans équipe",
@@ -76,8 +82,6 @@ suite("Équipe d'une tâche", () => {
     });
     avecEquipe = a.id;
     sansEquipe = b.id;
-
-    await queries.affecterATache(societeId, avecEquipe, TECH_A);
 
     clientA = await ouvrirSession("tech.a@local");
     clientB = await ouvrirSession("tech.b@local");
@@ -92,9 +96,18 @@ suite("Équipe d'une tâche", () => {
     ]);
   });
 
-  it("porte l'équipe affectée", async () => {
+  it("porte les membres de l'équipe affectée", async () => {
     const equipe = await queries.listEquipeTache(avecEquipe);
-    expect(equipe.map((m) => m.profileId)).toEqual([TECH_A]);
+    expect(equipe.map((m) => m.profileId)).toContain(TECH_A);
+  });
+
+  /* Un salarié sans compte fait partie de l'équipe et n'y casse rien : il ne
+     peut simplement pas pointer lui-même. C'est le cas de la moitié d'un
+     chantier, et il ne doit pas faire échouer la résolution. */
+  it("accepte un membre sans compte", async () => {
+    const equipe = await queries.listMembresEquipe(EQUIPE);
+    expect(equipe.some((m) => m.profileId === null)).toBe(true);
+    expect(equipe.length).toBeGreaterThan(1);
   });
 
   it("laisse un membre de l'équipe déclarer les travaux faits", async () => {
@@ -154,25 +167,32 @@ suite("Équipe d'une tâche", () => {
     expect(tache?.statut).toBe("validee");
   });
 
-  it("refuse au technicien d'affecter quelqu'un à une tâche", async () => {
-    const { error } = await clientA.from("tache_intervenants").insert({
-      societe_id: societeId,
-      tache_id: sansEquipe,
-      profile_id: TECH_B,
-    });
-    expect(error).not.toBeNull();
-  });
-
-  it("laisse le conducteur constituer l'équipe", async () => {
-    const { error } = await clientConducteur.from("tache_intervenants").insert({
-      societe_id: societeId,
-      tache_id: sansEquipe,
-      profile_id: TECH_B,
-    });
+  /* Composer les équipes est un geste RH, pas un geste de planning : le
+     conducteur n'a le module RH qu'en lecture. La RLS ne lève alors aucune
+     erreur, elle ne modifie aucune ligne — un refus silencieux qu'il vaut
+     mieux tenir sous test que découvrir en production. */
+  it("ne laisse pas le conducteur toucher aux salariés", async () => {
+    const { error } = await clientConducteur
+      .from("salaries")
+      .update({ technicien_id: EQUIPE })
+      .eq("id", SALARIE_B);
     expect(error).toBeNull();
 
-    const equipe = await queries.listEquipeTache(sansEquipe);
-    expect(equipe.map((m) => m.profileId)).toContain(TECH_B);
+    const equipe = await queries.listMembresEquipe(EQUIPE);
+    expect(equipe.map((m) => m.profileId)).not.toContain(TECH_B);
+  });
+
+  it("laisse le RH composer l'équipe", async () => {
+    await queries.affecterSalarieAEquipe(SALARIE_B, EQUIPE);
+    expect((await queries.listMembresEquipe(EQUIPE)).map((m) => m.profileId)).toContain(
+      TECH_B
+    );
+
+    // Remis en l'état : les autres cas reposent sur B hors de l'équipe.
+    await queries.affecterSalarieAEquipe(SALARIE_B, null);
+    expect(
+      (await queries.listMembresEquipe(EQUIPE)).map((m) => m.profileId)
+    ).not.toContain(TECH_B);
   });
 
   it("garde la trace de chaque transition", async () => {
