@@ -559,3 +559,29 @@ export async function identiteSociete(societeId: string): Promise<IdentitePlatef
 
   return identite;
 }
+
+/**
+ * Traduction des codes de cycle de vie de la plateforme vers notre énumération.
+ *
+ * Elle est **volontairement incomplète**. Les codes ci-dessous sont ceux dont
+ * facturation-tpe a éprouvé le sens contre la plateforme réelle ; pour les
+ * autres, on garde le code brut dans `code_plateforme` et on ne touche pas au
+ * statut. Deviner la sémantique d'un code de cycle de vie ferait passer une
+ * facture pour encaissée alors qu'elle est en litige — mieux vaut ne rien dire
+ * que dire faux.
+ */
+export const STATUT_PAR_CODE: Record<string, string> = {
+  "fr:200": "deposee",
+  "fr:201": "recue",
+  "fr:204": "approuvee",
+  "fr:207": "suspendue",
+  "fr:210": "refusee",
+  "fr:211": "paiement_transmis",
+  "fr:212": "encaissee",
+  "fr:213": "rejetee",
+};
+
+/** Le statut connu d'un code, ou rien plutôt qu'une approximation. */
+export function statutDeCode(code: string | null | undefined): string | null {
+  return STATUT_PAR_CODE[String(code ?? "").toLowerCase()] ?? null;
+}
