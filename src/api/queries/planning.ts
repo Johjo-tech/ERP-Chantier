@@ -26,12 +26,17 @@ import {
   blocagesValidationConducteur,
   messageBlocages,
 } from "../regles-bc";
+import {
+  STATUT_INITIAL,
+  motifTransitionRefusee,
+  transitionPermise,
+  type GesteTache,
+} from "../regles-taches";
 import { listBonCommandeLignes } from "./bonCommande";
 import type {
   PlanningTache,
   PlanningTacheInsert,
   PlanningTacheUpdate,
-  StatutTache,
   TravailSupplementaireInsert,
   Uuid,
 } from "../types";
@@ -93,7 +98,7 @@ export function planifierTache(
   return insertOne("planning_taches", {
     ...input,
     societe_id: societeId,
-    statut: input.statut ?? ("planifiee" satisfies StatutTache),
+    statut: input.statut ?? STATUT_INITIAL,
   });
 }
 
@@ -128,31 +133,27 @@ export async function sauvegarderTerrain(
 }
 
 /**
- * Transitions autorisées de la machine à états.
+ * Refuse le geste avant l'aller-retour, et dit pourquoi.
  *
- * ⚠ Ces contrôles sont un filet côté client, pas une sécurité : le navigateur
- * est falsifiable. Les fonctions SQL acceptent aujourd'hui n'importe quelle
- * transition — voir supabase/migrations/ pour le correctif à appliquer en base.
+ * Ces contrôles ne sont pas une sécurité : le navigateur est falsifiable. Ce
+ * sont les fonctions SQL qui décident — elles gardent les transitions, les
+ * rôles, et refusent l'écriture directe des colonnes d'état depuis
+ * `20260909140000_durcir_circuit_taches.sql`. Leur intérêt est ailleurs :
+ * expliquer le refus sur place plutôt que de renvoyer une erreur Postgres.
+ *
+ * La règle elle-même vit dans `regles-taches.ts`, partagée avec l'interface :
+ * elle était écrite en trois exemplaires libres de diverger.
  */
-const TRANSITIONS: Record<string, StatutTache[]> = {
-  realiser: ["planifiee", "refusee"],
-  arbitrer: ["realisee"],
-};
-
 async function exigerStatut(
   tacheId: Uuid,
-  action: keyof typeof TRANSITIONS,
+  geste: GesteTache,
   libelle: string
 ): Promise<void> {
   const tache = await getTache(tacheId);
   if (!tache) throw new Error("Tâche introuvable.");
 
-  const attendus = TRANSITIONS[action];
-  const statut = (tache.statut ?? "planifiee") as StatutTache;
-  if (!attendus.includes(statut)) {
-    throw new Error(
-      `${libelle} : impossible depuis l'état « ${statut} » (attendu : ${attendus.join(" ou ")}).`
-    );
+  if (!transitionPermise(geste, tache.statut)) {
+    throw new Error(motifTransitionRefusee(geste, tache.statut, libelle));
   }
 }
 

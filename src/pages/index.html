@@ -5202,6 +5202,11 @@ function bcWorkflowStepperHTML(b, ctx){
   const etape2 = !!b.valideConducteur;
   const etape3 = !!b.valideDirecteur;
   const etape4 = !!state.factures.find(f=>f.bonCommandeId===b.id);
+  /* Arbitrer, c'est le geste du conducteur. Le bouton s'affichait sans aucun
+     contrôle de rôle, là où celui du directeur était gardé juste en dessous :
+     un technicien voyait « Valider (conducteur) » et se heurtait au refus de la
+     base. Masquer ce qui serait de toute façon refusé. */
+  const peutArbitrer = !window.actionsTache || window.actionsTache('realisee').peutArbitrer;
   const steps = [
     {label:'Métiers (technicien)', done:etape1},
     {label:'Conducteur', done:etape2},
@@ -5217,12 +5222,11 @@ function bcWorkflowStepperHTML(b, ctx){
       ${i<steps.length-1? `<div class="bc-step-line ${steps[i].done?'is-done':''}"></div>`:''}
     `).join('')}
     <div class="bc-step-actions">
-      ${ctx==='attente' && !etape2? (etape1?
+      ${ctx==='attente' && !etape2 && peutArbitrer? (etape1?
         `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}')">✓ Valider (conducteur)</button>`
         : `<div class="bc-attente-message">⏳ En attente — tous les métiers doivent être marqués comme réalisés par le technicien avant de pouvoir passer à la validation du conducteur.</div>`
       ) : ''}
       ${ctx==='validation' && etape2 && !etape3 && (!window.actionsFacturation || window.actionsFacturation().peutValiderPrefacture)? `<button class="btn small primary" onclick="openValidationDirecteurModal('${b.id}')">✓ Valider (directeur)</button>` : ''}
-      ${ctx==='attente' && etape2? `<button class="btn small ghost" onclick="devaliderBC('${b.id}')">↩ Réinitialiser les validations</button>` : ''}
     </div>
   </div>`;
 }
@@ -5230,6 +5234,12 @@ let validationConducteurCtx = null;
 async function openValidationConducteurModal(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
+  /* Second garde-fou : masquer un bouton ne suffit pas, la fonction reste
+     appelable depuis la console. La base refuserait, mais autant le dire ici. */
+  if(window.actionsTache && !window.actionsTache('realisee').peutArbitrer){
+    showToast("Seuls le conducteur de travaux et l'administrateur arbitrent les tâches.");
+    return;
+  }
   validationConducteurCtx = bcId;
   document.getElementById('validationConducteurInfo').textContent = `${b.numeroBC||b.client} — ${b.client}`;
   document.getElementById('validationConducteurTaches').innerHTML = '<div class="empty">Chargement des tâches…</div>';
@@ -5678,15 +5688,16 @@ async function validerBCEtape(bcId, etape){
     showToast(err.message || "Validation refusée.");
   }
 }
-async function devaliderBC(bcId){
-  if(!confirm('Réinitialiser les validations conducteur et directeur pour ce bon de commande ?')) return;
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  b.valideConducteur = false; b.valideDirecteur = false;
-  await stSet('bonCommande:'+bcId, b);
-  await loadAll();
-  renderTab();
-}
+/* `devaliderBC` a été retirée avec son bouton « ↩ Réinitialiser les validations ».
+   Elle écrivait `valideConducteur` et `valideDirecteur`, deux champs dérivés des
+   tâches et sans colonne : le pont les ignore, le rechargement les recalculait à
+   l'identique. Le bouton demandait confirmation, affichait un succès, et ne
+   réinitialisait rien.
+
+   Il n'est pas remplacé par une vraie dévalidation : le circuit tient sur le
+   fait qu'une tâche validée est close — `tache_marquer_realisee` refuse
+   explicitement de la rouvrir, pour qu'un arbitrage ne s'efface pas sans trace.
+   Rouvrir une affaire validée est une décision de gestion, pas un correctif. */
 function bonCommandeForm(){
   const e = state.editing;
   const statuts = ['en attente','en cours','terminé','annulé'];
@@ -7083,17 +7094,9 @@ async function wfValiderPrefacture(){
   }
 }
 
-async function wfPretAChiffrer(){
-  try{
-    await window.passerPretAChiffrer(wfTacheCourante.bon_commande_id);
-    showToast('Bon de commande prêt à chiffrer.', 'success');
-    await loadAll();
-    renderTab();
-  }catch(err){
-    console.error('Passage à chiffrer refusé', err);
-    showToast(err.message || 'Action refusée.');
-  }
-}
+/* `wfPretAChiffrer` a été supprimée : elle était définie et jamais appelée. Le
+   passage à « prêt à chiffrer » est déduit du chiffrage, pas cliqué — cf. le
+   commentaire du bandeau plus haut. Un bouton mort disait le contraire. */
 
 function closeTechnicienInterventionModal(){
   document.getElementById('technicienInterventionModal').style.display = 'none';

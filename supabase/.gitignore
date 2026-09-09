@@ -7,11 +7,8 @@
 .env.local
 .env.*.local
 
-# Dumps du projet distant : contiennent la structure et les données réelles.
-# Le dépôt est public — rien de tout cela ne doit y entrer.
+# Dumps du projet distant. Le dépôt est public : les données réelles — noms de
+# clients, adresses, montants, empreintes de mots de passe — n'y entrent jamais.
+# La structure seule est versionnée, sous forme de migration de base.
 schema-cloud.sql
 data-cloud.sql
-
-# Base de schéma reconstituée depuis le projet distant, non versionnée tant
-# que la reprise des migrations n_est pas tranchée.
-migrations/20260101000000_base_schema_distant.sql
