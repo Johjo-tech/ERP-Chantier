@@ -1,0 +1,17 @@
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+
+# Dumps du projet distant : contiennent la structure et les données réelles.
+# Le dépôt est public — rien de tout cela ne doit y entrer.
+schema-cloud.sql
+data-cloud.sql
+
+# Base de schéma reconstituée depuis le projet distant, non versionnée tant
+# que la reprise des migrations n_est pas tranchée.
+migrations/20260101000000_base_schema_distant.sql
