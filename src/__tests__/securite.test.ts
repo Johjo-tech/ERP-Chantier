@@ -48,16 +48,11 @@ suite("Exposition anonyme", () => {
   });
 
   /**
-   * `kv_store` est volontairement laissée ouverte : elle sert de bac à sable
-   * alimenté par des tests, le temps de la reprise. Exposition acceptée et
-   * datée, pas oubliée — elle est lisible, modifiable et effaçable par
-   * quiconque connaît l'URL de l'application.
-   *
-   * À réactiver en même temps que
-   * supabase/migrations/20260907_verrouiller_kv_store.sql, une fois la reprise
-   * terminée.
+   * `kv_store` précède la modélisation relationnelle et n'était protégée par
+   * rien : 116 lignes lisibles, modifiables et effaçables avec la seule clé
+   * anon. Fermée le 2026-09-09 par activation de la RLS sans politique.
    */
-  it.skip("kv_store est fermée aux anonymes", async () => {
+  it("kv_store est fermée aux anonymes", async () => {
     expect(await lignesVisibles("kv_store")).toBeFalsy();
   });
 });
