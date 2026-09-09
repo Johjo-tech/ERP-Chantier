@@ -1459,7 +1459,12 @@ window.addEventListener('error', function(ev){
   }
 }, true);
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- html2pdf 0.10.1 (cdnjs) embarquait html2canvas 1.0.0-rc.5, qui capturait la
+     zone d'impression décalée d'une demi-page : les documents partaient amputés
+     de leur moitié gauche — désignation, émetteur, début des mentions. La 0.14
+     embarque html2canvas 1.4.1 et cadre juste. C'est la version qu'utilise
+     chantier-mate-ease, dont les PDF ont toujours été complets. -->
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.14.0/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -3368,6 +3373,82 @@ function renderPrintIntervention(it){
     <div class="p-footer">${esc(socName)}${s.siret? ' — SIRET '+esc(s.siret):''}${s.adresse? ' — '+esc(s.adresse):''}</div>
   `;
 }
+/** Laisse au navigateur deux cycles de rendu avant la capture. */
+function attendreRendu(){
+  return new Promise((r)=> requestAnimationFrame(()=> requestAnimationFrame(()=> r())));
+}
+
+/* Après une erreur, html2pdf laisse son calque de travail par-dessus l'écran :
+   il est invisible mais intercepte tous les clics, l'application paraît figée. */
+function nettoyerCalquesPdf(){
+  document.querySelectorAll('.html2pdf__overlay, .html2pdf__container').forEach((el)=> el.remove());
+}
+
+/* Le lien `download` est le seul chemin qui transporte un nom de fichier, et il
+   fonctionne aussi dans une iframe, contrairement à `window.open`. */
+function telechargerBlob(blob, nomFichier){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nomFichier}.pdf`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 60000);
+}
+
+/**
+ * Fabrique le PDF de la zone d'impression et le remet à l'utilisateur.
+ *
+ * Portage de `genererPdf()` de chantier-mate-ease, qui produit déjà des
+ * documents complets. Deux points s'y jouent :
+ *
+ *  - la zone est mesurée après le rendu, sinon la hauteur capturée est celle
+ *    d'avant l'insertion du contenu ;
+ *  - le fichier est remis par un lien `download`. Un onglet d'aperçu n'expose
+ *    que l'UUID du blob, d'où les « c6ca4058-….pdf » qui atterrissaient dans
+ *    les téléchargements.
+ *
+ * Le rognage de la moitié gauche, lui, ne venait pas d'ici : il tenait à la
+ * version d'html2pdf chargée (voir la balise script).
+ */
+async function lancerGenerationPdf(area, nomFichier, action){
+  try{
+    await attendreRendu();
+
+    const hauteur = Math.max(area.scrollHeight, area.offsetHeight);
+    const largeur = Math.max(area.scrollWidth, area.offsetWidth);
+    if(!hauteur || !largeur) throw new Error("le document à imprimer est vide");
+
+    const opt = {
+      margin: 0,
+      filename: `${nomFichier}.pdf`,
+      image: { type:'jpeg', quality:0.98 },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, scrollX:0, scrollY:0, height: hauteur, windowHeight: hauteur, width: largeur, windowWidth: largeur },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode: ['css','legacy'] }
+    };
+
+    const blob = await html2pdf().set(opt).from(area).outputPdf('blob');
+
+    /* L'aperçu en onglet ne vaut que hors iframe : ailleurs `window.open` est
+       bloqué et le document repart sans nom. */
+    if(action !== 'save' && window.self === window.top){
+      const url = URL.createObjectURL(blob);
+      const onglet = window.open(url, '_blank');
+      if(onglet){ setTimeout(()=> URL.revokeObjectURL(url), 60000); return; }
+      URL.revokeObjectURL(url);
+    }
+    telechargerBlob(blob, nomFichier);
+  }catch(err){
+    console.error('PDF generation error', err);
+    showToast("Impossible de produire le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
+  }finally{
+    area.style.display = 'none';
+    nettoyerCalquesPdf();
+  }
+}
 function generateInterventionPdf(it, action){
   action = action || 'open';
   const area = document.getElementById('printArea');
@@ -3379,36 +3460,7 @@ function generateInterventionPdf(it, action){
   area.innerHTML = renderPrintIntervention(it);
   area.style.display = 'block';
   showToast(action==='save' ? 'Enregistrement du PDF…' : 'Génération du PDF…', 'success');
-  const fullHeight = Math.max(area.scrollHeight, area.offsetHeight);
-  const fullWidth = Math.max(area.scrollWidth, area.offsetWidth);
-  const opt = {
-    margin: 0,
-    filename: `${it.numero || 'rapport'}.pdf`,
-    image: { type:'jpeg', quality:0.98 },
-    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, height: fullHeight, windowHeight: fullHeight, width: fullWidth, windowWidth: fullWidth },
-    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-    pagebreak: { mode: ['css','legacy'] }
-  };
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-    if(action === 'save'){
-      html2pdf().set(opt).from(area).save().then(()=>{
-        area.style.display = 'none';
-      }).catch((err)=>{
-        area.style.display = 'none';
-        console.error('PDF generation error', err);
-        showToast("Impossible d'enregistrer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-      });
-      return;
-    }
-    html2pdf().set(opt).from(area).toPdf().output('bloburl').then((url)=>{
-      area.style.display = 'none';
-      window.open(url, '_blank');
-    }).catch((err)=>{
-      area.style.display = 'none';
-      console.error('PDF generation error', err);
-      showToast("Impossible de générer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-    });
-  }); });
+  lancerGenerationPdf(area, it.numero || 'rapport', action);
 }
 function printInterventionDocument(id, action){
   const it = state.interventions.find(x=>x.id===id);
@@ -3589,37 +3641,7 @@ function printDocument(type, id, action){
   area.innerHTML = renderPrintDoc(type, id);
   area.style.display = 'block';
   showToast(action==='save' ? 'Enregistrement du PDF…' : 'Génération du PDF…', 'success');
-  const fullHeight = Math.max(area.scrollHeight, area.offsetHeight);
-  const fullWidth = Math.max(area.scrollWidth, area.offsetWidth);
-  const opt = {
-    margin: 0,
-    filename: `${doc.numero || NOM_FICHIER_DEFAUT[type] || 'document'}.pdf`,
-    image: { type:'jpeg', quality:0.98 },
-    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, height: fullHeight, windowHeight: fullHeight, width: fullWidth, windowWidth: fullWidth },
-    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-    pagebreak: { mode: ['css','legacy'] }
-  };
-  // Laisser un cycle de rendu au navigateur avant la capture (sinon page blanche)
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-    if(action === 'save'){
-      html2pdf().set(opt).from(area).save().then(()=>{
-        area.style.display = 'none';
-      }).catch((err)=>{
-        area.style.display = 'none';
-        console.error('PDF generation error', err);
-        showToast("Impossible d'enregistrer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-      });
-      return;
-    }
-    html2pdf().set(opt).from(area).toPdf().output('bloburl').then((url)=>{
-      area.style.display = 'none';
-      window.open(url, '_blank');
-    }).catch((err)=>{
-      area.style.display = 'none';
-      console.error('PDF generation error', err);
-      showToast("Impossible de générer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
-    });
-  }); });
+  lancerGenerationPdf(area, doc.numero || NOM_FICHIER_DEFAUT[type] || 'document', action);
 }
 
 /* ---------- Devis ---------- */
@@ -3731,7 +3753,7 @@ function renderDevisListHTML(list){
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('devis','${d.id}')">Modifier</button>
       <button class="btn small" onclick="dupliquerDevis('${d.id}')">Dupliquer</button>
-      <button class="btn small" onclick="printDocument('devis','${d.id}')">Imprimer / PDF</button>
+      <button class="btn small" onclick="printDocument('devis','${d.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('devis','${d.id}')">Envoyer par email</button>
       ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerEnFacture('${d.id}')">Transformer en facture</button>`}
       ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${d.id}')">Créer un bon de commande</button>`}
@@ -4567,7 +4589,7 @@ function factureSTCardHTML(f){
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ttc)}</div><span class="badge ${badgeClass(f.statut)}" style="margin-top:5px; display:inline-block;">${esc(f.statut)}</span></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="printDocument('facture','${f.id}','print')">Imprimer / PDF</button>
+      <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       ${f.statut==='impayée'? `<button class="btn small" onclick="marquerFactureSTPayee('${f.id}')">✓ Marquer payée</button>`:''}
     </div>
   </div>`;
@@ -4632,7 +4654,7 @@ function renderFacturesListHTML(list){
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
       <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
-      <button class="btn small" onclick="printDocument('facture','${f.id}')">Imprimer / PDF</button>
+      <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
     </div></div>`;
@@ -10326,7 +10348,7 @@ function chantierFacturesHTML(c){
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
         <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${f.id}')">🧾 ${esc(f.numero)} — ${moneyDisplay(t.ttc)} TTC</a>
         <span class="badge ${f.statut==='payée'?'success':f.statut==='impayée'?'danger':'info'}">${esc(f.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('facture','${f.id}')">Imprimer / PDF</button>
+        <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
         <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       </div>`;
     }).join('') : '<div class="empty">Aucune facture pour l\'instant.</div>'}
@@ -10353,7 +10375,7 @@ function chantierDevisComplHTML(c){
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
         <a href="javascript:void(0)" onclick="ouvrirDevisDepuisChantier('${d.id}')">📄 ${esc(d.numero)} — ${moneyDisplay(t.ht)} HT</a>
         <span class="badge ${d.statut==='accepté'?'success':d.statut==='refusé'?'danger':'info'}">${esc(d.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('devis','${d.id}')">Imprimer / PDF</button>
+        <button class="btn small" onclick="printDocument('devis','${d.id}','save')">Imprimer / PDF</button>
         <button class="btn small" onclick="envoyerDocumentEmail('devis','${d.id}')">Envoyer par email</button>
       </div>`;
     }).join('') : ''}

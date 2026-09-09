@@ -16,17 +16,19 @@
     "test:coverage": "vitest run --coverage",
     "db:types": "supabase gen types typescript --linked > src/api/database.types.ts && npm run db:columns",
     "db:pull": "supabase db pull",
-    "db:columns": "node scripts/gen-columns.mjs"
+    "db:columns": "node scripts/gen-columns.mjs",
+    "apercu": "node scripts/apercu.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@vitest/coverage-v8": "^1.0.0",
+    "playwright": "^1.63.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.7",
-    "@types/node": "^20.10.5",
-    "vitest": "^1.0.0",
-    "@vitest/coverage-v8": "^1.0.0"
+    "vitest": "^1.0.0"
   }
 }
