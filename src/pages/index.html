@@ -11784,12 +11784,21 @@ function technicienLinkOptions(current){
   const list = state.techniciens.filter(t=>t.societeId===state.societeId);
   return '<option value="">— Aucune —</option>' + list.map(t=>`<option value="${t.id}" ${t.id===current?'selected':''}>${esc(t.nom1||'Équipe')}</option>`).join('');
 }
-/* Les comptes de la société, pour rattacher un salarié au sien. La liste vient
-   du pont ; sans lui, le champ reste vide plutôt que de casser le formulaire. */
+/* Les comptes de la société, pour rattacher un salarié au sien.
+
+   Le rattachement existant est toujours proposé, même si l'annuaire ne l'a pas
+   ramené — annuaire non chargé, compte désactivé depuis, société changée. Sans
+   cette précaution le champ s'affichait sur « Aucun », et le simple fait
+   d'enregistrer la fiche effaçait le lien : le salarié perdait son compte sans
+   que personne ne l'ait demandé, et avec lui le droit de pointer ses tâches. */
 function comptesLinkOptions(current){
   const list = window.listeIntervenants ? window.listeIntervenants() : [];
+  const connu = list.some(i=>i.id===current);
   const options = list.map(i=>`<option value="${i.id}" ${i.id===current?'selected':''}>${esc(i.nom)}</option>`).join('');
-  return '<option value="">— Aucun —</option>' + options;
+  const conserve = (current && !connu)
+    ? `<option value="${esc(current)}" selected>Compte déjà rattaché</option>`
+    : '';
+  return `<option value="" ${current?'':'selected'}>— Aucun —</option>` + conserve + options;
 }
 function habilitationRowsHTML(habilitations){
   if(!habilitations.length) return '<div class="empty">Aucune habilitation renseignée.</div>';
