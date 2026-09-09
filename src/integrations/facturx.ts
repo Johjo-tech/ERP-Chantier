@@ -22,8 +22,9 @@
  * complète est un chantier à part, qui suppose de fabriquer le PDF autrement.
  */
 
-import { AFRelationship, PDFDocument, PDFName } from "pdf-lib";
+import { AFRelationship, PDFDocument, PDFName, PDFString } from "pdf-lib";
 import { NOM_FICHIER_FACTURX } from "@/api/regles-cii";
+import { CONDITION_SORTIE, profilSRGB } from "./srgb";
 
 /** Niveau de conformité déclaré dans les métadonnées. */
 export const PROFIL_FACTURX = "EN 16931";
@@ -141,7 +142,37 @@ export async function embarquerFacturX(
   });
   doc.catalog.set(PDFName.of("Metadata"), doc.context.register(flux));
 
+  poserIntentionDeSortie(doc);
+
   return doc.save();
+}
+
+/**
+ * L'intention de sortie : dans quel espace lire les couleurs du document.
+ *
+ * PDF/A refuse une page qui emploie `DeviceRGB` ou `DeviceGray` sans dire à
+ * quoi ces valeurs correspondent — soit toutes nos pages. C'était le seul
+ * défaut relevé par le validateur, deux assertions sur six cent deux.
+ */
+function poserIntentionDeSortie(doc: PDFDocument): void {
+  const icc = doc.context.flateStream(profilSRGB(), {
+    // Trois composantes : c'est un profil RVB.
+    N: 3,
+  });
+  const refIcc = doc.context.register(icc);
+
+  const intention = doc.context.obj({
+    Type: "OutputIntent",
+    S: "GTS_PDFA1",
+    OutputConditionIdentifier: PDFString.of(CONDITION_SORTIE),
+    Info: PDFString.of(CONDITION_SORTIE),
+    DestOutputProfile: refIcc,
+  });
+
+  doc.catalog.set(
+    PDFName.of("OutputIntents"),
+    doc.context.obj([doc.context.register(intention)])
+  );
 }
 
 /** Le même, rendu en `Blob` : c'est ce que le navigateur télécharge. */

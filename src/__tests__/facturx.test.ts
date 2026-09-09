@@ -13,6 +13,7 @@ import { PDFDocument, PDFDict, PDFName, PDFArray, PDFHexString, PDFRawStream } f
 import { chargeEN16931 } from "@/api/regles-en16931";
 import { NOM_FICHIER_FACTURX, versCII } from "@/api/regles-cii";
 import { PROFIL_FACTURX, embarquerFacturX } from "@/integrations/facturx";
+import { profilSRGB } from "@/integrations/srgb";
 
 const XML = versCII(
   chargeEN16931(
@@ -148,6 +149,31 @@ describe("PDF Factur-X", () => {
     const relu = await PDFDocument.load(octets);
     expect(relu.getTitle()).toBe("Facture FAC-2026-0428");
     expect(relu.getAuthor()).toBe("KTA PLOMBERIE");
+  });
+
+  /* Sans intention de sortie, PDF/A refuse toute page employant DeviceRGB ou
+     DeviceGray — c'est-à-dire toutes les nôtres. C'était le seul défaut relevé
+     par Mustangproject, deux assertions sur six cent deux. */
+  it("déclare l'intention de sortie qui rend le PDF/A valide", async () => {
+    const octets = await embarquerFacturX(await pdfVierge(), XML, {
+      numero: "FAC-2026-0428",
+      date: "2026-09-09",
+    });
+    const relu = await PDFDocument.load(octets);
+
+    const intentions = relu.catalog.lookup(PDFName.of("OutputIntents"), PDFArray);
+    expect(intentions?.size()).toBe(1);
+
+    const intention = intentions!.lookup(0, PDFDict);
+    expect(String(intention.lookup(PDFName.of("S")))).toBe("/GTS_PDFA1");
+    expect(intention.lookup(PDFName.of("DestOutputProfile"))).toBeTruthy();
+  });
+
+  it("embarque un profil colorimétrique valide", async () => {
+    const icc = profilSRGB();
+    // Signature ICC, à l'offset 36 : sans elle le profil est refusé.
+    expect(new TextDecoder().decode(icc.slice(36, 40))).toBe("acsp");
+    expect(new TextDecoder().decode(icc.slice(16, 20)).trim()).toBe("RGB");
   });
 
   it("ne se laisse pas arrêter par une date invalide", async () => {

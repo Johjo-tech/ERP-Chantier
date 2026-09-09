@@ -116,6 +116,9 @@ export interface FactureEN16931 {
   conditionsReglement?: string | null;
   /** Un taux, ou la mention déjà rédigée : la base porte l'un ou l'autre. */
   penalitesRetard?: number | string | null;
+  /** BT-22 / code AAB — l'escompte, ou son absence. Obligatoire en France. */
+  mentionEscompte?: string | null;
+  escomptePourcentage?: number | null;
   indemniteRecouvrement?: number | null;
   acomptesDeduits?: number | null;
   montantRegle?: number | null;
@@ -292,12 +295,23 @@ function notesLegales(facture: FactureEN16931): { subject_code: string; note: st
       ? brut.trim()
       : `En cas de retard de paiement, pénalités au taux annuel de ${brut ?? 10} %, exigibles sans rappel.`;
 
+  /* BR-FR-05 / BT-22 : la mention d'escompte est obligatoire, y compris pour
+     dire qu'il n'y en a pas. Son absence a été relevée par le validateur
+     Mustangproject — c'est une règle française, invisible depuis la norme
+     européenne seule. */
+  const escompte =
+    facture.mentionEscompte?.trim() ||
+    (facture.escomptePourcentage
+      ? `Escompte pour paiement anticipé : ${facture.escomptePourcentage} %.`
+      : "Pas d'escompte pour paiement anticipé.");
+
   return [
     {
       subject_code: "PMT",
       note: `Indemnité forfaitaire pour frais de recouvrement : ${indemnite} €.`,
     },
     { subject_code: "PMD", note: penalites },
+    { subject_code: "AAB", note: escompte },
     ...(facture.mentionsComplementaires ?? [])
       .filter((m) => m && m.trim())
       .map((m) => ({ subject_code: "AAI", note: m.trim() })),
