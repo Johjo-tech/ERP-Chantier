@@ -3375,43 +3375,87 @@ function renderPrintIntervention(it){
     <div class="p-footer">${esc(socName)}${s.siret? ' — SIRET '+esc(s.siret):''}${s.adresse? ' — '+esc(s.adresse):''}</div>
   `;
 }
+/** Laisse au navigateur deux cycles de rendu avant la capture. */
+function attendreRendu(){
+  return new Promise((r)=> requestAnimationFrame(()=> requestAnimationFrame(()=> r())));
+}
+
+/* Après une erreur, html2pdf laisse son calque de travail par-dessus l'écran :
+   il est invisible mais intercepte tous les clics, l'application paraît figée. */
+function nettoyerCalquesPdf(){
+  document.querySelectorAll('.html2pdf__overlay, .html2pdf__container').forEach((el)=> el.remove());
+}
+
+/* Le lien `download` est le seul chemin qui transporte un nom de fichier, et il
+   fonctionne aussi dans une iframe, contrairement à `window.open`. */
+function telechargerBlob(blob, nomFichier){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nomFichier}.pdf`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 60000);
+}
+
 /**
  * Fabrique le PDF de la zone d'impression et le remet à l'utilisateur.
  *
- * `save` télécharge sous le nom du document. `open` ouvre un aperçu par URL
- * blob : le visionneur du navigateur n'y lit aucun nom de fichier et propose
- * l'UUID du blob à l'enregistrement — c'est de là que venaient les
- * « c6ca4058-….pdf » dans les téléchargements. Un nom correct suppose donc un
- * vrai téléchargement, jamais un aperçu.
+ * Portage de `genererPdf()` de chantier-mate-ease, qui produit déjà des
+ * documents complets. Trois points s'y jouent, et chacun correspond à un
+ * défaut constaté sur nos PDF :
+ *
+ *  - la zone est posée à plat en haut à gauche le temps de la capture
+ *    (`.is-capturing`). html2canvas mesure le cadre à capturer sur la position
+ *    d'origine de l'élément mais rend son clone après recalcul de la mise en
+ *    page : le `translateX(-50%)` qui centre la zone à l'écran décalait les
+ *    deux d'une demi-page, et la colonne Désignation, le bloc Émetteur et le
+ *    début des mentions étaient rognés ;
+ *  - elle est mesurée après le rendu, sinon la hauteur capturée est celle
+ *    d'avant l'insertion du contenu ;
+ *  - le fichier est remis par un lien `download`. Un onglet d'aperçu n'expose
+ *    que l'UUID du blob, d'où les « c6ca4058-….pdf » qui atterrissaient dans
+ *    les téléchargements.
  */
-function lancerGenerationPdf(area, nomFichier, action){
-  const hauteur = Math.max(area.scrollHeight, area.offsetHeight);
-  const largeur = Math.max(area.scrollWidth, area.offsetWidth);
-  const opt = {
-    margin: 0,
-    filename: `${nomFichier}.pdf`,
-    image: { type:'jpeg', quality:0.98 },
-    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, scrollX:0, scrollY:0, height: hauteur, windowHeight: hauteur, width: largeur, windowWidth: largeur },
-    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-    pagebreak: { mode: ['css','legacy'] }
-  };
-  const terminer = () => { area.classList.remove('is-capturing'); area.style.display = 'none'; };
-  const echouer = (err, message) => { terminer(); console.error('PDF generation error', err); showToast(message); };
-
+async function lancerGenerationPdf(area, nomFichier, action){
   area.classList.add('is-capturing');
-  // Laisser un cycle de rendu au navigateur avant la capture (sinon page blanche)
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-    if(action === 'save'){
-      html2pdf().set(opt).from(area).save().then(terminer).catch((err)=>
-        echouer(err, "Impossible d'enregistrer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page."));
-      return;
+  try{
+    await attendreRendu();
+
+    const hauteur = Math.max(area.scrollHeight, area.offsetHeight);
+    const largeur = Math.max(area.scrollWidth, area.offsetWidth);
+    if(!hauteur || !largeur) throw new Error("le document à imprimer est vide");
+
+    const opt = {
+      margin: 0,
+      filename: `${nomFichier}.pdf`,
+      image: { type:'jpeg', quality:0.98 },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, scrollX:0, scrollY:0, height: hauteur, windowHeight: hauteur, width: largeur, windowWidth: largeur },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode: ['css','legacy'] }
+    };
+
+    const blob = await html2pdf().set(opt).from(area).outputPdf('blob');
+
+    /* L'aperçu en onglet ne vaut que hors iframe : ailleurs `window.open` est
+       bloqué et le document repart sans nom. */
+    if(action !== 'save' && window.self === window.top){
+      const url = URL.createObjectURL(blob);
+      const onglet = window.open(url, '_blank');
+      if(onglet){ setTimeout(()=> URL.revokeObjectURL(url), 60000); return; }
+      URL.revokeObjectURL(url);
     }
-    html2pdf().set(opt).from(area).toPdf().output('bloburl').then((url)=>{
-      terminer();
-      window.open(url, '_blank');
-    }).catch((err)=>
-      echouer(err, "Impossible de générer le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page."));
-  }); });
+    telechargerBlob(blob, nomFichier);
+  }catch(err){
+    console.error('PDF generation error', err);
+    showToast("Impossible de produire le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
+  }finally{
+    area.classList.remove('is-capturing');
+    area.style.display = 'none';
+    nettoyerCalquesPdf();
+  }
 }
 function generateInterventionPdf(it, action){
   action = action || 'open';
