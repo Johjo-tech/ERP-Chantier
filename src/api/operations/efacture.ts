@@ -140,8 +140,16 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
   const destinataire = versDestinataire(facture, client);
   const lignesEN = lignes.map(versLigne);
 
+  /* Les totaux vivent dans `v_facture_totaux`, pas dans les colonnes : sur 410
+     factures, 351 ont leurs colonnes à zéro alors que la vue calcule le vrai
+     montant. Les lire là où ils ne sont pas aurait transmis des factures à
+     0,00 € — c'est la base qui fait autorité sur ce qui engage. */
+  const totaux = await queries.getFactureTotaux(factureId);
+  const totalHt = Number(totaux?.ht ?? facture.total_ht ?? 0) || 0;
+  const totalTva = Number(totaux?.tva ?? facture.total_tva ?? 0) || 0;
+  const totalTtc = Number(totaux?.ttc ?? facture.total_ttc ?? 0) || 0;
+
   const solde = await calculerSoldeFacture(factureId).catch(() => null);
-  const totalTtc = Number(facture.total_ttc ?? 0) || 0;
 
   const donnees: FactureEN16931 = {
     numero: facture.numero,
@@ -160,9 +168,9 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     acomptesDeduits: facture.acomptes_deduits,
     // Le solde dit ce qui reste dû ; l'écart au total dit ce qui a été encaissé.
     montantRegle: solde == null ? 0 : Math.max(0, totalTtc - Number(solde)),
-    totalHt: facture.total_ht,
-    totalTva: facture.total_tva,
-    totalTtc: facture.total_ttc,
+    totalHt,
+    totalTva,
+    totalTtc,
     mentionsComplementaires: [facture.tva_motif_exoneration, societe?.mention_penalites_retard]
       .filter((m): m is string => !!m && !!m.trim()),
   };

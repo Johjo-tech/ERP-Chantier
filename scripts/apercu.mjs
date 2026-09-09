@@ -134,7 +134,14 @@ async function apercuPdf(page, type) {
   const chemin = path.join(SORTIE, nom);
   await telechargement.saveAs(chemin);
   console.log(`  fichier téléchargé : ${nom}`);
-  return { chemin, image: await pdfVersPng(chemin) };
+
+  /* Une facture doit repartir avec sa version structurée embarquée : c'est ce
+     qui la distingue d'un PDF ordinaire, et ça ne se voit pas à l'écran. */
+  const octets = readFileSync(chemin);
+  const embarque = octets.includes(Buffer.from("factur-x.xml"));
+  console.log(`  facture électronique embarquée : ${embarque ? "oui" : "non"}`);
+
+  return { chemin, embarque, image: await pdfVersPng(chemin) };
 }
 
 /**

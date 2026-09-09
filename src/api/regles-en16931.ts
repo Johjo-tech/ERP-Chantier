@@ -182,6 +182,25 @@ export function manquesPourEmettre(
   );
   exiger(lignes.length > 0, "BG-25", "lignes", "Une facture sans ligne ne peut pas être émise.");
 
+  /* BR-CO-10 : le total des lignes doit égaler le total hors taxes déclaré.
+     Ce contrôle n'est pas une formalité — il a rattrapé des factures dont les
+     totaux étaient lus dans des colonnes vides, et qui seraient parties à
+     0,00 € alors que leurs lignes en portaient plusieurs milliers. Un écart
+     d'un centime est toléré : il vient des arrondis, pas d'une erreur. */
+  if (lignes.length) {
+    const sommeLignes = lignes.reduce((t, l) => t + (Number(l.montantHt ?? 0) || 0), 0);
+    const declare = Number(facture.totalHt ?? 0) || 0;
+    if (Math.abs(sommeLignes - declare) > 0.01) {
+      manques.push({
+        code: "BR-CO-10",
+        champ: "totalHt",
+        libelle:
+          `Les lignes totalisent ${sommeLignes.toFixed(2)} € HT, la facture en déclare ` +
+          `${declare.toFixed(2)} €. La facture serait rejetée.`,
+      });
+    }
+  }
+
   return manques;
 }
 

@@ -306,6 +306,21 @@ describe("Ce qui empêche d'émettre", () => {
     expect(m.map((x) => x.code)).toContain("BG-25");
   });
 
+  /* Le contrôle qui a rattrapé le vrai défaut : les totaux étaient lus dans
+     des colonnes vides, et 351 factures sur 410 seraient parties à 0,00 €
+     alors que leurs lignes en portaient plusieurs milliers. */
+  it("refuse une facture dont les lignes ne totalisent pas le montant déclaré", () => {
+    const m = manquesPourEmettre({ ...FACTURE, totalHt: 0 }, EMETTEUR, CLIENT, LIGNES);
+    const ecart = m.find((x) => x.code === "BR-CO-10");
+    expect(ecart).toBeTruthy();
+    expect(ecart!.libelle).toContain("630.00");
+  });
+
+  it("tolère l'écart d'un centime, qui vient des arrondis", () => {
+    const m = manquesPourEmettre({ ...FACTURE, totalHt: 630.01 }, EMETTEUR, CLIENT, LIGNES);
+    expect(m.map((x) => x.code)).not.toContain("BR-CO-10");
+  });
+
   /* Le manque se nomme : « 400 Bad Request » n'apprend rien à qui doit
      corriger la fiche client. */
   it("dit ce qu'il faut corriger, pas seulement qu'il manque quelque chose", () => {
