@@ -192,6 +192,7 @@ export type Database = {
           metiers: Json | null
           montant: number
           montant_par_metier: Json | null
+          montant_sous_traitant: number | null
           notes: string | null
           numero_bc: string | null
           numero_interne: string | null
@@ -242,6 +243,7 @@ export type Database = {
           metiers?: Json | null
           montant?: number
           montant_par_metier?: Json | null
+          montant_sous_traitant?: number | null
           notes?: string | null
           numero_bc?: string | null
           numero_interne?: string | null
@@ -292,6 +294,7 @@ export type Database = {
           metiers?: Json | null
           montant?: number
           montant_par_metier?: Json | null
+          montant_sous_traitant?: number | null
           notes?: string | null
           numero_bc?: string | null
           numero_interne?: string | null
@@ -2925,7 +2928,7 @@ export type Database = {
           refus_motif: string | null
           societe_id: string
           sous_traitant_id: string | null
-          statut: string | null
+          statut: string
           technicien_id: string | null
           validee_le: string | null
           validee_par: string | null
@@ -2956,7 +2959,7 @@ export type Database = {
           refus_motif?: string | null
           societe_id: string
           sous_traitant_id?: string | null
-          statut?: string | null
+          statut?: string
           technicien_id?: string | null
           validee_le?: string | null
           validee_par?: string | null
@@ -2987,7 +2990,7 @@ export type Database = {
           refus_motif?: string | null
           societe_id?: string
           sous_traitant_id?: string | null
-          statut?: string | null
+          statut?: string
           technicien_id?: string | null
           validee_le?: string | null
           validee_par?: string | null
