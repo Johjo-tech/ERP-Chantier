@@ -18,7 +18,6 @@ import type { LigneChiffrable } from "../api/regles-bc";
 
 const QUANTITE_DEFAUT = 1;
 const UNITE_DEFAUT = "u";
-const TVA_DEFAUT = REGLAGES_DEFAUT.documents.tvaDefaut;
 
 export const CHAPITRE_BON_COMMANDE = "Bon de commande";
 export const CHAPITRE_TRAVAUX_SUP = "Travaux supplémentaires constatés sur le chantier";
@@ -81,14 +80,14 @@ export function badgeOrigine(origine: string | null | undefined): string {
   return ORIGINES[origine ?? ""] ?? "Ajouté en cours de chantier";
 }
 
-function travailEnLigne(t: TravailAffichable): LigneAffichee {
+function travailEnLigne(t: TravailAffichable, tvaDefaut: number): LigneAffichee {
   return {
     type: "ligne",
     designation: t.libelle ?? "",
     qte: QUANTITE_DEFAUT,
     unite: UNITE_DEFAUT,
     prixUnitaire: Number(t.prix_vente_ht) || 0,
-    tva: Number(t.tva) || TVA_DEFAUT,
+    tva: Number(t.tva) || tvaDefaut,
     classe: CLASSE_AJOUT,
     badge: badgeOrigine(t.origine),
   };
@@ -107,7 +106,10 @@ function travailEnLigne(t: TravailAffichable): LigneAffichee {
  */
 export function lignesDocumentDirecteur(
   lignes: LigneAffichee[],
-  travaux: TravailAffichable[]
+  travaux: TravailAffichable[],
+  /* Le taux vient des réglages de la société : 20 % en neuf, 10 % en
+     rénovation, 0 en autoliquidation. Le figer ici le rendrait faux ailleurs. */
+  tvaDefaut: number = REGLAGES_DEFAUT.documents.tvaDefaut
 ): LigneAffichee[] {
   const origine = lignes ?? [];
   const ajouts = travaux ?? [];
@@ -122,7 +124,7 @@ export function lignesDocumentDirecteur(
   }
 
   document.push({ type: "chapitre", designation: CHAPITRE_TRAVAUX_SUP });
-  document.push(...ajouts.map(travailEnLigne));
+  document.push(...ajouts.map((t) => travailEnLigne(t, tvaDefaut)));
 
   return document;
 }

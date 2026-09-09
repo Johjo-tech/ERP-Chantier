@@ -51,3 +51,34 @@ describe("Fusion des réglages", () => {
     expect(fusionnerReglages({ unites: ["U", " lot "] }).unites).toEqual(["U", "lot"]);
   });
 });
+
+describe("Taux de TVA", () => {
+  /* Le taux était écrit en dur à quatorze endroits du monolithe : changer
+     « TVA par défaut » dans les réglages ne changeait rien aux nouvelles
+     lignes. Ces tests fixent la source unique. */
+
+  it("propose les quatre taux français, plus zéro", () => {
+    // 0 sert à l'autoliquidation du bâtiment et aux exonérations
+    expect(fusionnerReglages({}).tauxTva).toEqual([0, 2.1, 5.5, 10, 20]);
+  });
+
+  it("accepte une liste personnalisée, triée et dédoublonnée", () => {
+    expect(fusionnerReglages({ tauxTva: [20, 5.5, 20, 0] }).tauxTva).toEqual([0, 5.5, 20]);
+  });
+
+  it("écarte ce qui n'est pas un taux exploitable", () => {
+    // Un taux négatif ne se verrait qu'au calcul des totaux, très loin d'ici
+    expect(fusionnerReglages({ tauxTva: [10, -5, "abc", 20] }).tauxTva).toEqual([10, 20]);
+  });
+
+  it("retombe sur les taux d'usine plutôt que sur une liste vide", () => {
+    expect(fusionnerReglages({ tauxTva: [] }).tauxTva).toEqual([0, 2.1, 5.5, 10, 20]);
+    expect(fusionnerReglages({ tauxTva: "20" }).tauxTva).toEqual([0, 2.1, 5.5, 10, 20]);
+  });
+
+  it("respecte le taux par défaut choisi par la société", () => {
+    // Du neuf se facture à 20 %, pas au 10 % qui était figé dans le code
+    expect(fusionnerReglages({ documents: { tvaDefaut: 20 } }).documents.tvaDefaut).toBe(20);
+    expect(fusionnerReglages({ documents: { tvaDefaut: 0 } }).documents.tvaDefaut).toBe(0);
+  });
+});

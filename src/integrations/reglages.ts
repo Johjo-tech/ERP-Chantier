@@ -30,6 +30,8 @@ export interface ReglagesSociete {
   documents: ReglagesDocuments;
   /** Unités proposées dans les lignes et le catalogue. */
   unites: string[];
+  /** Taux de TVA proposés dans les lignes. */
+  tauxTva: number[];
   /** Métiers proposés en plus de ceux de la table `metiers`. */
   metiers: string[];
   /** Jours avant échéance à partir desquels une alerte apparaît. */
@@ -38,6 +40,16 @@ export interface ReglagesSociete {
 }
 
 export const UNITES_DEFAUT = ["U", "ml", "m²", "m³", "h", "j", "forfait", "kg", "l", "ens"];
+
+/**
+ * Taux de TVA proposés dans les lignes.
+ *
+ * Les quatre taux français, plus zéro : la franchise en base, l'autoliquidation
+ * du bâtiment et les exonérations facturent à 0 %, et l'ancienne liste
+ * `[5.5, 10, 20]` ne permettait ni l'un ni l'autre. Modifiable par société,
+ * comme les unités — un taux peut disparaître ou changer.
+ */
+export const TAUX_TVA_DEFAUT = [0, 2.1, 5.5, 10, 20];
 
 export const REGLAGES_DEFAUT: ReglagesSociete = {
   documents: {
@@ -53,6 +65,7 @@ export const REGLAGES_DEFAUT: ReglagesSociete = {
     couleurAccent: "#FF6A1A",
   },
   unites: UNITES_DEFAUT,
+  tauxTva: TAUX_TVA_DEFAUT,
   metiers: [],
   seuils: SEUILS,
   notifications: { actives: true, destinataires: "" },
@@ -75,6 +88,18 @@ const liste = (v: unknown, defaut: string[]): string[] => {
   if (!Array.isArray(v)) return defaut;
   const nettoyee = v.map((x) => String(x).trim()).filter(Boolean);
   return nettoyee.length ? nettoyee : defaut;
+};
+
+/**
+ * Liste de taux, triée et débarrassée des valeurs inexploitables.
+ *
+ * Un taux négatif ou non numérique ne se verrait qu'au moment du calcul des
+ * totaux, très loin d'ici, et sans qu'on puisse remonter jusqu'aux réglages.
+ */
+const listeTaux = (v: unknown, defaut: number[]): number[] => {
+  if (!Array.isArray(v)) return [...defaut];
+  const propres = v.map(Number).filter((n) => Number.isFinite(n) && n >= 0);
+  return propres.length ? [...new Set(propres)].sort((a, b) => a - b) : [...defaut];
 };
 
 function fusionnerSeuils(v: Brut): Seuils {
@@ -114,6 +139,7 @@ export function fusionnerReglages(brut: unknown): ReglagesSociete {
       couleurAccent: texte(doc.couleurAccent, d.couleurAccent),
     },
     unites: liste(r.unites, UNITES_DEFAUT),
+    tauxTva: listeTaux(r.tauxTva, TAUX_TVA_DEFAUT),
     metiers: liste(r.metiers, []),
     seuils: fusionnerSeuils(r.seuils as Brut),
     notifications: {

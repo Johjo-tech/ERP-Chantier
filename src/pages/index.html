@@ -2741,7 +2741,7 @@ function quickNew(tab, type){ setTab(tab); openForm(type); }
 
 /* ---------- Formulaires génériques (ouverture / fermeture / lignes) ---------- */
 function openForm(type, prefill){
-  const base = {type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva:10};
+  const base = {type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()};
   state.editing = {type, id: prefill && prefill.id, lignes: (prefill && prefill.lignes && prefill.lignes.length ? prefill.lignes : [Object.assign({},base)]), ...(prefill||{})};
   if(type === 'bonCommande' && prefill && (prefill.travauxSupplementaires||[]).length){
     const designationsExistantes = new Set(state.editing.lignes.filter(l=>(l.type||'ligne')==='ligne').map(l=>l.designation));
@@ -2751,7 +2751,7 @@ function openForm(type, prefill){
         if(!ajoute && state.editing.lignes.length===1 && !state.editing.lignes[0].designation && !state.editing.lignes[0].prixUnitaire){
           state.editing.lignes = [];
         }
-        state.editing.lignes.push({type:'ligne', designation:t.texte, qte:1, prixUnitaire:0, tva:10});
+        state.editing.lignes.push({type:'ligne', designation:t.texte, qte:1, prixUnitaire:0, tva: tvaDefaut()});
         ajoute = true;
       }
     });
@@ -2800,7 +2800,7 @@ function ligneRow(l,i){
     <td><input type="number" min="0" step="1" value="${l.qte}" style="width:60px;" oninput="updateLigne(${i},'qte',this.value)"></td>
     <td><select onchange="updateLigne(${i},'unite',this.value)">${uniteOptions(l.unite)}</select></td>
     <td><input type="number" min="0" step="0.01" value="${l.prixUnitaire}" style="width:90px;" oninput="updateLigne(${i},'prixUnitaire',this.value)"></td>
-    <td><select onchange="updateLigne(${i},'tva',this.value)">${[5.5,10,20].map(v=>`<option value="${v}" ${v==l.tva?'selected':''}>${v}%</option>`).join('')}</select></td>
+    <td><select onchange="updateLigne(${i},'tva',this.value)">${optionsTvaHTML(l.tva)}</select></td>
     <td style="white-space:nowrap;">
       <button class="btn small ${hasComment?'primary':'ghost'}" onclick="toggleLigneComment(${i})" title="${hasComment?'Modifier le commentaire':'Ajouter un commentaire'}">💬</button>
       <button class="btn small danger" onclick="removeLigne(${i})">✕</button>
@@ -3221,10 +3221,10 @@ function toggleBCLignesZone(){
   const ouverte = zone.style.display !== 'none';
   zone.style.display = ouverte ? 'none' : 'block';
 }
-function addLigne(){ state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva:10}); refreshLignesUI(); }
+function addLigne(){ state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
 function addChapitre(){ state.editing.lignes.push({type:'chapitre', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function addCommentaire(){ state.editing.lignes.push({type:'commentaire', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
-function removeLigne(i){ state.editing.lignes.splice(i,1); if(!state.editing.lignes.length) state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva:10}); refreshLignesUI(); }
+function removeLigne(i){ state.editing.lignes.splice(i,1); if(!state.editing.lignes.length) state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
 let draggedLigneIndex = null;
 function dragStartLigne(ev, i){
   draggedLigneIndex = i;
@@ -3985,7 +3985,7 @@ function transformerBonCommandeEnFacture(bcId, ignorerValidationDirecteur){
     precisionCommune:b.precisionCommune||'', ancienLocataire:b.ancienLocataire||'',
     interlocuteur:'', conducteur:b.conducteur||'',
     date:todayISO(), echeance:'',
-    lignes: (b.lignes&&b.lignes.length)? JSON.parse(JSON.stringify(b.lignes)) : [{type:'ligne', designation:`Travaux — BC ${b.numeroBC||''}`, qte:1, prixUnitaire:b.montant||0, tva:10}],
+    lignes: (b.lignes&&b.lignes.length)? JSON.parse(JSON.stringify(b.lignes)) : [{type:'ligne', designation:`Travaux — BC ${b.numeroBC||''}`, qte:1, prixUnitaire:b.montant||0, tva: tvaDefaut()}],
     remisePourcentage:0, bonCommandeId:b.id, chantierId:b.chantierId||null, statut:'impayée',
     interventionId: (state.interventions.find(x=>x.bonCommandeId===b.id)||{}).id || null
   });
@@ -4163,11 +4163,11 @@ function voirFactureDepuisDevis(factureId){ goToFacture(factureId); }
 function voirDevisDepuisFacture(devisId){ goToDevis(devisId); }
 function parsePreconisationsEnLignes(texte, fallback){
   const lignes = (texte||'').split('\n').map(l=>l.trim()).filter(Boolean);
-  if(!lignes.length) return [{type:'ligne', designation: fallback||'', qte:1, unite:'u', prixUnitaire:0, tva:10}];
+  if(!lignes.length) return [{type:'ligne', designation: fallback||'', qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()}];
   return lignes.map(l=>{
     const m = l.match(/^(.*?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Zµ²³%]*)\s*$/i);
-    if(m) return {type:'ligne', designation: m[1].trim(), qte: parseFloat(m[2].replace(',','.'))||1, unite: m[3]? m[3] : 'u', prixUnitaire:0, tva:10};
-    return {type:'ligne', designation: l, qte:1, unite:'u', prixUnitaire:0, tva:10};
+    if(m) return {type:'ligne', designation: m[1].trim(), qte: parseFloat(m[2].replace(',','.'))||1, unite: m[3]? m[3] : 'u', prixUnitaire:0, tva: tvaDefaut()};
+    return {type:'ligne', designation: l, qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()};
   });
 }
 function transformerInterventionEn(type, interventionId){
@@ -4190,7 +4190,7 @@ function transformerInterventionEn(type, interventionId){
   const designationSuggeree = i.typePanne || '';
   const lignesSuggerees = (i.rapport && i.rapport.preconisations && i.rapport.preconisations.trim())
     ? parsePreconisationsEnLignes(i.rapport.preconisations)
-    : [{type:'ligne', designation: (i.rapport && i.rapport.constatations) ? i.rapport.constatations : designationSuggeree, qte:1, unite:'u', prixUnitaire:0, tva:10}];
+    : [{type:'ligne', designation: (i.rapport && i.rapport.constatations) ? i.rapport.constatations : designationSuggeree, qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()}];
   const prefill = {
     client: i.client, adresse: i.adresse, occupant: i.occupant||'', adresseLocataire: i.adresseLocataire||'',
     interlocuteur: i.interlocuteur||'',
@@ -5120,10 +5120,10 @@ function ouvrirEditionPrefacture(bcId){
   const designationsExistantes = new Set(lignesDepart.filter(l=>(l.type||'ligne')==='ligne').map(l=>l.designation));
   (b.travauxSupplementaires||[]).forEach(t=>{
     if(!designationsExistantes.has(t.texte)){
-      lignesDepart.push({ type:'ligne', designation: t.texte, qte:1, prixUnitaire:0, tva:10 });
+      lignesDepart.push({ type:'ligne', designation: t.texte, qte:1, prixUnitaire:0, tva: tvaDefaut() });
     }
   });
-  if(!lignesDepart.length) lignesDepart.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva:10});
+  if(!lignesDepart.length) lignesDepart.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()});
   state.editing = { id: bcId, lignes: lignesDepart };
   renderTab();
 }
@@ -5539,7 +5539,7 @@ function renderValidationDirecteur(){
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
   if(!b) return;
 
-  const lignesDoc = window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux);
+  const lignesDoc = window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut());
   const blocages = blocagesDirecteur(b, ctx);
 
   document.getElementById('validationDirecteurCorps').innerHTML = `
@@ -5762,7 +5762,7 @@ function bonCommandeForm(){
       <p class="card-sub">Facultatif — chiffrez les prestations ligne par ligne (avec prix, chapitres et lignes de commentaire), comme sur un devis. Si vous remplissez cette section, le montant ci-dessus sera recalculé automatiquement.</p>
       <div id="bcLignesZone" style="display:${bcLignesOntDuContenu(e.lignes)?'block':'none'};">
         <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
-        <tbody id="lignesBody">${ligneRowsHTML(e.lignes&&e.lignes.length? e.lignes : [{type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva:10}])}</tbody></table>
+        <tbody id="lignesBody">${ligneRowsHTML(e.lignes&&e.lignes.length? e.lignes : [{type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}])}</tbody></table>
         <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
           <button type="button" class="btn small" onclick="addLigne()">+ Ligne</button>
           <button type="button" class="btn small" onclick="addChapitre()">+ Chapitre</button>
@@ -8714,6 +8714,26 @@ const TYPES_DOC_LEGAUX = ['KBIS','Assurance décennale','Assurance RC Pro','Atte
 /* ---------- Réglages : sections par onglet ----------
    Chaque section n'écrit que les champs présents à l'écran : `saveReglages()`
    fusionne avec l'existant, pour qu'un onglet non affiché ne soit pas effacé. */
+/* Le taux de TVA n'est pas une constante du métier : 20 % en neuf, 10 % en
+   rénovation, 5,5 % en amélioration énergétique, 0 en autoliquidation. Il vient
+   donc des réglages de la société, jamais d'un littéral. */
+function tvaDefaut(){
+  const d = reglagesCourants().documents;
+  return Number.isFinite(Number(d && d.tvaDefaut)) ? Number(d.tvaDefaut) : 0;
+}
+function tauxTvaProposes(){
+  const r = reglagesCourants();
+  return (r.tauxTva && r.tauxTva.length) ? r.tauxTva : [tvaDefaut()];
+}
+/** Options d'un sélecteur de taux, le taux courant présélectionné. */
+function optionsTvaHTML(courant){
+  const taux = tauxTvaProposes();
+  const valeur = Number.isFinite(Number(courant)) ? Number(courant) : tvaDefaut();
+  // Un taux enregistré autrefois peut ne plus figurer dans la liste : on le garde
+  const liste = taux.includes(valeur) ? taux : [...taux, valeur].sort((a,b)=>a-b);
+  return liste.map(v=>`<option value="${v}" ${v===valeur?'selected':''}>${v}%</option>`).join('');
+}
+
 function reglagesCourants(){
   return (state.settings[state.societeId]||{}).reglages || window.REGLAGES_DEFAUT;
 }
@@ -8727,6 +8747,7 @@ function renderReglagesDocumentsSection(){
       <div class="field"><label>Validité des devis (jours)</label><input type="number" min="0" id="rg_validiteDevis" value="${d.validiteDevisJours}"></div>
       <div class="field"><label>Délai de paiement (jours)</label><input type="number" min="0" id="rg_delaiPaiement" value="${d.delaiPaiementJours}"></div>
       <div class="field"><label>TVA par défaut (%)</label><input type="number" min="0" step="0.1" id="rg_tva" value="${d.tvaDefaut}"></div>
+      <div class="field"><label>Taux de TVA proposés (%)</label><input type="text" id="rg_tauxTva" value="${esc(tauxTvaProposes().join(', '))}" placeholder="0, 5.5, 10, 20"><small style="color:var(--text-dim); font-size:11px;">Séparés par des virgules. 0 sert à l'autoliquidation et aux exonérations.</small></div>
       <div class="field"><label>Couleur des documents</label><input type="color" id="rg_couleur" value="${esc(d.couleurAccent)}"></div>
       <div class="field full"><label>Mention d'acceptation (devis)</label><input type="text" id="rg_mentionAcceptation" value="${esc(d.mentionAcceptation)}"></div>
       <div class="field full"><label>Conditions affichées sur les devis</label><textarea id="rg_conditionsDevis" style="min-height:60px;">${esc(d.conditionsDevis)}</textarea></div>
@@ -8901,7 +8922,13 @@ async function saveReglages(){
     ? el('rg_unites').value.split(',').map(x=>x.trim()).filter(Boolean)
     : base.unites;
 
-  const obj = { ...s, reglages: { ...base, documents, unites, seuils, notifications } };
+  /* Le nettoyage — tri, doublons, valeurs aberrantes — est fait par
+     `fusionnerReglages` à la relecture : une seule règle, côté testable. */
+  const tauxTva = el('rg_tauxTva')
+    ? el('rg_tauxTva').value.split(',').map(x=>parseFloat(x.trim())).filter(n=>Number.isFinite(n) && n>=0)
+    : base.tauxTva;
+
+  const obj = { ...s, reglages: { ...base, documents, unites, tauxTva, seuils, notifications } };
   state.settings[state.societeId] = obj;
 
   const r = await stSet('settings:'+state.societeId, obj);
@@ -9273,7 +9300,7 @@ async function confirmerFacturationAvancement(){
     if(nouveau > deja){
       const aFacturer = montant * (nouveau-deja)/100;
       const dpgfLigne = c.dpgfLignes.find(l=>l.id===ligneId);
-      lignesFacture.push({ type:'ligne', designation: `${dpgfLigne.designation} (avancement ${deja.toFixed(0)}% → ${nouveau.toFixed(0)}%)`, qte:1, prixUnitaire: aFacturer, tva:10 });
+      lignesFacture.push({ type:'ligne', designation: `${dpgfLigne.designation} (avancement ${deja.toFixed(0)}% → ${nouveau.toFixed(0)}%)`, qte:1, prixUnitaire: aFacturer, tva: tvaDefaut() });
       if(dpgfLigne) dpgfLigne.avancementCumule = nouveau;
     }
   });
@@ -12692,7 +12719,7 @@ function articleForm(){
       <div class="field"><label>Unité</label><select id="a_unite">${uniteOptions(e.unite)}</select></div>
       <div class="field full"><label>Désignation</label><input type="text" id="a_designation" value="${esc(e.designation)}"></div>
       <div class="field"><label>Prix unitaire HT</label><input type="number" step="0.01" id="a_prix" value="${e.prixUnitaire||''}"></div>
-      <div class="field"><label>TVA par défaut</label><select id="a_tva">${[5.5,10,20].map(v=>`<option value="${v}" ${v==(e.tva||10)?'selected':''}>${v}%</option>`).join('')}</select></div>
+      <div class="field"><label>TVA par défaut</label><select id="a_tva">${optionsTvaHTML(e.tva)}</select></div>
     </div>
     <div style="display:flex; gap:10px;">
       <button class="btn primary" onclick="saveArticle()">Enregistrer</button>

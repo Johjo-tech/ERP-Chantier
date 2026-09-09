@@ -294,6 +294,16 @@ describe("Document du directeur", () => {
     expect(doc[1].tva).toBeGreaterThan(0);
   });
 
+  it("respecte le taux de TVA de la société, pas un taux figé", () => {
+    // Du neuf se facture à 20 %, de l'amélioration énergétique à 5,5 %
+    expect(lignesDocumentDirecteur([], [{ libelle: "Siphon" }], 20)[1].tva).toBe(20);
+    expect(lignesDocumentDirecteur([], [{ libelle: "Siphon" }], 5.5)[1].tva).toBe(5.5);
+  });
+
+  it("laisse le taux propre au travail primer sur le défaut", () => {
+    expect(lignesDocumentDirecteur([], [{ libelle: "Siphon", tva: 10 }], 20)[1].tva).toBe(10);
+  });
+
   it("produit une ligne repérable par la règle des prix manquants", () => {
     // Le document et le blocage doivent voir la même chose
     const doc = lignesDocumentDirecteur([], [{ libelle: "Siphon", statut: "a_chiffrer" }]);
