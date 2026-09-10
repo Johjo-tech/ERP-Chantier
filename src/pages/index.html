@@ -1476,10 +1476,12 @@ window.addEventListener('error', function(ev){
      de leur moitié gauche — désignation, émetteur, début des mentions. La 0.14
      embarque html2canvas 1.4.1 et cadre juste. C'est la version qu'utilise
      chantier-mate-ease, dont les PDF ont toujours été complets. -->
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.14.0/dist/html2pdf.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<!-- html2pdf, XLSX et docx ne viennent plus d'un CDN : elles sont
+     construites avec l'application (src/integrations/librairies-documents.ts),
+     qui les pose sur `window` avant tout clic. Un CDN sans attribut
+     `integrity` exécutait le code de son choix dans une application qui
+     manipule des factures, et xlsx 0.18.5 traînait deux failles connues.
+     chart.js a été retiré : aucun `new Chart` n'existe dans ce fichier. -->
 <script>
 /* Alimenté au démarrage par les sociétés que la RLS rend visibles
    (voir src/integrations/session.ts). La liste ci-dessous n'est qu'un repli
