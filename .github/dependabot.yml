@@ -17,6 +17,13 @@ updates:
     commit-message:
       prefix: "ci"
     labels: ["dépendances", "ci"]
+    # Même règle que pour npm : une majeure se décide. Sans cette clause,
+    # Dependabot a proposé dès la première heure `actions/checkout` en 7.0.1
+    # et `setup-node` en 7.0.0 — deux sauts de trois majeures, sur les
+    # actions qui exécutent la CI.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /
