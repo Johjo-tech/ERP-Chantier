@@ -108,3 +108,8 @@ $$;
    des adresses passerait sur une base vide. On la rejoue ici, une fois les
    données en place, pour que le local reflète l'état du distant. */
 select * from public.reparer_adresses();
+
+/* Même raison : la reprise des numéros de bons de commande s'exécute dans la
+   migration, donc avant le chargement de la copie. On la rejoue ici pour que
+   le local reflète ce que la production aura. */
+select * from public.reprendre_numeros_bons_commande();

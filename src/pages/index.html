@@ -3499,7 +3499,11 @@ function printInterventionDraft(action){
 function bonCommandeDocMetaHTML(b){
   const metiers = bcMetiersDuBC(b).map(m=>metierDisplayLabel(m)).filter(Boolean);
   return [
-    b.numeroBC && b.numeroInterne ? `Réf. client : <b>${esc(b.numeroBC)}</b>` : '',
+    /* La référence du client s'affiche dès qu'elle existe. Elle était
+       conditionnée à la présence du numéro interne, si bien qu'un bon qui
+       n'en avait pas — 788 sur 826 — imprimait un document muet sur la
+       référence que le client, lui, utilise pour s'y retrouver. */
+    b.numeroBC ? `Réf. client : <b>${esc(b.numeroBC)}</b>` : '',
     b.dateReception ? `Reçu le : <b>${fmtDate(b.dateReception)}</b>` : '',
     b.conducteur ? `Conducteur : <b>${esc(b.conducteur)}</b>` : '',
     metiers.length ? `Métiers : <b>${esc(metiers.join(', '))}</b>` : ''

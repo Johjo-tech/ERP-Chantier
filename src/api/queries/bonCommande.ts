@@ -125,8 +125,20 @@ export async function createSAV(
   const origine = await getBonCommande(bcOrigineId);
   if (!origine) throw new Error(`Bon de commande ${bcOrigineId} introuvable`);
 
-  const { id, cree_le, maj_le, societe_id, legacy_id, numero_bc, ...entete } =
-    origine;
+  /* `numero_interne` ne se recopie pas : un SAV est un bon distinct, et
+     l'index unique (societe_id, numero_interne) refuserait le doublon. La
+     base lui en attribue un neuf à l'insertion. Tant que le champ restait
+     vide partout, la copie passait inaperçue. */
+  const {
+    id,
+    cree_le,
+    maj_le,
+    societe_id,
+    legacy_id,
+    numero_bc,
+    numero_interne,
+    ...entete
+  } = origine;
 
   return createBonCommande(societeId, {
     ...entete,

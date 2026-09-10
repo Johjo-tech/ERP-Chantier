@@ -919,8 +919,9 @@ export async function stGet(cle: string): Promise<unknown | null> {
  * Ce que la base décide et que l'appelant ne pouvait pas connaître.
  *
  * Le numéro d'une facture est attribué par un trigger, au passage à un statut
- * émis, et jamais avant : il n'existe donc pas dans l'objet enregistré. Le
- * relire est le seul moyen de l'afficher sans recharger toute la collection.
+ * émis, et celui d'un bon de commande à sa création : ni l'un ni l'autre
+ * n'existe dans l'objet enregistré. Les relire est le seul moyen de les
+ * afficher sans recharger toute la collection.
  */
 function champsCalcules(
   prefixe: string,
@@ -929,7 +930,9 @@ function champsCalcules(
   if (!row) return {};
   const legacy = versLegacy(prefixe, row);
   const calcules: Record<string, unknown> = {};
-  if (legacy.numero !== undefined) calcules.numero = legacy.numero;
+  for (const champ of ["numero", "numeroInterne"]) {
+    if (legacy[champ] !== undefined) calcules[champ] = legacy[champ];
+  }
   return calcules;
 }
 

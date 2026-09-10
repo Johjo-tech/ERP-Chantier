@@ -20,6 +20,10 @@ const CHAMPS_CHERCHES = [
   "client",
   "numero",
   "numeroBC",
+  /* Le numéro maison du bon de commande, distinct de `numeroBC` qui porte la
+     référence du client. Il n'était cherché nulle part, alors qu'il figure sur
+     le document imprimé : impossible de retrouver un bon depuis le papier. */
+  "numeroInterne",
   "numeroLogement",
   "adresse",
   "adresseLocataire",
