@@ -1043,13 +1043,69 @@ async function chercherUuid(table: TableName, legacyId: string): Promise<Uuid | 
   return (data as { id: Uuid } | null)?.id ?? null;
 }
 
+/**
+ * Réécrit les lignes filles d'un document — sauf si rien n'a changé.
+ *
+ * L'app renvoie l'objet entier à chaque enregistrement, y compris quand elle
+ * ne touche qu'au statut : encaisser un règlement rejouait donc un
+ * « supprimer tout puis réinsérer » sur des lignes identiques. C'était déjà
+ * du gaspillage ; depuis que les lignes d'une facture émise sont figées en
+ * base, c'est un refus — et l'encaissement échouerait pour une écriture dont
+ * personne n'avait besoin.
+ *
+ * Comparer d'abord règle les deux : le geste inutile disparaît, et une vraie
+ * modification se heurte au refus qu'elle mérite.
+ */
 async function remplacerEnfants(
   enfant: { table: TableName; fk: string },
   parentId: Uuid,
   rows: Record<string, unknown>[]
 ) {
-  await dyn().from(enfant.table).delete().eq(enfant.fk, parentId);
-  if (rows.length) await dyn().from(enfant.table).insert(rows);
+  if (await enfantsIdentiques(enfant, parentId, rows)) return;
+
+  /* PostgREST ne lève pas : il range son refus dans `error`. Sans ce contrôle,
+     le refus de la base était perdu et `stSet` annonçait un succès — l'écran
+     disait « enregistré » sur des lignes que rien n'avait touchées. */
+  const suppression = await dyn().from(enfant.table).delete().eq(enfant.fk, parentId);
+  if (suppression.error) throw suppression.error;
+
+  if (rows.length) {
+    const insertion = await dyn().from(enfant.table).insert(rows);
+    if (insertion.error) throw insertion.error;
+  }
+}
+
+/** Vrai si la base porte déjà exactement ces lignes, dans cet ordre. */
+async function enfantsIdentiques(
+  enfant: { table: TableName; fk: string },
+  parentId: Uuid,
+  rows: Record<string, unknown>[]
+): Promise<boolean> {
+  const { data, error } = await dyn()
+    .from(enfant.table)
+    .select("*")
+    .eq(enfant.fk, parentId);
+  if (error) return false;
+
+  const enBase = (data ?? []) as Record<string, unknown>[];
+  if (enBase.length !== rows.length) return false;
+
+  /* Seuls les champs que l'app renvoie sont comparés : la base en ajoute
+     (id, cree_le) que l'appelant ne connaît pas et ne prétend pas fixer. */
+  const parPosition = [...enBase].sort(
+    (a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)
+  );
+  return rows.every((envoyee, i) => {
+    const existante = parPosition[i];
+    if (!existante) return false;
+    return Object.entries(envoyee).every(([champ, valeur]) => {
+      if (champ === enfant.fk) return true;
+      const actuelle = existante[champ];
+      if (actuelle == null && valeur == null) return true;
+      // Postgres rend les numériques en chaîne : comparer sur le texte.
+      return String(actuelle ?? "") === String(valeur ?? "");
+    });
+  });
 }
 
 /** Remplace : `async function stDelete(key)`. */
