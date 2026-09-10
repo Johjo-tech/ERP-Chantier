@@ -72,12 +72,14 @@ npm run type-check
 npm run test:run
 ```
 
-Les suites unitaires tournent toujours. Les suites d'intégration écrivent dans
-la **vraie base** et ne s'activent que si `TEST_USER_EMAIL` /
-`TEST_USER_PASSWORD` sont dans `.env.local` — sans préfixe `VITE_`.
+Les suites unitaires tournent toujours. Les suites d'intégration ne s'activent
+que si `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` sont dans `.env.local` — sans
+préfixe `VITE_`.
 
-⚠ Elles créent des données réelles et consomment des numéros de document, qui
-ne sont jamais réattribués. Viser une société dédiée aux tests.
+Les faire tourner sur la base locale (`supabase start`, puis un
+`.env.test.local` qui pointe dessus) : voir `docs/TESTING.md`. Sinon elles
+écrivent dans la **vraie base**, y créent des données et consomment des
+numéros de document qui ne sont jamais réattribués.
 
 Un bug corrigé se double d'un test qui le reproduit.
 

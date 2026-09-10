@@ -1347,6 +1347,18 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     </div>
   </div>
 </div>
+<div id="choixAssigneModal" class="view-modal">
+  <div class="view-modal-panel" style="max-width:380px;">
+    <button class="view-modal-close" onclick="fermerChoixAssigne()">✕</button>
+    <h3 style="margin-top:0;" id="choixAssigneTitre">Quelle équipe ?</h3>
+    <p class="card-sub" id="choixAssigneAide"></p>
+    <div class="field"><label>Affecter à</label><select id="choixAssigneSelect"></select></div>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn primary" onclick="confirmerChoixAssigne()">✓ Planifier</button>
+      <button class="btn ghost" onclick="fermerChoixAssigne()">Annuler</button>
+    </div>
+  </div>
+</div>
 <div id="validationConducteurModal" class="view-modal">
   <div class="view-modal-panel" style="max-width:560px;">
     <button class="view-modal-close" onclick="closeValidationConducteurModal()">✕</button>
@@ -3413,7 +3425,7 @@ function telechargerBlob(blob, nomFichier){
  * Le rognage de la moitié gauche, lui, ne venait pas d'ici : il tenait à la
  * version d'html2pdf chargée (voir la balise script).
  */
-async function lancerGenerationPdf(area, nomFichier, action){
+async function lancerGenerationPdf(area, nomFichier, action, factureId){
   try{
     await attendreRendu();
 
@@ -3430,7 +3442,18 @@ async function lancerGenerationPdf(area, nomFichier, action){
       pagebreak: { mode: ['css','legacy'] }
     };
 
-    const blob = await html2pdf().set(opt).from(area).outputPdf('blob');
+    let blob = await html2pdf().set(opt).from(area).outputPdf('blob');
+
+    /* Une facture emporte sa version structurée : le même fichier porte la page
+       que l'humain lit et les données que la machine du client exploite. Un
+       manque n'empêche pas le téléchargement, il le signale. */
+    if(factureId && window.pdfFacturX){
+      const r = await window.pdfFacturX(blob, factureId);
+      blob = r.fichier;
+      if(!r.structuree && r.manques.length){
+        showToast(`PDF simple : ${r.manques[0]}`);
+      }
+    }
 
     /* L'aperçu en onglet ne vaut que hors iframe : ailleurs `window.open` est
        bloqué et le document repart sans nom. */
@@ -3641,7 +3664,11 @@ function printDocument(type, id, action){
   area.innerHTML = renderPrintDoc(type, id);
   area.style.display = 'block';
   showToast(action==='save' ? 'Enregistrement du PDF…' : 'Génération du PDF…', 'success');
-  lancerGenerationPdf(area, doc.numero || NOM_FICHIER_DEFAUT[type] || 'document', action);
+  /* Seule une facture numérotée porte une version structurée : un devis n'est
+     pas une facture électronique, et un brouillon sans numéro n'existe pas
+     encore pour la plateforme. */
+  const pourFacturX = (type === 'facture' && doc.numero) ? id : null;
+  lancerGenerationPdf(area, doc.numero || NOM_FICHIER_DEFAUT[type] || 'document', action, pourFacturX);
 }
 
 /* ---------- Devis ---------- */
@@ -3891,6 +3918,32 @@ function dupliquerDevis(devisId){
   });
   showToast('Devis dupliqué — modifiez-le puis enregistrez pour créer un nouveau devis.', 'success');
 }
+/**
+ * Dépose la facture sur la plateforme de dématérialisation.
+ *
+ * Le geste reste manuel : une facture transmise ne se rattrape pas, il faut
+ * émettre un avoir. On demande donc confirmation, et on montre ce qui bloque
+ * plutôt que d'échouer sans dire pourquoi.
+ */
+async function transmettreALaPlateforme(factureId){
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+  if(f.pdpIdentifiant){
+    showToast(`Déjà déposée sur la plateforme (${f.pdpIdentifiant}).`);
+    return;
+  }
+  if(!window.transmettreFacture){
+    showToast("La transmission n'est pas disponible.");
+    return;
+  }
+  if(!confirm(`Déposer la facture ${f.numero} sur la plateforme ?\n\nUne facture transmise ne peut plus être modifiée : il faudrait émettre un avoir.`)) return;
+
+  showToast('Transmission en cours…');
+  const r = await window.transmettreFacture(factureId);
+  showToast(r.message, r.depose ? 'success' : undefined);
+  if(r.depose){ await loadAll(); renderTab(); }
+}
+
 function dupliquerFacture(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
@@ -4656,6 +4709,7 @@ function renderFacturesListHTML(list){
       <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
+      ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
       <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
     </div></div>`;
   }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';
@@ -5202,6 +5256,11 @@ function bcWorkflowStepperHTML(b, ctx){
   const etape2 = !!b.valideConducteur;
   const etape3 = !!b.valideDirecteur;
   const etape4 = !!state.factures.find(f=>f.bonCommandeId===b.id);
+  /* Arbitrer, c'est le geste du conducteur. Le bouton s'affichait sans aucun
+     contrôle de rôle, là où celui du directeur était gardé juste en dessous :
+     un technicien voyait « Valider (conducteur) » et se heurtait au refus de la
+     base. Masquer ce qui serait de toute façon refusé. */
+  const peutArbitrer = !window.actionsTache || window.actionsTache('realisee').peutArbitrer;
   const steps = [
     {label:'Métiers (technicien)', done:etape1},
     {label:'Conducteur', done:etape2},
@@ -5217,12 +5276,11 @@ function bcWorkflowStepperHTML(b, ctx){
       ${i<steps.length-1? `<div class="bc-step-line ${steps[i].done?'is-done':''}"></div>`:''}
     `).join('')}
     <div class="bc-step-actions">
-      ${ctx==='attente' && !etape2? (etape1?
+      ${ctx==='attente' && !etape2 && peutArbitrer? (etape1?
         `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}')">✓ Valider (conducteur)</button>`
         : `<div class="bc-attente-message">⏳ En attente — tous les métiers doivent être marqués comme réalisés par le technicien avant de pouvoir passer à la validation du conducteur.</div>`
       ) : ''}
       ${ctx==='validation' && etape2 && !etape3 && (!window.actionsFacturation || window.actionsFacturation().peutValiderPrefacture)? `<button class="btn small primary" onclick="openValidationDirecteurModal('${b.id}')">✓ Valider (directeur)</button>` : ''}
-      ${ctx==='attente' && etape2? `<button class="btn small ghost" onclick="devaliderBC('${b.id}')">↩ Réinitialiser les validations</button>` : ''}
     </div>
   </div>`;
 }
@@ -5230,6 +5288,12 @@ let validationConducteurCtx = null;
 async function openValidationConducteurModal(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
+  /* Second garde-fou : masquer un bouton ne suffit pas, la fonction reste
+     appelable depuis la console. La base refuserait, mais autant le dire ici. */
+  if(window.actionsTache && !window.actionsTache('realisee').peutArbitrer){
+    showToast("Seuls le conducteur de travaux et l'administrateur arbitrent les tâches.");
+    return;
+  }
   validationConducteurCtx = bcId;
   document.getElementById('validationConducteurInfo').textContent = `${b.numeroBC||b.client} — ${b.client}`;
   document.getElementById('validationConducteurTaches').innerHTML = '<div class="empty">Chargement des tâches…</div>';
@@ -5678,15 +5742,16 @@ async function validerBCEtape(bcId, etape){
     showToast(err.message || "Validation refusée.");
   }
 }
-async function devaliderBC(bcId){
-  if(!confirm('Réinitialiser les validations conducteur et directeur pour ce bon de commande ?')) return;
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  b.valideConducteur = false; b.valideDirecteur = false;
-  await stSet('bonCommande:'+bcId, b);
-  await loadAll();
-  renderTab();
-}
+/* `devaliderBC` a été retirée avec son bouton « ↩ Réinitialiser les validations ».
+   Elle écrivait `valideConducteur` et `valideDirecteur`, deux champs dérivés des
+   tâches et sans colonne : le pont les ignore, le rechargement les recalculait à
+   l'identique. Le bouton demandait confirmation, affichait un succès, et ne
+   réinitialisait rien.
+
+   Il n'est pas remplacé par une vraie dévalidation : le circuit tient sur le
+   fait qu'une tâche validée est close — `tache_marquer_realisee` refuse
+   explicitement de la rouvrir, pour qu'un arbitrage ne s'efface pas sans trace.
+   Rouvrir une affaire validée est une décision de gestion, pas un correctif. */
 function bonCommandeForm(){
   const e = state.editing;
   const statuts = ['en attente','en cours','terminé','annulé'];
@@ -7083,17 +7148,9 @@ async function wfValiderPrefacture(){
   }
 }
 
-async function wfPretAChiffrer(){
-  try{
-    await window.passerPretAChiffrer(wfTacheCourante.bon_commande_id);
-    showToast('Bon de commande prêt à chiffrer.', 'success');
-    await loadAll();
-    renderTab();
-  }catch(err){
-    console.error('Passage à chiffrer refusé', err);
-    showToast(err.message || 'Action refusée.');
-  }
-}
+/* `wfPretAChiffrer` a été supprimée : elle était définie et jamais appelée. Le
+   passage à « prêt à chiffrer » est déduit du chiffrage, pas cliqué — cf. le
+   commentaire du bandeau plus haut. Un bouton mort disait le contraire. */
 
 function closeTechnicienInterventionModal(){
   document.getElementById('technicienInterventionModal').style.display = 'none';
@@ -7277,26 +7334,60 @@ function allowDropHour(ev){ ev.preventDefault(); ev.dataTransfer.dropEffect='mov
 async function dropOnHour(ev, dateISO, hour, assigneeField, assigneeValue){
   ev.preventDefault();
   ev.currentTarget.classList.remove('drag-over');
+  const info = readDraggedItem(ev);
+  draggedItem = null;
+  if(!info) return;
+
+  /* Une tâche sans équipe ne pourra être clôturée que par le conducteur : le
+     choix n'est pas optionnel. Quand le filtre en porte une, elle s'applique et
+     le dépôt reste immédiat ; sinon on la demande, au lieu de refuser. */
   if(assigneeField && !assigneeValue){
-    showToast(assigneeField==='sousTraitant' ? "Sélectionnez d'abord un sous-traitant dans le filtre avant de planifier." : "Sélectionnez d'abord une équipe dans le filtre avant de planifier.");
-    draggedItem = null;
+    ouvrirChoixAssigne(info, assigneeField, dateISO, String(hour).padStart(2,'0')+':00');
     return;
   }
-  const info = readDraggedItem(ev);
-  if(!info) return;
+  await poserAuPlanning(info, dateISO, String(hour).padStart(2,'0')+':00', assigneeField, assigneeValue);
+}
+
+/** Écrit la planification sur le bon. L'équipe rejoint la tâche à sa création. */
+async function poserAuPlanning(info, dateISO, heure, assigneeField, assigneeValue){
   const resolved = resolvePlanningItem(info.kind, info.id);
   if(!resolved) return;
   const { bc, metierKey, bcId } = resolved;
   setSchedField(bc, metierKey, 'datePlanifiee', dateISO);
   setSchedField(bc, metierKey, 'datePlanifieeFin', dateISO);
-  setSchedField(bc, metierKey, 'heurePlanifiee', String(hour).padStart(2,'0')+':00');
+  setSchedField(bc, metierKey, 'heurePlanifiee', heure);
   if(!schedField(bc, metierKey, 'dureeHeures')) setSchedField(bc, metierKey, 'dureeHeures', 1);
   if(assigneeField && assigneeValue){
     setSchedField(bc, metierKey, assigneeField, assigneeValue);
   }
   await stSet(planningKeyPrefix(info.kind)+bcId, bc);
-  draggedItem = null;
   renderTab();
+}
+
+let choixAssigneCtx = null;
+function ouvrirChoixAssigne(info, assigneeField, dateISO, heure){
+  choixAssigneCtx = { info, assigneeField, dateISO, heure };
+  const st = assigneeField === 'sousTraitant';
+  document.getElementById('choixAssigneTitre').textContent = st ? 'Quel sous-traitant ?' : 'Quelle équipe ?';
+  document.getElementById('choixAssigneAide').textContent = st
+    ? "Le sous-traitant intervient sur cette date."
+    : "Seuls les membres de cette équipe pourront déclarer les travaux faits.";
+  document.getElementById('choixAssigneSelect').innerHTML = st
+    ? sousTraitantSelectOptions('')
+    : technicienSelectOptions('');
+  document.getElementById('choixAssigneModal').style.display = 'flex';
+}
+function fermerChoixAssigne(){
+  document.getElementById('choixAssigneModal').style.display = 'none';
+  choixAssigneCtx = null;
+}
+async function confirmerChoixAssigne(){
+  if(!choixAssigneCtx) return;
+  const valeur = document.getElementById('choixAssigneSelect').value;
+  if(!valeur){ showToast("Choisissez d'abord dans la liste."); return; }
+  const { info, assigneeField, dateISO, heure } = choixAssigneCtx;
+  fermerChoixAssigne();
+  await poserAuPlanning(info, dateISO, heure, assigneeField, valeur);
 }
 async function dropUnsched(ev){
   ev.preventDefault();
@@ -7346,23 +7437,20 @@ async function shiftBCUnJourPlusTot(kind, id){
 }
 async function quickScheduleBC(kind, id, dateVal, assigneeField, assigneeValue){
   if(!dateVal) return;
+  // Même règle qu'au glisser-déposer : on demande l'équipe plutôt que de refuser.
   if(assigneeField && !assigneeValue){
-    showToast(assigneeField==='sousTraitant' ? "Sélectionnez d'abord un sous-traitant dans le filtre avant de planifier." : "Sélectionnez d'abord une équipe dans le filtre avant de planifier.");
-    renderTab();
+    ouvrirChoixAssigne({ kind, id }, assigneeField, dateVal, '08:00');
     return;
   }
+  await poserAuPlanning({ kind, id }, dateVal, schedHeureOuDefaut(kind, id), assigneeField, assigneeValue);
+}
+
+/* Le sélecteur de date ne touche pas à l'heure déjà posée, contrairement au
+   dépôt sur une case horaire qui la fixe. */
+function schedHeureOuDefaut(kind, id){
   const resolved = resolvePlanningItem(kind, id);
-  if(!resolved) return;
-  const { bc, metierKey, bcId } = resolved;
-  setSchedField(bc, metierKey, 'datePlanifiee', dateVal);
-  setSchedField(bc, metierKey, 'datePlanifieeFin', dateVal);
-  if(!schedField(bc, metierKey, 'heurePlanifiee')) setSchedField(bc, metierKey, 'heurePlanifiee', '08:00');
-  if(!schedField(bc, metierKey, 'dureeHeures')) setSchedField(bc, metierKey, 'dureeHeures', 1);
-  if(assigneeField && assigneeValue){
-    setSchedField(bc, metierKey, assigneeField, assigneeValue);
-  }
-  await stSet(planningKeyPrefix(kind)+bcId, bc);
-  renderTab();
+  if(!resolved) return '08:00';
+  return schedField(resolved.bc, resolved.metierKey, 'heurePlanifiee') || '08:00';
 }
 async function updateBCHeure(kind, id, value){
   const resolved = resolvePlanningItem(kind, id);
@@ -8584,7 +8672,7 @@ function renderReglagesOnglet(){
     case 'numerotation':  return renderNumerotationSection();
     case 'travaux':       return renderMetiersSection() + renderUnitesSection();
     case 'articles':      return renderArticlesSection();
-    case 'intervenants':  return renderConducteursSection() + renderTechniciensSection() + renderSousTraitantsSection();
+    case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection();
     case 'rh':            return renderSeuilsSection('rh');
     case 'vehicules':     return renderSeuilsSection('vehicules');
     case 'notifications': return renderNotificationsSection();
@@ -11294,8 +11382,23 @@ async function confirmVendreVehicule(){
   renderTab();
   showToast('Véhicule marqué comme vendu, facture créée.', 'success');
 }
+function setRhView(view){
+  state.rhView = view;
+  renderTab();
+}
 function renderRH(){
   if(state.viewingRegistre) return renderRegistreUniquePersonnel();
+  const vue = state.rhView || 'salaries';
+  const equipes = state.techniciens.filter(t=>t.societeId===state.societeId);
+  const sousNav = `
+    <div class="plus-subnav" style="justify-content:center;">
+      <button class="plus-subnav-btn ${vue==='salaries'?'active':''}" onclick="setRhView('salaries')">Salariés</button>
+      <button class="plus-subnav-btn ${vue==='equipes'?'active':''}" onclick="setRhView('equipes')">Équipes ${equipes.length? `(${equipes.length})`:''}</button>
+    </div>`;
+  if(vue==='equipes') return sousNav + renderEquipesRH();
+  return sousNav + renderRHSalaries();
+}
+function renderRHSalaries(){
   const list = state.salaries.filter(s=>s.societeId===state.societeId);
   const q = (state.rhSearch||'').trim().toLowerCase();
   const metierFiltre = state.rhMetierFiltre||'';
@@ -11314,6 +11417,81 @@ function renderRH(){
     <div id="formZoneSalarie">${state.formOpen.salarie? salarieForm(): ''}</div>
     <div id="rhListZone">${renderSalarieListHTML(filtered)}</div>
   `;
+}
+/**
+ * Les équipes et leurs membres.
+ *
+ * Une équipe est une ligne de `techniciens` — l'application les appelle ainsi
+ * depuis toujours dans le planning et les statistiques. Ses membres sont les
+ * salariés dont « Équipe liée » pointe dessus : rattacher quelqu'un, c'est
+ * écrire ce champ, qui existait déjà mais ne se renseignait que depuis la fiche
+ * du salarié, une par une.
+ *
+ * L'appartenance décide de qui peut déclarer les travaux faits — la base
+ * remonte la chaîne compte → salarié → équipe. D'où la mention du compte
+ * manquant : un membre sans compte ne pointera jamais lui-même.
+ */
+function renderEquipesRH(){
+  const equipes = state.techniciens.filter(t=>t.societeId===state.societeId);
+  const salaries = state.salaries.filter(s=>s.societeId===state.societeId && s.actif !== false);
+  const sansEquipe = salaries.filter(s=>!s.technicienId);
+
+  return `
+    <div class="page-head"><h1>Équipes</h1>${state.formOpen.technicien? '' : `<button class="btn primary" onclick="openForm('technicien')">+ Nouvelle équipe</button>`}</div>
+    <div id="formZoneTechnicien">${state.formOpen.technicien? technicienForm() : ''}</div>
+    ${equipes.map(t=>{
+      const membres = salaries.filter(s=>s.technicienId===t.id);
+      return `<div class="card">
+        <div class="card-row">
+          <div>
+            <div class="card-title">${esc(technicienLabel(t))}</div>
+            <div class="card-sub">${(t.metiers&&t.metiers.length)? '🔧 '+t.metiers.map(esc).join(', ') : (t.metier? '🔧 '+esc(t.metier):'Aucun métier')} · ${membres.length} membre${membres.length>1?'s':''}</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn small" onclick="editItem('technicien','${t.id}')">Modifier</button>
+            <button class="btn small danger" onclick="deleteItem('technicien','${t.id}')">Supprimer</button>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          ${membres.map(s=>`
+            <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-top:1px solid var(--border);">
+              <span style="flex:1;">${esc([s.prenom,s.nom].filter(Boolean).join(' '))}${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</span>
+              ${s.profileId? '' : '<span class="card-sub" title="Sans compte, ce membre ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}
+              <button class="btn small ghost" onclick="retirerDeLEquipe('${s.id}')">Retirer</button>
+            </div>`).join('') || '<div class="empty" style="margin:6px 0;">Aucun membre. Cette équipe ne peut rien déclarer.</div>'}
+        </div>
+        ${sansEquipe.length? `<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+          <select id="ajoutMembre_${t.id}" style="flex:1;">
+            <option value="">— Ajouter un salarié —</option>
+            ${sansEquipe.map(s=>`<option value="${s.id}">${esc([s.prenom,s.nom].filter(Boolean).join(' '))}</option>`).join('')}
+          </select>
+          <button class="btn small" onclick="ajouterALEquipe('${t.id}')">+ Ajouter</button>
+        </div>` : ''}
+      </div>`;
+    }).join('') || '<div class="empty">Aucune équipe. Créez-en une pour pouvoir planifier.</div>'}
+    ${sansEquipe.length? `<div class="section-title" style="margin-top:26px;">Salariés sans équipe (${sansEquipe.length})</div>
+      <div class="card"><div class="card-sub">${sansEquipe.map(s=>esc([s.prenom,s.nom].filter(Boolean).join(' '))).join(' · ')}</div></div>` : ''}
+  `;
+}
+async function ajouterALEquipe(equipeId){
+  const select = document.getElementById('ajoutMembre_'+equipeId);
+  const salarieId = select && select.value;
+  if(!salarieId) return;
+  await majEquipeSalarie(salarieId, equipeId);
+}
+async function retirerDeLEquipe(salarieId){
+  await majEquipeSalarie(salarieId, null);
+}
+/* Le rattachement passe par la fiche du salarié : c'est elle qui porte le champ,
+   et l'écrire ailleurs ferait diverger les deux chemins. */
+async function majEquipeSalarie(salarieId, equipeId){
+  const s = state.salaries.find(x=>x.id===salarieId);
+  if(!s) return;
+  const r = await stSet('salarie:'+salarieId, { ...s, technicienId: equipeId });
+  if(!r){ showToast(saveFailedMessage()); return; }
+  await loadAll();
+  renderTab();
+  showToast(equipeId? 'Salarié rattaché à l\'équipe.' : 'Salarié retiré de l\'équipe.', 'success');
 }
 function renderRegistreUniquePersonnel(){
   const list = state.salaries.filter(s=>s.societeId===state.societeId)
@@ -11580,7 +11758,8 @@ function salarieForm(){
         <option value="F" ${e.sexe==='F'?'selected':''}>Femme</option>
         <option value="M" ${e.sexe==='M'?'selected':''}>Homme</option>
       </select></div>
-      <div class="field"><label>Équipe liée (Techniciens)</label><select id="sal_technicienId">${technicienLinkOptions(e.technicienId)}</select></div>
+      <div class="field"><label>Équipe</label><select id="sal_technicienId">${technicienLinkOptions(e.technicienId)}</select></div>
+      <div class="field"><label>Compte utilisateur</label><select id="sal_profileId">${comptesLinkOptions(e.profileId)}</select><div class="card-sub" style="margin-top:4px;">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div></div>
       <div class="field"><label>Type de contrat</label><select id="sal_typeContrat">${TYPES_CONTRAT.map(t=>`<option value="${t}" ${e.typeContrat===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Coût horaire chargé (HT, salaire + charges)</label><input type="number" step="0.01" id="sal_coutHoraireCharge" value="${e.coutHoraireCharge!=null?e.coutHoraireCharge:''}" placeholder="Ex : 32.50"></div>
       <div class="field"><label>Salaire mensuel net</label><input type="number" step="0.01" id="sal_salaireMensuelNet" value="${e.salaireMensuelNet!=null?e.salaireMensuelNet:''}" placeholder="Ex : 1850"></div>
@@ -11647,6 +11826,22 @@ function technicienLinkOptions(current){
   const list = state.techniciens.filter(t=>t.societeId===state.societeId);
   return '<option value="">— Aucune —</option>' + list.map(t=>`<option value="${t.id}" ${t.id===current?'selected':''}>${esc(t.nom1||'Équipe')}</option>`).join('');
 }
+/* Les comptes de la société, pour rattacher un salarié au sien.
+
+   Le rattachement existant est toujours proposé, même si l'annuaire ne l'a pas
+   ramené — annuaire non chargé, compte désactivé depuis, société changée. Sans
+   cette précaution le champ s'affichait sur « Aucun », et le simple fait
+   d'enregistrer la fiche effaçait le lien : le salarié perdait son compte sans
+   que personne ne l'ait demandé, et avec lui le droit de pointer ses tâches. */
+function comptesLinkOptions(current){
+  const list = window.listeIntervenants ? window.listeIntervenants() : [];
+  const connu = list.some(i=>i.id===current);
+  const options = list.map(i=>`<option value="${i.id}" ${i.id===current?'selected':''}>${esc(i.nom)}</option>`).join('');
+  const conserve = (current && !connu)
+    ? `<option value="${esc(current)}" selected>Compte déjà rattaché</option>`
+    : '';
+  return `<option value="" ${current?'':'selected'}>— Aucun —</option>` + conserve + options;
+}
 function habilitationRowsHTML(habilitations){
   if(!habilitations.length) return '<div class="empty">Aucune habilitation renseignée.</div>';
   return habilitations.map((h,i)=>`
@@ -11693,6 +11888,7 @@ async function saveSalarie(){
     nationalite: document.getElementById('sal_nationalite').value,
     sexe: document.getElementById('sal_sexe').value,
     technicienId: document.getElementById('sal_technicienId').value || null,
+    profileId: document.getElementById('sal_profileId').value || null,
     typeContrat: document.getElementById('sal_typeContrat').value,
     coutHoraireCharge: parseFloat(document.getElementById('sal_coutHoraireCharge').value) || null,
     salaireMensuelNet: parseFloat(document.getElementById('sal_salaireMensuelNet').value) || null,
@@ -12494,27 +12690,18 @@ function sousTraitantFilterOptions(current){
   const list = state.sousTraitants.filter(s=>s.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
   return '<option value="">Tous les sous-traitants</option>' + list.map(s=>`<option value="${esc(s.nom)}" ${s.nom===current?'selected':''}>${esc(s.nom)}</option>`).join('');
 }
-function renderTechniciensSection(){
-  const list = state.techniciens.filter(t=>t.societeId===state.societeId);
-  const typeLabels = {seul:'Seul', binome:'Binôme', trinome:'Trinôme'};
-  return `
-    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
-      <span>Techniciens</span>
-      <button class="btn small primary" onclick="openForm('technicien')">+ Nouveau technicien</button>
-    </div>
-    <div id="formZoneTechnicien">${state.formOpen.technicien? technicienForm() : ''}</div>
-    ${list.map(t=>`
-      <div class="card"><div class="card-row">
-        <div><div class="card-title">${esc(technicienLabel(t))}</div><div class="card-sub">${typeLabels[t.type]||''}${(t.metiers&&t.metiers.length)? ' · 🔧 '+t.metiers.map(esc).join(', ') : (t.metier? ' · 🔧 '+esc(t.metier):'')}</div></div>
-      </div>
-      <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('technicien','${t.id}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('technicien','${t.id}')">Supprimer</button>
-      </div></div>`).join('') || '<div class="empty">Aucun technicien enregistré pour cette société.</div>'}
-  `;
-}
+/* Les équipes ont quitté les Réglages pour l'onglet Équipes du RH, où elles
+   vivent avec leurs membres. `renderTechniciensSection` n'existe plus. */
+
+/* Le libellé composait `nom1 + nom2 + nom3`. Seul `nom1` a une colonne : les
+   deux autres n'étaient jamais relus, le « + » ne s'affichait qu'avant le
+   premier rechargement.
+
+   Les équipes d'origine n'ont pas de nom, seulement un métier — c'est ainsi
+   qu'elles ont été créées. Le métier en tient lieu plutôt que « (sans nom) »,
+   qui ne désigne rien dans un menu déroulant. */
 function technicienLabel(t){
-  return [t.nom1, t.nom2, t.nom3].filter(Boolean).join(' + ');
+  return t.nom1 || t.metier || (t.metiers && t.metiers[0]) || 'Équipe';
 }
 /* Retient le client choisi parmi les suggestions de la lecture automatique. */
 function appliquerClientOCR(nom){
@@ -12645,51 +12832,46 @@ function getCheckedMetiers(idPrefix){
   const values = Array.from(document.querySelectorAll(`input[name="${idPrefix}_metiers"]:checked`)).map(el=>el.value);
   return [...new Set(values)];
 }
+/**
+ * Formulaire d'équipe.
+ *
+ * Il proposait une composition « seul / binôme / trinôme » et jusqu'à trois
+ * noms. La table n'a qu'une colonne `nom` : `type`, `nom2` et `nom3` n'avaient
+ * aucune colonne et étaient écartés à l'enregistrement — un binôme saisi
+ * ressortait seul. Les membres viennent désormais des salariés, où ils sont
+ * nommés une fois pour toutes ; l'équipe ne porte plus que son nom, ses métiers
+ * et sa couleur au planning.
+ */
 function technicienForm(){
   const e = state.editing;
-  const type = e.type || 'seul';
   return `
   <div class="form-panel">
-    <h3>${e.id? 'Modifier le technicien' : 'Nouveau technicien'}</h3>
+    <h3>${e.id? "Modifier l'équipe" : 'Nouvelle équipe'}</h3>
     <div class="field-grid">
-      <div class="field full"><label>Composition</label><select id="tc_type" onchange="toggleTechnicienFields(this.value)">
-        <option value="seul" ${type==='seul'?'selected':''}>Seul</option>
-        <option value="binome" ${type==='binome'?'selected':''}>Binôme (2 personnes)</option>
-        <option value="trinome" ${type==='trinome'?'selected':''}>Trinôme (3 personnes)</option>
-      </select></div>
-      <div class="field full"><label>Nom du 1er technicien</label><input type="text" id="tc_nom1" value="${esc(e.nom1)}" placeholder="Ex : Karim"></div>
-      <div class="field full" id="tc_nom2Field" style="display:${(type==='binome'||type==='trinome')?'':'none'};"><label>Nom du 2e technicien</label><input type="text" id="tc_nom2" value="${esc(e.nom2)}" placeholder="Ex : Yanis"></div>
-      <div class="field full" id="tc_nom3Field" style="display:${type==='trinome'?'':'none'};"><label>Nom du 3e technicien</label><input type="text" id="tc_nom3" value="${esc(e.nom3)}" placeholder="Ex : Sami"></div>
+      <div class="field full"><label>Nom de l'équipe</label><input type="text" id="tc_nom1" value="${esc(e.nom1)}" placeholder="Ex : Équipe peinture, Karim &amp; Yanis…"></div>
+      <div class="field"><label>Couleur au planning</label><input type="color" id="tc_couleur" value="${esc(e.couleur || '#4F7CFF')}"></div>
       <div class="field full"><label>Métier(s)</label>${metierCheckboxesHTML('tc', e.metiers || (e.metier? [e.metier] : []))}</div>
     </div>
+    <p class="card-sub" style="margin-top:4px;">Les membres se rattachent depuis l'onglet Équipes du RH, ou depuis la fiche de chaque salarié.</p>
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="btn primary" onclick="saveTechnicien()">Enregistrer</button>
       <button class="btn ghost" onclick="closeForm('technicien')">Annuler</button>
     </div>
   </div>`;
 }
-function toggleTechnicienFields(type){
-  const f2 = document.getElementById('tc_nom2Field');
-  const f3 = document.getElementById('tc_nom3Field');
-  if(f2) f2.style.display = (type==='binome'||type==='trinome') ? '' : 'none';
-  if(f3) f3.style.display = (type==='trinome') ? '' : 'none';
-}
 async function saveTechnicien(){
   const e = state.editing;
-  const type = document.getElementById('tc_type').value;
   const nom1 = document.getElementById('tc_nom1').value.trim();
-  if(!nom1){ alert('Le nom du 1er technicien est requis.'); return; }
+  if(!nom1){ alert("Le nom de l'équipe est requis."); return; }
   const id = e.id || uid();
   const metiers = getCheckedMetiers('tc');
-  const obj = { id, societeId: state.societeId, type, nom1,
-    nom2: (type==='binome'||type==='trinome') ? document.getElementById('tc_nom2').value.trim() : '',
-    nom3: (type==='trinome') ? document.getElementById('tc_nom3').value.trim() : '',
-    metiers, metier: metiers[0]||'' };
+  const obj = { id, societeId: state.societeId, nom1, metiers, metier: metiers[0]||'',
+    couleur: document.getElementById('tc_couleur').value };
   const r = await stSet('technicien:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await loadAll();
   closeForm('technicien');
-  showToast(e.id? 'Technicien modifié.' : 'Technicien créé.', 'success');
+  showToast(e.id? 'Équipe modifiée.' : 'Équipe créée.', 'success');
 }
 function technicienSelectOptions(current){
   const list = state.techniciens.filter(t=>t.societeId===state.societeId);

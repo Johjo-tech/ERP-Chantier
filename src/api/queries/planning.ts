@@ -26,12 +26,17 @@ import {
   blocagesValidationConducteur,
   messageBlocages,
 } from "../regles-bc";
+import {
+  STATUT_INITIAL,
+  motifTransitionRefusee,
+  transitionPermise,
+  type GesteTache,
+} from "../regles-taches";
 import { listBonCommandeLignes } from "./bonCommande";
 import type {
   PlanningTache,
   PlanningTacheInsert,
   PlanningTacheUpdate,
-  StatutTache,
   TravailSupplementaireInsert,
   Uuid,
 } from "../types";
@@ -71,6 +76,55 @@ export async function listTachesTechnicien(
   return data ?? [];
 }
 
+/**
+ * Membres de l'équipe affectée à une tâche.
+ *
+ * Une tâche est confiée à une équipe, et il suffit qu'un de ses membres la
+ * déclare faite : on ne demande pas à toute l'équipe de se prononcer. C'est ce
+ * que la base vérifie dans `tache_marquer_realisee`, en empruntant la chaîne
+ * compte → salarié → équipe → tâche.
+ *
+ * Un membre sans compte est renvoyé comme les autres : il fait partie de
+ * l'équipe, il ne peut simplement pas pointer lui-même.
+ */
+export async function listEquipeTache(
+  tacheId: Uuid
+): Promise<{ salarieId: Uuid; nom: string; profileId: Uuid | null }[]> {
+  const tache = await getTache(tacheId);
+  if (!tache?.technicien_id) return [];
+  return listMembresEquipe(tache.technicien_id as Uuid);
+}
+
+/** Membres d'une équipe, quelle que soit la tâche. */
+export async function listMembresEquipe(
+  equipeId: Uuid
+): Promise<{ salarieId: Uuid; nom: string; profileId: Uuid | null }[]> {
+  const { data, error } = await supabase
+    .from("salaries")
+    .select("id, nom, prenom, profile_id")
+    .eq("technicien_id", equipeId)
+    .order("nom");
+
+  if (error) throw new SupabaseError("Équipe indisponible", error.code, error);
+  return (data ?? []).map((s) => ({
+    salarieId: s.id as Uuid,
+    nom: [s.prenom, s.nom].filter(Boolean).join(" "),
+    profileId: (s.profile_id as Uuid | null) ?? null,
+  }));
+}
+
+/** Rattache un salarié à une équipe, ou l'en détache avec `null`. */
+export async function affecterSalarieAEquipe(
+  salarieId: Uuid,
+  equipeId: Uuid | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("salaries")
+    .update({ technicien_id: equipeId })
+    .eq("id", salarieId);
+  if (error) throw new SupabaseError("Affectation refusée", error.code, error);
+}
+
 /** Tâches en attente d'arbitrage du conducteur. */
 export async function listTachesAValider(societeId: Uuid): Promise<PlanningTache[]> {
   const { data, error } = await supabase
@@ -93,7 +147,7 @@ export function planifierTache(
   return insertOne("planning_taches", {
     ...input,
     societe_id: societeId,
-    statut: input.statut ?? ("planifiee" satisfies StatutTache),
+    statut: input.statut ?? STATUT_INITIAL,
   });
 }
 
@@ -128,31 +182,27 @@ export async function sauvegarderTerrain(
 }
 
 /**
- * Transitions autorisées de la machine à états.
+ * Refuse le geste avant l'aller-retour, et dit pourquoi.
  *
- * ⚠ Ces contrôles sont un filet côté client, pas une sécurité : le navigateur
- * est falsifiable. Les fonctions SQL acceptent aujourd'hui n'importe quelle
- * transition — voir supabase/migrations/ pour le correctif à appliquer en base.
+ * Ces contrôles ne sont pas une sécurité : le navigateur est falsifiable. Ce
+ * sont les fonctions SQL qui décident — elles gardent les transitions, les
+ * rôles, et refusent l'écriture directe des colonnes d'état depuis
+ * `20260909140000_durcir_circuit_taches.sql`. Leur intérêt est ailleurs :
+ * expliquer le refus sur place plutôt que de renvoyer une erreur Postgres.
+ *
+ * La règle elle-même vit dans `regles-taches.ts`, partagée avec l'interface :
+ * elle était écrite en trois exemplaires libres de diverger.
  */
-const TRANSITIONS: Record<string, StatutTache[]> = {
-  realiser: ["planifiee", "refusee"],
-  arbitrer: ["realisee"],
-};
-
 async function exigerStatut(
   tacheId: Uuid,
-  action: keyof typeof TRANSITIONS,
+  geste: GesteTache,
   libelle: string
 ): Promise<void> {
   const tache = await getTache(tacheId);
   if (!tache) throw new Error("Tâche introuvable.");
 
-  const attendus = TRANSITIONS[action];
-  const statut = (tache.statut ?? "planifiee") as StatutTache;
-  if (!attendus.includes(statut)) {
-    throw new Error(
-      `${libelle} : impossible depuis l'état « ${statut} » (attendu : ${attendus.join(" ou ")}).`
-    );
+  if (!transitionPermise(geste, tache.statut)) {
+    throw new Error(motifTransitionRefusee(geste, tache.statut, libelle));
   }
 }
 

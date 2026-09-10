@@ -1,0 +1,14 @@
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+
+# Dumps du projet distant. Le dépôt est public : les données réelles — noms de
+# clients, adresses, montants, empreintes de mots de passe — n'y entrent jamais.
+# La structure seule est versionnée, sous forme de migration de base.
+schema-cloud.sql
+data-cloud.sql

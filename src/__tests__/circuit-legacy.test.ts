@@ -64,6 +64,34 @@ suite("Circuit de validation de l'app historique", () => {
     expect(peinture!.statut).toBe("realisee");
   });
 
+  /* L'équipe est choisie à la planification, sur le bon ; la tâche naît plus
+     tard, au premier pointage. Si elle ne la reprend pas au passage, la garde
+     « on ne déclare que les tâches de son équipe » n'a rien à lire — et c'est
+     resté vrai pour les 627 tâches existantes, toutes sans équipe. */
+  it("reprend l'équipe du bon sur la tâche qu'elle matérialise", async () => {
+    /* Nom unique : l'équipe est retrouvée par son libellé, et deux équipes
+       homonymes rendraient l'assertion dépendante de l'ordre de lecture. */
+    const equipe = await queries.createTechnicien(societeId, {
+      nom: `Équipe reprise ${Date.now()}`,
+      metier: "PLOMBERIE",
+    });
+
+    const bc2 = await queries.createBonCommande(societeId, {
+      client_nom: "CLIENT DE TEST",
+      date: aujourdhui,
+      date_planifiee: aujourdhui,
+      metiers: ["PLOMBERIE"],
+      technicien: equipe.nom,
+    });
+    await relire();
+
+    const brut = (await stGet(`bonCommande:${bc2.id}`)) as Record<string, unknown>;
+    await stSet(`bonCommande:${bc2.id}`, { ...brut, metiersFait: { PLOMBERIE: true } });
+
+    const taches = await queries.listTachesBonCommande(bc2.id);
+    expect(taches[0]?.technicien_id).toBe(equipe.id);
+  });
+
   it("ne valide pas le conducteur tant qu'un métier reste ouvert", async () => {
     const bc = (await relire()).find((b) => b.id === bcId)!;
     // PEINTURE faite, SOL pas encore : le stepper reste à l'étape 1

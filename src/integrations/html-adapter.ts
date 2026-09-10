@@ -499,6 +499,57 @@ async function uuidSousTraitant(nom: string): Promise<Uuid | null> {
   return null;
 }
 
+/**
+ * Équipes, indexées par uuid. L'app les désigne par leur nom, comme les
+ * sous-traitants : le planning stocke le libellé sur le bon de commande.
+ */
+let equipesParUuid: Map<Uuid, string> | null = null;
+
+async function annuaireEquipes(): Promise<Map<Uuid, string>> {
+  if (equipesParUuid) return equipesParUuid;
+  const { data, error } = await dyn().from("techniciens").select("id, nom");
+  if (error) {
+    console.error("Annuaire des équipes indisponible", error);
+    return new Map();
+  }
+  equipesParUuid = new Map(
+    ((data ?? []) as { id: Uuid; nom: string }[]).map((e) => [e.id, e.nom])
+  );
+  return equipesParUuid;
+}
+
+/**
+ * L'uuid de l'équipe portée par un bon de commande.
+ *
+ * Le champ vaut tantôt l'uuid (sélecteur récent), tantôt le libellé (héritage) :
+ * on accepte les deux plutôt que de perdre l'affectation.
+ */
+async function uuidEquipe(valeur: string | undefined): Promise<Uuid | null> {
+  const brut = (valeur || "").trim();
+  if (!brut) return null;
+
+  const annuaire = await annuaireEquipes();
+  if (annuaire.has(brut as Uuid)) return brut as Uuid;
+  for (const [uuid, nom] of annuaire) if (nom === brut) return uuid;
+
+  /* L'annuaire est chargé une fois : une équipe créée depuis, dans la même
+     session, n'y figure pas. Plutôt que de perdre l'affectation, on relit —
+     et on retient, pour ne pas relire à chaque tâche. */
+  const { data } = await dyn()
+    .from("techniciens")
+    .select("id, nom")
+    .eq("nom", brut)
+    .limit(1)
+    .maybeSingle();
+  const trouvee = data as { id: Uuid; nom: string } | null;
+  if (trouvee) {
+    equipesParUuid?.set(trouvee.id, trouvee.nom);
+    return trouvee.id;
+  }
+  console.warn(`Équipe inconnue, affectation ignorée : ${brut}`);
+  return null;
+}
+
 /** Colonnes du circuit, lues d'un bloc pour toute la collection. */
 const CHAMPS_TACHE =
   "id, bon_commande_id, metier, statut, validee_le, realisee_le, commentaire," +
@@ -708,6 +759,9 @@ async function appliquerWorkflow(
       libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
       date_tache: dateTache,
       metier,
+      // L'équipe est choisie à la planification, sur le bon ; c'est ici qu'elle
+      // rejoint la tâche, seul endroit où la garde saura la lire.
+      technicien_id: await uuidEquipe(valeur.technicien as string | undefined),
     });
     taches.push({ id: creee.id, metier, statut: creee.statut });
     return creee.id;

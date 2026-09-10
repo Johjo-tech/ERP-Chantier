@@ -10,6 +10,11 @@
 
 import { signOut } from "@/api/client";
 import * as queries from "@/api/queries";
+import {
+  actionsTache as reglesActionsTache,
+  prochainActeur as reglesProchainActeur,
+  type ActionsTache,
+} from "@/api/regles-taches";
 import type { PlanningTache, Uuid } from "@/api/types";
 import type { RoleMembre, Societe } from "@/api/types";
 import { rechercherAdresse } from "./adresse";
@@ -65,6 +70,7 @@ import {
   comptesRendusTerrain,
   lignesDocumentDirecteur,
 } from "./prefacture";
+import { enrichirFactureX, etatConnexionPdp, transmettre } from "./facturx-pont";
 import { estRoleConnu, navAutorisee, peutSurNav, voitLesPrix } from "./permissions";
 import type { Action, ModuleId } from "./permissions";
 import { peut } from "./permissions";
@@ -222,45 +228,21 @@ export async function tacheDuBonCommande(
   });
 }
 
-export interface ActionsTache {
-  /** Poser une tâche au planning, l'affecter, la déplacer. */
-  peutPlanifier: boolean;
-  /** Renseigner constats, photos et travaux supplémentaires. */
-  peutSaisir: boolean;
-  /** Déclarer les travaux faits — le terrain clôture, il n'arbitre pas. */
-  peutCloturer: boolean;
-  /** Valider ou refuser ce que le terrain a déclaré. */
-  peutArbitrer: boolean;
-}
+export type { ActionsTache };
 
 /**
- * Répartition des rôles sur le circuit :
+ * Ce que le rôle courant peut faire sur une tâche.
  *
- *   technicien   clôture sa tâche ; ne planifie pas, n'arbitre pas
- *   conducteur   planifie et arbitre
- *   admin        planifie, arbitre, et valide la pré-facture
- *   secrétaire   lit les tâches, reprend la pré-facture et facture
- *
- * Le rôle est un paramètre plutôt qu'une lecture implicite : c'est ce qui rend
- * la règle vérifiable sans monter de session.
+ * La règle vit dans `regles-taches.ts`, partagée avec la couche d'accès : elle
+ * était recopiée ici, et rien n'obligeait les deux versions à rester d'accord.
+ * Ne subsiste ici que le défaut du rôle, qui suppose une session ouverte et ne
+ * peut donc pas descendre dans un module feuille.
  */
 export function actionsTache(
   statut: string | null,
   role: RoleMembre | null = roleEffectif()
 ): ActionsTache {
-  const etat = statut ?? "planifiee";
-  const terrain = role === "technicien" || role === "sous_traitant";
-  const encadrement = role === "admin" || role === "conducteur";
-
-  return {
-    peutPlanifier: encadrement,
-    // Une tâche validée est close : plus personne n'y touche
-    peutSaisir: (terrain || encadrement) && etat !== "validee",
-    peutCloturer:
-      (terrain || encadrement) && (etat === "planifiee" || etat === "refusee"),
-    // On n'arbitre que ce que le terrain a déclaré fait
-    peutArbitrer: encadrement && etat === "realisee",
-  };
+  return reglesActionsTache(statut, role);
 }
 
 /**
@@ -270,6 +252,10 @@ export function actionsTache(
  * une requête par tâche serait absurde.
  */
 let annuaire: Map<Uuid, { nom: string; role: RoleMembre | null }> | null = null;
+/* La liste plate double la table d'index : l'écran RH doit proposer les comptes
+   dans l'ordre pour rattacher un salarié au sien, ce qu'une Map ne garantit
+   pas. */
+let intervenants: { id: Uuid; nom: string; role: RoleMembre | null }[] = [];
 
 export async function chargerIntervenants(): Promise<void> {
   const societe = societeActive();
@@ -277,10 +263,18 @@ export async function chargerIntervenants(): Promise<void> {
   try {
     const liste = await queries.listIntervenants(societe.uuid);
     annuaire = new Map(liste.map((i) => [i.id, { nom: i.nom, role: i.role }]));
+    // `nom` retombe déjà sur l'email quand le compte n'en porte pas.
+    intervenants = [...liste].sort((a, b) => a.nom.localeCompare(b.nom));
   } catch (err) {
     console.error("Annuaire des intervenants indisponible", err);
     annuaire = new Map();
+    intervenants = [];
   }
+}
+
+/** Les comptes de la société, pour les écrans qui doivent y rattacher quelqu'un. */
+export function listeIntervenants() {
+  return intervenants;
 }
 
 /** Nom lisible d'un intervenant ; son identifiant ne dit rien à personne. */
@@ -289,21 +283,8 @@ export function nomIntervenant(id: string | null | undefined): string {
   return annuaire?.get(id as Uuid)?.nom ?? "un utilisateur";
 }
 
-/** Qui doit agir à cette étape, en clair. */
-export function prochainActeur(statut: string | null): string {
-  switch (statut ?? "planifiee") {
-    case "planifiee":
-      return "le technicien";
-    case "refusee":
-      return "le technicien, pour reprise";
-    case "realisee":
-      return "le conducteur de travaux";
-    case "validee":
-      return "l'administrateur, pour la pré-facture";
-    default:
-      return "";
-  }
-}
+/** Qui doit agir à cette étape, en clair. Règle partagée, voir `regles-taches`. */
+export const prochainActeur = reglesProchainActeur;
 
 export interface ActionsFacturation {
   /** Chiffrer les travaux supplémentaires et valider la pré-facture. */
@@ -366,8 +347,12 @@ export function injecterSession() {
 
   w.chargerIntervenants = chargerIntervenants;
   w.nomIntervenant = nomIntervenant;
+  w.listeIntervenants = listeIntervenants;
   w.prochainActeur = prochainActeur;
   w.validerPrefacture = queries.validerPrefacture;
+  w.pdfFacturX = enrichirFactureX;
+  w.transmettreFacture = transmettre;
+  w.etatConnexionPdp = etatConnexionPdp;
   w.validerChiffrage = queries.validerChiffrage;
   w.validerAffaireConducteur = queries.validerAffaireConducteur;
   w.emettreFacture = queries.emettreFacture;

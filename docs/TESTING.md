@@ -4,6 +4,58 @@ Comment tester l'app complètement avant de la mettre en production.
 
 ---
 
+## 0️⃣ BASE LOCALE (recommandé avant tout)
+
+Sans elle, les suites d'intégration écrivent dans la **vraie base** : elles y
+créent des clients et des devis, et consomment des numéros de facture qui ne
+sont jamais réattribués. Avec elle, tout se passe dans un conteneur et un
+`supabase db reset` efface la trace.
+
+```bash
+supabase start        # démarre Postgres, Auth, REST, Storage, Studio
+supabase stop         # arrête tout (--no-backup pour repartir de zéro)
+supabase db reset     # rejoue migrations + données, base propre
+```
+
+Studio : http://127.0.0.1:54323 · API : http://127.0.0.1:54321
+
+### Comment le développement bascule sur le local
+
+Vite donne la priorité à `.env.[mode].local` sur `.env.local`. Deux fichiers,
+non versionnés, suffisent donc à détourner l'application sans toucher aux
+identifiants du projet distant :
+
+| Fichier | Ce qu'il détourne |
+|---|---|
+| `.env.development.local` | `npm run dev`, `npm run apercu` |
+| `.env.test.local` | `npm run test:run` |
+
+Chacun contient l'URL locale et la clé anon que `supabase start` affiche.
+Les supprimer suffit à revenir au projet distant.
+
+### Reconstituer le schéma et les données
+
+`supabase/migrations` ne contient que les migrations récentes ; les premières
+n'ont jamais été versionnées. La base locale est donc reconstituée depuis le
+projet distant :
+
+```bash
+supabase db dump --linked -f supabase/schema-cloud.sql
+supabase db dump --linked --data-only -f supabase/data-cloud.sql
+cp supabase/schema-cloud.sql supabase/migrations/20260101000000_base_schema_distant.sql
+supabase start
+```
+
+Le seed pointe sur `data-cloud.sql` (voir `config.toml`). Ces trois fichiers
+sont **exclus de git** : le dépôt est public et ils portent des données
+réelles — noms de clients, adresses, montants — ainsi que les empreintes de
+mots de passe des comptes. Les reprendre est à refaire sur chaque poste.
+
+Le compte de test est celui du projet distant, mot de passe compris : les
+empreintes voyagent avec les données.
+
+---
+
 ## 1️⃣ TESTS AUTOMATISÉS (Vitest)
 
 ### Installation & Configuration

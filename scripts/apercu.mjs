@@ -100,26 +100,32 @@ async function ouvrirApplication(navigateur, env) {
 }
 
 /** Provoque le téléchargement du PDF d'un document réel et le rend en image. */
-async function apercuPdf(page, type) {
+async function apercuPdf(page, type, numeroVise) {
   const cle = type === "devis" ? "devis" : "factures";
   /* La société courante d'abord — c'est ce que voit l'utilisateur —, mais un
      document d'une autre société vaut mieux que pas d'aperçu du tout. */
-  const choix = await page.evaluate((cle) => {
+  const choix = await page.evaluate(([cle, numero]) => {
+    window.__apercuNumero = numero || null;
     const tous = state[cle] || [];
     const dansLaSociete = tous.filter((d) => d.societeId === state.societeId);
     /* Un document numéroté : c'est le seul qui prouve que le nom de fichier
        sort correct, un brouillon retombant sur le nom par défaut. */
     const candidats = dansLaSociete.length ? dansLaSociete : tous;
-    const retenu = candidats.filter((d) => d.numero).at(-1) || candidats.at(-1);
+    /* Un numéro précis quand on le demande : c'est ce qui permet de rejouer un
+       document dont un validateur s'est plaint, plutôt que le dernier venu. */
+    const vise = window.__apercuNumero;
+    const retenu = vise
+      ? candidats.find((d) => d.numero === vise)
+      : candidats.filter((d) => d.numero).at(-1) || candidats.at(-1);
     return {
       id: retenu ? retenu.id : null,
       numero: retenu ? retenu.numero : null,
       total: tous.length,
       dansLaSociete: dansLaSociete.length,
     };
-  }, cle);
+  }, [cle, numeroVise]);
   console.log(`  ${cle} : ${choix.total} au total, ${choix.dansLaSociete} dans la société courante`);
-  if (!choix.id) throw new Error(`aucun document « ${type} » dans les données chargées`);
+  if (!choix.id) throw new Error(`aucun document « ${type} »${numeroVise ? ` numéroté ${numeroVise}` : ""} dans les données chargées`);
   const id = choix.id;
   console.log(`  document retenu : ${choix.numero || id}`);
 
@@ -134,19 +140,41 @@ async function apercuPdf(page, type) {
   const chemin = path.join(SORTIE, nom);
   await telechargement.saveAs(chemin);
   console.log(`  fichier téléchargé : ${nom}`);
-  return { chemin, image: await pdfVersPng(chemin) };
+
+  /* Une facture doit repartir avec sa version structurée embarquée : c'est ce
+     qui la distingue d'un PDF ordinaire, et ça ne se voit pas à l'écran. */
+  const octets = readFileSync(chemin);
+  const embarque = octets.includes(Buffer.from("factur-x.xml"));
+  console.log(`  facture électronique embarquée : ${embarque ? "oui" : "non"}`);
+
+  return { chemin, embarque, image: await pdfVersPng(chemin) };
 }
 
-/** Capture un onglet de l'application. */
-async function apercuEcran(page, onglet) {
+/**
+ * Capture un onglet de l'application.
+ *
+ * `rh:equipes` vise un sous-onglet : plusieurs écrans en ont, et sans ça on ne
+ * verrait jamais que leur première vue.
+ */
+async function apercuEcran(page, cible) {
+  const [onglet, sousVue] = cible.split(":");
   await page.evaluate((o) => window.setTab(o), onglet);
-  await page.waitForTimeout(1200);
-  const image = path.join(SORTIE, `ecran-${onglet}.png`);
+  await page.waitForTimeout(600);
+
+  if (sousVue) {
+    const bascules = { rh: "setRhView", factures: "setFacturesView", reglages: "setReglagesTab" };
+    const bascule = bascules[onglet];
+    if (!bascule) throw new Error(`Aucune sous-vue connue pour l'onglet « ${onglet} »`);
+    await page.evaluate(([f, v]) => window[f](v), [bascule, sousVue]);
+    await page.waitForTimeout(600);
+  }
+
+  const image = path.join(SORTIE, `ecran-${cible.replace(":", "-")}.png`);
   await page.screenshot({ path: image, fullPage: true });
   return { image };
 }
 
-const [commande, argument = "facture"] = process.argv.slice(2);
+const [commande, argument = "facture", precision] = process.argv.slice(2);
 if (!["pdf", "ecran"].includes(commande)) {
   console.error("usage : node scripts/apercu.mjs pdf <facture|devis> | ecran <onglet>");
   process.exit(1);
@@ -160,7 +188,7 @@ const navigateur = await chromium.launch();
 try {
   const { page } = await ouvrirApplication(navigateur, lireEnv());
   const resultat =
-    commande === "pdf" ? await apercuPdf(page, argument) : await apercuEcran(page, argument);
+    commande === "pdf" ? await apercuPdf(page, argument, precision) : await apercuEcran(page, argument);
   console.log(`  image : ${resultat.image}`);
 } finally {
   await navigateur.close();

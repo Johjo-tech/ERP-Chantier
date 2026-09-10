@@ -2768,24 +2768,30 @@ export type Database = {
       pdp_connexion_secrets: {
         Row: {
           access_token: string | null
+          bail_refresh: string | null
           connexion_id: string
           cree_le: string
+          dernier_refresh_le: string | null
           expire_le: string | null
           maj_le: string
           refresh_token: string | null
         }
         Insert: {
           access_token?: string | null
+          bail_refresh?: string | null
           connexion_id: string
           cree_le?: string
+          dernier_refresh_le?: string | null
           expire_le?: string | null
           maj_le?: string
           refresh_token?: string | null
         }
         Update: {
           access_token?: string | null
+          bail_refresh?: string | null
           connexion_id?: string
           cree_le?: string
+          dernier_refresh_le?: string | null
           expire_le?: string | null
           maj_le?: string
           refresh_token?: string | null
@@ -2806,6 +2812,7 @@ export type Database = {
           adresse_electronique_valeur: string | null
           connecte_le: string | null
           cree_le: string
+          environnement: string
           etat: string
           expire_le: string | null
           fournisseur: string
@@ -2821,6 +2828,7 @@ export type Database = {
           adresse_electronique_valeur?: string | null
           connecte_le?: string | null
           cree_le?: string
+          environnement?: string
           etat?: string
           expire_le?: string | null
           fournisseur?: string
@@ -2836,6 +2844,7 @@ export type Database = {
           adresse_electronique_valeur?: string | null
           connecte_le?: string | null
           cree_le?: string
+          environnement?: string
           etat?: string
           expire_le?: string | null
           fournisseur?: string
@@ -5082,11 +5091,20 @@ export type Database = {
         Returns: undefined
       }
       code_unite: { Args: { p_unite: string }; Returns: string }
+      decouper_adresse: {
+        Args: { p_adresse: string }
+        Returns: {
+          code_postal: string
+          rue: string
+          ville: string
+        }[]
+      }
       est_admin: { Args: { p_societe: string }; Returns: boolean }
       est_affecte_au_chantier: {
         Args: { p_chantier_id: string }
         Returns: boolean
       }
+      est_de_l_equipe: { Args: { p_tache_id: string }; Returns: boolean }
       est_membre: { Args: { p_societe: string }; Returns: boolean }
       mes_societes: { Args: never; Returns: string[] }
       mon_role: {
@@ -5098,12 +5116,20 @@ export type Database = {
         Args: { p_annee?: number; p_societe: string; p_type: string }
         Returns: string
       }
+      reparer_adresses: {
+        Args: never
+        Returns: {
+          entite: string
+          reparees: number
+        }[]
+      }
       rls_table_fille: {
         Args: { p_colonne: string; p_parent: string; p_table: string }
         Returns: undefined
       }
       rls_table_racine: { Args: { p_table: string }; Returns: undefined }
       role_dans_societe: { Args: { p_societe_id: string }; Returns: string }
+      tache_a_une_equipe: { Args: { p_tache_id: string }; Returns: boolean }
       tache_marquer_realisee: {
         Args: {
           p_commentaire?: string
@@ -5345,3 +5371,4 @@ export const Constants = {
     },
   },
 } as const
+
