@@ -28,12 +28,6 @@ const CLE = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const EN_LOCAL = /127\.0\.0\.1|localhost/.test(URL ?? "");
 const suite = AUTH_DISPONIBLE ? describe : describe.skip;
 
-function motif(erreur: unknown): string {
-  const e = erreur as { message?: string; details?: unknown };
-  const d = e?.details as { message?: string } | undefined;
-  return [e?.message, d?.message].filter(Boolean).join(" ");
-}
-
 suite("Lignes d'une facture émise", () => {
   const aujourdhui = new Date().toISOString().slice(0, 10);
   let societeId: Uuid;
@@ -176,9 +170,13 @@ suite("Lignes d'une facture émise", () => {
     expect(Number(apres[0].prix_unitaire)).toBe(5000);
   });
 
-  /* La règle doit tenir quel que soit le rôle, pas seulement pour le compte
-     de test qui est administrateur partout. */
-  (EN_LOCAL ? it : it.skip)("refuse au technicien, qui y parvenait", async () => {
+  /* Deux couches, et elles n'agissent pas au même moment.
+     Le trigger — éprouvé plus haut — refuse à tout le monde, message à l'appui.
+     La RLS, elle, arrête le technicien **avant** : la matrice lui refuse le
+     module `factures`, la ligne ne lui est donc même pas visible. Son écriture
+     ne lève rien, elle ne trouve simplement rien à écrire. C'est plus fort
+     qu'un refus, et c'est pourquoi ce cas n'attend pas de message. */
+  (EN_LOCAL ? it : it.skip)("dérobe la ligne au technicien, qui la réécrivait", async () => {
     const f = await factureEmise();
     const client: SupabaseClient = createClient(URL, CLE, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -189,19 +187,25 @@ suite("Lignes d'une facture émise", () => {
     });
     expect(connexion).toBeNull();
 
-    const { error } = await client
+    // Invisible : la matrice refuse `factures` au technicien, jusqu'à la lecture.
+    const { data: vues } = await client
+      .from("facture_lignes")
+      .select("*")
+      .eq("facture_id", f.id);
+    expect(vues).toEqual([]);
+
+    const { data: modifiees } = await client
       .from("facture_lignes")
       .update({ prix_unitaire: 1 })
-      .eq("id", f.lignes[0].id);
-    expect(motif(error)).toMatch(/émise/i);
+      .eq("id", f.lignes[0].id)
+      .select();
+    expect(modifiees ?? []).toEqual([]);
 
-    const { error: suppression } = await client
-      .from("facture_lignes")
-      .delete()
-      .eq("id", f.lignes[0].id);
-    expect(motif(suppression)).toMatch(/émise/i);
-
+    await client.from("facture_lignes").delete().eq("id", f.lignes[0].id);
     await client.auth.signOut();
-    expect(await queries.listFactureLignes(f.id)).toHaveLength(1);
+
+    const apres = await queries.listFactureLignes(f.id);
+    expect(apres).toHaveLength(1);
+    expect(Number(apres[0].prix_unitaire)).toBe(5000);
   });
 });
