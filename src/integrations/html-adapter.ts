@@ -391,7 +391,7 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
     : "*";
   const { data, error } = await dyn().from(collection.table).select(select);
   if (error) {
-    console.error(`Chargement de ${collection.table} impossible:`, error);
+    console.error("Chargement de collection impossible", collection.table, error);
     return [];
   }
 
@@ -857,7 +857,7 @@ async function appliquerWorkflow(
     }
 
   } catch (err) {
-    console.error(`Circuit de validation : transition refusée sur ${cle}`, err);
+    console.error("Circuit de validation : transition refusée", cle, err);
   }
 }
 
@@ -880,7 +880,7 @@ async function attacher(
 
   const refus = reponses.find((r) => r.error);
   if (refus) {
-    console.error(`Chargement de ${enfant.table} impossible:`, refus.error);
+    console.error("Chargement de table fille impossible", enfant.table, refus.error);
     return;
   }
   const data = reponses.flatMap((r) => r.data ?? []);
@@ -1020,7 +1020,8 @@ export async function stSet(
   } catch (err) {
     const e = err as { message?: string; details?: string; hint?: string; code?: string };
     console.error(
-      `Enregistrement de ${cle} refusé par la base`,
+      "Enregistrement refusé par la base",
+      cle,
       { code: e.code, message: e.message, details: e.details, hint: e.hint },
       err
     );
