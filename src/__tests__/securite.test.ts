@@ -51,8 +51,17 @@ suite("Exposition anonyme", () => {
    * `kv_store` précède la modélisation relationnelle et n'était protégée par
    * rien : 116 lignes lisibles, modifiables et effaçables avec la seule clé
    * anon. Fermée le 2026-09-09 par activation de la RLS sans politique.
+   *
+   * **Rouverte le 2026-09-10, délibérément** : un outil externe s'y branche et
+   * personne ne sait encore avec quelle clé. Le cas est retourné plutôt que
+   * supprimé — il dit désormais ce qui est vrai, et il redeviendra un test de
+   * fermeture le jour où l'on refermera. Un test qu'on efface est un risque
+   * qu'on oublie.
+   *
+   * Pour refermer : `drop policy kv_store_ouverte on public.kv_store;`
+   * puis `revoke all on table public.kv_store from anon;`
    */
-  it("kv_store est fermée aux anonymes", async () => {
-    expect(await lignesVisibles("kv_store")).toBeFalsy();
+  it("kv_store est ouverte aux anonymes — provisoire et assumé", async () => {
+    expect(await lignesVisibles("kv_store")).toBeTruthy();
   });
 });
