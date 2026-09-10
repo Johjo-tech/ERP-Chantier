@@ -915,6 +915,24 @@ export async function stGet(cle: string): Promise<unknown | null> {
   return cache.get(cle) ?? null;
 }
 
+/**
+ * Ce que la base décide et que l'appelant ne pouvait pas connaître.
+ *
+ * Le numéro d'une facture est attribué par un trigger, au passage à un statut
+ * émis, et jamais avant : il n'existe donc pas dans l'objet enregistré. Le
+ * relire est le seul moyen de l'afficher sans recharger toute la collection.
+ */
+function champsCalcules(
+  prefixe: string,
+  row: Record<string, unknown> | null
+): Record<string, unknown> {
+  if (!row) return {};
+  const legacy = versLegacy(prefixe, row);
+  const calcules: Record<string, unknown> = {};
+  if (legacy.numero !== undefined) calcules.numero = legacy.numero;
+  return calcules;
+}
+
 /** Remplace : `async function stSet(key, val)`. */
 export async function stSet(
   cle: string,
@@ -988,7 +1006,16 @@ export async function stSet(
       await appliquerWorkflow(parentId, cle, valeur);
     }
 
-    cache.set(cle, { ...valeur, id });
+    /* La base ne se contente plus d'accepter ce qu'on lui envoie : elle
+       attribue le numéro de facture à l'émission. Garder en cache la valeur
+       *émise* laisserait l'écran afficher une facture sans numéro jusqu'au
+       rechargement suivant. On relit donc ce qui a réellement été écrit, et
+       les champs calculés priment sur ceux qu'on a proposés. */
+    cache.set(cle, {
+      ...valeur,
+      ...champsCalcules(prefixe, data as Record<string, unknown>),
+      id,
+    });
     return true;
   } catch (err) {
     const e = err as { message?: string; details?: string; hint?: string; code?: string };

@@ -4783,7 +4783,11 @@ async function saveFacture(){
   const client = document.getElementById('f_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); return; }
   const id = e.id || uid();
-  const numero = e.numero || await nextNumero(state.societeId,'facture');
+  /* Le numéro d'une facture est attribué par la base, à l'émission, dans la
+     même transaction que l'enregistrement. Le demander ici consommerait une
+     référence même si la saisie est abandonnée — c'est ce qui creusait des
+     trous dans une série que la loi veut continue. */
+  const numero = e.numero || '';
   const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, chantierId: document.getElementById('f_chantierId').value || null, client,
     adresse: resolveClientAdresse(client),
     interlocuteur: document.getElementById('f_interlocuteur').value,
@@ -9417,8 +9421,8 @@ async function confirmerFacturationAvancement(){
   if(!lignesFacture.length){ showToast('Aucun avancement supplémentaire à facturer.'); return; }
   await stSet('chantier:'+chantierId, c);
   const factureId = uid();
-  const numero = await nextNumero(state.societeId, 'facture');
-  const factureObj = { id: factureId, societeId: state.societeId, numero, createdAt: new Date().toISOString(),
+  // Brouillon : la base numérotera à l'émission.
+  const factureObj = { id: factureId, societeId: state.societeId, numero: '', createdAt: new Date().toISOString(),
     client: c.client||'', adresse: c.adresse||'', codePostal: c.codePostal||'', ville: c.ville||'',
     date: todayISO(), echeance:'', lignes: lignesFacture, remisePourcentage:0, statut:'brouillon',
     chantierId: c.id, notes: `Situation de travaux — ${c.nom}` };
@@ -11368,8 +11372,8 @@ async function confirmVendreVehicule(){
   ].filter(Boolean).join(' — ');
   const designation = `Vente du véhicule ${v.nom}${details? ' (' + details + ')' : ''}`;
   const factureId = uid();
-  const numero = await nextNumero(state.societeId, 'facture');
-  const factureObj = { id: factureId, societeId: state.societeId, numero, createdAt: new Date().toISOString(),
+  // Émise d'emblée : la base attribue le numéro à l'enregistrement.
+  const factureObj = { id: factureId, societeId: state.societeId, numero: '', createdAt: new Date().toISOString(),
     client: acheteur, adresse:'', date, echeance:'',
     lignes:[{ type:'ligne', designation, qte:1, prixUnitaire: prix, tva: v.tvaApplicable===false? 0 : 20 }],
     remisePourcentage:0, statut:'impayée', notes:`Vente de véhicule` };
