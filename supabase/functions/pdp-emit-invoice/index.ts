@@ -29,7 +29,11 @@ import {
 
 /** Ce que le XML annonce, pour le confronter à la base. */
 function lireDansXml(xml: string, balise: string): string | null {
-  const trouve = xml.match(new RegExp(`<${balise}[^>]*>([^<]+)</${balise}>`));
+  /* Les deux appels passent aujourd'hui un littéral, mais un nom de balise
+     CII porte des points dans d'autres profils : non échappé, il deviendrait
+     un joker et ferait correspondre n'importe quelle balise voisine. */
+  const b = balise.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const trouve = xml.match(new RegExp(`<${b}[^>]*>([^<]+)</${b}>`));
   return trouve ? trouve[1].trim() : null;
 }
 

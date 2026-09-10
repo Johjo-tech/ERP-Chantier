@@ -65,16 +65,35 @@ interface EntrepriseApi {
   matching_etablissements?: EtabApi[];
 }
 
-/** L'API renvoie parfois « 12 RUE X 75001 PARIS » : on retire CP et ville. */
-function nettoyerAdresse(adresse: string, codePostal: string, ville: string): string {
+/**
+ * Rend une chaîne inoffensive dans un motif d'expression régulière.
+ *
+ * Les noms de communes françaises contiennent des parenthèses et des points —
+ * « SAINTE-FOY-LÈS-LYON », « L'ISLE-D'ABEAU », et surtout les libellés INSEE du
+ * type « LYON (69003) ». Injectés tels quels, ces caractères sont interprétés
+ * comme des opérateurs : au mieux le nettoyage ne trouve rien, au pire
+ * `new RegExp` lève sur une parenthèse non fermée et fait échouer toute la
+ * recherche d'entreprise.
+ */
+export function echapperRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** L'API renvoie parfois « 12 RUE X 75001 PARIS » : on retire CP et ville.
+ *  Exportée pour être éprouvée seule : c'est là que les caractères spéciaux
+ *  d'un nom de commune faisaient tout basculer. */
+export function nettoyerAdresse(adresse: string, codePostal: string, ville: string): string {
   if (!adresse) return "";
   const a = adresse.trim();
   if (!codePostal) return a;
 
-  const sansCpVille = a.replace(new RegExp(`\\s*${codePostal}\\s*${ville}.*$`, "i"), "").trim();
+  const cp = echapperRegex(codePostal);
+  const v = echapperRegex(ville);
+
+  const sansCpVille = a.replace(new RegExp(`\\s*${cp}\\s*${v}.*$`, "i"), "").trim();
   if (sansCpVille && sansCpVille !== a) return sansCpVille;
 
-  const sansCp = a.replace(new RegExp(`\\s*${codePostal}.*$`, "i"), "").trim();
+  const sansCp = a.replace(new RegExp(`\\s*${cp}.*$`, "i"), "").trim();
   return sansCp || a;
 }
 
