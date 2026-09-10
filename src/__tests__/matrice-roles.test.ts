@@ -160,6 +160,59 @@ suite("Matrice des rôles", () => {
       expect(Number(apres[0].prix_unitaire)).toBe(100);
     });
 
+    /* « Jamais » se vérifie sur la donnée qui traverse le réseau, pas sur le
+       masque d'écran. Le pont lit une vue qui annule les colonnes sensibles :
+       une source unique pour tous les rôles, donc rien à choisir et rien à
+       oublier. La table brute, elle, lui est fermée. */
+    it("reçoit ses bons de commande sans aucun montant", async () => {
+      const { data: brut } = await technicien.from("bons_commande").select("*").limit(1);
+      expect(brut).toEqual([]);
+
+      const { data: vue } = await technicien
+        .from("v_bons_commande_terrain")
+        .select("client_nom, montant, montant_sous_traitant")
+        .not("client_nom", "is", null)
+        .limit(1);
+      expect(vue).toHaveLength(1);
+      expect(vue![0].client_nom).toBeTruthy();
+      expect(vue![0].montant).toBeNull();
+      expect(vue![0].montant_sous_traitant).toBeNull();
+    });
+
+    it("reçoit l'annuaire des salariés sans la paie ni les IBAN", async () => {
+      const { data: brut } = await technicien.from("salaries").select("*").limit(1);
+      expect(brut).toEqual([]);
+
+      const { data: vue } = await technicien
+        .from("v_salaries_annuaire")
+        .select("nom, poste, salaire_mensuel_net, cout_horaire_charge, iban")
+        .limit(1);
+      expect(vue).toHaveLength(1);
+      expect(vue![0].nom).toBeTruthy();
+      expect(vue![0].salaire_mensuel_net).toBeNull();
+      expect(vue![0].cout_horaire_charge).toBeNull();
+      expect(vue![0].iban).toBeNull();
+    });
+
+    it("ne charge ni catalogue de prix, ni encaissements, ni devis, ni factures", async () => {
+      for (const table of ["articles", "reglements", "devis", "factures"]) {
+        const { data } = await technicien.from(table).select("*").limit(1);
+        expect(data, table).toEqual([]);
+      }
+    });
+
+    /* Le conducteur, lui, lit la même vue et y trouve les montants : c'est
+       ce qui prouve que le masquage suit le rôle et non la source. */
+    it("laisse le conducteur lire les montants dans la même vue", async () => {
+      const { data } = await conducteur
+        .from("v_bons_commande_terrain")
+        .select("montant")
+        .not("montant", "is", null)
+        .limit(1);
+      expect(data).toHaveLength(1);
+      expect(Number(data![0].montant)).toBeGreaterThan(0);
+    });
+
     /* Remettre la série à 1 arrêterait la facturation net : l'index unique
        refuserait le doublon dès la pièce suivante. */
     it("ne remet pas le compteur de factures à zéro", async () => {

@@ -112,7 +112,15 @@ export function ligneVersLegacy(row: Record<string, unknown>): LigneLegacy {
 
 interface Collection {
   table: TableName;
-  lignes?: { table: TableName; fk: string };
+  /**
+   * Vue à lire quand la table brute porte des montants que tout le monde n'a
+   * pas à voir. Elle rend les mêmes colonnes, mais annule les sensibles selon
+   * le rôle — d'où une source **unique** : le pont n'a pas à choisir, donc il
+   * ne peut pas se tromper, et la table reste fermée à qui n'y a pas droit.
+   * L'écriture, elle, vise toujours la table.
+   */
+  vueLecture?: string;
+  lignes?: { table: TableName; fk: string; vueLecture?: string };
   photos?: { table: TableName; fk: string };
   /** Le document porte le nom du client en clair (colonne `client_nom`). */
   client?: boolean;
@@ -143,9 +151,14 @@ const COLLECTIONS: Record<string, Collection> = {
   },
   bonCommande: {
     table: "bons_commande",
+    vueLecture: "v_bons_commande_terrain",
     // Le SAV pointe vers son bon d'origine ; la colonne ne porte pas le même nom
     alias: { bonCommandeId: "bon_commande_parent_id" },
-    lignes: { table: "bon_commande_lignes", fk: "bon_commande_id" },
+    lignes: {
+      table: "bon_commande_lignes",
+      fk: "bon_commande_id",
+      vueLecture: "v_bon_commande_lignes_terrain",
+    },
     photos: { table: "bon_commande_photos", fk: "bon_commande_id" },
     client: true,
   },
@@ -168,7 +181,7 @@ const COLLECTIONS: Record<string, Collection> = {
   metierPerso: { table: "metiers", alias: { nom: "libelle" } },
   sousTraitant: { table: "sous_traitants" },
   chantier: { table: "chantiers" },
-  salarie: { table: "salaries" },
+  salarie: { table: "salaries", vueLecture: "v_salaries_annuaire" },
   vehicule: { table: "vehicules" },
   materiel: { table: "materiels" },
   document: { table: "documents_legaux" },
@@ -389,9 +402,10 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
   const select = collection.societeVia
     ? `*, ${collection.societeVia.table}(societe_id)`
     : "*";
-  const { data, error } = await dyn().from(collection.table).select(select);
+  const source = collection.vueLecture ?? collection.table;
+  const { data, error } = await dyn().from(source).select(select);
   if (error) {
-    console.error("Chargement de collection impossible", collection.table, error);
+    console.error("Chargement de collection impossible", source, error);
     return [];
   }
 
@@ -863,15 +877,16 @@ async function appliquerWorkflow(
 
 /** Rattache les lignes filles en une requête pour toute la collection. */
 async function attacher(
-  enfant: { table: TableName; fk: string },
+  enfant: { table: TableName; fk: string; vueLecture?: string },
   uuidParPrefixe: Map<Uuid, string>,
   champ: "lignes" | "photos",
   mapper: (row: Record<string, unknown>) => unknown
 ) {
+  const source = enfant.vueLecture ?? enfant.table;
   const reponses = await Promise.all(
     enLots([...uuidParPrefixe.keys()]).map((lot) =>
       dyn()
-        .from(enfant.table)
+        .from(source)
         .select("*")
         .in(enfant.fk, lot)
         .order("position", { ascending: true })
@@ -880,7 +895,7 @@ async function attacher(
 
   const refus = reponses.find((r) => r.error);
   if (refus) {
-    console.error("Chargement de table fille impossible", enfant.table, refus.error);
+    console.error("Chargement de table fille impossible", source, refus.error);
     return;
   }
   const data = reponses.flatMap((r) => r.data ?? []);
