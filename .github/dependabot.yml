@@ -1,0 +1,42 @@
+# Suivi des dépendances.
+#
+# Les actions de workflow sont épinglées au SHA d'un commit : sans Dependabot,
+# elles resteraient figées et les correctifs de sécurité ne remonteraient
+# jamais. C'est lui qui rouvre la porte que l'épinglage ferme — il réécrit le
+# SHA **et** le commentaire de version, et la montée passe par une revue.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    commit-message:
+      prefix: "ci"
+    labels: ["dépendances", "ci"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+    labels: ["dépendances"]
+    # Une montée majeure change le contrat : elle se décide, elle ne se subit
+    # pas au fil d'une pull request automatique. Les correctifs de sécurité,
+    # eux, passent quelle que soit la portée du saut.
+    open-pull-requests-limit: 5
+    groups:
+      correctifs:
+        applies-to: version-updates
+        update-types: ["patch", "minor"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
