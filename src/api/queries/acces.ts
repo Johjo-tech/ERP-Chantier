@@ -34,7 +34,7 @@ export async function monRole(societeId: Uuid): Promise<RoleMembre | null> {
 
   if (error) {
     // Un non-membre reçoit une erreur d'autorisation : ce n'est pas un incident
-    console.warn(`Rôle indisponible pour la société ${societeId}`, error.message);
+    console.warn("Rôle indisponible pour la société", societeId, error.message);
     return null;
   }
   return data ?? null;
@@ -58,7 +58,7 @@ export async function aPermission(
   });
 
   if (error) {
-    console.warn(`Permission ${module}.${action} refusée`, error.message);
+    console.warn("Permission refusée", module, action, error.message);
     return false;
   }
   return data === true;

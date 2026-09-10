@@ -112,7 +112,15 @@ export function ligneVersLegacy(row: Record<string, unknown>): LigneLegacy {
 
 interface Collection {
   table: TableName;
-  lignes?: { table: TableName; fk: string };
+  /**
+   * Vue à lire quand la table brute porte des montants que tout le monde n'a
+   * pas à voir. Elle rend les mêmes colonnes, mais annule les sensibles selon
+   * le rôle — d'où une source **unique** : le pont n'a pas à choisir, donc il
+   * ne peut pas se tromper, et la table reste fermée à qui n'y a pas droit.
+   * L'écriture, elle, vise toujours la table.
+   */
+  vueLecture?: string;
+  lignes?: { table: TableName; fk: string; vueLecture?: string };
   photos?: { table: TableName; fk: string };
   /** Le document porte le nom du client en clair (colonne `client_nom`). */
   client?: boolean;
@@ -143,9 +151,14 @@ const COLLECTIONS: Record<string, Collection> = {
   },
   bonCommande: {
     table: "bons_commande",
+    vueLecture: "v_bons_commande_terrain",
     // Le SAV pointe vers son bon d'origine ; la colonne ne porte pas le même nom
     alias: { bonCommandeId: "bon_commande_parent_id" },
-    lignes: { table: "bon_commande_lignes", fk: "bon_commande_id" },
+    lignes: {
+      table: "bon_commande_lignes",
+      fk: "bon_commande_id",
+      vueLecture: "v_bon_commande_lignes_terrain",
+    },
     photos: { table: "bon_commande_photos", fk: "bon_commande_id" },
     client: true,
   },
@@ -168,7 +181,7 @@ const COLLECTIONS: Record<string, Collection> = {
   metierPerso: { table: "metiers", alias: { nom: "libelle" } },
   sousTraitant: { table: "sous_traitants" },
   chantier: { table: "chantiers" },
-  salarie: { table: "salaries" },
+  salarie: { table: "salaries", vueLecture: "v_salaries_annuaire" },
   vehicule: { table: "vehicules" },
   materiel: { table: "materiels" },
   document: { table: "documents_legaux" },
@@ -389,9 +402,10 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
   const select = collection.societeVia
     ? `*, ${collection.societeVia.table}(societe_id)`
     : "*";
-  const { data, error } = await dyn().from(collection.table).select(select);
+  const source = collection.vueLecture ?? collection.table;
+  const { data, error } = await dyn().from(source).select(select);
   if (error) {
-    console.error(`Chargement de ${collection.table} impossible:`, error);
+    console.error("Chargement de collection impossible", source, error);
     return [];
   }
 
@@ -857,21 +871,22 @@ async function appliquerWorkflow(
     }
 
   } catch (err) {
-    console.error(`Circuit de validation : transition refusée sur ${cle}`, err);
+    console.error("Circuit de validation : transition refusée", cle, err);
   }
 }
 
 /** Rattache les lignes filles en une requête pour toute la collection. */
 async function attacher(
-  enfant: { table: TableName; fk: string },
+  enfant: { table: TableName; fk: string; vueLecture?: string },
   uuidParPrefixe: Map<Uuid, string>,
   champ: "lignes" | "photos",
   mapper: (row: Record<string, unknown>) => unknown
 ) {
+  const source = enfant.vueLecture ?? enfant.table;
   const reponses = await Promise.all(
     enLots([...uuidParPrefixe.keys()]).map((lot) =>
       dyn()
-        .from(enfant.table)
+        .from(source)
         .select("*")
         .in(enfant.fk, lot)
         .order("position", { ascending: true })
@@ -880,7 +895,7 @@ async function attacher(
 
   const refus = reponses.find((r) => r.error);
   if (refus) {
-    console.error(`Chargement de ${enfant.table} impossible:`, refus.error);
+    console.error("Chargement de table fille impossible", source, refus.error);
     return;
   }
   const data = reponses.flatMap((r) => r.data ?? []);
@@ -913,6 +928,27 @@ export async function stGet(cle: string): Promise<unknown | null> {
 
   await chargerCollection(prefixe);
   return cache.get(cle) ?? null;
+}
+
+/**
+ * Ce que la base décide et que l'appelant ne pouvait pas connaître.
+ *
+ * Le numéro d'une facture est attribué par un trigger, au passage à un statut
+ * émis, et celui d'un bon de commande à sa création : ni l'un ni l'autre
+ * n'existe dans l'objet enregistré. Les relire est le seul moyen de les
+ * afficher sans recharger toute la collection.
+ */
+function champsCalcules(
+  prefixe: string,
+  row: Record<string, unknown> | null
+): Record<string, unknown> {
+  if (!row) return {};
+  const legacy = versLegacy(prefixe, row);
+  const calcules: Record<string, unknown> = {};
+  for (const champ of ["numero", "numeroInterne"]) {
+    if (legacy[champ] !== undefined) calcules[champ] = legacy[champ];
+  }
+  return calcules;
 }
 
 /** Remplace : `async function stSet(key, val)`. */
@@ -988,12 +1024,22 @@ export async function stSet(
       await appliquerWorkflow(parentId, cle, valeur);
     }
 
-    cache.set(cle, { ...valeur, id });
+    /* La base ne se contente plus d'accepter ce qu'on lui envoie : elle
+       attribue le numéro de facture à l'émission. Garder en cache la valeur
+       *émise* laisserait l'écran afficher une facture sans numéro jusqu'au
+       rechargement suivant. On relit donc ce qui a réellement été écrit, et
+       les champs calculés priment sur ceux qu'on a proposés. */
+    cache.set(cle, {
+      ...valeur,
+      ...champsCalcules(prefixe, data as Record<string, unknown>),
+      id,
+    });
     return true;
   } catch (err) {
     const e = err as { message?: string; details?: string; hint?: string; code?: string };
     console.error(
-      `Enregistrement de ${cle} refusé par la base`,
+      "Enregistrement refusé par la base",
+      cle,
       { code: e.code, message: e.message, details: e.details, hint: e.hint },
       err
     );
@@ -1012,13 +1058,69 @@ async function chercherUuid(table: TableName, legacyId: string): Promise<Uuid | 
   return (data as { id: Uuid } | null)?.id ?? null;
 }
 
+/**
+ * Réécrit les lignes filles d'un document — sauf si rien n'a changé.
+ *
+ * L'app renvoie l'objet entier à chaque enregistrement, y compris quand elle
+ * ne touche qu'au statut : encaisser un règlement rejouait donc un
+ * « supprimer tout puis réinsérer » sur des lignes identiques. C'était déjà
+ * du gaspillage ; depuis que les lignes d'une facture émise sont figées en
+ * base, c'est un refus — et l'encaissement échouerait pour une écriture dont
+ * personne n'avait besoin.
+ *
+ * Comparer d'abord règle les deux : le geste inutile disparaît, et une vraie
+ * modification se heurte au refus qu'elle mérite.
+ */
 async function remplacerEnfants(
   enfant: { table: TableName; fk: string },
   parentId: Uuid,
   rows: Record<string, unknown>[]
 ) {
-  await dyn().from(enfant.table).delete().eq(enfant.fk, parentId);
-  if (rows.length) await dyn().from(enfant.table).insert(rows);
+  if (await enfantsIdentiques(enfant, parentId, rows)) return;
+
+  /* PostgREST ne lève pas : il range son refus dans `error`. Sans ce contrôle,
+     le refus de la base était perdu et `stSet` annonçait un succès — l'écran
+     disait « enregistré » sur des lignes que rien n'avait touchées. */
+  const suppression = await dyn().from(enfant.table).delete().eq(enfant.fk, parentId);
+  if (suppression.error) throw suppression.error;
+
+  if (rows.length) {
+    const insertion = await dyn().from(enfant.table).insert(rows);
+    if (insertion.error) throw insertion.error;
+  }
+}
+
+/** Vrai si la base porte déjà exactement ces lignes, dans cet ordre. */
+async function enfantsIdentiques(
+  enfant: { table: TableName; fk: string },
+  parentId: Uuid,
+  rows: Record<string, unknown>[]
+): Promise<boolean> {
+  const { data, error } = await dyn()
+    .from(enfant.table)
+    .select("*")
+    .eq(enfant.fk, parentId);
+  if (error) return false;
+
+  const enBase = (data ?? []) as Record<string, unknown>[];
+  if (enBase.length !== rows.length) return false;
+
+  /* Seuls les champs que l'app renvoie sont comparés : la base en ajoute
+     (id, cree_le) que l'appelant ne connaît pas et ne prétend pas fixer. */
+  const parPosition = [...enBase].sort(
+    (a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)
+  );
+  return rows.every((envoyee, i) => {
+    const existante = parPosition[i];
+    if (!existante) return false;
+    return Object.entries(envoyee).every(([champ, valeur]) => {
+      if (champ === enfant.fk) return true;
+      const actuelle = existante[champ];
+      if (actuelle == null && valeur == null) return true;
+      // Postgres rend les numériques en chaîne : comparer sur le texte.
+      return String(actuelle ?? "") === String(valeur ?? "");
+    });
+  });
 }
 
 /** Remplace : `async function stDelete(key)`. */

@@ -1476,10 +1476,12 @@ window.addEventListener('error', function(ev){
      de leur moitié gauche — désignation, émetteur, début des mentions. La 0.14
      embarque html2canvas 1.4.1 et cadre juste. C'est la version qu'utilise
      chantier-mate-ease, dont les PDF ont toujours été complets. -->
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.14.0/dist/html2pdf.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<!-- html2pdf, XLSX et docx ne viennent plus d'un CDN : elles sont
+     construites avec l'application (src/integrations/librairies-documents.ts),
+     qui les pose sur `window` avant tout clic. Un CDN sans attribut
+     `integrity` exécutait le code de son choix dans une application qui
+     manipule des factures, et xlsx 0.18.5 traînait deux failles connues.
+     chart.js a été retiré : aucun `new Chart` n'existe dans ce fichier. -->
 <script>
 /* Alimenté au démarrage par les sociétés que la RLS rend visibles
    (voir src/integrations/session.ts). La liste ci-dessous n'est qu'un repli
@@ -3497,7 +3499,11 @@ function printInterventionDraft(action){
 function bonCommandeDocMetaHTML(b){
   const metiers = bcMetiersDuBC(b).map(m=>metierDisplayLabel(m)).filter(Boolean);
   return [
-    b.numeroBC && b.numeroInterne ? `Réf. client : <b>${esc(b.numeroBC)}</b>` : '',
+    /* La référence du client s'affiche dès qu'elle existe. Elle était
+       conditionnée à la présence du numéro interne, si bien qu'un bon qui
+       n'en avait pas — 788 sur 826 — imprimait un document muet sur la
+       référence que le client, lui, utilise pour s'y retrouver. */
+    b.numeroBC ? `Réf. client : <b>${esc(b.numeroBC)}</b>` : '',
     b.dateReception ? `Reçu le : <b>${fmtDate(b.dateReception)}</b>` : '',
     b.conducteur ? `Conducteur : <b>${esc(b.conducteur)}</b>` : '',
     metiers.length ? `Métiers : <b>${esc(metiers.join(', '))}</b>` : ''
@@ -4783,7 +4789,11 @@ async function saveFacture(){
   const client = document.getElementById('f_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); return; }
   const id = e.id || uid();
-  const numero = e.numero || await nextNumero(state.societeId,'facture');
+  /* Le numéro d'une facture est attribué par la base, à l'émission, dans la
+     même transaction que l'enregistrement. Le demander ici consommerait une
+     référence même si la saisie est abandonnée — c'est ce qui creusait des
+     trous dans une série que la loi veut continue. */
+  const numero = e.numero || '';
   const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, chantierId: document.getElementById('f_chantierId').value || null, client,
     adresse: resolveClientAdresse(client),
     interlocuteur: document.getElementById('f_interlocuteur').value,
@@ -9417,8 +9427,8 @@ async function confirmerFacturationAvancement(){
   if(!lignesFacture.length){ showToast('Aucun avancement supplémentaire à facturer.'); return; }
   await stSet('chantier:'+chantierId, c);
   const factureId = uid();
-  const numero = await nextNumero(state.societeId, 'facture');
-  const factureObj = { id: factureId, societeId: state.societeId, numero, createdAt: new Date().toISOString(),
+  // Brouillon : la base numérotera à l'émission.
+  const factureObj = { id: factureId, societeId: state.societeId, numero: '', createdAt: new Date().toISOString(),
     client: c.client||'', adresse: c.adresse||'', codePostal: c.codePostal||'', ville: c.ville||'',
     date: todayISO(), echeance:'', lignes: lignesFacture, remisePourcentage:0, statut:'brouillon',
     chantierId: c.id, notes: `Situation de travaux — ${c.nom}` };
@@ -11368,8 +11378,8 @@ async function confirmVendreVehicule(){
   ].filter(Boolean).join(' — ');
   const designation = `Vente du véhicule ${v.nom}${details? ' (' + details + ')' : ''}`;
   const factureId = uid();
-  const numero = await nextNumero(state.societeId, 'facture');
-  const factureObj = { id: factureId, societeId: state.societeId, numero, createdAt: new Date().toISOString(),
+  // Émise d'emblée : la base attribue le numéro à l'enregistrement.
+  const factureObj = { id: factureId, societeId: state.societeId, numero: '', createdAt: new Date().toISOString(),
     client: acheteur, adresse:'', date, echeance:'',
     lignes:[{ type:'ligne', designation, qte:1, prixUnitaire: prix, tva: v.tvaApplicable===false? 0 : 20 }],
     remisePourcentage:0, statut:'impayée', notes:`Vente de véhicule` };

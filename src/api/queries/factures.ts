@@ -5,7 +5,6 @@
  */
 
 import {
-  getNextNumero,
   todayISO,
   getOne,
   insertMany,
@@ -97,17 +96,25 @@ export async function getFactureSolde(id: Uuid): Promise<FactureSolde | null> {
 
 // ============ ÉCRITURE ============
 
+/**
+ * Le numéro n'est pas demandé : la base l'attribue.
+ *
+ * Un trigger le pose à l'insertion si le statut n'est pas « brouillon », dans
+ * la même transaction. Le réclamer d'avance consommait une référence même
+ * quand l'enregistrement échouait — la série y perdait sa continuité, que
+ * l'article 242 nonies A de l'annexe II au CGI exige.
+ *
+ * `input.numero` reste accepté : les factures de sous-traitance portent une
+ * série qui leur est propre, hors compteur.
+ */
 export async function createFacture(
   societeId: Uuid,
   input: NouvelleFacture,
   lignes: LigneFactureInput[] = []
 ): Promise<FactureComplete> {
-  const numero = input.numero ?? (await getNextNumero(societeId, "facture"));
-
   const facture = await insertOne("factures", {
     ...input,
     societe_id: societeId,
-    numero,
   });
 
   return { ...facture, lignes: await replaceFactureLignes(facture.id, lignes) };
@@ -158,11 +165,11 @@ export async function emettreFacture(
     throw new Error(`Facture déjà émise sous le numéro ${facture.numero}.`);
   }
 
-  const numero = await getNextNumero(facture.societe_id, "facture");
-
+  /* Le numéro naît de ce passage même : le trigger le pose en voyant le statut
+     quitter « brouillon ». La ligne rendue par PostgREST le porte déjà — il n'y
+     a rien à relire ensuite. */
   return updateFacture(id, {
     ...corrections,
-    numero,
     statut: "impayée",
   });
 }

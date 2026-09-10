@@ -9,6 +9,9 @@
  */
 
 import { getCurrentSession } from "./api/client";
+/* Pose html2pdf, XLSX et docx sur `window` : l'écran historique les appelle
+   comme des globales, et elles arrivaient jusqu'ici par balise CDN. */
+import "./integrations/librairies-documents";
 import { injectGlobalFunctions, viderCache } from "./integrations/html-adapter";
 import { protectRoute, watchAuthState } from "./integrations/auth-guard";
 import {

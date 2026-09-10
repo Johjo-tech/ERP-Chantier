@@ -10,3 +10,4 @@ dist
 supabase/.temp
 supabase/.branches
 .apercu/
+.hawk.env.local

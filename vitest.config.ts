@@ -18,6 +18,13 @@ export default defineConfig(({ mode }) => {
          terminent en quelques millisecondes et ne sont pas concernées. */
       testTimeout: 20000,
       hookTimeout: 40000,
+      /* Les fichiers s'exécutent l'un après l'autre : les suites d'intégration
+         partagent une **même** base, et plusieurs vérifient des compteurs —
+         numérotation des factures, des bons de commande. Menées en parallèle,
+         elles se consomment mutuellement des numéros et échouent une fois sur
+         deux, sur un défaut qui n'existe pas. Le prix est quelques secondes ;
+         ce qu'on achète, c'est un échec qui veut dire quelque chose. */
+      fileParallelism: false,
       coverage: {
         provider: "v8",
         reporter: ["text", "json", "html"],
