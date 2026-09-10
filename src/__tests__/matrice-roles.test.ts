@@ -201,6 +201,30 @@ suite("Matrice des rôles", () => {
       }
     });
 
+    /* Les vues appartiennent à `postgres` : elles échappent donc à la RLS de
+       la table et portent leur propre `est_membre`. Si ce filtre sautait, le
+       terrain lirait les affaires des autres sociétés — une fuite bien pire
+       que celle des prix. C'est le prix du mécanisme, et il se vérifie. */
+    it("ne laisse pas la vue franchir la frontière entre sociétés", async () => {
+      const autre = (await queries.listMesSocietes()).find(
+        (s) => s.code !== TEST_SOCIETE_CODE
+      );
+      if (!autre) return; // une seule société : rien à cloisonner
+
+      const sonde = `SONDE CLOISON ${Date.now()}`;
+      await queries.createBonCommande(autre.id, {
+        client_nom: sonde,
+        date: aujourdhui,
+        montant: 99999,
+      });
+
+      const { data } = await technicien
+        .from("v_bons_commande_terrain")
+        .select("client_nom")
+        .eq("client_nom", sonde);
+      expect(data).toEqual([]);
+    });
+
     /* Le conducteur, lui, lit la même vue et y trouve les montants : c'est
        ce qui prouve que le masquage suit le rôle et non la source. */
     it("laisse le conducteur lire les montants dans la même vue", async () => {
