@@ -1,0 +1,66 @@
+# Scan dynamique de l'API Supabase — pile locale uniquement.
+#
+# Le front est une page statique : un scanner n'y trouve presque rien. La
+# surface réelle est ici — PostgREST, ses tables sous RLS, ses fonctions RPC,
+# et les douze fonctions edge. C'est là que se décident les droits.
+#
+# **Ce fichier ne vise jamais la production.** `host` pointe sur la pile
+# locale, et un scan actif envoie de vraies charges d'attaque : sur une base
+# comptable en service, il laisserait des lignes parasites, consommerait des
+# numéros de document et écrirait dans le journal des transitions. Pour une
+# fidélité proche de la production, utiliser une branche Supabase, jamais le
+# projet lui-même.
+#
+# Lancement :
+#   set -a && source .hawk.env.local && set +a && hawk scan
+#
+# Les jetons viennent de `.hawk.env.local`, hors git. Ceux de la pile locale
+# ne sont pas des secrets — la CLI Supabase les génère identiques pour tous —
+# mais les garder hors du dépôt évite qu'un jeton de production s'y glisse un
+# jour par habitude.
+
+app:
+  applicationId: ${APP_ID}
+  env: Development
+  host: ${APP_HOST:http://127.0.0.1:54321}
+
+  # PostgREST publie sa propre spec OpenAPI : chaque table et chaque RPC y
+  # figure. C'est ce qui permet au scan d'énumérer la surface au lieu de la
+  # deviner en suivant des liens — il n'y en a aucun sur une API.
+  openApiConf:
+    path: /rest/v1/
+
+  # Supabase exige deux en-têtes : `apikey` identifie le projet, `Authorization`
+  # porte la session. Sans le second, tout revient en 401 et le scan ne prouve
+  # rien de la RLS — or c'est précisément elle qu'on veut éprouver.
+  authentication:
+    # `external` ne sait pas se réauthentifier : un indicateur qui se déclenche
+    # ne ferait que dupliquer la requête et journaliser un faux échec. On les
+    # neutralise et on s'en remet à `testPath`, évalué séparément.
+    loggedInIndicator: ".*"
+    loggedOutIndicator: "$^"
+    external:
+      values:
+        - type: TOKEN
+          value:
+            name: apikey
+            val: ${SUPABASE_ANON}
+        - type: TOKEN
+          tokenType: Bearer
+          value:
+            name: Authorization
+            val: ${SUPABASE_JWT}
+    # La vraie vérification : si cette requête ne rend pas 200, la session
+    # n'est pas prise et le scan entier ne vaut rien.
+    testPath:
+      path: /rest/v1/societes?select=id&limit=1
+      success: ".*200.*"
+      requestMethod: GET
+
+hawk:
+  spider:
+    # L'API n'a pas de liens à suivre : la spec OpenAPI fait tout le travail.
+    base: false
+  scan:
+    # Un échec du scanner doit être visible, pas avalé.
+    failureThreshold: high
