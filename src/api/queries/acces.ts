@@ -40,11 +40,56 @@ export async function monRole(societeId: Uuid): Promise<RoleMembre | null> {
   return data ?? null;
 }
 
+/** Un droit accordé par la matrice : une ligne de `role_permissions`. */
+export interface DroitAccorde {
+  role: RoleMembre;
+  module: string;
+  action: string;
+}
+
+/**
+ * La matrice des droits, telle que la base la porte.
+ *
+ * Une ligne = un droit accordé ; l'absence de ligne est un refus. C'est la
+ * **même** table que consulte `a_permission()` : l'écran et la RLS ne peuvent
+ * plus se contredire, ce qui est arrivé dans les deux sens.
+ *
+ * Aucune tolérance à l'échec ici. Une matrice vide masquerait toute
+ * l'application, une matrice tronquée en masquerait une part au hasard — deux
+ * pannes qui ressemblent à un problème de droits et qu'on chercherait
+ * longtemps. Mieux vaut ne pas démarrer.
+ */
+export async function listRolePermissions(): Promise<DroitAccorde[]> {
+  const { data, error, count } = await supabase
+    .from("role_permissions")
+    .select("role, module, action", { count: "exact" });
+
+  if (error) {
+    throw new SupabaseError("Failed to load role_permissions", error.code, error);
+  }
+
+  const lignes = data ?? [];
+  if (count !== null && lignes.length < count) {
+    throw new SupabaseError(
+      `Matrice des droits tronquée : ${lignes.length} lignes reçues sur ${count}.`,
+      "PGRST_TRUNCATED"
+    );
+  }
+  if (lignes.length === 0) {
+    throw new SupabaseError(
+      "Matrice des droits vide : aucun droit ne serait accordé à personne.",
+      "MATRICE_VIDE"
+    );
+  }
+  return lignes as DroitAccorde[];
+}
+
 /**
  * Verdict de la base pour un droit donné.
  *
- * À réserver aux actions sensibles : la matrice locale (`integrations/
- * permissions.ts`) suffit pour l'affichage courant et évite un aller-retour.
+ * À réserver aux actions sensibles : la matrice chargée en session
+ * (`integrations/permissions.ts`) suffit pour l'affichage courant et évite un
+ * aller-retour — elle vient désormais de la même table.
  */
 export async function aPermission(
   societeId: Uuid,

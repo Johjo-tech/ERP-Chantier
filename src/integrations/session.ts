@@ -71,7 +71,13 @@ import {
   lignesDocumentDirecteur,
 } from "./prefacture";
 import { enrichirFactureX, etatConnexionPdp, transmettre } from "./facturx-pont";
-import { estRoleConnu, navAutorisee, peutSurNav, voitLesPrix } from "./permissions";
+import {
+  estRoleConnu,
+  installerMatrice,
+  navAutorisee,
+  peutSurNav,
+  voitLesPrix,
+} from "./permissions";
 import type { Action, ModuleId } from "./permissions";
 import { peut } from "./permissions";
 
@@ -90,8 +96,13 @@ let roleSimule: RoleMembre | null = null;
 
 const CLE_SIMULATION = "erp.role.simule";
 
-/** Charge les sociétés visibles et le rôle détenu dans chacune. */
+/** Charge la matrice des droits, les sociétés visibles et le rôle détenu. */
 export async function chargerSession(): Promise<SocieteAccessible[]> {
+  /* La matrice d'abord, et sans rattrapage : tout l'affichage s'y réfère, et
+     une application qui ne sait pas ce qui est permis ne doit pas se rendre.
+     L'erreur remonte jusqu'à l'écran « Application indisponible ». */
+  installerMatrice(await queries.listRolePermissions());
+
   const brutes: Societe[] = await queries.listMesSocietes();
 
   societes = await Promise.all(

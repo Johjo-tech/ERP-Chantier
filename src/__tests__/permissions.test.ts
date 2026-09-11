@@ -1,11 +1,20 @@
 /**
- * Matrice des droits — miroir de la fonction SQL `a_permission`.
+ * Les fonctions d'affichage qui lisent la matrice des droits.
  *
- * Ces tests fixent le contrat d'affichage : ils ne prouvent pas la sécurité,
- * qui reste assurée par la RLS, mais ils empêchent la matrice de dériver.
+ * La matrice elle-même ne vit plus ici : elle vient de la table
+ * `role_permissions`, et c'est `matrice-en-base.test.ts` qui garde son contenu.
+ * Ces cas gardent la **logique** — `peut`, `peutSurNav`, `navAutorisee` — et
+ * tournent sans base, sur la grille relue à l'œil de `matrice-attendue.ts`.
+ *
+ * Les deux suites partagent donc une même référence, écrite à la main : si la
+ * base dit ce que dit la grille, et que la logique lit bien la grille, alors
+ * l'écran montre ce que la base autorise.
+ *
+ * Ils ne prouvent pas la sécurité, qui reste assurée par la RLS ; ils empêchent
+ * l'affichage de dériver.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import {
   actionsFacturation,
   actionsTache,
@@ -14,11 +23,15 @@ import {
 } from "@/integrations/session";
 import {
   MODULE_PAR_NAV,
+  installerMatrice,
   navAutorisee,
   peut,
   peutSurNav,
   voitLesPrix,
 } from "@/integrations/permissions";
+import { droitsAttendus } from "./matrice-attendue";
+
+beforeAll(() => installerMatrice(droitsAttendus()));
 
 describe("Droits par rôle", () => {
   it("donne tout à l'administrateur", () => {
