@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -121,6 +141,13 @@ export type Database = {
             referencedRelation: "bons_commande"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "bon_commande_lignes_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
+            referencedColumns: ["id"]
+          },
         ]
       }
       bon_commande_photos: {
@@ -154,6 +181,13 @@ export type Database = {
             columns: ["bon_commande_id"]
             isOneToOne: false
             referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bon_commande_photos_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
             referencedColumns: ["id"]
           },
         ]
@@ -316,6 +350,13 @@ export type Database = {
             columns: ["bon_commande_parent_id"]
             isOneToOne: false
             referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_bon_commande_parent_id_fkey"
+            columns: ["bon_commande_parent_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
             referencedColumns: ["id"]
           },
           {
@@ -893,6 +934,13 @@ export type Database = {
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chantier_todos_salarie_fk"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
         ]
@@ -1490,32 +1538,38 @@ export type Database = {
       facture_cycle_vie: {
         Row: {
           auteur_id: string | null
+          code_plateforme: string | null
           cree_le: string
           date_statut: string
           donnees: Json | null
           facture_id: string
           id: string
           message: string | null
+          pdp_evenement_id: string | null
           statut: Database["public"]["Enums"]["facture_statut_cycle"]
         }
         Insert: {
           auteur_id?: string | null
+          code_plateforme?: string | null
           cree_le?: string
           date_statut?: string
           donnees?: Json | null
           facture_id: string
           id?: string
           message?: string | null
+          pdp_evenement_id?: string | null
           statut: Database["public"]["Enums"]["facture_statut_cycle"]
         }
         Update: {
           auteur_id?: string | null
+          code_plateforme?: string | null
           cree_le?: string
           date_statut?: string
           donnees?: Json | null
           facture_id?: string
           id?: string
           message?: string | null
+          pdp_evenement_id?: string | null
           statut?: Database["public"]["Enums"]["facture_statut_cycle"]
         }
         Relationships: [
@@ -1947,6 +2001,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "factures_bon_commande_fk"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "factures_chantier_fk"
             columns: ["chantier_id"]
             isOneToOne: false
@@ -2112,6 +2173,13 @@ export type Database = {
             columns: ["bon_commande_id"]
             isOneToOne: false
             referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factures_entrantes_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
             referencedColumns: ["id"]
           },
           {
@@ -2545,6 +2613,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "invitations_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "invitations_societe_id_fkey"
             columns: ["societe_id"]
             isOneToOne: false
@@ -2634,6 +2709,13 @@ export type Database = {
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "materiel_prets_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
         ]
@@ -2867,30 +2949,39 @@ export type Database = {
       }
       pdp_oauth_etats: {
         Row: {
+          code_verifier: string | null
           cree_le: string
+          environnement: string
           etat: string
           expire_le: string
           id: string
           profile_id: string | null
           redirect_uri: string | null
+          retour_url: string | null
           societe_id: string
         }
         Insert: {
+          code_verifier?: string | null
           cree_le?: string
+          environnement?: string
           etat: string
           expire_le?: string
           id?: string
           profile_id?: string | null
           redirect_uri?: string | null
+          retour_url?: string | null
           societe_id: string
         }
         Update: {
+          code_verifier?: string | null
           cree_le?: string
+          environnement?: string
           etat?: string
           expire_le?: string
           id?: string
           profile_id?: string | null
           redirect_uri?: string | null
+          retour_url?: string | null
           societe_id?: string
         }
         Relationships: [
@@ -3010,6 +3101,13 @@ export type Database = {
             columns: ["bon_commande_id"]
             isOneToOne: false
             referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_taches_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
             referencedColumns: ["id"]
           },
           {
@@ -3151,6 +3249,24 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          action: string
+          module: string
+          role: Database["public"]["Enums"]["role_membre"]
+        }
+        Insert: {
+          action: string
+          module: string
+          role: Database["public"]["Enums"]["role_membre"]
+        }
+        Update: {
+          action?: string
+          module?: string
+          role?: Database["public"]["Enums"]["role_membre"]
+        }
+        Relationships: []
+      }
       salarie_absences: {
         Row: {
           approuve_par: string | null
@@ -3214,6 +3330,13 @@ export type Database = {
             referencedRelation: "salaries"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "salarie_absences_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
         ]
       }
       salarie_contacts_urgence: {
@@ -3261,6 +3384,13 @@ export type Database = {
             referencedRelation: "salaries"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "salarie_contacts_urgence_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
         ]
       }
       salarie_contrats: {
@@ -3306,6 +3436,13 @@ export type Database = {
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salarie_contrats_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
         ]
@@ -3362,6 +3499,13 @@ export type Database = {
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salarie_documents_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
         ]
@@ -3421,6 +3565,13 @@ export type Database = {
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salarie_formations_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
         ]
@@ -3485,6 +3636,13 @@ export type Database = {
             referencedRelation: "salaries"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "salarie_habilitations_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
         ]
       }
       salarie_rdv: {
@@ -3539,6 +3697,13 @@ export type Database = {
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salarie_rdv_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
         ]
@@ -3679,6 +3844,13 @@ export type Database = {
             columns: ["manager_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salaries_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
           {
@@ -4036,6 +4208,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tache_travaux_supplementaires_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tache_travaux_supplementaires_planning_tache_id_fkey"
             columns: ["planning_tache_id"]
             isOneToOne: false
@@ -4308,6 +4487,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vehicule_controles_periodiques_effectue_par_salarie_id_fkey"
+            columns: ["effectue_par_salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "vehicule_controles_periodiques_vehicule_id_fkey"
             columns: ["vehicule_id"]
             isOneToOne: false
@@ -4501,6 +4687,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vehicule_prets_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "vehicule_prets_vehicule_id_fkey"
             columns: ["vehicule_id"]
             isOneToOne: false
@@ -4630,6 +4823,13 @@ export type Database = {
             columns: ["conducteur_salarie_id"]
             isOneToOne: false
             referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicules_conducteur_salarie_id_fkey"
+            columns: ["conducteur_salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
           {
@@ -4993,6 +5193,269 @@ export type Database = {
       }
     }
     Views: {
+      v_bon_commande_lignes_terrain: {
+        Row: {
+          article_reference: string | null
+          bon_commande_id: string | null
+          commentaire: string | null
+          cree_le: string | null
+          designation: string | null
+          id: string | null
+          position: number | null
+          prix_unitaire: number | null
+          quantite: number | null
+          tva: number | null
+          tva_categorie: Database["public"]["Enums"]["tva_categorie"] | null
+          type: Database["public"]["Enums"]["ligne_type"] | null
+          unite: string | null
+          unite_code: string | null
+        }
+        Insert: {
+          article_reference?: string | null
+          bon_commande_id?: string | null
+          commentaire?: string | null
+          cree_le?: string | null
+          designation?: string | null
+          id?: string | null
+          position?: number | null
+          prix_unitaire?: never
+          quantite?: number | null
+          tva?: number | null
+          tva_categorie?: Database["public"]["Enums"]["tva_categorie"] | null
+          type?: Database["public"]["Enums"]["ligne_type"] | null
+          unite?: string | null
+          unite_code?: string | null
+        }
+        Update: {
+          article_reference?: string | null
+          bon_commande_id?: string | null
+          commentaire?: string | null
+          cree_le?: string | null
+          designation?: string | null
+          id?: string | null
+          position?: number | null
+          prix_unitaire?: never
+          quantite?: number | null
+          tva?: number | null
+          tva_categorie?: Database["public"]["Enums"]["tva_categorie"] | null
+          type?: Database["public"]["Enums"]["ligne_type"] | null
+          unite?: string | null
+          unite_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bon_commande_lignes_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bon_commande_lignes_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_bons_commande_terrain: {
+        Row: {
+          adresse: string | null
+          adresse_locataire: string | null
+          ancien_locataire: string | null
+          bon_commande_parent_id: string | null
+          client_id: string | null
+          client_nom: string | null
+          code_postal: string | null
+          conducteur: string | null
+          cree_le: string | null
+          date: string | null
+          date_fin_travaux: string | null
+          date_planifiee: string | null
+          date_planifiee_fin: string | null
+          date_reception: string | null
+          devis_id: string | null
+          duree_dernier_jour: number | null
+          duree_heures: number | null
+          en_attente_bc: boolean | null
+          etage: string | null
+          gratuite: boolean | null
+          gratuite_motif: string | null
+          heure_dernier_jour: string | null
+          heure_planifiee: string | null
+          id: string | null
+          interlocuteur: string | null
+          legacy_id: string | null
+          logement_statut: Database["public"]["Enums"]["logement_statut"] | null
+          maj_le: string | null
+          metier: string | null
+          metiers: Json | null
+          montant: number | null
+          montant_par_metier: Json | null
+          montant_sous_traitant: number | null
+          notes: string | null
+          numero_bc: string | null
+          numero_interne: string | null
+          numero_logement: string | null
+          occupant: string | null
+          precision_commune: string | null
+          probleme_description: string | null
+          sans_bc: boolean | null
+          schedule_par_metier: Json | null
+          societe_id: string | null
+          statut: string | null
+          statut_workflow: string | null
+          technicien: string | null
+          ville: string | null
+        }
+        Insert: {
+          adresse?: string | null
+          adresse_locataire?: string | null
+          ancien_locataire?: string | null
+          bon_commande_parent_id?: string | null
+          client_id?: string | null
+          client_nom?: string | null
+          code_postal?: string | null
+          conducteur?: string | null
+          cree_le?: string | null
+          date?: string | null
+          date_fin_travaux?: string | null
+          date_planifiee?: string | null
+          date_planifiee_fin?: string | null
+          date_reception?: string | null
+          devis_id?: string | null
+          duree_dernier_jour?: number | null
+          duree_heures?: number | null
+          en_attente_bc?: boolean | null
+          etage?: string | null
+          gratuite?: boolean | null
+          gratuite_motif?: string | null
+          heure_dernier_jour?: string | null
+          heure_planifiee?: string | null
+          id?: string | null
+          interlocuteur?: string | null
+          legacy_id?: string | null
+          logement_statut?:
+            | Database["public"]["Enums"]["logement_statut"]
+            | null
+          maj_le?: string | null
+          metier?: string | null
+          metiers?: Json | null
+          montant?: never
+          montant_par_metier?: never
+          montant_sous_traitant?: never
+          notes?: string | null
+          numero_bc?: string | null
+          numero_interne?: string | null
+          numero_logement?: string | null
+          occupant?: string | null
+          precision_commune?: string | null
+          probleme_description?: string | null
+          sans_bc?: boolean | null
+          schedule_par_metier?: Json | null
+          societe_id?: string | null
+          statut?: string | null
+          statut_workflow?: string | null
+          technicien?: string | null
+          ville?: string | null
+        }
+        Update: {
+          adresse?: string | null
+          adresse_locataire?: string | null
+          ancien_locataire?: string | null
+          bon_commande_parent_id?: string | null
+          client_id?: string | null
+          client_nom?: string | null
+          code_postal?: string | null
+          conducteur?: string | null
+          cree_le?: string | null
+          date?: string | null
+          date_fin_travaux?: string | null
+          date_planifiee?: string | null
+          date_planifiee_fin?: string | null
+          date_reception?: string | null
+          devis_id?: string | null
+          duree_dernier_jour?: number | null
+          duree_heures?: number | null
+          en_attente_bc?: boolean | null
+          etage?: string | null
+          gratuite?: boolean | null
+          gratuite_motif?: string | null
+          heure_dernier_jour?: string | null
+          heure_planifiee?: string | null
+          id?: string | null
+          interlocuteur?: string | null
+          legacy_id?: string | null
+          logement_statut?:
+            | Database["public"]["Enums"]["logement_statut"]
+            | null
+          maj_le?: string | null
+          metier?: string | null
+          metiers?: Json | null
+          montant?: never
+          montant_par_metier?: never
+          montant_sous_traitant?: never
+          notes?: string | null
+          numero_bc?: string | null
+          numero_interne?: string | null
+          numero_logement?: string | null
+          occupant?: string | null
+          precision_commune?: string | null
+          probleme_description?: string | null
+          sans_bc?: boolean | null
+          schedule_par_metier?: Json | null
+          societe_id?: string | null
+          statut?: string | null
+          statut_workflow?: string | null
+          technicien?: string | null
+          ville?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bons_commande_bon_commande_parent_id_fkey"
+            columns: ["bon_commande_parent_id"]
+            isOneToOne: false
+            referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_bon_commande_parent_id_fkey"
+            columns: ["bon_commande_parent_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_devis_id_fkey"
+            columns: ["devis_id"]
+            isOneToOne: false
+            referencedRelation: "devis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_devis_id_fkey"
+            columns: ["devis_id"]
+            isOneToOne: false
+            referencedRelation: "v_devis_totaux"
+            referencedColumns: ["devis_id"]
+          },
+          {
+            foreignKeyName: "bons_commande_societe_id_fkey"
+            columns: ["societe_id"]
+            isOneToOne: false
+            referencedRelation: "societes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_chantier_avancement: {
         Row: {
           chantier_id: string | null
@@ -5074,10 +5537,266 @@ export type Database = {
           },
         ]
       }
+      v_salaries_annuaire: {
+        Row: {
+          actif: boolean | null
+          adresse: string | null
+          carte_btp_numero: string | null
+          carte_btp_validite: string | null
+          code_postal: string | null
+          cout_horaire_charge: number | null
+          cree_le: string | null
+          date_entree: string | null
+          date_naissance: string | null
+          date_sortie: string | null
+          departement: string | null
+          email: string | null
+          iban: string | null
+          id: string | null
+          legacy_id: string | null
+          lieu_naissance: string | null
+          maj_le: string | null
+          manager_id: string | null
+          medecine_travail: string | null
+          mutuelle: string | null
+          nationalite: string | null
+          nom: string | null
+          notes: string | null
+          photo_url: string | null
+          poste: string | null
+          prenom: string | null
+          profile_id: string | null
+          retraite: string | null
+          salaire_mensuel_net: number | null
+          sexe: string | null
+          situation_familiale: string | null
+          societe_id: string | null
+          solde_cp_initial: number | null
+          statut_cadre: string | null
+          technicien_id: string | null
+          telephone: string | null
+          temps_travail: string | null
+          type_contrat: string | null
+          ville: string | null
+          visite_medicale_date: string | null
+          visite_medicale_prochaine: string | null
+        }
+        Insert: {
+          actif?: boolean | null
+          adresse?: string | null
+          carte_btp_numero?: string | null
+          carte_btp_validite?: string | null
+          code_postal?: string | null
+          cout_horaire_charge?: never
+          cree_le?: string | null
+          date_entree?: string | null
+          date_naissance?: never
+          date_sortie?: string | null
+          departement?: string | null
+          email?: string | null
+          iban?: never
+          id?: string | null
+          legacy_id?: string | null
+          lieu_naissance?: never
+          maj_le?: string | null
+          manager_id?: string | null
+          medecine_travail?: string | null
+          mutuelle?: never
+          nationalite?: never
+          nom?: string | null
+          notes?: string | null
+          photo_url?: string | null
+          poste?: string | null
+          prenom?: string | null
+          profile_id?: string | null
+          retraite?: never
+          salaire_mensuel_net?: never
+          sexe?: string | null
+          situation_familiale?: never
+          societe_id?: string | null
+          solde_cp_initial?: never
+          statut_cadre?: string | null
+          technicien_id?: string | null
+          telephone?: string | null
+          temps_travail?: string | null
+          type_contrat?: string | null
+          ville?: string | null
+          visite_medicale_date?: string | null
+          visite_medicale_prochaine?: string | null
+        }
+        Update: {
+          actif?: boolean | null
+          adresse?: string | null
+          carte_btp_numero?: string | null
+          carte_btp_validite?: string | null
+          code_postal?: string | null
+          cout_horaire_charge?: never
+          cree_le?: string | null
+          date_entree?: string | null
+          date_naissance?: never
+          date_sortie?: string | null
+          departement?: string | null
+          email?: string | null
+          iban?: never
+          id?: string | null
+          legacy_id?: string | null
+          lieu_naissance?: never
+          maj_le?: string | null
+          manager_id?: string | null
+          medecine_travail?: string | null
+          mutuelle?: never
+          nationalite?: never
+          nom?: string | null
+          notes?: string | null
+          photo_url?: string | null
+          poste?: string | null
+          prenom?: string | null
+          profile_id?: string | null
+          retraite?: never
+          salaire_mensuel_net?: never
+          sexe?: string | null
+          situation_familiale?: never
+          societe_id?: string | null
+          solde_cp_initial?: never
+          statut_cadre?: string | null
+          technicien_id?: string | null
+          telephone?: string | null
+          temps_travail?: string | null
+          type_contrat?: string | null
+          ville?: string | null
+          visite_medicale_date?: string | null
+          visite_medicale_prochaine?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salaries_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salaries_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salaries_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salaries_societe_id_fkey"
+            columns: ["societe_id"]
+            isOneToOne: false
+            referencedRelation: "societes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salaries_technicien_id_fkey"
+            columns: ["technicien_id"]
+            isOneToOne: false
+            referencedRelation: "techniciens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_travaux_supplementaires_terrain: {
+        Row: {
+          bon_commande_id: string | null
+          cree_le: string | null
+          cree_par: string | null
+          id: string | null
+          libelle: string | null
+          maj_le: string | null
+          origine: string | null
+          planning_tache_id: string | null
+          prix_vente_ht: number | null
+          quantite: number | null
+          societe_id: string | null
+          statut: string | null
+          tva: number | null
+          unite: string | null
+        }
+        Insert: {
+          bon_commande_id?: string | null
+          cree_le?: string | null
+          cree_par?: string | null
+          id?: string | null
+          libelle?: string | null
+          maj_le?: string | null
+          origine?: string | null
+          planning_tache_id?: string | null
+          prix_vente_ht?: never
+          quantite?: number | null
+          societe_id?: string | null
+          statut?: string | null
+          tva?: number | null
+          unite?: string | null
+        }
+        Update: {
+          bon_commande_id?: string | null
+          cree_le?: string | null
+          cree_par?: string | null
+          id?: string | null
+          libelle?: string | null
+          maj_le?: string | null
+          origine?: string | null
+          planning_tache_id?: string | null
+          prix_vente_ht?: never
+          quantite?: number | null
+          societe_id?: string | null
+          statut?: string | null
+          tva?: number | null
+          unite?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tache_travaux_supplementaires_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "bons_commande"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tache_travaux_supplementaires_bon_commande_id_fkey"
+            columns: ["bon_commande_id"]
+            isOneToOne: false
+            referencedRelation: "v_bons_commande_terrain"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tache_travaux_supplementaires_planning_tache_id_fkey"
+            columns: ["planning_tache_id"]
+            isOneToOne: false
+            referencedRelation: "planning_taches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tache_travaux_supplementaires_societe_id_fkey"
+            columns: ["societe_id"]
+            isOneToOne: false
+            referencedRelation: "societes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       a_permission: {
         Args: { p_action: string; p_module: string; p_societe_id: string }
+        Returns: boolean
+      }
+      a_permission_du_role: {
+        Args: {
+          p_action: string
+          p_module: string
+          p_role: Database["public"]["Enums"]["role_membre"]
+        }
         Returns: boolean
       }
       bc_chiffrage_valide: { Args: { p_bc_id: string }; Returns: undefined }
@@ -5111,6 +5830,10 @@ export type Database = {
         Args: { p_societe: string }
         Returns: Database["public"]["Enums"]["role_membre"]
       }
+      numero_suivant_interne: {
+        Args: { p_annee: number; p_societe: string; p_type: string }
+        Returns: string
+      }
       peut_ecrire: { Args: { p_societe: string }; Returns: boolean }
       prochain_numero: {
         Args: { p_annee?: number; p_societe: string; p_type: string }
@@ -5121,6 +5844,14 @@ export type Database = {
         Returns: {
           entite: string
           reparees: number
+        }[]
+      }
+      reprendre_numeros_bons_commande: {
+        Args: never
+        Returns: {
+          compteur: number
+          numerotes: number
+          societe: string
         }[]
       }
       rls_table_fille: {
@@ -5153,6 +5884,7 @@ export type Database = {
         Returns: undefined
       }
       uuid_ou_null: { Args: { p_texte: string }; Returns: string }
+      voit_les_prix: { Args: { p_societe: string }; Returns: boolean }
     }
     Enums: {
       cadre_facturation: "B2B_national" | "B2B_international" | "B2G" | "B2C"
@@ -5321,6 +6053,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       cadre_facturation: ["B2B_national", "B2B_international", "B2G", "B2C"],
