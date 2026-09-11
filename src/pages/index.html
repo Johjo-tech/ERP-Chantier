@@ -13092,6 +13092,7 @@ async function saveDocument(){
       + '</div>';
     return;
   }
+  await loadAll();
   // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
   pousserHistorique(true);
   renderShell();
