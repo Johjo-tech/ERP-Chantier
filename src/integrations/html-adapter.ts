@@ -390,6 +390,36 @@ export function viderCache() {
   societesChargees = false;
 }
 
+/**
+ * PostgREST plafonne toute réponse — réglage `max_rows`, 1 000 par défaut — et
+ * tronque **sans le dire** : pas d'erreur, pas d'indice dans la réponse. Une
+ * collection coupée donne une application qui a l'air normale mais à qui il
+ * manque les enregistrements les plus récents. On facturerait alors sur des
+ * données incomplètes, et un bon de commande introuvable passerait pour perdu.
+ *
+ * On demande donc le total à part, et on refuse de servir un chargement
+ * partiel. Le comptage exact coûte un parcours de plus ; à l'échelle du
+ * projet il se mesure en millisecondes, et c'est le prix d'un chargement dont
+ * on sait qu'il est entier.
+ *
+ * Le plafond n'est pas lisible depuis le client : on compare ce qu'on reçoit à
+ * ce qui existe, ce qui reste juste quel que soit le réglage.
+ */
+export function refuserSiTronque(
+  source: string,
+  recus: number,
+  total: number | null
+): void {
+  if (total === null || recus >= total) return;
+  throw new Error(
+    `Chargement incomplet : « ${source} » a renvoyé ${recus} enregistrements ` +
+      `sur ${total}. La réponse a été tronquée par le plafond « Max rows » de ` +
+      `l'API Supabase (Dashboard → Settings → API). Relevez-le : afficher des ` +
+      `données partielles fausserait les totaux et masquerait les ` +
+      `enregistrements les plus récents.`
+  );
+}
+
 async function chargerCollection(prefixe: string): Promise<string[]> {
   const collection = COLLECTIONS[prefixe];
   if (!collection) return [];
@@ -403,11 +433,17 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
     ? `*, ${collection.societeVia.table}(societe_id)`
     : "*";
   const source = collection.vueLecture ?? collection.table;
-  const { data, error } = await dyn().from(source).select(select);
+  const { data, error, count } = await dyn()
+    .from(source)
+    .select(select, { count: "exact" });
+  /* Une erreur franche — réseau coupé, RLS qui refuse — dégrade déjà de façon
+     visible : le bandeau « Supabase inaccessible » s'affiche. La troncature,
+     elle, ne se voit nulle part : c'est le seul cas qu'on transforme en refus. */
   if (error) {
     console.error("Chargement de collection impossible", source, error);
     return [];
   }
+  refuserSiTronque(source, (data ?? []).length, count);
 
   const cles: string[] = [];
   const uuidParPrefixe = new Map<Uuid, string>();
@@ -887,7 +923,7 @@ async function attacher(
     enLots([...uuidParPrefixe.keys()]).map((lot) =>
       dyn()
         .from(source)
-        .select("*")
+        .select("*", { count: "exact" })
         .in(enfant.fk, lot)
         .order("position", { ascending: true })
     )
@@ -897,6 +933,11 @@ async function attacher(
   if (refus) {
     console.error("Chargement de table fille impossible", source, refus.error);
     return;
+  }
+  /* Les lignes filles sont bien plus nombreuses que leurs parents : c'est ici
+     que le plafond se heurte en premier. Chaque lot répond pour lui-même. */
+  for (const reponse of reponses) {
+    refuserSiTronque(source, (reponse.data ?? []).length, reponse.count);
   }
   const data = reponses.flatMap((r) => r.data ?? []);
 
