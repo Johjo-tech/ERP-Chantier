@@ -5033,6 +5033,14 @@ function bonCommandeCardHTML(b, workflowCtx){
     const bonCommandeOrigine = b.bonCommandeId ? state.bonsCommande.find(x=>x.id===b.bonCommandeId) : null;
     const devisLie = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
     const rapportLie = state.interventions.find(i=>i.bonCommandeId===b.id);
+    /* Le planning arbitre des tâches, il ne chiffre pas. La zone de pré-facture
+       s'affichait sur toutes les cartes, y compris « Planning › En attente » et
+       « Pièces » : on y saisissait des prix à côté du circuit de validation, et
+       le total TTC s'affichait sur le bouton lui-même sans égard pour le rôle.
+       Elle ne vit plus que là où le prix se décide — la liste des bons et les
+       deux vues de Facturation — et pour un rôle qui voit les prix. */
+    const chiffrageIci = (workflowCtx === false || workflowCtx === 'validation' || workflowCtx === 'afacturer')
+      && (!window.affichePrix || window.affichePrix());
     return `<div class="card" id="bonCommande-card-${b.id}">
       <div class="card-row">
       <div style="flex:1; min-width:0;"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.interlocuteur? ' · 👤 '+esc(b.interlocuteur):''}${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}${(b.metiers&&b.metiers.length)||b.metier? ' · 🔧 '+esc(metiersDisplayJoin(b)):''}</div>
@@ -5061,10 +5069,10 @@ function bonCommandeCardHTML(b, workflowCtx){
           ${b.technicienDessin? `<div class="card-sub" style="margin-top:8px;">✏️ Dessin :</div><img src="${b.technicienDessin}" style="max-width:280px; border:1px solid var(--border); border-radius:8px; margin-top:4px; cursor:pointer;" onclick="event.stopPropagation(); openAttachmentPreview('${jsAttr(b.technicienDessin)}','dessin.png')">`:''}
         </div>` : ''}
       </div>`:''}
-      <div class="tech-fiche-zone">
+      ${chiffrageIci? `<div class="tech-fiche-zone">
         <button class="btn small ghost" onclick="event.stopPropagation(); togglePreFactureOuverte('${b.id}')">🧾 Pré-facture${(b.lignes&&b.lignes.length)? ` (${money(computeTotals(b.lignes).ttc)} TTC)` : ' — non chiffrée'} ${state.preFactureOuverte===b.id?'▲':'▼'}</button>
         ${state.preFactureOuverte===b.id? renderPrefactureZone(b) : ''}
-      </div>
+      </div>`:''}
       ${b.pieceACommander? `<div class="card-sub" style="color:#C24E00; font-weight:600;">📦 Pièce à commander${b.pieceACommanderDetail? ' : '+esc(b.pieceACommanderDetail) : ''}${b.pieceACommanderDateCommande? ' — commandée le '+fmtDate(b.pieceACommanderDateCommande) : ''}${b.pieceACommanderFournisseur? ' — Fournisseur : '+esc(b.pieceACommanderFournisseur) : ''}</div>`:''}
       ${b.datePlanificationInitiale? `<div class="card-sub">🕓 Planifiée une première fois le ${fmtDate(b.datePlanificationInitiale)} (reportée pour attente de pièce)</div>`:''}
       ${b.dateInterventionTerminee? `<div class="card-sub" style="color:#2E9BF0; font-weight:600;">✅ Intervention terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
