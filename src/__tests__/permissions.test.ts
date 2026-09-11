@@ -37,6 +37,15 @@ describe("Droits par rôle", () => {
     expect(peut("conducteur", "factures", "modifier")).toBe(false);
   });
 
+  /* Il relève les quantités sur le chantier, donc il chiffre le devis qui en
+     découle. La base le lui accordait depuis le 10/09, l'écran l'ignorait :
+     les boutons restaient cachés à qui avait le droit de s'en servir. */
+  it("laisse le conducteur chiffrer un devis, sans pouvoir l'effacer", () => {
+    expect(peut("conducteur", "devis", "creer")).toBe(true);
+    expect(peut("conducteur", "devis", "modifier")).toBe(true);
+    expect(peut("conducteur", "devis", "supprimer")).toBe(false);
+  });
+
   it("cantonne le technicien à ses rapports", () => {
     expect(peut("technicien", "rapports", "creer")).toBe(true);
     expect(peut("technicien", "rapports", "supprimer")).toBe(false);

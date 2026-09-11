@@ -86,6 +86,9 @@ export const MODULE_PAR_NAV: Record<string, ModuleId> = {
 const TOUT: Action[] = ["voir", "creer", "modifier", "supprimer"];
 const LECTURE: Action[] = ["voir"];
 const LECTURE_ECRITURE: Action[] = ["voir", "modifier"];
+/* Produire et corriger, mais pas effacer : effacer un devis ou un rapport
+   efface une trace, et cela reste un geste d'administrateur. */
+const SAUF_SUPPRESSION: Action[] = ["voir", "creer", "modifier"];
 
 type Matrice = Partial<Record<ModuleId, Action[]>>;
 
@@ -120,7 +123,9 @@ const MATRICE: Record<RoleMembre, Matrice> = {
     rapports: TOUT,
     vehicules: LECTURE_ECRITURE,
     clients: LECTURE,
-    devis: LECTURE,
+    // Il relève les quantités sur le chantier : il chiffre le devis qui en
+    // découle. Accordé en base le 10/09 ; l'écran l'ignorait encore.
+    devis: SAUF_SUPPRESSION,
     factures: LECTURE,
     controle_fournisseurs: LECTURE,
     rh: LECTURE,
@@ -131,7 +136,7 @@ const MATRICE: Record<RoleMembre, Matrice> = {
     tableau_de_bord: LECTURE,
     chantiers: LECTURE,
     planning: LECTURE,
-    rapports: ["voir", "creer", "modifier"],
+    rapports: SAUF_SUPPRESSION,
     materiel: LECTURE_ECRITURE,
     rh: LECTURE,
     vehicules: LECTURE,
@@ -141,7 +146,7 @@ const MATRICE: Record<RoleMembre, Matrice> = {
     chantiers: LECTURE,
     planning: LECTURE,
     materiel: LECTURE,
-    rapports: ["voir", "creer", "modifier"],
+    rapports: SAUF_SUPPRESSION,
   },
   lecture: Object.fromEntries(
     TOUS_MODULES.filter((m) => m !== "utilisateurs").map((m) => [m, LECTURE])
