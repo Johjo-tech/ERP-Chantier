@@ -361,7 +361,10 @@ export function injecterSession() {
   w.nomIntervenant = nomIntervenant;
   w.listeIntervenants = listeIntervenants;
   w.prochainActeur = prochainActeur;
-  w.validerPrefacture = queries.validerPrefacture;
+  /* `validerPrefacture` n'est plus exposée au HTML : elle enchaîne le chiffrage
+     et la génération de la facture sans jamais demander de prix. L'écran passe
+     par `validerChiffrage`, après la saisie ligne à ligne de Facturation ›
+     Validation. La fonction reste dans `queries`, où les tests l'éprouvent. */
   w.pdfFacturX = enrichirFactureX;
   w.transmettreFacture = transmettre;
   w.etatConnexionPdp = etatConnexionPdp;
