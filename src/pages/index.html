@@ -1047,6 +1047,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 
 /* Circuit de validation d'une tâche de planning */
 .wf-bandeau{ border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:var(--surface); }
+/* Un bon multi-métiers empile un bandeau par métier : sans séparation, les
+   deux circuits se lisent comme un seul. */
+.wf-bandeau + .wf-bandeau{ margin-top:10px; }
+.wf-metier{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
 .wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
 .wf-planifiee{ background:#EEF2F7; color:#4A566E; }
 .wf-realisee{ background:#FFF3E4; color:#9A5B00; }
@@ -1247,11 +1251,11 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <h3 style="margin-top:0;" id="techModalTitre">Fiche d'intervention</h3>
     <p class="card-sub" id="techModalInfo"></p>
 
-    <!-- Circuit de validation : état de la tâche et actions ouvertes au rôle -->
+    <!-- Circuit de validation : un bandeau par métier du bon, chacun avec son
+         état et les actions ouvertes au rôle. Les cases « Métiers réalisés »
+         qui vivaient ici ne persistaient rien et doublaient ces bandeaux. -->
+    <div class="section-title" style="margin-top:14px;">🔧 Métiers</div>
     <div id="techModalWorkflow" style="margin-top:12px;"></div>
-
-    <div class="section-title" style="margin-top:14px;">🔧 Métiers réalisés</div>
-    <div id="techModalMetiers"></div>
 
     <div class="section-title" style="margin-top:16px;">📅 Cette date</div>
     <label class="bc-tache-row" style="background:var(--surface-2); border-radius:8px;">
@@ -5414,7 +5418,11 @@ async function addTravailSupplementaire(bcId, inputId, containerId){
     const role = window.roleEffectif();
     await window.ajouterTravailSupplementaire(window.societeActive().uuid, {
       bon_commande_id: bcId,
-      planning_tache_id: wfTacheCourante ? wfTacheCourante.id : null,
+      /* La saisie est au niveau du bon, pas du métier : rattacher la ligne à
+         une tâche n'a de sens que si le bon n'en porte qu'une. Sur un bon
+         multi-métiers, en désigner une serait arbitraire — le bon suffit à
+         la retrouver, `bon_commande_id` étant la seule colonne obligatoire. */
+      planning_tache_id: wfTaches.length === 1 ? wfTaches[0].tache.id : null,
       libelle,
       quantite: 1,
       origine: (role === 'conducteur' || role === 'admin') ? 'conducteur' : 'technicien',
@@ -6979,7 +6987,6 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   techModalCtx = { kind, bcId: b.id, dayIso: estDateOrigine ? null : dayIso };
   document.getElementById('techModalTitre').textContent = (b.numeroBC || b.client) + (estDateOrigine ? '' : ` — ${fmtDate(dayIso)}`);
   document.getElementById('techModalInfo').textContent = `${esc(b.client)} — ${withVille(b.adresse, b.codePostal, b.ville)||''}`;
-  renderTechModalMetiers(b);
   const occSuppl = techModalCtx.dayIso ? (b.datesSupplementaires||[]).find(d=>d.date===techModalCtx.dayIso) : null;
   document.getElementById('techModalDateFaite').checked = techModalCtx.dayIso ? !!(occSuppl && occSuppl.fait) : !!b.dateOrigineFait;
   const autresDates = bcToutesDatesDuBC(b).filter(d=> d.dayIso !== (techModalCtx.dayIso||b.datePlanifiee));
@@ -7001,7 +7008,10 @@ function openTechnicienInterventionModal(kind, id, dayIso){
    statut, et les transitions passent par des fonctions SQL qui horodatent et
    enregistrent l'auteur. L'interface ne fait que déclencher. */
 
-let wfTacheCourante = null;
+/* Un élément par métier du bon : `{ metier, tache }`. Chaque métier porte sa
+   propre tâche et s'arbitre séparément — c'est ce que supposent déjà les règles
+   de `regles-bc.ts` et le `metiersFait` de l'adaptateur. */
+let wfTaches = [];
 
 const WF_LIBELLES = {
   planifiee: 'Planifiée',
@@ -7014,41 +7024,64 @@ async function chargerWorkflowTache(b, dayIso){
   const zone = document.getElementById('techModalWorkflow');
   if(!zone) return;
   zone.innerHTML = '<div class="wf-bandeau"><span class="wf-meta">Chargement du suivi…</span></div>';
-  wfTacheCourante = null;
+  wfTaches = [];
 
   try{
     const date = dayIso || b.datePlanifiee || todayISO();
-    wfTacheCourante = await window.tacheDuBonCommande(b.id, date, b.numeroBC || b.client || 'Intervention');
-    renderWorkflowTache();
+    const libelle = b.numeroBC || b.client || 'Intervention';
+    /* Un bon sans métier déclaré garde une tâche unique sans métier : son
+       circuit reste exactement celui d'avant. */
+    const metiers = bcMetiersDuBC(b);
+    const cibles = metiers.length ? metiers : [null];
+
+    const chargees = [];
+    for(const m of cibles){
+      /* En série : deux matérialisations concurrentes sur le même bon
+         créeraient deux tâches pour un même métier. */
+      chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m) });
+    }
+    wfTaches = chargees;
+    renderWorkflowTaches();
   }catch(err){
     console.error('Suivi de tâche indisponible', err);
     zone.innerHTML = `<div class="wf-bandeau"><span class="wf-meta">Suivi indisponible : ${esc(err.message||'erreur')}</span></div>`;
   }
 }
 
-function renderWorkflowTache(){
+function renderWorkflowTaches(){
   const zone = document.getElementById('techModalWorkflow');
-  const t = wfTacheCourante;
-  if(!zone || !t) return;
+  if(!zone) return;
+  if(!wfTaches.length){ zone.innerHTML = ''; return; }
 
+  const bandeaux = wfTaches.map((e, i) => bandeauTacheHTML(e, i)).join('');
+
+  /* La pré-facture engage le bon de commande entier, pas une tâche. Rendue dans
+     le bandeau d'une tâche validée, elle était le seul bouton restant et se
+     lisait comme l'étape suivante du circuit — alors que les autres métiers
+     n'étaient pas encore arbitrés. */
+  const toutesValidees = wfTaches.every(e => (e.tache.statut || 'planifiee') === 'validee');
+  const prefacture = (toutesValidees && window.actionsFacturation().peutValiderPrefacture)
+    ? `<div class="wf-bandeau"><div class="wf-actions"><button class="btn" onclick="wfValiderPrefacture()">🧾 Valider la pré-facture</button></div></div>`
+    : '';
+
+  zone.innerHTML = bandeaux + prefacture;
+}
+
+function bandeauTacheHTML(entree, i){
+  const t = entree.tache;
   const statut = t.statut || 'planifiee';
   const droits = window.actionsTache(statut);
 
   const boutons = [];
   if(droits.peutSaisir){
-    boutons.push(`<button class="btn" onclick="wfEnregistrerConstats()">💾 Enregistrer mes constats</button>`);
+    boutons.push(`<button class="btn" onclick="wfEnregistrerConstats(${i})">💾 Enregistrer mes constats</button>`);
   }
   if(droits.peutCloturer){
-    boutons.push(`<button class="btn primary" onclick="wfMarquerRealisee()">✓ Travaux terminés</button>`);
+    boutons.push(`<button class="btn primary" onclick="wfMarquerRealisee(${i})">✓ Travaux terminés</button>`);
   }
   if(droits.peutArbitrer){
-    boutons.push(`<button class="btn primary" onclick="wfValider(true)">✓ Valider</button>`);
-    boutons.push(`<button class="btn ghost" onclick="wfValider(false)">✕ Refuser</button>`);
-  }
-  // Une fois les tâches validées, l'admin chiffre et valide la pré-facture.
-  // Le passage à « prêt à chiffrer » est déduit, pas cliqué.
-  if(statut === 'validee' && window.actionsFacturation().peutValiderPrefacture){
-    boutons.push(`<button class="btn" onclick="wfValiderPrefacture()">🧾 Valider la pré-facture</button>`);
+    boutons.push(`<button class="btn primary" onclick="wfValider(${i}, true)">✓ Valider</button>`);
+    boutons.push(`<button class="btn ghost" onclick="wfValider(${i}, false)">✕ Refuser</button>`);
   }
 
   /* Qui a fait quoi : un identifiant ne dit rien, on affiche le nom. */
@@ -7073,7 +7106,8 @@ function renderWorkflowTache(){
         ? `<span class="wf-tour wf-tour-moi">⏳ À vous de jouer — ${esc(acteur)}</span>`
         : `<span class="wf-tour">⏳ En attente de ${esc(acteur)}</span>`);
 
-  zone.innerHTML = `<div class="wf-bandeau">
+  return `<div class="wf-bandeau">
+    ${entree.metier ? `<div class="wf-metier">${esc(metierDisplayLabel(entree.metier))}</div>` : ''}
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
     ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
     ${histoire.length ? `<div class="wf-meta">${histoire.join('<br>')}</div>` : ''}
@@ -7084,17 +7118,27 @@ function renderWorkflowTache(){
   </div>`;
 }
 
+/* La tâche visée par un bouton : les bandeaux sont rendus dans l'ordre de
+   `wfTaches`, l'indice les désigne sans exposer d'identifiant dans le HTML. */
+function wfTacheAt(i){
+  const entree = wfTaches[i];
+  if(!entree) throw new Error('Tâche introuvable — rouvrez la fiche.');
+  return entree.tache;
+}
+
 async function wfRafraichir(){
-  const taches = await window.listTachesBonCommande(wfTacheCourante.bon_commande_id);
-  wfTacheCourante = taches.find(x => x.id === wfTacheCourante.id) || wfTacheCourante;
-  renderWorkflowTache();
+  const bcId = techModalCtx && techModalCtx.bcId;
+  if(!bcId || !wfTaches.length) return;
+  const taches = await window.listTachesBonCommande(bcId);
+  wfTaches = wfTaches.map(e => ({ ...e, tache: taches.find(x => x.id === e.tache.id) || e.tache }));
+  renderWorkflowTaches();
 }
 
 /* Enregistre commentaire et pièce sans changer d'état : le technicien peut
    noter au fil de l'intervention sans la déclarer terminée. */
-async function wfEnregistrerConstats(){
+async function wfEnregistrerConstats(i){
   try{
-    await window.sauvegarderTerrain(wfTacheCourante.id, {
+    await window.sauvegarderTerrain(wfTacheAt(i).id, {
       commentaire: document.getElementById('techModalCommentaire').value || undefined,
       pieceACommander: document.getElementById('techModalPieceCommander').checked,
       pieceDescription: document.getElementById('techModalPieceDetail').value || undefined,
@@ -7107,16 +7151,17 @@ async function wfEnregistrerConstats(){
   }
 }
 
-async function wfMarquerRealisee(){
+async function wfMarquerRealisee(i){
   const commentaire = document.getElementById('techModalCommentaire').value || undefined;
   try{
+    const tacheId = wfTacheAt(i).id;
     // On enregistre d'abord les constats : ils seraient perdus au changement d'état
-    await window.sauvegarderTerrain(wfTacheCourante.id, {
+    await window.sauvegarderTerrain(tacheId, {
       commentaire,
       pieceACommander: document.getElementById('techModalPieceCommander').checked,
       pieceDescription: document.getElementById('techModalPieceDetail').value || undefined,
     });
-    await window.marquerRealisee(wfTacheCourante.id, { commentaire });
+    await window.marquerRealisee(tacheId, { commentaire });
     await wfRafraichir();
     showToast('Travaux déclarés faits — en attente de validation.', 'success');
   }catch(err){
@@ -7125,7 +7170,7 @@ async function wfMarquerRealisee(){
   }
 }
 
-async function wfValider(ok){
+async function wfValider(i, ok){
   let motif;
   if(!ok){
     // Un refus non motivé ne dit pas au technicien quoi reprendre
@@ -7133,7 +7178,7 @@ async function wfValider(ok){
     if(!motif || !motif.trim()) return;
   }
   try{
-    await window.validerTache(wfTacheCourante.id, ok, motif);
+    await window.validerTache(wfTacheAt(i).id, ok, motif);
     await wfRafraichir();
     showToast(ok ? 'Travaux validés.' : 'Travaux renvoyés au technicien.', 'success');
   }catch(err){
@@ -7146,7 +7191,7 @@ async function wfValider(ok){
 async function wfValiderPrefacture(){
   if(!confirm('Valider la pré-facture et générer la facture brouillon ?')) return;
   try{
-    const factureId = await window.validerPrefacture(wfTacheCourante.bon_commande_id);
+    const factureId = await window.validerPrefacture(techModalCtx.bcId);
     showToast('Facture brouillon générée — à émettre depuis Factures.', 'success', 5000);
     await loadAll();
     closeTechnicienInterventionModal();
@@ -7166,21 +7211,11 @@ function closeTechnicienInterventionModal(){
   document.getElementById('technicienInterventionModal').style.display = 'none';
   techModalCtx = null;
 }
-function renderTechModalMetiers(b){
-  const metiers = bcMetiersDuBC(b);
-  const fait = b.metiersFait || {};
-  document.getElementById('techModalMetiers').innerHTML = metiers.length? metiers.map(m=>`
-    <label class="bc-tache-row ${fait[m]?'is-fait':''}">
-      <input type="checkbox" ${fait[m]?'checked':''} onchange="toggleTechModalMetier('${jsAttr(m)}')">
-      <span style="flex:1;">${esc(metierDisplayLabel(m))}</span>
-    </label>`).join('') : '<div class="empty">Aucun métier renseigné.</div>';
-}
-function toggleTechModalMetier(metier){
-  const b = state.bonsCommande.find(x=>x.id===techModalCtx.bcId);
-  if(!b) return;
-  if(!b.metiersFait) b.metiersFait = {};
-  b.metiersFait[metier] = !b.metiersFait[metier];
-}
+/* `renderTechModalMetiers` et `toggleTechModalMetier` ont été supprimées. Leurs
+   cases à cocher ne persistaient rien — `toggleTechModalMetier` ne modifiait
+   que `b.metiersFait` en mémoire, perdu au rechargement — et elles doublaient
+   désormais les bandeaux de circuit, qui eux portent l'état réel de chaque
+   métier. Une case qui ne sauvegarde pas dit le contraire de ce qu'elle fait. */
 function renderTechModalPhotos(b){
   const photos = b.technicienPhotos || [];
   document.getElementById('techModalPhotos').innerHTML = photos.map((p,i)=>`
@@ -13057,7 +13092,6 @@ async function saveDocument(){
       + '</div>';
     return;
   }
-  await loadAll();
   // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
   pousserHistorique(true);
   renderShell();

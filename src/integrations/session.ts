@@ -203,28 +203,40 @@ export async function seDeconnecter(): Promise<void> {
 // ============ CIRCUIT DE VALIDATION ============
 
 /**
- * Retrouve la tâche de planning d'un bon de commande pour une date, ou la crée.
+ * Retrouve la tâche de planning d'un bon de commande pour un métier et une
+ * date, ou la crée.
  *
  * Les cartes du planning représentent des bons de commande ; le circuit de
  * validation, lui, s'appuie sur `planning_taches`. On matérialise donc la tâche
  * au premier passage plutôt que d'imposer une double saisie.
+ *
+ * Le métier fait partie de l'identité de la tâche : un bon PEINTURE+SOL porte
+ * deux tâches qui s'arbitrent séparément. Un repli sur la première tâche du bon
+ * rendrait celle d'un autre métier — déjà validée, elle fermait tout arbitrage
+ * et ne laissait que le bouton de pré-facture, faisant passer une étape de
+ * facturation pour une étape du circuit.
  */
 export async function tacheDuBonCommande(
   bcId: Uuid,
   date: string,
-  libelle: string
+  libelle: string,
+  metier?: string | null
 ): Promise<PlanningTache> {
   const societe = societeActive();
   if (!societe) throw new Error("Aucune société active.");
 
   const taches = await queries.listTachesBonCommande(bcId);
-  const existante = taches.find((t) => t.date_tache === date) ?? taches[0];
+  /* Un bon sans métier déclaré garde ses tâches sans métier : la comparaison se
+     fait sur la chaîne vide pour que `null` et `""` restent le même cas. */
+  const duMetier = taches.filter((t) => (t.metier ?? "") === (metier ?? ""));
+  const existante = duMetier.find((t) => t.date_tache === date) ?? duMetier[0];
   if (existante) return existante;
 
   return queries.planifierTache(societe.uuid, {
     bon_commande_id: bcId,
     libelle,
     date_tache: date,
+    metier: metier || null,
   });
 }
 
