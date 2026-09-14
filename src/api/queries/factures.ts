@@ -96,13 +96,24 @@ export async function getFactureSolde(id: Uuid): Promise<FactureSolde | null> {
 
 // ============ ÉCRITURE ============
 
+/** Miroir du défaut de la colonne `factures.statut`. Le changer ici sans le
+ *  changer en base ferait diverger ce que l'on croit créer de ce qui est créé. */
+const STATUT_PAR_DEFAUT = "impayée" as const;
+
 /**
  * Le numéro n'est pas demandé : la base l'attribue.
  *
- * Un trigger le pose à l'insertion si le statut n'est pas « brouillon », dans
- * la même transaction. Le réclamer d'avance consommait une référence même
- * quand l'enregistrement échouait — la série y perdait sa continuité, que
- * l'article 242 nonies A de l'annexe II au CGI exige.
+ * Un trigger le pose au passage à un statut émis, dans la même transaction. Le
+ * réclamer d'avance consommait une référence même quand l'enregistrement
+ * échouait — la série y perdait sa continuité, que l'article 242 nonies A de
+ * l'annexe II au CGI exige.
+ *
+ * **La facture naît toujours brouillon, quel que soit le statut demandé.** Une
+ * ligne de table et ses lignes filles ne peuvent pas arriver dans la même
+ * requête : émettre d'emblée reviendrait à numéroter une facture vide, et c'est
+ * exactement ce qui a produit 55 pièces numérotées sans rien à facturer. Le
+ * statut voulu est appliqué ensuite, une fois les lignes posées — la base
+ * refuse alors d'elle-même s'il n'y en a aucune (règle BG-25).
  *
  * `input.numero` reste accepté : les factures de sous-traitance portent une
  * série qui leur est propre, hors compteur.
@@ -112,12 +123,24 @@ export async function createFacture(
   input: NouvelleFacture,
   lignes: LigneFactureInput[] = []
 ): Promise<FactureComplete> {
+  /* La colonne `statut` a pour défaut « impayée » : ne rien préciser revient
+     donc à demander une facture **émise**, pas un brouillon. C'est contraire à
+     l'intuition, et c'est par là que passaient la plupart des créations. */
+  const statutVoulu = input.statut ?? STATUT_PAR_DEFAUT;
+  const emiseDEmblee = statutVoulu !== "brouillon" && !input.numero;
+
   const facture = await insertOne("factures", {
     ...input,
+    statut: emiseDEmblee ? "brouillon" : input.statut,
     societe_id: societeId,
   });
 
-  return { ...facture, lignes: await replaceFactureLignes(facture.id, lignes) };
+  const lignesPosees = await replaceFactureLignes(facture.id, lignes);
+
+  if (!emiseDEmblee) return { ...facture, lignes: lignesPosees };
+
+  const emise = await updateOne("factures", facture.id, { statut: statutVoulu });
+  return { ...emise, lignes: lignesPosees };
 }
 
 export function updateFacture(id: Uuid, updates: FactureUpdate) {

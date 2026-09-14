@@ -18,6 +18,7 @@ import * as queries from "@/api/queries";
 import { supabase } from "@/api/client";
 import type { Uuid } from "@/api/types";
 import { AUTH_DISPONIBLE, TEST_SOCIETE_CODE } from "./setup";
+import { LIGNES_MINIMALES } from "./facture-de-test";
 
 const suite = AUTH_DISPONIBLE ? describe : describe.skip;
 
@@ -80,7 +81,7 @@ suite("Numérotation des factures", () => {
       client_nom: NOM_CLIENT,
       date: aujourdhui,
       statut: "brouillon",
-    });
+    }, LIGNES_MINIMALES);
     const avant = await compteurFacture(societeId, annee);
 
     const emise = await queries.emettreFacture(brouillon.id);
@@ -91,13 +92,27 @@ suite("Numérotation des factures", () => {
     await expect(queries.emettreFacture(brouillon.id)).rejects.toThrow(/déjà émise/);
   });
 
-  it("numérote une facture créée directement émise", async () => {
+  /* Demander une facture émise d'emblée reste possible : `createFacture` la
+     fait naître brouillon, pose les lignes, puis l'émet. L'appelant ne voit
+     qu'un geste, la base n'a jamais numéroté de pièce vide. */
+  it("numérote une facture créée directement émise, lignes comprises", async () => {
     const facture = await queries.createFacture(societeId, {
       client_nom: NOM_CLIENT,
       date: aujourdhui,
       statut: "impayée",
-    });
+    }, LIGNES_MINIMALES);
     expect(facture.numero).toMatch(/^FAC-\d{4}-\d{4}$/);
+    expect(facture.statut).toBe("impayée");
+  });
+
+  it("refuse une facture émise que rien ne facture", async () => {
+    await expect(
+      queries.createFacture(societeId, {
+        client_nom: NOM_CLIENT,
+        date: aujourdhui,
+        statut: "impayée",
+      })
+    ).rejects.toThrow();
   });
 
   /* Le cas qui motive tout le reste : jusqu'ici le numéro était pris avant
@@ -125,7 +140,7 @@ suite("Numérotation des factures", () => {
           client_nom: NOM_CLIENT,
           date: aujourdhui,
           statut: "brouillon",
-        })
+        }, LIGNES_MINIMALES)
       )
     );
 
@@ -157,7 +172,7 @@ suite("Numérotation des factures", () => {
         client_nom: NOM_CLIENT,
         date: aujourdhui,
         statut: "impayée",
-      });
+      }, LIGNES_MINIMALES);
       numerotee = f.id;
       numero = f.numero!;
     });

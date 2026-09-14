@@ -390,6 +390,26 @@ export function viderCache() {
   societesChargees = false;
 }
 
+/**
+ * Faut-il faire naître cette facture brouillon avant de l'émettre ?
+ *
+ * Oui dès qu'on demande un statut émis sans fournir de numéro : la base
+ * refuserait de numéroter une pièce que rien ne facture, et ses lignes ne
+ * peuvent pas arriver dans la même requête.
+ *
+ * Non pour une facture de sous-traitance, qui porte son propre numéro hors
+ * compteur : le trigger la laisse passer telle quelle.
+ */
+export function emissionADifferer(
+  prefixe: string,
+  row: Record<string, unknown>
+): boolean {
+  if (prefixe !== "facture") return false;
+  const statut = row.statut;
+  if (typeof statut !== "string" || statut === "brouillon") return false;
+  return !String(row.numero ?? "").trim();
+}
+
 async function chargerCollection(prefixe: string): Promise<string[]> {
   const collection = COLLECTIONS[prefixe];
   if (!collection) return [];
@@ -981,6 +1001,15 @@ export async function stSet(
       else if (id) row.legacy_id = id;
     }
 
+    /* Une facture et ses lignes n'arrivent pas dans la même requête : la
+       première crée la pièce, la seconde la garnit. Demander d'emblée un
+       statut émis reviendrait donc à numéroter une facture vide — ce que la
+       base refuse désormais, et ce qui avait produit 55 pièces numérotées sans
+       rien à facturer. On la fait naître brouillon, on pose les lignes, et on
+       applique le statut voulu ensuite. L'écran, lui, n'a rien changé. */
+    const statutVoulu = emissionADifferer(prefixe, row) ? (row.statut as string) : null;
+    if (statutVoulu) row.statut = "brouillon";
+
     const { data, error } = await dyn()
       .from(collection.table)
       .upsert(row)
@@ -988,7 +1017,8 @@ export async function stSet(
       .single();
     if (error) throw error;
 
-    const parentId = (data as Record<string, unknown>).id as Uuid;
+    let data_ = data as Record<string, unknown>;
+    const parentId = data_.id as Uuid;
     uuidParCle.set(cle, parentId);
 
     if (collection.lignes) {
@@ -1024,6 +1054,19 @@ export async function stSet(
       await appliquerWorkflow(parentId, cle, valeur);
     }
 
+    /* Les lignes sont posées : la facture peut être émise. Le numéro est
+       attribué ici, par le trigger, et relu juste après. */
+    if (statutVoulu) {
+      const { data: emise, error: refus } = await dyn()
+        .from(collection.table)
+        .update({ statut: statutVoulu })
+        .eq("id", parentId)
+        .select()
+        .single();
+      if (refus) throw refus;
+      data_ = emise as Record<string, unknown>;
+    }
+
     /* La base ne se contente plus d'accepter ce qu'on lui envoie : elle
        attribue le numéro de facture à l'émission. Garder en cache la valeur
        *émise* laisserait l'écran afficher une facture sans numéro jusqu'au
@@ -1031,7 +1074,7 @@ export async function stSet(
        les champs calculés priment sur ceux qu'on a proposés. */
     cache.set(cle, {
       ...valeur,
-      ...champsCalcules(prefixe, data as Record<string, unknown>),
+      ...champsCalcules(prefixe, data_),
       id,
     });
     return true;
