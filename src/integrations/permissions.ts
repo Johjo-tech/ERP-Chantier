@@ -38,6 +38,7 @@ export type ModuleId =
   | "vehicules"
   | "statistiques"
   | "reglages"
+  | "articles"
   | "utilisateurs";
 
 export const ROLES_LIBELLES: Record<RoleMembre, string> = {
@@ -66,6 +67,7 @@ export const MODULES_LIBELLES: Record<ModuleId, string> = {
   vehicules: "Véhicules",
   statistiques: "Statistiques",
   reglages: "Réglages",
+  articles: "Catalogue d'articles",
   utilisateurs: "Utilisateurs",
 };
 
@@ -80,6 +82,7 @@ export const MODULE_PAR_NAV: Record<string, ModuleId> = {
   chantiers: "chantiers",
   reglements: "reglements",
   clients: "clients",
+  catalogue: "articles",
   rh: "rh",
   sousTraitants: "rh",
   vehicules: "vehicules",

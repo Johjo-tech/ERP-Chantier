@@ -37,6 +37,7 @@ export const MATRICE_ATTENDUE: Record<ModuleId, Record<RoleMembre, string>> = {
   vehicules:                { admin:"VCMS", secretaire:"VCMS", conducteur:"VM",   technicien:"V",   sous_traitant:"",    lecture:"V" },
   statistiques:             { admin:"VCMS", secretaire:"V",    conducteur:"V",    technicien:"",    sous_traitant:"",    lecture:"V" },
   reglages:                 { admin:"VCMS", secretaire:"V",    conducteur:"V",    technicien:"",    sous_traitant:"",    lecture:"V" },
+  articles:                 { admin:"VCMS", secretaire:"VCMS", conducteur:"V",    technicien:"",    sous_traitant:"",    lecture:"V" },
   utilisateurs:             { admin:"VCMS", secretaire:"",     conducteur:"",     technicien:"",    sous_traitant:"",    lecture:"" },
 };
 

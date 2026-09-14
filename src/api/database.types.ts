@@ -36,42 +36,60 @@ export type Database = {
     Tables: {
       articles: {
         Row: {
-          code: string | null
+          actif: boolean
+          code: string
           cree_le: string
+          description: string | null
           designation: string
+          famille: string | null
+          gere_en_stock: boolean
           id: string
           legacy_id: string | null
           maj_le: string
           metier: string | null
+          prix_achat: number | null
           prix_unitaire: number
           societe_id: string
           tva: number
+          type_article: string
           unite: string | null
         }
         Insert: {
-          code?: string | null
+          actif?: boolean
+          code: string
           cree_le?: string
+          description?: string | null
           designation: string
+          famille?: string | null
+          gere_en_stock?: boolean
           id?: string
           legacy_id?: string | null
           maj_le?: string
           metier?: string | null
+          prix_achat?: number | null
           prix_unitaire?: number
           societe_id: string
           tva?: number
+          type_article?: string
           unite?: string | null
         }
         Update: {
-          code?: string | null
+          actif?: boolean
+          code?: string
           cree_le?: string
+          description?: string | null
           designation?: string
+          famille?: string | null
+          gere_en_stock?: boolean
           id?: string
           legacy_id?: string | null
           maj_le?: string
           metier?: string | null
+          prix_achat?: number | null
           prix_unitaire?: number
           societe_id?: string
           tva?: number
+          type_article?: string
           unite?: string | null
         }
         Relationships: [
@@ -5860,6 +5878,8 @@ export type Database = {
       }
       rls_table_racine: { Args: { p_table: string }; Returns: undefined }
       role_dans_societe: { Args: { p_societe_id: string }; Returns: string }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       tache_a_une_equipe: { Args: { p_tache_id: string }; Returns: boolean }
       tache_marquer_realisee: {
         Args: {
