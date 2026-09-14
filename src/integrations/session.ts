@@ -44,6 +44,14 @@ import {
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
 import { extraireBonCommande, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import {
+  attenteAnnoncee,
+  etatAnnule,
+  etatDelaiDepasse,
+  etatEchec,
+  etatLecture,
+  formaterDuree,
+} from "@/api/regles-ocr";
+import {
   correspond,
   dansLaPeriode,
   dateDocument,
@@ -428,6 +436,14 @@ export function injecterSession() {
 
   // Lecture automatique des bons de commande
   w.extraireBonCommande = extraireBonCommande;
+  /* Le suivi de lecture : seuils et formulations vivent dans `regles-ocr`,
+     pas dans `index.html` qui n'a aucun test. */
+  w.etatLecture = etatLecture;
+  w.etatAnnule = etatAnnule;
+  w.etatDelaiDepasse = etatDelaiDepasse;
+  w.etatEchec = etatEchec;
+  w.formaterDuree = formaterDuree;
+  w.attenteAnnoncee = attenteAnnoncee;
   w.versSaisieBonCommande = versSaisieBonCommande;
   w.rapprocherClient = rapprocherClient;
 

@@ -44,6 +44,17 @@ export const SEUIL_PLUS_LONG_QUE_DHABITUDE_MS = 45_000;
  */
 export const DELAI_LECTURE_MS = 120_000;
 
+/**
+ * Au bout de ce délai, ce qu'on attend n'est plus l'envoi mais le modèle.
+ *
+ * `fetch` ne rapporte aucune progression de téléversement : le navigateur ne
+ * sait pas distinguer les deux. Comme le document a été ramené sous 14 Mo — et
+ * qu'il en fait moins d'un dans l'immense majorité des cas — deux secondes
+ * suffisent à l'envoyer sur toute liaison utilisable. Afficher « Envoi » au-delà
+ * serait faux.
+ */
+export const DELAI_BASCULE_ANALYSE_MS = 2_000;
+
 export type TonLecture = "neutre" | "attention" | "erreur";
 
 export interface EtatLecture {

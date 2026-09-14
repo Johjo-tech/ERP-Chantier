@@ -889,6 +889,19 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 @media(max-width:640px){ input.art-pick{width:84px !important;} }
 .mic-btn.listening{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-2); animation:pulseSoft 1s infinite;}
 @keyframes pulseSoft{0%{box-shadow:0 0 0 0 rgba(255,106,26,.35);}100%{box-shadow:0 0 0 8px rgba(255,106,26,0);}}
+/* L'écran de lecture d'un bon de commande.
+   Pas de barre de progression : il n'existe aucun pourcentage honnête pour
+   « on attend le modèle », et une barre calée sur le temps écoulé serait un
+   mensonge. Un compteur de secondes, lui, ne ment pas. */
+.ocr-ecran{display:flex; flex-direction:column; align-items:center; gap:10px; padding:38px 24px; text-align:center;}
+.ocr-titre{display:flex; align-items:center; gap:10px; font-size:17px; font-weight:700;}
+.ocr-pastille{width:10px; height:10px; border-radius:50%; background:var(--accent-2, #FF6A1A); animation:pulseSoft 1.1s infinite;}
+.ocr-fichier{font-size:13px; color:var(--text-dim); word-break:break-all; max-width:460px;}
+.ocr-chrono{font-variant-numeric:tabular-nums; font-size:30px; font-weight:700; letter-spacing:-.5px;}
+.ocr-attente{font-size:12.5px; color:var(--text-dim);}
+.ocr-alerte{font-size:13px; color:var(--accent-2, #C24E00); max-width:460px;}
+.ocr-actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:6px;}
+@media (prefers-reduced-motion:reduce){ .ocr-pastille{animation:none;} }
 
 .lignes-table{width:100%; border-collapse:collapse; margin-top:4px;}
 .lignes-table th{font-size:10.5px; color:var(--text-dim); text-transform:uppercase; text-align:left; padding:4px 6px; letter-spacing:.05em;}
@@ -6100,6 +6113,12 @@ async function validerBCEtape(bcId, etape){
    explicitement de la rouvrir, pour qu'un arbitrage ne s'efface pas sans trace.
    Rouvrir une affaire validée est une décision de gestion, pas un correctif. */
 function bonCommandeForm(){
+  /* Pendant une lecture automatique, l'écran se consacre à la lecture. Le
+     formulaire reviendra prérempli. Rendre le suivi depuis `state.ocr` plutôt
+     qu'en manipulant le DOM est ce qui lui permet de survivre à `renderTab()` —
+     l'ancien message de fin, lui, était effacé par le rendu qui le suivait. */
+  if(state.ocr && (state.ocr.enCours || state.ocr.etat)) return ocrEcranHTML();
+
   const e = state.editing;
   const statuts = ['en attente','en cours','terminé','annulé'];
   const sansBC = !!e.sansBC;
@@ -13082,15 +13101,125 @@ async function importerBonCommande(fichier, input){
   await lireBonCommande(fichier, input);
 }
 
-/* ---------- Lecture automatique d'un bon de commande ---------- */
+/* ---------- Lecture automatique d'un bon de commande ----------
+
+   Ce que l'écran affichait : une phrase figée, « Lecture du document en
+   cours… », en douze pixels sous le bouton. Aucun mouvement, aucun délai, aucun
+   moyen d'abandonner. Et le 14/09 la fonction est morte sans émettre de réponse
+   HTTP : la promesse ne s'est jamais résolue, donc le `catch` n'a jamais été
+   atteint et la phrase serait restée là indéfiniment.
+
+   Désormais l'écran se consacre à la lecture, un chronomètre tourne, la durée
+   habituelle est annoncée, on peut renoncer, et **toute** issue produit un
+   message qui survit au rendu — y compris le silence du serveur. */
+
+let ocrChronoTimer = null;
+
+function arreterChronoOCR(){
+  if(ocrChronoTimer){ clearInterval(ocrChronoTimer); ocrChronoTimer = null; }
+}
+
+/* Le chronomètre ne redessine jamais l'écran : il réécrit trois nœuds. Un
+   `renderTab()` chaque seconde emporterait le focus et ferait clignoter la
+   page. Il se re-résout à chaque tic et abandonne en silence si l'écran a
+   changé — le prochain rendu recalculera la valeur depuis `state.ocr.debut`. */
+function majChronoOCR(){
+  const o = state.ocr;
+  if(!o || !o.enCours){ arreterChronoOCR(); return; }
+  const chrono = document.getElementById('ocrChrono');
+  if(!chrono) return;
+
+  const ecoule = Date.now() - o.debut;
+  const etat = window.etatLecture(o.etape, ecoule, o.evenements || []);
+  chrono.textContent = window.formaterDuree(ecoule);
+  const libelle = document.getElementById('ocrLibelle');
+  if(libelle) libelle.textContent = etat.libelle;
+  const alerte = document.getElementById('ocrAlerte');
+  if(alerte){
+    alerte.textContent = etat.alerte || '';
+    alerte.style.display = etat.alerte ? '' : 'none';
+  }
+}
+
+function demarrerChronoOCR(){
+  arreterChronoOCR();
+  ocrChronoTimer = setInterval(majChronoOCR, 1000);
+}
+
+function annulerLectureBC(){
+  const o = state.ocr;
+  if(!o || !o.enCours) return;
+  o.annuleParUtilisateur = true;
+  o.controleur.abort();
+}
+
+/** Reprendre la main à la main, après un échec ou un abandon. */
+function quitterLectureBC(){
+  state.ocr = null;
+  renderTab();
+}
+
+/** L'écran pendant et après la lecture : il remplace le formulaire. */
+function ocrEcranHTML(){
+  const o = state.ocr;
+  const ecoule = Date.now() - o.debut;
+
+  if(!o.enCours && o.etat){
+    const couleur = o.etat.ton === 'erreur' ? 'var(--danger)' : 'var(--text-dim)';
+    return `<div class="form-panel ocr-ecran">
+      <div class="ocr-titre" style="color:${couleur};">${esc(o.etat.libelle)}</div>
+      ${o.etat.alerte? `<div class="ocr-alerte">${esc(o.etat.alerte)}</div>`:''}
+      <div class="ocr-fichier">${esc(o.nom)}</div>
+      <div class="ocr-actions">
+        <label class="btn primary" style="cursor:pointer;">↻ Réessayer
+          <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="relancerLectureBC(this.files[0], this)">
+        </label>
+        <button type="button" class="btn" onclick="quitterLectureBC()">Saisir à la main</button>
+      </div>
+    </div>`;
+  }
+
+  const etat = window.etatLecture(o.etape, ecoule, o.evenements || []);
+  return `<div class="form-panel ocr-ecran">
+    <div class="ocr-titre"><span class="ocr-pastille"></span><span id="ocrLibelle">${esc(etat.libelle)}</span></div>
+    <div class="ocr-fichier">${esc(o.nom)}</div>
+    <div class="ocr-chrono" id="ocrChrono">${esc(window.formaterDuree(ecoule))}</div>
+    <div class="ocr-attente">${esc(window.attenteAnnoncee())}</div>
+    <div class="ocr-alerte" id="ocrAlerte" style="display:${etat.alerte?'':'none'};">${esc(etat.alerte||'')}</div>
+    <div class="ocr-actions">
+      <button type="button" class="btn ghost" onclick="annulerLectureBC()">Annuler la lecture</button>
+    </div>
+  </div>`;
+}
+
+function relancerLectureBC(fichier, input){
+  state.ocr = null;
+  return lireBonCommande(fichier, input);
+}
+
 async function lireBonCommande(fichier, input){
   if(!fichier) return;
-  const statut = document.getElementById('ocrStatut');
-  const dire = (msg, couleur) => { if(statut){ statut.textContent = msg; statut.style.color = couleur || 'var(--text-dim)'; } };
+  /* Le bouton n'était ni désactivé ni renommé : on pouvait lancer une seconde
+     lecture par-dessus la première. */
+  if(state.ocr && state.ocr.enCours){
+    showToast('Une lecture est déjà en cours.');
+    return;
+  }
 
-  dire('Lecture du document en cours…');
+  const controleur = new AbortController();
+  state.ocr = {
+    enCours: true, etape: 'preparation', debut: Date.now(),
+    nom: fichier.name, controleur, evenements: [], etat: null,
+    annuleParUtilisateur: false,
+  };
+  renderTab();
+  demarrerChronoOCR();
+
   try{
-    const extraction = await window.extraireBonCommande(fichier);
+    const extraction = await window.extraireBonCommande(fichier, {
+      signal: controleur.signal,
+      surEtape: (etape)=>{ if(state.ocr){ state.ocr.etape = etape; majChronoOCR(); } },
+    });
     const saisie = window.versSaisieBonCommande(extraction);
 
     /* Le nom lu correspond rarement au libellé enregistré : on le rapproche du
@@ -13112,12 +13241,19 @@ async function lireBonCommande(fichier, input){
     else if(!rapp.reconnu) messages.push('client « ' + rapp.nom + ' » à confirmer');
     messages.push(...avert);
 
+    /* La lecture a abouti : l'écran rend la main au formulaire, désormais
+       prérempli. Le compte rendu part en toast **et** dans le bloc de statut,
+       parce que le premier s'efface au bout de quelques secondes. */
+    state.ocr = null;
+    renderTab();
+    const dire = (msg, couleur) => {
+      const zone = document.getElementById('ocrStatut');
+      if(zone){ zone.textContent = msg; zone.style.color = couleur || 'var(--text-dim)'; }
+    };
     dire(messages.length
       ? 'Document lu — à vérifier : ' + messages.join(' · ')
       : 'Document lu — vérifiez les champs avant d\'enregistrer.',
       messages.length ? 'var(--accent-2)' : 'var(--success, #1E6B37)');
-
-    renderTab();
 
     /* Client incertain : on propose les plus proches plutôt que de laisser
        l'utilisateur chercher dans toute la liste. */
@@ -13134,8 +13270,29 @@ async function lireBonCommande(fichier, input){
     showToast('Bon de commande lu — relisez avant d\'enregistrer.', 'success', 4000);
   }catch(err){
     console.error('OCR', err);
-    dire(err.message || 'Lecture impossible.', 'var(--danger)');
+    const ecoule = state.ocr ? Date.now() - state.ocr.debut : 0;
+    const abandonne = err && (err.name === 'AbortError' || err.name === 'TimeoutError');
+
+    /* Trois issues, trois messages. Les confondre, c'est ce qui faisait croire
+       à une panne quand l'utilisateur venait simplement de renoncer — et
+       inversement, laisser un silence passer pour une lecture en cours. */
+    let etat;
+    if(state.ocr && state.ocr.annuleParUtilisateur) etat = window.etatAnnule(ecoule);
+    else if(abandonne) etat = window.etatDelaiDepasse(ecoule);
+    else etat = window.etatEchec(err && err.message ? err.message : 'Lecture impossible.');
+
+    if(state.ocr){ state.ocr.etat = etat; state.ocr.enCours = false; }
+    renderTab();
+
+    /* Le message vit désormais à deux endroits : l'écran, qui le garde, et un
+       toast, qui le porte à l'attention même si la page a défilé. Il n'y avait
+       jusqu'ici ni l'un ni l'autre en cas d'échec. */
+    if(etat.ton === 'erreur'){
+      showToast(etat.libelle + (etat.alerte ? ' — ' + etat.alerte : ''), 'error', 9000);
+    }
   }finally{
+    arreterChronoOCR();
+    if(state.ocr) state.ocr.enCours = false;
     if(input) input.value = '';
   }
 }
