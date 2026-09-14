@@ -66,6 +66,11 @@ body.sidebar-collapsed #sidebar{display:none;}
 .nav-item svg{width:18px; height:18px; flex-shrink:0;}
 .nav-item.active{background:var(--sidebar-active); color:var(--sidebar-text);}
 .nav-item.active svg{color:var(--accent);}
+/* Garder le menu ouvert : une préférence, pas un geste. Le bouton ☰ ferme et
+   ouvre à la demande ; cette bascule empêche seulement la barre de se replier
+   toute seule, ce qu'elle fait à chaque ouverture de formulaire. */
+.sidebar-pin{display:flex; align-items:center; gap:9px; padding:9px 6px; margin-top:auto; color:var(--sidebar-text-dim); font-size:11.5px; cursor:pointer; border-top:1px solid rgba(255,255,255,.08);}
+.sidebar-pin:hover{color:#fff;}
 .sidebar-foot{font-size:11px; color:var(--sidebar-text-dim); padding:10px 6px 0; border-top:1px solid rgba(255,255,255,.08); margin-top:10px;}
 
 #main{flex:1; min-width:0; display:flex; flex-direction:column;}
@@ -1103,6 +1108,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
       </div>
     </div>
     <div class="nav-items" id="navDesktop"></div>
+    <label class="sidebar-pin" title="Le menu ne se refermera plus tout seul à l'ouverture d'un formulaire">
+      <span class="ghost-toggle"><input type="checkbox" id="menuEpingleToggle" onchange="toggleMenuEpingle(this.checked)"><span class="ghost-toggle-slider"></span></span>
+      <span>Garder le menu ouvert</span>
+    </label>
     <div class="sidebar-foot" id="sidebarFoot">Données partagées avec toute personne ayant ce lien.</div>
   </aside>
   <div id="main">
@@ -2277,6 +2286,42 @@ function endResizeAttachmentFloat(){
   document.removeEventListener('mousemove', onResizeAttachmentFloat);
   document.removeEventListener('mouseup', endResizeAttachmentFloat);
 }
+/* Le menu se replie tout seul : `openForm` le referme à chaque ouverture de
+   formulaire, et le planning le masque pour récupérer la largeur. Cette
+   préférence l'en empêche.
+
+   Elle vit dans le stockage du navigateur — une préférence d'affichage, propre
+   à cette machine, qui n'a rien à faire en base. Un stockage refusé (navigation
+   privée, réglage du navigateur) ne doit pas empêcher l'application de
+   fonctionner : on retombe alors sur le comportement d'origine. */
+const CLE_MENU_EPINGLE = 'erp.menu.epingle';
+
+function menuEpingle(){
+  try{ return localStorage.getItem(CLE_MENU_EPINGLE) === '1'; }
+  catch(e){ return false; }
+}
+
+function toggleMenuEpingle(coche){
+  try{ localStorage.setItem(CLE_MENU_EPINGLE, coche ? '1' : '0'); }
+  catch(e){ console.warn('Préférence de menu non conservée par le navigateur', e); }
+  appliquerEpinglageMenu();
+  showToast(coche ? 'Le menu reste ouvert.' : 'Le menu se repliera à nouveau.', 'success', 2000);
+}
+
+/* Appelée au démarrage et au basculement, jamais à chaque rendu : sans quoi un
+   clic sur ☰ pour fermer serait aussitôt défait. Le geste explicite garde la
+   main sur la préférence. */
+function appliquerEpinglageMenu(){
+  const epingle = menuEpingle();
+  const el = document.getElementById('menuEpingleToggle');
+  if(el) el.checked = epingle;
+  if(epingle){
+    document.body.classList.remove('sidebar-collapsed');
+    // Le planning masque la barre par une autre règle : il faut la forcer.
+    document.body.classList.add('sidebar-forced');
+  }
+}
+
 function toggleSidebarForced(){
   if(document.body.classList.contains('is-planning-view')){
     document.body.classList.toggle('sidebar-forced');
@@ -2337,7 +2382,7 @@ function renderTab(){
   contentEl.innerHTML = renderers[state.tab]();
   contentEl.classList.toggle('is-planning', state.tab==='planning');
   document.body.classList.toggle('is-planning-view', state.tab==='planning');
-  if(state.tab!=='planning') document.body.classList.remove('sidebar-forced');
+  if(state.tab!=='planning' && !menuEpingle()) document.body.classList.remove('sidebar-forced');
   const isWide = state.tab==='devis' || state.tab==='factures' || state.tab==='interventions' || state.tab==='dashboard' || state.tab==='bonsCommande' || state.tab==='planning' || state.tab==='clients' || state.tab==='chantiers' || state.tab==='rh' || state.tab==='vehicules' || state.tab==='materiel' || state.tab==='piecesCommande' || state.tab==='statistiques' || state.tab==='catalogue';
   contentEl.classList.toggle('content-wide', isWide);
   if(state.tab==='interventions' && state.formOpen.intervention && (state.editing.step||1)===3){
@@ -2852,7 +2897,7 @@ function openForm(type, prefill){
   Object.keys(state.formOpen).forEach(k=> state.formOpen[k] = false);
   state.formOpen[type] = true;
   pousserHistorique();
-  document.body.classList.add('sidebar-collapsed');
+  if(!menuEpingle()) document.body.classList.add('sidebar-collapsed');
   renderTab();
   const zoneId = 'formZone' + type.charAt(0).toUpperCase() + type.slice(1);
   setTimeout(()=>{ const el = document.getElementById(zoneId); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); },50);
@@ -13564,6 +13609,8 @@ async function saveDocument(){
   // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
   pousserHistorique(true);
   renderShell();
+  // La préférence d'affichage du menu, relue à l'ouverture de la session.
+  appliquerEpinglageMenu();
   renderTab();
   if(!hasRealStorage){
     const foot = document.getElementById('sidebarFoot');
