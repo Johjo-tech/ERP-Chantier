@@ -12,8 +12,10 @@ import { signOut } from "@/api/client";
 import * as queries from "@/api/queries";
 import {
   actionsTache as reglesActionsTache,
+  motifLectureSeule as reglesMotifLectureSeule,
   prochainActeur as reglesProchainActeur,
   type ActionsTache,
+  type AppartenanceTache,
 } from "@/api/regles-taches";
 import type { PlanningTache, Uuid } from "@/api/types";
 import type { RoleMembre, Societe } from "@/api/types";
@@ -212,12 +214,26 @@ export function affichePrix(): boolean {
 /** Identité affichée dans l'en-tête. */
 let identite = "";
 
-export function setIdentite(v: string) {
+/** Identifiant du compte connecté : c'est par lui qu'on retrouve son équipe. */
+let compteId: Uuid | null = null;
+
+export function setIdentite(v: string, id?: string | null) {
   identite = v;
+  compteId = (id as Uuid) ?? null;
 }
 
 export function utilisateurCourant(): string {
   return identite;
+}
+
+/**
+ * Le compte connecté, tel que `planning_taches.realisee_par` l'enregistre.
+ *
+ * L'écran ne le connaissait pas : il ne pouvait donc pas savoir si une tâche
+ * était celle de l'utilisateur, et proposait « Travaux terminés » sur toutes.
+ */
+export function monCompteId(): Uuid | null {
+  return compteId;
 }
 
 /** Déconnexion : la redirection est faite par `watchAuthState`. */
@@ -277,9 +293,18 @@ export type { ActionsTache };
  */
 export function actionsTache(
   statut: string | null,
-  role: RoleMembre | null = roleEffectif()
+  role: RoleMembre | null = roleEffectif(),
+  appartenance?: AppartenanceTache
 ): ActionsTache {
-  return reglesActionsTache(statut, role);
+  return reglesActionsTache(statut, role, appartenance);
+}
+
+/** Pourquoi le rôle courant ne peut rien faire sur cette tâche, en clair. */
+export function motifLectureSeule(
+  appartenance?: AppartenanceTache,
+  role: RoleMembre | null = roleEffectif()
+): string | null {
+  return reglesMotifLectureSeule(role, appartenance);
 }
 
 /**
@@ -370,6 +395,8 @@ export function injecterSession() {
   // Circuit de validation des tâches
   w.tacheDuBonCommande = tacheDuBonCommande;
   w.actionsTache = actionsTache;
+  w.motifLectureSeule = motifLectureSeule;
+  w.monCompteId = monCompteId;
   w.actionsFacturation = actionsFacturation;
   /* Le métier, lu sur les chapitres du bon plutôt que coché. `memeMetier` est
      la comparaison partagée : l'écran, l'adaptateur et la session doivent en

@@ -1106,6 +1106,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* Une tâche que plus aucun métier du bon ne réclame : elle bloque le passage au
    chiffrage, elle doit donc se voir et s'arbitrer comme les autres. */
 .wf-hors-metier{ color:var(--warning, #B8860B); }
+/* À qui la tâche est confiée : sans cette ligne, le terrain ne pouvait pas
+   savoir pourquoi les boutons lui sont fermés. */
+.wf-equipe{ font-size:12px; color:var(--text-dim); margin:6px 0 2px; }
+.wf-sans-equipe{ color:var(--warning, #B8860B); }
 .wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
 .wf-planifiee{ background:#EEF2F7; color:#4A566E; }
 .wf-realisee{ background:#FFF3E4; color:#9A5B00; }
@@ -7487,10 +7491,43 @@ function renderWorkflowTaches(){
   zone.innerHTML = bandeaux + suite;
 }
 
+/**
+ * L'équipe du compte connecté, dans la société active.
+ *
+ * C'est la chaîne que la base emprunte pour sa propre garde : compte → salarié
+ * → équipe. On la refait ici pour que l'écran sache, **avant** le clic, si la
+ * tâche est celle de l'utilisateur.
+ */
+function monEquipeId(){
+  const moi = window.monCompteId && window.monCompteId();
+  if(!moi) return null;
+  const salarie = state.salaries.find(s => s.profileId === moi && s.societeId === state.societeId);
+  return (salarie && salarie.technicienId) || null;
+}
+
+/** À qui la tâche est confiée, vu du compte qui regarde. */
+function appartenanceTache(t){
+  const equipeTache = t.technicien_id || t.technicienId || null;
+  return {
+    aUneEquipe: !!equipeTache,
+    enFaitPartie: !!equipeTache && equipeTache === monEquipeId(),
+  };
+}
+
 function bandeauTacheHTML(entree, i){
   const t = entree.tache;
   const statut = t.statut || 'planifiee';
-  const droits = window.actionsTache(statut);
+  const appartenance = appartenanceTache(t);
+  const droits = window.actionsTache(statut, undefined, appartenance);
+  /* Le terrain voit toutes les tâches du bon — connaître l'avancement du
+     chantier entier a du sens — mais il n'agit que sur les siennes. Le motif
+     reprend mot pour mot celui que la base opposerait. */
+  const lectureSeule = window.motifLectureSeule
+    ? window.motifLectureSeule(appartenance)
+    : null;
+  const equipe = (t.technicien_id || t.technicienId)
+    ? (state.techniciens.find(e => e.id === (t.technicien_id || t.technicienId)) || {}).nom1
+    : null;
 
   const boutons = [];
   if(droits.peutSaisir){
@@ -7530,12 +7567,13 @@ function bandeauTacheHTML(entree, i){
     ${entree.metier ? `<div class="wf-metier">${esc(metierDisplayLabel(entree.metier))}</div>` : ''}
     ${entree.horsMetier ? `<div class="wf-metier wf-hors-metier">Hors métier${entree.metier ? '' : ' — tâche sans métier'}</div>` : ''}
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
+    ${equipe ? `<div class="wf-equipe">👷 Confiée à ${esc(equipe)}</div>` : '<div class="wf-equipe wf-sans-equipe">👷 Aucune équipe affectée</div>'}
     ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
     ${histoire.length ? `<div class="wf-meta">${histoire.join('<br>')}</div>` : ''}
     <div class="wf-attente">${attente}</div>
     ${boutons.length
       ? `<div class="wf-actions">${boutons.join('')}</div>`
-      : `<div class="wf-meta">Aucune action ouverte à votre rôle à cette étape.</div>`}
+      : `<div class="wf-meta">${esc(lectureSeule || 'Aucune action ouverte à votre rôle à cette étape.')}</div>`}
   </div>`;
 }
 
