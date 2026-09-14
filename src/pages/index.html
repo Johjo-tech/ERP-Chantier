@@ -1067,6 +1067,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .wf-banner.alerte{ background:#FDECEE; color:#B42318; border:1px solid #F5C2C7; }
 /* Le document rendu dans la modale : mêmes styles d'impression, cadre à l'écran. */
 .print-preview{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; overflow-x:auto; font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; }
+/* Chiffrer, c'est saisir des prix en regardant la commande. Le document de
+   référence — devis ou bon — se met donc à côté du tableau, pas au-dessus :
+   au-dessus, il fallait faire défiler pour comparer. */
+.pf-colonnes{ display:flex; gap:16px; align-items:flex-start; }
+.pf-reference{ flex:0 0 44%; max-height:68vh; overflow:auto; font-size:9pt; }
+.pf-travail{ flex:1; min-width:0; }
+@media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; } }
 .print-preview table{ width:100%; border-collapse:collapse; }
 .wf-tour-moi{ background:var(--accent-soft); color:var(--accent-2); }
 .wf-clos{ display:inline-block; font-size:11.5px; font-weight:700; color:var(--success); }
@@ -1386,7 +1393,7 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 <!-- Le directeur engage le montant facturé : il doit voir le document entier,
      pas une liste de métiers. -->
 <div id="validationDirecteurModal" class="view-modal">
-  <div class="view-modal-panel" style="max-width:960px;">
+  <div class="view-modal-panel" style="max-width:1240px;">
     <button class="view-modal-close" onclick="closeValidationDirecteurModal()">✕</button>
     <h3 style="margin-top:0;" id="validationDirecteurTitre">Pré-facture</h3>
     <p class="card-sub" id="validationDirecteurInfo"></p>
@@ -3529,16 +3536,6 @@ const NOM_FICHIER_DEFAUT = { devis:'devis', facture:'facture', bonCommande:'bon-
  * la table artisanale de la pré-facture, qui masquait chapitres et commentaires.
  */
 function documentImprimable(type, id){
-  /* La pré-facture est la facture à venir, montrée avant qu'elle existe. Elle
-     s'appuie sur les données du bon de commande, mais la rendre sous le titre
-     « BON DE COMMANDE » faisait croire qu'on avait ouvert le mauvais document.
-     Elle n'a pas de numéro — aucun n'est attribué tant qu'elle n'est pas
-     émise — et porte la référence du bon à la place. */
-  if(type==='prefacture'){
-    const b = (state.bonsCommande||[]).find(x=>x.id===id);
-    if(!b) return null;
-    return { doc: { ...b, numero: '', date: todayISO() }, titre: 'PRÉ-FACTURE' };
-  }
   if(type==='bonCommande'){
     const b = (state.bonsCommande||[]).find(x=>x.id===id);
     if(!b) return null;
@@ -3577,13 +3574,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
-        ${/* Une pré-facture n'a pas de numéro : aucun n'est attribué tant
-             qu'elle n'est pas émise. Afficher « N° » vide laisserait croire à
-             une perte ; on donne la référence du bon, celle que le client
-             utilise pour s'y retrouver. */''}
-        <div class="p-docmeta">${type==='prefacture'
-          ? `Date : <b>${fmtDate(doc.date)}</b>${bonCommandeDocMetaHTML(doc)}`
-          : `N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}`}</div>
+        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
       </td>
     </tr></table>
     <div class="p-rule"></div>
@@ -3613,13 +3604,10 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <tr><td class="label">TVA</td><td class="val">${fmt(t.tva)}</td></tr>
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
-    ${/* Une pré-facture ne se signe pas : c'est un document de travail interne,
-         arrêté avant d'émettre. Elle le dit, pour qu'on ne l'envoie pas au
-         client en croyant envoyer la facture. */''}
-    ${type==='prefacture' ? `<div class="p-mentions" style="margin-top:8mm;"><b>Document provisoire</b> — ne vaut pas facture. Les montants sont ceux arrêtés avant émission.</div>` : `<table class="p-sign"><tr>
+    <table class="p-sign"><tr>
       <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
       <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
-    </tr></table>`}
+    </tr></table>
     ${blocConditionsHTML(type, doc, s, hidePrices)}
     ${blocMentionsHTML(type, s)}
     <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
@@ -5506,7 +5494,9 @@ async function openValidationDirecteurModal(bcId){
     lignes: JSON.parse(JSON.stringify(b.lignes || [])),
     avecPrix: prixVisibles,
     prixVisibles,
-    peutValider: droits.peutValiderPrefacture
+    peutValider: droits.peutValiderPrefacture,
+    // Rien d'ouvert au départ : le tableau des prix prend toute la largeur.
+    reference: null
   };
 
   document.getElementById('validationDirecteurTitre').textContent =
@@ -5699,30 +5689,53 @@ function renderValidationDirecteur(){
   /* L'ordre suit celui du travail : ce qui a été commandé et ce que le terrain
      a ajouté, ce qu'il en a dit, puis les prix. Ce qui bloque et le bouton
      vivent dans le pied, toujours visible. */
+  /* Ce qu'on fait ici, c'est saisir des prix. Le tableau est donc le sujet, et
+     la pièce d'origine — devis ou bon de commande — s'ouvre à côté quand on
+     veut la consulter. Rendre la pré-facture elle-même n'apprenait rien : on
+     la regarde une fois émise, pas pendant qu'on la chiffre. */
   document.getElementById('validationDirecteurCorps').innerHTML = `
-    <label class="bc-tache-row" style="margin:0 0 12px;">
-      <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
-      <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
-    </label>
-    <div class="section-title">📄 Ce qui a été commandé, et ce que le chantier a ajouté</div>
-    <div class="print-preview" id="validationDirecteurApercu">${apercuPrefactureHTML(ctx)}</div>
-    <div class="section-title" style="margin-top:18px;">💬 Ce que le terrain a rapporté</div>
-    ${comptesRendusHTML(ctx)}
-    <div class="section-title" style="margin-top:18px;">💶 Les prix — chaque poste, commandé ou ajouté</div>
-    ${chiffrageDirecteurHTML(ctx)}
+    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+      ${referencesPrefactureHTML(ctx, b)}
+      <label class="bc-tache-row" style="margin:0;">
+        <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
+        <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
+      </label>
+    </div>
+    <div class="pf-colonnes">
+      ${ctx.reference? `<div class="print-preview pf-reference">${referenceDocumentHTML(ctx, b)}</div>` : ''}
+      <div class="pf-travail">
+        <div class="section-title" style="margin-top:0;">💶 Les prix — chaque poste, commandé ou ajouté</div>
+        ${chiffrageDirecteurHTML(ctx)}
+        <div class="section-title" style="margin-top:18px;">💬 Ce que le terrain a rapporté</div>
+        ${comptesRendusHTML(ctx)}
+      </div>
+    </div>
   `;
   rafraichirChiffrageDirecteur();
 }
 
-function apercuPrefactureHTML(ctx){
-  /* « prefacture » et non « bonCommande » : c'est la facture à venir qu'on
-     arrête ici. Rendre le bon de commande donnait un document intitulé BON DE
-     COMMANDE dans une fenêtre appelée pré-facture — on croyait avoir ouvert
-     le mauvais écran. */
-  return renderPrintDoc(
-    'prefacture', ctx.bcId, !ctx.avecPrix,
-    window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut())
-  );
+/** Les pièces consultables : le bon toujours, le devis s'il y en a un. */
+function referencesPrefactureHTML(ctx, b){
+  const devis = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
+  const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${cle}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
+  return `<div style="display:flex; gap:6px; flex-wrap:wrap;">
+    <span class="card-sub" style="align-self:center;">Consulter :</span>
+    ${bouton('bonCommande', '📄 Bon de commande')}
+    ${devis? bouton('devis', `📄 Devis ${esc(devis.numero||'')}`) : ''}
+  </div>`;
+}
+
+function referenceDocumentHTML(ctx, b){
+  if(ctx.reference === 'devis' && b.devisId) return renderPrintDoc('devis', b.devisId, !ctx.avecPrix);
+  return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
+}
+
+/* Un second clic referme : la référence est une aide, pas un décor permanent —
+   refermée, le tableau reprend toute la largeur. */
+function basculerReferencePrefacture(cle){
+  if(!validationDirecteurCtx) return;
+  validationDirecteurCtx.reference = validationDirecteurCtx.reference === cle ? null : cle;
+  renderValidationDirecteur();
 }
 
 /* Redessine ce qui dépend des prix, et **seulement** cela : les champs de
@@ -5733,9 +5746,6 @@ function rafraichirChiffrageDirecteur(){
   if(!ctx) return;
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
   if(!b) return;
-
-  const apercu = document.getElementById('validationDirecteurApercu');
-  if(apercu) apercu.innerHTML = apercuPrefactureHTML(ctx);
 
   const total = document.getElementById('validationDirecteurTotal');
   if(total) total.innerHTML = totalChiffrageHTML(ctx);
