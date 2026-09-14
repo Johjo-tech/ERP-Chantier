@@ -65,6 +65,12 @@ export const CODES_UNITE: Record<string, string> = {
   m3: "MTQ",
   km: "KMT",
   lot: "NPL",
+  /* Apportées par le catalogue d'articles : l'export du logiciel de gestion
+     emploie `PC` et `MM`. Sans elles, les deux retombaient sur « unité » et un
+     millimètre passait pour une pièce sur la facture électronique. */
+  pièce: "C62",
+  piece: "C62",
+  mm: "MMT",
 };
 
 export function codeUnite(unite: string | null | undefined): string {
