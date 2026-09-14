@@ -3571,6 +3571,47 @@ const ZONES_DND = {
 
 /** La zone d'où part le glisser : on ne dépose pas d'un tableau dans l'autre. */
 let zoneDndCourante = null;
+/** Le travail supplémentaire en cours de glisser, s'il y en a un. */
+let travailGlisse = null;
+
+function dragStartTravail(ev, id){
+  travailGlisse = id;
+  draggedLigneIndex = null;
+  zoneDndCourante = 'travail';
+  ev.dataTransfer.effectAllowed = 'move';
+  try{ ev.dataTransfer.setData('text/plain', id); }catch(e){}
+}
+
+/**
+ * Un travail constaté devient une ligne du bon, à l'endroit où on le dépose.
+ *
+ * Il n'est pas supprimé mais passé à `integre` : ni `bc_generer_facture`, qui
+ * ne reprend que `chiffre`, ni `bc_chiffrage_valide`, qui ne compte que
+ * `a_chiffrer`, ne le verront plus. Le supprimer laisserait une fenêtre où la
+ * ligne existe déjà et le travail aussi — une interruption entre les deux
+ * écritures ferait facturer deux fois.
+ */
+function integrerTravailDansLignes(id, insertPos){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const i = ctx.travaux.findIndex(t=>t.id===id);
+  if(i < 0) return;
+  const t = ctx.travaux[i];
+
+  ctx.lignes.splice(insertPos, 0, {
+    type:'ligne',
+    designation: t.libelle || '',
+    qte: t.quantite != null ? Number(t.quantite) : 1,
+    unite: t.unite || 'u',
+    prixUnitaire: Number(t.prix_vente_ht) || 0,
+    tva: Number(t.tva) || tvaDefaut(),
+  });
+  ctx.travaux.splice(i, 1);
+  // Enregistré au même moment que les lignes, jamais avant.
+  ctx.travauxIntegres = (ctx.travauxIntegres || []).concat(id);
+  renderValidationDirecteur();
+  showToast('Travail repris comme ligne du bon — enregistrez pour le conserver.', 'success', 5000);
+}
 
 function dragStartLigne(ev, i, zone){
   draggedLigneIndex = i;
@@ -3586,7 +3627,8 @@ function reperesDnd(zone){
 
 function dragOverLigne(ev, zone){
   const z = zone || 'document';
-  if(zoneDndCourante && zoneDndCourante !== z) return;
+  const travailVersLignes = zoneDndCourante === 'travail' && z === 'prefacture';
+  if(zoneDndCourante && zoneDndCourante !== z && !travailVersLignes) return;
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
   const row = ev.currentTarget;
@@ -3604,6 +3646,16 @@ function dropLigne(ev, targetIndex, zone){
   ev.preventDefault();
   const row = ev.currentTarget;
   reperesDnd(z).forEach(r=>r.classList.remove('drag-over-top','drag-over-bottom'));
+  /* Un travail supplémentaire déposé parmi les lignes les rejoint : c'est le
+     seul franchissement de zone autorisé, et il va dans ce sens-là seulement. */
+  if(zoneDndCourante === 'travail' && z === 'prefacture' && travailGlisse){
+    const rectT = row.getBoundingClientRect();
+    const avant = (ev.clientY - rectT.top) < rectT.height/2;
+    const id = travailGlisse;
+    travailGlisse = null; zoneDndCourante = null; draggedLigneIndex = null;
+    integrerTravailDansLignes(id, avant ? targetIndex : targetIndex + 1);
+    return;
+  }
   if(draggedLigneIndex === null || zoneDndCourante !== z){ draggedLigneIndex = null; return; }
   const rect = row.getBoundingClientRect();
   const before = (ev.clientY - rect.top) < rect.height/2;
@@ -5840,7 +5892,7 @@ async function openValidationDirecteurModal(bcId){
       window.listTravauxSupplementaires(bcId)
     ]);
     validationDirecteurCtx.taches = taches || [];
-    validationDirecteurCtx.travaux = travaux || [];
+    validationDirecteurCtx.travaux = (travaux || []).filter(t=>t.statut !== 'integre');
     renderValidationDirecteur();
   }catch(err){
     console.error('Dossier de validation indisponible', err);
@@ -5943,7 +5995,7 @@ function chiffrageDirecteurHTML(ctx){
   const travaux = (ctx.travaux||[]).map(t=>{
     const manquant = t.statut !== 'chiffre';
     return `<tr class="${manquant?'p-sans-prix':''}">
-      <td>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></td>
+      <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartTravail(event, '${jsAttr(t.id)}')" title="Glisser dans une ligne du bon pour l'y intégrer">⠿</span><span>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></span></div></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:70px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:52px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
       <td></td>
@@ -6150,7 +6202,15 @@ async function enregistrerChiffrageDirecteur(silencieux){
     const r = await stSet('bonCommande:'+b.id, b);
     if(!r){ showToast(saveFailedMessage()); return false; }
 
-    ctx.travaux = await window.listTravauxSupplementaires(ctx.bcId);
+    /* Après l'enregistrement des lignes, jamais avant : si le bon n'avait pas
+       pu s'écrire, un travail déjà marqué « intégré » aurait disparu des deux
+       côtés — ni dans la liste des travaux, ni sur le document. */
+    for(const id of (ctx.travauxIntegres || [])){
+      await window.integrerTravailSupplementaire(id);
+    }
+    ctx.travauxIntegres = [];
+
+    ctx.travaux = (await window.listTravauxSupplementaires(ctx.bcId)).filter(t=>t.statut !== 'integre');
     renderValidationDirecteur();
     if(!silencieux) showToast('Prix enregistrés.', 'success');
     return true;

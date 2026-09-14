@@ -408,6 +408,21 @@ export function ajouterTravailSupplementaire(
   });
 }
 
+/**
+ * Le travail a été repris comme ligne du bon : il quitte la liste sans être
+ * détruit.
+ *
+ * Le supprimer laisserait une fenêtre où la ligne existe déjà et le travail
+ * aussi — une interruption entre les deux écritures ferait facturer deux fois.
+ * `integre` n'est repris ni par `bc_generer_facture`, qui ne prend que
+ * `chiffre`, ni par `bc_chiffrage_valide`, qui ne compte que `a_chiffrer` : il
+ * disparaît des deux circuits, et la trace de ce que le terrain a constaté
+ * reste en base.
+ */
+export function integrerTravailSupplementaire(id: Uuid) {
+  return updateOne("tache_travaux_supplementaires", id, { statut: "integre" });
+}
+
 export function supprimerTravailSupplementaire(id: Uuid) {
   return remove("tache_travaux_supplementaires", id);
 }

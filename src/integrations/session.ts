@@ -441,6 +441,7 @@ export function injecterSession() {
   w.ajouterTravailSupplementaire = queries.ajouterTravailSupplementaire;
   w.supprimerTravailSupplementaire = queries.supprimerTravailSupplementaire;
   w.chiffrerTravailSupplementaire = queries.chiffrerTravailSupplementaire;
+  w.integrerTravailSupplementaire = queries.integrerTravailSupplementaire;
 
   // Validation directeur : ce qui bloque, et le document qui le montre
   w.blocagesChiffrage = blocagesChiffrage;
