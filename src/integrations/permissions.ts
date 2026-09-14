@@ -1,14 +1,22 @@
 /**
  * Matrice des droits par rôle — miroir d'affichage.
  *
- * IMPORTANT : cette matrice doit rester synchronisée avec la fonction SQL
- * `public.a_permission(societe_id, module, action)`. La base reste l'autorité
- * (RLS) ; ici on masque simplement ce qui serait de toute façon refusé, pour
- * éviter de présenter des actions vouées à l'échec.
+ * Elle ne se recopie plus : elle **vient de la base**, de la table
+ * `role_permissions` que consulte aussi `a_permission()`. L'écran et la RLS
+ * lisent donc le même texte, et ne peuvent plus se contredire — ce qui est
+ * arrivé dans les deux sens : une facture émise réécrite par un compte terrain
+ * que l'écran bloquait, puis un conducteur autorisé à chiffrer un devis par une
+ * base dont l'écran cachait les boutons.
  *
- * Portée depuis chantier-mate-ease, sans dépendance à un framework.
+ * La base reste l'autorité. Ici on masque ce qui serait de toute façon refusé,
+ * pour ne pas présenter des actions vouées à l'échec.
+ *
+ * Ce module ne va rien chercher lui-même : il reçoit la matrice par
+ * `installerMatrice()`, appelée à l'ouverture de session. Il reste donc sans
+ * accès base, et se teste sans elle.
  */
 
+import type { DroitAccorde } from "@/api/queries";
 import type { RoleMembre } from "@/api/types";
 
 export type Action = "voir" | "creer" | "modifier" | "supprimer";
@@ -83,78 +91,33 @@ export const MODULE_PAR_NAV: Record<string, ModuleId> = {
   plus: "tableau_de_bord",
 };
 
-const TOUT: Action[] = ["voir", "creer", "modifier", "supprimer"];
-const LECTURE: Action[] = ["voir"];
-const LECTURE_ECRITURE: Action[] = ["voir", "modifier"];
-/* Produire et corriger, mais pas effacer : effacer un devis ou un rapport
-   efface une trace, et cela reste un geste d'administrateur. */
-const SAUF_SUPPRESSION: Action[] = ["voir", "creer", "modifier"];
+/**
+ * Les droits accordés, indexés « rôle|module|action ».
+ *
+ * `null` tant que la session n'a rien installé — un état distinct de « aucun
+ * droit », et c'est tout l'intérêt : une matrice absente ne doit pas se
+ * confondre avec un compte sans droits.
+ */
+let accordes: Set<string> | null = null;
 
-type Matrice = Partial<Record<ModuleId, Action[]>>;
+const cle = (role: string, module: string, action: string) =>
+  `${role}|${module}|${action}`;
 
-const TOUS_MODULES = Object.keys(MODULES_LIBELLES) as ModuleId[];
+/**
+ * Installe la matrice lue en base. Appelée par `chargerSession()`, avant que
+ * le moindre écran ne se rende.
+ */
+export function installerMatrice(lignes: readonly DroitAccorde[]): void {
+  accordes = new Set(lignes.map((l) => cle(l.role, l.module, l.action)));
+}
 
-const MATRICE: Record<RoleMembre, Matrice> = {
-  admin: Object.fromEntries(TOUS_MODULES.map((m) => [m, TOUT])) as Matrice,
-  secretaire: {
-    tableau_de_bord: LECTURE,
-    clients: TOUT,
-    devis: TOUT,
-    factures: TOUT,
-    facturation_electronique: TOUT,
-    reglements: TOUT,
-    controle_fournisseurs: TOUT,
-    rh: TOUT,
-    vehicules: TOUT,
-    bons_commande: LECTURE_ECRITURE,
-    chantiers: LECTURE,
-    materiel: LECTURE,
-    planning: LECTURE,
-    rapports: LECTURE,
-    statistiques: LECTURE,
-    reglages: LECTURE,
-  },
-  conducteur: {
-    tableau_de_bord: LECTURE,
-    chantiers: TOUT,
-    bons_commande: TOUT,
-    materiel: TOUT,
-    planning: TOUT,
-    rapports: TOUT,
-    vehicules: LECTURE_ECRITURE,
-    clients: LECTURE,
-    // Il relève les quantités sur le chantier : il chiffre le devis qui en
-    // découle. Accordé en base le 10/09 ; l'écran l'ignorait encore.
-    devis: SAUF_SUPPRESSION,
-    factures: LECTURE,
-    controle_fournisseurs: LECTURE,
-    rh: LECTURE,
-    statistiques: LECTURE,
-    reglages: LECTURE,
-  },
-  technicien: {
-    tableau_de_bord: LECTURE,
-    chantiers: LECTURE,
-    planning: LECTURE,
-    rapports: SAUF_SUPPRESSION,
-    materiel: LECTURE_ECRITURE,
-    rh: LECTURE,
-    vehicules: LECTURE,
-  },
-  sous_traitant: {
-    tableau_de_bord: LECTURE,
-    chantiers: LECTURE,
-    planning: LECTURE,
-    materiel: LECTURE,
-    rapports: SAUF_SUPPRESSION,
-  },
-  lecture: Object.fromEntries(
-    TOUS_MODULES.filter((m) => m !== "utilisateurs").map((m) => [m, LECTURE])
-  ) as Matrice,
-};
+/** Pour les tests et le diagnostic : la matrice est-elle en place ? */
+export function matriceInstallee(): boolean {
+  return accordes !== null;
+}
 
 export function estRoleConnu(role: string | null | undefined): role is RoleMembre {
-  return role != null && role in MATRICE;
+  return role != null && role in ROLES_LIBELLES;
 }
 
 /** Le rôle autorise-t-il cette action sur ce module ? */
@@ -163,8 +126,16 @@ export function peut(
   module: ModuleId,
   action: Action
 ): boolean {
+  /* Répondre « non » faute de matrice masquerait l'application entière en
+     la faisant passer pour un problème de droits — on chercherait longtemps.
+     Un refus doit venir de la matrice, jamais de son absence. */
+  if (accordes === null) {
+    throw new Error(
+      "Matrice des droits non chargée : installerMatrice() doit précéder tout rendu."
+    );
+  }
   if (!role) return false;
-  return (MATRICE[role][module] ?? []).includes(action);
+  return accordes.has(cle(role, module, action));
 }
 
 /** Même question, à partir d'un identifiant d'onglet de l'app. */
@@ -177,7 +148,15 @@ export function peutSurNav(
   return module ? peut(role, module, action) : false;
 }
 
-/** Techniciens et sous-traitants ne voient aucun montant. */
+/**
+ * Techniciens et sous-traitants ne voient aucun montant.
+ *
+ * Recopie encore la fonction SQL `voit_les_prix()`, faute de table où la lire.
+ * L'écart est limité — une règle, pas une matrice — et la base reste
+ * l'autorité : elle sert des vues où les colonnes de prix sont annulées, si
+ * bien qu'un miroir faux ici ne révélerait aucun montant. Il ferait seulement
+ * afficher des colonnes vides.
+ */
 export function voitLesPrix(role: RoleMembre | null): boolean {
   return role !== null && role !== "technicien" && role !== "sous_traitant";
 }
