@@ -807,8 +807,18 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .ghost-toggle-slider:before{ content:""; position:absolute; height:14px; width:14px; left:2.5px; bottom:2.5px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.25); }
 .ghost-toggle input:checked + .ghost-toggle-slider{ background:var(--accent); }
 .ghost-toggle input:checked + .ghost-toggle-slider:before{ transform:translateX(15px); }
-#companyLabelDesktop{ font-size:13px; font-weight:500; color:var(--text-dim); letter-spacing:.02em; }
-#companyLabelMobile{ font-size:12px; font-weight:500; color:var(--text-dim); letter-spacing:.02em; white-space:nowrap; }
+/* Le nom de la société est le bouton qui permet d'en changer : c'est là qu'on
+   le cherche, pas dans un menu caché sous son propre nom, dans une barre
+   latérale repliée. */
+.societe-btn{ display:flex; align-items:center; gap:5px; background:none; border:none; cursor:pointer; padding:3px 6px; border-radius:7px; font-family:inherit; color:var(--text-dim); letter-spacing:.02em; font-weight:500; }
+.societe-btn:hover{ background:var(--surface-2); color:var(--text); }
+.societe-btn .chev{ font-size:9px; opacity:.7; }
+#companyLabelDesktop{ font-size:13px; }
+#companyLabelMobile{ font-size:12px; white-space:nowrap; }
+/* La règle commune (`left:6px; right:6px`) collerait le menu à la largeur du
+   libellé, en colonne illisible. Celui-ci part du bord droit et prend la place
+   qu'il lui faut, sans déborder d'un téléphone. */
+.user-menu--droite{ left:auto; right:0; min-width:min(280px, 84vw); }
 @media(max-width:860px){ #deskTopStrip{ display:none; } }
 @media(min-width:861px){ #companyLabelMobile{ display:none; } }
 #toastBox.success{background:#123A28; color:#C9F5DF; border-color:var(--success);}
@@ -1087,7 +1097,6 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <div class="user-menu-wrap">
       <button class="brand user-menu-btn" onclick="toggleUserMenu(event)"><span class="brand-dot"></span><span class="user-menu-name">Aissa Choumane<span class="role-badge" id="roleBadgeDesktop"></span></span><span class="user-menu-chevron">▾</span></button>
       <div class="user-menu" id="userMenu">
-        <div id="userMenuSocietes"></div>
         <div id="userMenuRoles"></div>
         <div class="user-menu-sep"></div>
         <button onclick="logOut()">Se déconnecter</button>
@@ -1109,14 +1118,17 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
         <input type="checkbox" id="ghostModeToggleDesktop" onchange="toggleGhostMode(this.checked)">
         <span class="ghost-toggle-slider"></span>
       </label>
-      <span id="companyLabelDesktop">KTA Plomberie</span>
+      <div class="user-menu-wrap">
+        <button class="societe-btn" onclick="toggleUserMenu(event)" title="Changer de société">
+          <span id="companyLabelDesktop">—</span><span class="chev">▾</span>
+        </button>
+        <div class="user-menu user-menu--droite" id="societeMenuDesktop"></div>
+      </div>
     </div>
     <div id="topbar">
       <div class="user-menu-wrap">
         <button class="brand user-menu-btn" onclick="toggleUserMenu(event)"><span class="brand-dot"></span><span class="user-menu-name">Aissa Choumane<span class="role-badge" id="roleBadgeMobile"></span></span><span class="user-menu-chevron">▾</span></button>
         <div class="user-menu" id="userMenuMobile">
-          <div class="user-menu-section-title">Accès</div>
-          <div id="userMenuSocietesMobile"></div>
           <div id="userMenuRolesMobile"></div>
           <div class="user-menu-sep"></div>
           <button onclick="logOut()">Se déconnecter</button>
@@ -1134,7 +1146,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
           <input type="checkbox" id="ghostModeToggleMobile" onchange="toggleGhostMode(this.checked)">
           <span class="ghost-toggle-slider"></span>
         </label>
-        <span id="companyLabelMobile">KTA Plomberie</span>
+        <div class="user-menu-wrap">
+          <button class="societe-btn" onclick="toggleUserMenu(event)" title="Changer de société">
+            <span id="companyLabelMobile">—</span><span class="chev">▾</span>
+          </button>
+          <div class="user-menu user-menu--droite" id="societeMenuMobile"></div>
+        </div>
       </div>
     </div>
     <div id="content"></div>
@@ -2043,20 +2060,35 @@ function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:
 /* ---------- Rendu de la coquille ---------- */
 /* Menu utilisateur : sociétés réellement accessibles, et simulation de rôle
    réservée à l'administrateur (sans effet sur la base, la RLS fait foi). */
-function renderUserMenu(){
+/* Les sociétés où ce compte est membre, telles que la base les donne.
+   Une seule fonction les rend, pour le seul endroit qui les propose : le nom
+   de société, en haut. Elles vivaient aussi dans le menu sous le nom de
+   l'utilisateur — deux chemins vers le même geste, qui auraient fini par ne
+   plus dire la même chose. */
+function optionsSocietesHTML(){
   const societes = window.societesAccessibles ? window.societesAccessibles() : [];
-  /* La section est toujours affichée, même avec une seule société : sinon on ne
-     distingue pas « accès limité à une société » de « sélecteur cassé ». */
-  const htmlSocietes = `<div class="user-menu-section-title">Société</div>`
-    + (societes.length
-        ? societes.map(soc =>
-            `<button onclick="changerSociete('${esc(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
-          ).join('')
-          + (societes.length === 1
-              ? `<div style="padding:6px 12px; color:var(--text-dim); font-size:11px; line-height:1.4;">Une seule société vous est rattachée. Pour en obtenir d'autres, un administrateur doit vous ajouter dans <b>membres_societe</b>.</div>`
-              : '')
-        : `<div style="padding:6px 12px; color:var(--danger); font-size:11px;">Aucune société rattachée à ce compte.</div>`);
+  if(!societes.length){
+    return `<div style="padding:8px 12px; color:var(--danger); font-size:11.5px;">Aucune société rattachée à ce compte.</div>`;
+  }
+  /* Le sélecteur s'affiche même avec une seule société : sinon on ne distingue
+     pas « je n'ai accès qu'à une société » de « le sélecteur est cassé ». */
+  return `<div class="user-menu-section-title">Société</div>`
+    + societes.map(soc =>
+        `<button onclick="changerSociete('${esc(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
+      ).join('')
+    + (societes.length === 1
+        ? `<div style="padding:6px 12px; color:var(--text-dim); font-size:11px; line-height:1.4;">Une seule société vous est rattachée. Pour en obtenir d'autres, un administrateur doit vous ajouter dans <b>membres_societe</b>.</div>`
+        : '');
+}
 
+/** Le nom de la société active, pour le bouton qui l'affiche. */
+function nomSocieteActive(){
+  const societes = window.societesAccessibles ? window.societesAccessibles() : [];
+  const active = societes.find(s => s.id === state.societeId);
+  return active ? active.nom : (societeName(state.societeId) || '—');
+}
+
+function renderUserMenu(){
   const estAdmin = window.roleReel && window.roleReel() === 'admin';
   const htmlRoles = estAdmin
     ? `<div class="user-menu-section-title">Voir en tant que</div>` +
@@ -2065,11 +2097,24 @@ function renderUserMenu(){
       .map(([id,label]) => `<button onclick="setRole('${id}')">${state.currentRole===id?'✓ ':''}${label}</button>`).join('')
     : '';
 
-  [['userMenuSocietes','userMenuRoles'],['userMenuSocietesMobile','userMenuRolesMobile']].forEach(([idSoc,idRole])=>{
-    const elSoc = document.getElementById(idSoc);
-    if(elSoc) elSoc.innerHTML = htmlSocietes;
-    const elRole = document.getElementById(idRole);
-    if(elRole) elRole.innerHTML = htmlRoles;
+  ['userMenuRoles','userMenuRolesMobile'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = htmlRoles;
+  });
+
+  /* Les deux barres — large et étroite — portent le même sélecteur : ne
+     traiter que celle qu'on a sous les yeux laisserait l'autre inerte. */
+  const societes = optionsSocietesHTML();
+  const nom = nomSocieteActive();
+  ['societeMenuDesktop','societeMenuMobile'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = societes;
+  });
+  /* Le libellé portait « KTA Plomberie » écrit en dur dans la page : il
+     mentait dès qu'on changeait de société. */
+  ['companyLabelDesktop','companyLabelMobile'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = nom;
   });
 
   const email = window.utilisateurCourant ? window.utilisateurCourant() : '';
