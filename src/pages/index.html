@@ -1024,7 +1024,14 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
 .p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
-.p-footer{ margin-top:10mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+.p-footer{ margin-top:6mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+/* Les mentions légales appartiennent au pied de page, pas à la suite du texte.
+   La page est une colonne haute d'au moins une feuille A4 (297mm moins les
+   14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
+   contre le bord inférieur. Un document plus long repousse simplement le pied
+   après son contenu, ce qui est le comportement voulu. */
+.p-page{ display:flex; flex-direction:column; min-height:269mm; }
+.p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
 .p-photo{ width:42mm; height:42mm; object-fit:cover; border-radius:2mm; border:1px solid #E2E6ED; }
@@ -3553,11 +3560,14 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     telephone: s.telephone,
   };
   return `
+    <div class="p-page">
     <table class="p-header"><tr>
       <td style="width:55%;">
         ${logoHTML(s)}
-        <div class="p-company">${esc(em.nom)}</div>
-        ${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}
+        ${/* Le bloc « Émetteur » plus bas porte déjà le nom et l'adresse : les
+             répéter sous le logo les faisait figurer deux fois sur la page.
+             Sans logo, en revanche, l'en-tête doit bien identifier l'émetteur. */
+          logoHTML(s) ? '' : `<div class="p-company">${esc(em.nom)}</div>${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}`}
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
@@ -3578,7 +3588,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
         ${doc.clientSiret? `<div class="p-line">SIRET ${esc(doc.clientSiret)}</div>`:''}
         ${doc.clientTvaIntracom? `<div class="p-line">TVA ${esc(doc.clientTvaIntracom)}</div>`:''}
         ${doc.interlocuteur? `<div class="p-line">À l'attention de ${esc(doc.interlocuteur)}</div>`:''}
-        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
+        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement||doc.occupant||doc.logementStatut||doc.etage)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
       </td>
     </tr></table>
     <table class="p-lignes">
@@ -3591,13 +3601,20 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <tr><td class="label">TVA</td><td class="val">${fmt(t.tva)}</td></tr>
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
-    <table class="p-sign"><tr>
-      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
+    ${/* Une facture ne se signe pas : elle constate une créance, elle ne
+         recueille pas d'accord. Les lignes de signature n'y avaient donc rien
+         à faire. Le devis, lui, vit de l'accord du client, et le bon de
+         commande de la validation de sa pré-facture. */
+      type === 'facture' ? '' : `<table class="p-sign"><tr>
+      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
       <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
-    </tr></table>
+    </tr></table>`}
     ${blocConditionsHTML(type, doc, s, hidePrices)}
-    ${blocMentionsHTML(type, s)}
-    <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    <div class="p-bas-de-page">
+      ${blocMentionsHTML(type, s)}
+      <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    </div>
+    </div>
   `;
 }
 
