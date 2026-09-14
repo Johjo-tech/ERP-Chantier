@@ -1024,7 +1024,18 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
 .p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
-.p-footer{ margin-top:10mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+.p-footer{ margin-top:6mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+/* Les mentions légales appartiennent au pied de page, pas à la suite du texte.
+   La page est une colonne haute d'au moins une feuille A4 (297mm moins les
+   14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
+   contre le bord inférieur. Un document plus long repousse simplement le pied
+   après son contenu, ce qui est le comportement voulu. */
+/* La hauteur réservée se lit : une A4, moins les 14 mm de marge de part et
+   d'autre de `#printArea`, moins 5 mm de sûreté. Sans cette marge, le calcul
+   tombait à 297,0 mm pile — mesuré à 297,1 après arrondi des sous-pixels, et
+   html2pdf ajoutait une seconde page entièrement vide. */
+.p-page{ display:flex; flex-direction:column; min-height:calc(297mm - 28mm - 5mm); }
+.p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
 .p-photo{ width:42mm; height:42mm; object-fit:cover; border-radius:2mm; border:1px solid #E2E6ED; }
@@ -1067,6 +1078,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .wf-banner.alerte{ background:#FDECEE; color:#B42318; border:1px solid #F5C2C7; }
 /* Le document rendu dans la modale : mêmes styles d'impression, cadre à l'écran. */
 .print-preview{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; overflow-x:auto; font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; }
+/* Chiffrer, c'est saisir des prix en regardant la commande. Le document de
+   référence — devis ou bon — se met donc à côté du tableau, pas au-dessus :
+   au-dessus, il fallait faire défiler pour comparer. */
+.pf-colonnes{ display:flex; gap:16px; align-items:flex-start; }
+.pf-reference{ flex:0 0 44%; max-height:68vh; overflow:auto; font-size:9pt; }
+.pf-travail{ flex:1; min-width:0; }
+@media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; } }
 .print-preview table{ width:100%; border-collapse:collapse; }
 .wf-tour-moi{ background:var(--accent-soft); color:var(--accent-2); }
 .wf-clos{ display:inline-block; font-size:11.5px; font-weight:700; color:var(--success); }
@@ -1386,14 +1404,20 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 <!-- Le directeur engage le montant facturé : il doit voir le document entier,
      pas une liste de métiers. -->
 <div id="validationDirecteurModal" class="view-modal">
-  <div class="view-modal-panel" style="max-width:960px;">
+  <div class="view-modal-panel" style="max-width:1240px;">
     <button class="view-modal-close" onclick="closeValidationDirecteurModal()">✕</button>
-    <h3 style="margin-top:0;">Validation de la pré-facture</h3>
+    <h3 style="margin-top:0;" id="validationDirecteurTitre">Pré-facture</h3>
     <p class="card-sub" id="validationDirecteurInfo"></p>
     <div id="validationDirecteurCorps"></div>
-    <div style="display:flex; gap:10px; margin-top:18px; align-items:center;">
-      <button class="btn primary" id="validationDirecteurConfirmBtn" onclick="confirmerValidationDirecteur()">✓ Valider le chiffrage</button>
-      <button class="btn ghost" onclick="closeValidationDirecteurModal()">Annuler</button>
+    <!-- Un seul bouton : enregistrer les prix fait partie de valider, ce n'est
+         pas un geste à part. Ce qui reste en suspens est annoncé juste au-dessus. -->
+    <div id="validationDirecteurPied" style="position:sticky; bottom:0; background:var(--card,#fff); padding:14px 0 2px; border-top:1px solid var(--border,#E2E6ED); margin-top:18px;">
+      <div id="validationDirecteurBlocages"></div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn primary" id="validationDirecteurConfirmBtn" onclick="confirmerValidationDirecteur()">✓ Valider la pré-facture</button>
+        <button class="btn" id="validationDirecteurEnregistrerBtn" onclick="enregistrerChiffrageDirecteur()">💾 Enregistrer sans valider</button>
+        <button class="btn ghost" onclick="closeValidationDirecteurModal()">Annuler</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3553,11 +3577,14 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     telephone: s.telephone,
   };
   return `
+    <div class="p-page">
     <table class="p-header"><tr>
       <td style="width:55%;">
         ${logoHTML(s)}
-        <div class="p-company">${esc(em.nom)}</div>
-        ${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}
+        ${/* Le bloc « Émetteur » plus bas porte déjà le nom et l'adresse : les
+             répéter sous le logo les faisait figurer deux fois sur la page.
+             Sans logo, en revanche, l'en-tête doit bien identifier l'émetteur. */
+          logoHTML(s) ? '' : `<div class="p-company">${esc(em.nom)}</div>${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}`}
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
@@ -3578,7 +3605,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
         ${doc.clientSiret? `<div class="p-line">SIRET ${esc(doc.clientSiret)}</div>`:''}
         ${doc.clientTvaIntracom? `<div class="p-line">TVA ${esc(doc.clientTvaIntracom)}</div>`:''}
         ${doc.interlocuteur? `<div class="p-line">À l'attention de ${esc(doc.interlocuteur)}</div>`:''}
-        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
+        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement||doc.occupant||doc.logementStatut||doc.etage)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
       </td>
     </tr></table>
     <table class="p-lignes">
@@ -3591,13 +3618,20 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <tr><td class="label">TVA</td><td class="val">${fmt(t.tva)}</td></tr>
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
-    <table class="p-sign"><tr>
-      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
+    ${/* Une facture ne se signe pas : elle constate une créance, elle ne
+         recueille pas d'accord. Les lignes de signature n'y avaient donc rien
+         à faire. Le devis, lui, vit de l'accord du client, et le bon de
+         commande de la validation de sa pré-facture. */
+      type === 'facture' ? '' : `<table class="p-sign"><tr>
+      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
       <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
-    </tr></table>
+    </tr></table>`}
     ${blocConditionsHTML(type, doc, s, hidePrices)}
-    ${blocMentionsHTML(type, s)}
-    <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    <div class="p-bas-de-page">
+      ${blocMentionsHTML(type, s)}
+      <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    </div>
+    </div>
   `;
 }
 
@@ -3954,20 +3988,6 @@ async function transmettreALaPlateforme(factureId){
   if(r.depose){ await loadAll(); renderTab(); }
 }
 
-function dupliquerFacture(factureId){
-  const f = state.factures.find(x=>x.id===factureId);
-  if(!f) return;
-  openForm('facture', {
-    client:f.client, adresse:f.adresse, occupant:f.occupant||'', adresseLocataire:f.adresseLocataire||'',
-    logementStatut:f.logementStatut||'', etage:f.etage||'', numeroLogement:f.numeroLogement||'', precisionCommune:f.precisionCommune||'', ancienLocataire:f.ancienLocataire||'',
-    interlocuteur:f.interlocuteur||'',
-    date: todayISO(), echeance:'',
-    lignes: JSON.parse(JSON.stringify(f.lignes)),
-    remisePourcentage: f.remisePourcentage||0,
-    statut:'brouillon'
-  });
-  showToast('Facture dupliquée — modifiez-la puis enregistrez pour créer une nouvelle facture.', 'success');
-}
 function transformerEnFacture(devisId){
   const d = state.devis.find(x=>x.id===devisId);
   if(!d) return;
@@ -4716,7 +4736,6 @@ function renderFacturesListHTML(list){
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
-      <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
@@ -5057,7 +5076,6 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${b.pieceJointeData? `<div class="card-sub"><a href="${b.pieceJointeData}" download="${esc(b.pieceJointeNom||'bon-de-commande')}" style="color:var(--accent-2); text-decoration:underline;" onclick="event.stopPropagation()">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a></div>`:''}
       ${factureLiee? `<div class="card-sub">Facture liée : <a href="javascript:void(0)" onclick="goToFacture('${factureLiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(factureLiee.numero)}</a></div>`:''}
       ${savLie? `<div class="card-sub">SAV lié : <a href="javascript:void(0)" onclick="goToBonCommande('${savLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(savLie.numeroBC)}</a></div>`:''}
-      ${(b.travauxSupplementaires||[]).length? `<div class="card-sub" style="color:#7B4FD9;">➕ Travaux supplémentaires (sans prix) : ${b.travauxSupplementaires.map(t=>esc(t.texte)).join(' · ')}</div>`:''}
       ${(b.technicienCommentaire || b.sousTraitantCommentaire || (b.technicienPhotos||[]).length || b.technicienDessin || b.pieceACommanderDetail || b.dateInterventionTerminee)? `<div class="tech-fiche-zone">
         <button class="btn small ghost" onclick="event.stopPropagation(); toggleTechFicheOuverte('${b.id}')">📋 Fiche d'intervention du technicien ${state.techFicheOuverte===b.id?'▲':'▼'}</button>
         ${state.techFicheOuverte===b.id? `<div class="tech-fiche-detail">
@@ -5069,9 +5087,11 @@ function bonCommandeCardHTML(b, workflowCtx){
           ${b.technicienDessin? `<div class="card-sub" style="margin-top:8px;">✏️ Dessin :</div><img src="${b.technicienDessin}" style="max-width:280px; border:1px solid var(--border); border-radius:8px; margin-top:4px; cursor:pointer;" onclick="event.stopPropagation(); openAttachmentPreview('${jsAttr(b.technicienDessin)}','dessin.png')">`:''}
         </div>` : ''}
       </div>`:''}
+      ${/* Un seul chemin vers le chiffrage. L'éditeur qui vivait ici ne lisait
+            que `b.lignes` et ignorait les travaux ajoutés sur le chantier : on
+            pouvait chiffrer une affaire sans jamais les voir. */''}
       ${chiffrageIci? `<div class="tech-fiche-zone">
-        <button class="btn small ghost" onclick="event.stopPropagation(); togglePreFactureOuverte('${b.id}')">🧾 Pré-facture${(b.lignes&&b.lignes.length)? ` (${money(computeTotals(b.lignes).ttc)} TTC)` : ' — non chiffrée'} ${state.preFactureOuverte===b.id?'▲':'▼'}</button>
-        ${state.preFactureOuverte===b.id? renderPrefactureZone(b) : ''}
+        <button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${b.id}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>
       </div>`:''}
       ${b.pieceACommander? `<div class="card-sub" style="color:#C24E00; font-weight:600;">📦 Pièce à commander${b.pieceACommanderDetail? ' : '+esc(b.pieceACommanderDetail) : ''}${b.pieceACommanderDateCommande? ' — commandée le '+fmtDate(b.pieceACommanderDateCommande) : ''}${b.pieceACommanderFournisseur? ' — Fournisseur : '+esc(b.pieceACommanderFournisseur) : ''}</div>`:''}
       ${b.datePlanificationInitiale? `<div class="card-sub">🕓 Planifiée une première fois le ${fmtDate(b.datePlanificationInitiale)} (reportée pour attente de pièce)</div>`:''}
@@ -5097,7 +5117,11 @@ function bonCommandeCardHTML(b, workflowCtx){
     ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('bonCommande','${b.id}')">Modifier</button>
-      ${(factureLiee||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnFacture('${b.id}')" ${!b.valideDirecteur?'disabled title="Validation directeur requise avant facturation"':''}>Transformer en facture</button>`}
+      ${/* Une fois la pré-facture validée, l'étape suivante doit sauter aux yeux :
+            c'est le geste qu'on cherche, pas un bouton gris parmi cinq. */''}
+      ${(factureLiee||isSAV)? '' : (b.valideDirecteur
+        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${b.id}')">🧾 Créer la facture</button>`
+        : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
       ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${b.id}')">Créer un SAV</button>`}
       ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${b.id}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${rapportLie.id}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${b.id}')">🔗 Lier un rapport</button>`}
       <button class="btn small danger" onclick="deleteItem('bonCommande','${b.id}')">Supprimer</button>
@@ -5179,69 +5203,6 @@ function toggleTechFicheOuverte(id){
   state.techFicheOuverte = state.techFicheOuverte===id ? null : id;
   renderTab();
 }
-function togglePreFactureOuverte(id){
-  state.preFactureOuverte = state.preFactureOuverte===id ? null : id;
-  if(state.preFactureOuverte===null) state.prefactureEditId = null;
-  renderTab();
-}
-function renderPrefactureZone(b){
-  if(state.prefactureEditId === b.id){
-    return `<div class="tech-fiche-detail" onclick="event.stopPropagation()">
-      <table class="lignes-table" style="background:#fff;"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
-      <tbody id="lignesBody">${ligneRowsHTML(state.editing.lignes)}</tbody></table>
-      <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-        <button type="button" class="btn small" onclick="addLigne()">+ Ligne</button>
-        <button type="button" class="btn small" onclick="addChapitre()">+ Chapitre</button>
-        <button type="button" class="btn small" onclick="addCommentaire()">+ Commentaire</button>
-      </div>
-      <div class="totals-box" id="totalsBoxContent" style="margin-top:8px;">${totalsBoxInnerHTML(computeTotalsAvecRemise(state.editing.lignes,0))}</div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button type="button" class="btn primary" onclick="enregistrerPrefacture('${b.id}')">✓ Enregistrer les prix</button>
-        <button type="button" class="btn ghost" onclick="annulerEditionPrefacture()">Annuler</button>
-      </div>
-    </div>`;
-  }
-  const hasLignes = b.lignes && b.lignes.length;
-  return `<div class="tech-fiche-detail" onclick="event.stopPropagation()">
-    ${hasLignes? `<table class="lignes-table" style="background:#fff;"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th>Total HT</th></tr></thead>
-    <tbody>${b.lignes.filter(l=>(l.type||'ligne')==='ligne').map(l=>`<tr><td>${esc(l.designation)}</td><td>${l.qte}</td><td>${esc(l.unite||'u')}</td><td>${money(l.prixUnitaire)}</td><td>${l.tva}%</td><td>${money((parseFloat(l.qte)||0)*(parseFloat(l.prixUnitaire)||0))}</td></tr>`).join('')}</tbody></table>
-    <div class="totals-box" style="margin-top:8px;">${totalsBoxInnerHTML(computeTotalsAvecRemise(b.lignes,0))}</div>`
-    : `<div class="empty">Aucun prix détaillé pour l'instant.</div>`}
-    <button type="button" class="btn small primary" style="margin-top:10px;" onclick="ouvrirEditionPrefacture('${b.id}')">${hasLignes? '✏️ Modifier les prix' : '+ Créer la pré-facture'}</button>
-  </div>`;
-}
-function ouvrirEditionPrefacture(bcId){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  state.prefactureEditId = bcId;
-  const lignesDepart = (b.lignes&&b.lignes.length) ? JSON.parse(JSON.stringify(b.lignes)) : [];
-  const designationsExistantes = new Set(lignesDepart.filter(l=>(l.type||'ligne')==='ligne').map(l=>l.designation));
-  (b.travauxSupplementaires||[]).forEach(t=>{
-    if(!designationsExistantes.has(t.texte)){
-      lignesDepart.push({ type:'ligne', designation: t.texte, qte:1, prixUnitaire:0, tva: tvaDefaut() });
-    }
-  });
-  if(!lignesDepart.length) lignesDepart.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()});
-  state.editing = { id: bcId, lignes: lignesDepart };
-  renderTab();
-}
-function annulerEditionPrefacture(){
-  state.prefactureEditId = null;
-  renderTab();
-}
-async function enregistrerPrefacture(bcId){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  const lignesRenseignees = bcLignesOntDuContenu(state.editing.lignes);
-  b.lignes = lignesRenseignees ? state.editing.lignes : [];
-  if(lignesRenseignees) b.montant = computeTotals(b.lignes).ht;
-  const r = await stSet('bonCommande:'+bcId, b);
-  if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
-  state.prefactureEditId = null;
-  renderTab();
-  showToast('Pré-facture enregistrée.', 'success');
-}
 function bcInterventionFaite(b){
   const metiers = bcMetiersDuBC(b);
   const dates = bcToutesDatesDuBC(b);
@@ -5302,7 +5263,9 @@ function bcWorkflowStepperHTML(b, ctx){
         `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}')">✓ Valider (conducteur)</button>`
         : `<div class="bc-attente-message">⏳ En attente — tous les métiers doivent être marqués comme réalisés par le technicien avant de pouvoir passer à la validation du conducteur.</div>`
       ) : ''}
-      ${ctx==='validation' && etape2 && !etape3 && (!window.actionsFacturation || window.actionsFacturation().peutValiderPrefacture)? `<button class="btn small primary" onclick="openValidationDirecteurModal('${b.id}')">✓ Valider (directeur)</button>` : ''}
+      ${/* Le stepper dit où en est le dossier ; le geste, lui, a un seul bouton,
+            porté par la zone « pré-facture » de la carte — avec son montant. En
+            mettre un second ici rendrait deux boutons pour la même chose. */''}
     </div>
   </div>`;
 }
@@ -5519,8 +5482,13 @@ let validationDirecteurCtx = null;
 async function openValidationDirecteurModal(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
-  if(window.actionsFacturation && !window.actionsFacturation().peutValiderPrefacture){
-    showToast("La validation de la pré-facture est réservée à l'administrateur.");
+  /* Chiffrer et valider sont deux droits distincts : la secrétaire chiffre,
+     l'administrateur arrête le montant. La fenêtre s'ouvre donc pour les deux —
+     la refuser à la secrétaire la renvoyait vers un éditeur qui ne montre pas
+     les travaux ajoutés sur le chantier. Seul le bouton du bas est réservé. */
+  const droits = window.actionsFacturation ? window.actionsFacturation() : { peutModifierPrefacture:true, peutValiderPrefacture:true };
+  if(!droits.peutModifierPrefacture){
+    showToast("La pré-facture se chiffre depuis un compte administrateur ou secrétariat.");
     return;
   }
 
@@ -5531,10 +5499,15 @@ async function openValidationDirecteurModal(bcId){
     travaux: [],
     lignes: JSON.parse(JSON.stringify(b.lignes || [])),
     avecPrix: prixVisibles,
-    prixVisibles
+    prixVisibles,
+    peutValider: droits.peutValiderPrefacture,
+    // Rien d'ouvert au départ : le tableau des prix prend toute la largeur.
+    reference: null
   };
 
-  document.getElementById('validationDirecteurInfo').textContent = `${b.numeroInterne||b.numeroBC||'sans numéro'} — ${b.client||''}`;
+  document.getElementById('validationDirecteurTitre').textContent =
+    `Pré-facture — BC ${b.numeroInterne||b.numeroBC||'sans numéro'}`;
+  document.getElementById('validationDirecteurInfo').textContent = `${b.client||''}`;
   document.getElementById('validationDirecteurCorps').innerHTML = '<div class="empty">Chargement du dossier…</div>';
   document.getElementById('validationDirecteurModal').style.display = 'flex';
   // Rien n'est encore contrôlé : le bouton ne s'ouvre qu'après lecture du dossier
@@ -5563,7 +5536,12 @@ function closeValidationDirecteurModal(){
 
 function majBoutonValidationDirecteur(actif){
   const btn = document.getElementById('validationDirecteurConfirmBtn');
-  if(btn) btn.disabled = !actif;
+  if(btn){
+    const peutValider = !validationDirecteurCtx || validationDirecteurCtx.peutValider;
+    btn.disabled = !actif;
+    // Inutile de montrer à la secrétaire un bouton qu'elle ne peut pas presser.
+    btn.style.display = peutValider ? '' : 'none';
+  }
 }
 
 function toggleValidationDirecteurPrix(coche){
@@ -5581,51 +5559,122 @@ function blocagesDirecteur(b, ctx){
   });
 }
 
-function blocagesDirecteurHTML(blocages){
-  if(!blocages.length){
-    return `<div class="wf-banner ok">✓ Rien ne reste en suspens : le chiffrage peut être validé.</div>`;
+function blocagesDirecteurHTML(blocages, ctx){
+  if(blocages.length){
+    return `<div class="wf-banner alerte" style="margin-bottom:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">⚠ Il reste ${blocages.length===1?'un point':'des points'} à traiter avant de valider</div>
+      <ul style="margin:0; padding-left:18px;">
+        ${blocages.map(x=>`<li>${esc(x.libelle)}${x.details.length? ` <span class="card-sub">— ${esc(x.details.join(', '))}</span>`:''}</li>`).join('')}
+      </ul>
+    </div>`;
   }
-  return `<div class="wf-banner alerte">
-    <div style="font-weight:700; margin-bottom:6px;">⚠ Validation impossible</div>
-    <ul style="margin:0; padding-left:18px;">
-      ${blocages.map(x=>`<li>${esc(x.libelle)}${x.details.length? ` <span class="card-sub">— ${esc(x.details.join(', '))}</span>`:''}</li>`).join('')}
-    </ul>
-  </div>`;
+  /* Chiffrer et valider sont deux droits : la secrétaire complète le dossier,
+     l'administrateur arrête le montant. Le dire, plutôt que griser en silence. */
+  if(ctx && !ctx.peutValider){
+    return `<div class="wf-banner" style="margin-bottom:10px;">Le dossier est complet. La validation revient à un administrateur — enregistrez, il prendra la suite.</div>`;
+  }
+  return `<div class="wf-banner ok" style="margin-bottom:10px;">✓ Rien ne reste en suspens : la pré-facture peut être validée.</div>`;
 }
 
 /* Chiffrage : toute ligne et tout travail supplémentaire y passe, pour que le
    directeur valide chaque montant et pas seulement ceux qui manquent. */
 function chiffrageDirecteurHTML(ctx){
-  const lignes = (ctx.lignes||[])
-    .map((l,i)=>({l,i}))
-    .filter(x=>(x.l.type||'ligne')==='ligne');
+  /* Tout est rendu, chapitres et commentaires compris. Les filtrer ici les
+     laissait s'ajouter dans le dossier sans jamais apparaître : le bouton
+     répondait, l'écran non. Leur index d'origine est conservé — c'est lui que
+     la saisie et la suppression adressent. */
+  const lignes = (ctx.lignes||[]).map((l,i)=>({l,i}));
 
+  /* Le tableau se **saisit**, il ne fait pas que se chiffrer : 600 bons de
+     commande sur 829 n'ont aucune ligne, et c'est ici qu'on les construit.
+     C'est ce que faisait l'éditeur retiré de la carte ; la capacité déménage,
+     elle ne disparaît pas.
+
+     `oninput` et non `onchange` : le total suit la frappe. Seuls l'aperçu, le
+     total et le pied sont redessinés — jamais les champs, sinon la saisie
+     perdrait le focus à chaque caractère. Ajouter ou retirer une ligne, en
+     revanche, refait le tableau : la structure a changé. */
   const rows = lignes.map(({l,i})=>{
-    const manquant = !(parseFloat(l.prixUnitaire) > 0);
+    const type = l.type || 'ligne';
+    const manquant = type === 'ligne' && !(parseFloat(l.prixUnitaire) > 0);
+    if(type !== 'ligne'){
+      /* Un chapitre et un commentaire ne se saisissent pas dans le même champ
+         gris : on doit voir ce qu'on construit. Le champ porte donc l'allure
+         qu'aura la ligne sur le document. */
+      const allure = type==='chapitre'
+        ? 'font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#C24E00;'
+        : 'font-style:italic; color:#6B7686;';
+      return `<tr class="${type==='chapitre'?'p-chapitre':'p-comment'}">
+        <td colspan="3"><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+        <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
+      </tr>`;
+    }
     return `<tr class="${manquant?'p-sans-prix':''}">
-      <td>${esc(l.designation||'—')}</td>
-      <td class="num">${esc(l.qte||1)} ${esc(l.unite||'u')}</td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" style="width:100px; text-align:right;" onchange="majPrixLigneDirecteur(${i}, this.value)"></td>
+      <td><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:70px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:52px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
+      <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
     </tr>`;
   }).join('');
 
+  /* Les travaux supplémentaires vivent dans leur propre table et ont leur
+     circuit : on les chiffre ici, on ne les invente ni ne les efface. */
   const travaux = (ctx.travaux||[]).map(t=>{
     const manquant = t.statut !== 'chiffre';
     return `<tr class="${manquant?'p-sans-prix':''}">
       <td>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></td>
       <td class="num">1 u</td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" style="width:100px; text-align:right;" onchange="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+      <td></td>
     </tr>`;
   }).join('');
 
-  if(!rows && !travaux) return '<div class="empty">Ce bon de commande ne porte aucune ligne à chiffrer.</div>';
-
   return `<table class="lignes-table" style="margin-top:8px;">
-    <tr><th>Désignation</th><th class="num">Qté</th><th class="num">Prix U. HT</th></tr>
-    ${rows}
-    ${travaux? `<tr class="p-chapitre"><td colspan="3">Travaux supplémentaires</td></tr>${travaux}`:''}
+    <tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr>
+    ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
+    ${travaux? `<tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}`:''}
   </table>
-  <button class="btn primary" style="margin-top:10px;" onclick="enregistrerChiffrageDirecteur()">💾 Enregistrer les prix</button>`;
+  <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+    <button type="button" class="btn small" onclick="ajouterLigneDirecteur('ligne')">+ Ligne</button>
+    <button type="button" class="btn small" onclick="ajouterLigneDirecteur('chapitre')">+ Chapitre</button>
+    <button type="button" class="btn small" onclick="ajouterLigneDirecteur('commentaire')">+ Commentaire</button>
+  </div>
+  <div class="totals-box" id="validationDirecteurTotal" style="margin-top:10px;">${totalChiffrageHTML(ctx)}</div>`;
+}
+
+/** Une valeur change : l'aperçu et le total suivent, les champs ne bougent pas. */
+function majLigneDirecteur(index, champ, valeur){
+  if(!validationDirecteurCtx) return;
+  const ligne = validationDirecteurCtx.lignes[index];
+  if(!ligne) return;
+  ligne[champ] = (champ === 'designation' || champ === 'unite')
+    ? valeur
+    : (parseFloat(String(valeur).replace(',', '.')) || 0);
+  rafraichirChiffrageDirecteur();
+}
+
+/** La structure change : le tableau se refait, le focus part sur la nouveauté. */
+function ajouterLigneDirecteur(type){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  ctx.lignes.push(type === 'ligne'
+    ? { type:'ligne', designation:'', qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut() }
+    : { type, designation:'' });
+  renderValidationDirecteur();
+}
+
+function supprimerLigneDirecteur(index){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  ctx.lignes.splice(index, 1);
+  renderValidationDirecteur();
+}
+
+/** Le total de ce qui est saisi à l'instant, lignes et travaux confondus. */
+function totalChiffrageHTML(ctx){
+  return totalsBoxInnerHTML(computeTotalsAvecRemise(
+    window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut()), 0
+  ));
 }
 
 function comptesRendusHTML(ctx){
@@ -5651,29 +5700,75 @@ function renderValidationDirecteur(){
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
   if(!b) return;
 
-  const lignesDoc = window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut());
-  const blocages = blocagesDirecteur(b, ctx);
-
+  /* L'ordre suit celui du travail : ce qui a été commandé et ce que le terrain
+     a ajouté, ce qu'il en a dit, puis les prix. Ce qui bloque et le bouton
+     vivent dans le pied, toujours visible. */
+  /* Ce qu'on fait ici, c'est saisir des prix. Le tableau est donc le sujet, et
+     la pièce d'origine — devis ou bon de commande — s'ouvre à côté quand on
+     veut la consulter. Rendre la pré-facture elle-même n'apprenait rien : on
+     la regarde une fois émise, pas pendant qu'on la chiffre. */
   document.getElementById('validationDirecteurCorps').innerHTML = `
-    ${blocagesDirecteurHTML(blocages)}
-    <label class="bc-tache-row" style="margin:12px 0;">
-      <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
-      <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
-    </label>
-    <div class="print-preview">${renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix, lignesDoc)}</div>
-    <div class="section-title" style="margin-top:18px;">💶 Chiffrage — chaque ligne au bon prix</div>
-    ${chiffrageDirecteurHTML(ctx)}
-    <div class="section-title" style="margin-top:18px;">💬 Comptes rendus du terrain</div>
-    ${comptesRendusHTML(ctx)}
+    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+      ${referencesPrefactureHTML(ctx, b)}
+      <label class="bc-tache-row" style="margin:0;">
+        <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
+        <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
+      </label>
+    </div>
+    <div class="pf-colonnes">
+      ${ctx.reference? `<div class="print-preview pf-reference">${referenceDocumentHTML(ctx, b)}</div>` : ''}
+      <div class="pf-travail">
+        <div class="section-title" style="margin-top:0;">💶 Les prix — chaque poste, commandé ou ajouté</div>
+        ${chiffrageDirecteurHTML(ctx)}
+        <div class="section-title" style="margin-top:18px;">💬 Ce que le terrain a rapporté</div>
+        ${comptesRendusHTML(ctx)}
+      </div>
+    </div>
   `;
-  majBoutonValidationDirecteur(blocages.length === 0);
+  rafraichirChiffrageDirecteur();
 }
 
-function majPrixLigneDirecteur(index, valeur){
+/** Les pièces consultables : le bon toujours, le devis s'il y en a un. */
+function referencesPrefactureHTML(ctx, b){
+  const devis = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
+  const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${cle}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
+  return `<div style="display:flex; gap:6px; flex-wrap:wrap;">
+    <span class="card-sub" style="align-self:center;">Consulter :</span>
+    ${bouton('bonCommande', '📄 Bon de commande')}
+    ${devis? bouton('devis', `📄 Devis ${esc(devis.numero||'')}`) : ''}
+  </div>`;
+}
+
+function referenceDocumentHTML(ctx, b){
+  if(ctx.reference === 'devis' && b.devisId) return renderPrintDoc('devis', b.devisId, !ctx.avecPrix);
+  return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
+}
+
+/* Un second clic referme : la référence est une aide, pas un décor permanent —
+   refermée, le tableau reprend toute la largeur. */
+function basculerReferencePrefacture(cle){
   if(!validationDirecteurCtx) return;
-  const ligne = validationDirecteurCtx.lignes[index];
-  if(!ligne) return;
-  ligne.prixUnitaire = parseFloat(String(valeur).replace(',', '.')) || 0;
+  validationDirecteurCtx.reference = validationDirecteurCtx.reference === cle ? null : cle;
+  renderValidationDirecteur();
+}
+
+/* Redessine ce qui dépend des prix, et **seulement** cela : les champs de
+   saisie ne sont pas reconstruits, donc le focus et le curseur ne bougent pas
+   pendant la frappe. */
+function rafraichirChiffrageDirecteur(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return;
+
+  const total = document.getElementById('validationDirecteurTotal');
+  if(total) total.innerHTML = totalChiffrageHTML(ctx);
+
+  const blocages = blocagesDirecteur(b, ctx);
+  const zone = document.getElementById('validationDirecteurBlocages');
+  if(zone) zone.innerHTML = blocagesDirecteurHTML(blocages, ctx);
+
+  majBoutonValidationDirecteur(blocages.length === 0 && ctx.peutValider);
 }
 
 function majPrixTravailDirecteur(id, valeur){
@@ -5682,15 +5777,17 @@ function majPrixTravailDirecteur(id, valeur){
   if(!travail) return;
   travail.prix_vente_ht = parseFloat(String(valeur).replace(',', '.')) || 0;
   travail.statut = 'chiffre';
+  rafraichirChiffrageDirecteur();
 }
 
 /* Les prix sont enregistrés avant la validation, jamais en même temps : si un
-   enregistrement échoue, le directeur doit le savoir sans avoir rien validé. */
-async function enregistrerChiffrageDirecteur(){
+   enregistrement échoue, le directeur doit le savoir sans avoir rien validé.
+   Renvoie vrai si tout est passé — l'appelant décide de la suite. */
+async function enregistrerChiffrageDirecteur(silencieux){
   const ctx = validationDirecteurCtx;
-  if(!ctx) return;
+  if(!ctx) return false;
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
-  if(!b) return;
+  if(!b) return false;
 
   try{
     for(const t of ctx.travaux){
@@ -5700,31 +5797,42 @@ async function enregistrerChiffrageDirecteur(){
     b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
     b.montant = computeTotals(b.lignes).ht;
     const r = await stSet('bonCommande:'+b.id, b);
-    if(!r){ showToast(saveFailedMessage()); return; }
+    if(!r){ showToast(saveFailedMessage()); return false; }
 
     ctx.travaux = await window.listTravauxSupplementaires(ctx.bcId);
     renderValidationDirecteur();
-    showToast('Prix enregistrés.', 'success');
+    if(!silencieux) showToast('Prix enregistrés.', 'success');
+    return true;
   }catch(err){
     console.error('Enregistrement du chiffrage refusé', err);
     showToast(err.message || "Enregistrement impossible.");
+    return false;
   }
 }
 
+/* Un seul geste pour l'utilisateur : enregistrer fait partie de valider. Les
+   deux restent deux appels, pour qu'un échec d'enregistrement n'ait jamais
+   l'air d'une validation — et le message dit lequel des deux a échoué. */
 async function confirmerValidationDirecteur(){
   const ctx = validationDirecteurCtx;
   if(!ctx) return;
+
+  const enregistre = await enregistrerChiffrageDirecteur(true);
+  if(!enregistre){
+    showToast("Les prix n'ont pas pu être enregistrés : rien n'a été validé.");
+    return;
+  }
 
   try{
     await window.validerChiffrage(ctx.bcId);
     await loadAll();
     closeValidationDirecteurModal();
     renderTab();
-    showToast('Chiffrage validé — le bon passe à la facturation.', 'success');
+    showToast('Pré-facture validée — le bon passe à « À facturer ».', 'success', 3000);
   }catch(err){
     // Le motif vient de la base : le montrer, plutôt qu'un message générique
     console.error('Validation directeur refusée', err);
-    showToast(err.message || "Validation refusée.");
+    showToast('Prix enregistrés, mais validation refusée : ' + (err.message || 'motif inconnu'));
   }
 }
 function bcMetiersChecklistHTML(b){

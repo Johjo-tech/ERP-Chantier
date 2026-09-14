@@ -11,6 +11,7 @@ import * as workflows from "@/api/operations/workflows";
 import * as queries from "@/api/queries";
 import type { Uuid } from "@/api/types";
 import { AUTH_DISPONIBLE, TEST_SOCIETE_CODE } from "./setup";
+import { LIGNES_MINIMALES } from "./facture-de-test";
 
 const suite = AUTH_DISPONIBLE ? describe : describe.skip;
 
@@ -90,7 +91,8 @@ suite("Workflows métier", () => {
         societeId,
         interventionId,
         "Fuite sur colonne",
-        "Tirage multicouche 16 ml"
+        "Tirage multicouche 16 ml",
+        LIGNES_MINIMALES
       );
 
       expect(facture.intervention_id).toBe(interventionId);
