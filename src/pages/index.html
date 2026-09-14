@@ -5573,9 +5573,11 @@ function blocagesDirecteurHTML(blocages, ctx){
 /* Chiffrage : toute ligne et tout travail supplémentaire y passe, pour que le
    directeur valide chaque montant et pas seulement ceux qui manquent. */
 function chiffrageDirecteurHTML(ctx){
-  const lignes = (ctx.lignes||[])
-    .map((l,i)=>({l,i}))
-    .filter(x=>(x.l.type||'ligne')==='ligne');
+  /* Tout est rendu, chapitres et commentaires compris. Les filtrer ici les
+     laissait s'ajouter dans le dossier sans jamais apparaître : le bouton
+     répondait, l'écran non. Leur index d'origine est conservé — c'est lui que
+     la saisie et la suppression adressent. */
+  const lignes = (ctx.lignes||[]).map((l,i)=>({l,i}));
 
   /* Le tableau se **saisit**, il ne fait pas que se chiffrer : 600 bons de
      commande sur 829 n'ont aucune ligne, et c'est ici qu'on les construit.
@@ -5590,8 +5592,14 @@ function chiffrageDirecteurHTML(ctx){
     const type = l.type || 'ligne';
     const manquant = type === 'ligne' && !(parseFloat(l.prixUnitaire) > 0);
     if(type !== 'ligne'){
+      /* Un chapitre et un commentaire ne se saisissent pas dans le même champ
+         gris : on doit voir ce qu'on construit. Le champ porte donc l'allure
+         qu'aura la ligne sur le document. */
+      const allure = type==='chapitre'
+        ? 'font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#C24E00;'
+        : 'font-style:italic; color:#6B7686;';
       return `<tr class="${type==='chapitre'?'p-chapitre':'p-comment'}">
-        <td colspan="3"><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire'}" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+        <td colspan="3"><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
         <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
       </tr>`;
     }
