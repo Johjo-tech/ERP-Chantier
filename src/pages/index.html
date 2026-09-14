@@ -13083,6 +13083,10 @@ async function saveDocument(){
     document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
     const autorises = navPourRole().map(n=>n.id);
     if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
+    /* Dans le try : le pont refuse de servir une collection tronquée, et cette
+       erreur doit atteindre l'écran. Hors du try, elle partait en promesse
+       rejetée — console seulement — et l'application s'affichait à moitié. */
+    await loadAll();
   }catch(e){
     console.error('Couche données indisponible', e);
     document.body.innerHTML = '<div style="max-width:640px; margin:56px auto; padding:24px; border:1px solid #E2E6ED; border-radius:12px; font:14px/1.6 system-ui; color:#1F2937;">'
