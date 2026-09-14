@@ -67,6 +67,7 @@ import {
 } from "@/api/regles-bc";
 import {
   memeMetier,
+  metierDuChapitre,
   metiersDesChapitres,
   referentielMetiers,
 } from "@/api/regles-metiers";
@@ -366,6 +367,7 @@ export function injecterSession() {
      la comparaison partagée : l'écran, l'adaptateur et la session doivent en
      employer une seule, faute de quoi une tâche devient inatteignable. */
   w.memeMetier = memeMetier;
+  w.metierDuChapitre = metierDuChapitre;
   w.metiersDesChapitres = metiersDesChapitres;
   w.referentielMetiers = referentielMetiers;
   // Recherche et filtrage : une seule définition pour tous les écrans
