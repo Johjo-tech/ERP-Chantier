@@ -20,6 +20,36 @@ const MIMES_ACCEPTES = new Set([
   "image/webp"
 ]);
 /** ~14 Mo une fois décodé : au-delà, demander un PDF allégé. */ const BASE64_MAX = 20_000_000;
+
+/* --- Le budget de temps ---------------------------------------------------
+ *
+ * La plateforme tue l'isolat à 150 s de temps mural. Le 14/09/2026, un appel
+ * Gemini resté sans réponse a consommé ce budget en entier : la fonction est
+ * morte sans émettre la moindre réponse HTTP (`reason: WallClockTime`,
+ * `cpu_time_used: 26 ms`), et le navigateur, dont la promesse ne s'est jamais
+ * résolue, affichait encore « Lecture en cours » indéfiniment.
+ *
+ * Ces trois constantes garantissent qu'on rend toujours la main, et à temps
+ * pour le dire. */
+
+/** Au-delà, on tient pour acquis que ce modèle ne répondra pas. */ const DELAI_GEMINI_MS = 45_000;
+/** Ce qu'on s'autorise en tout : 40 s de marge sur la limite de la plateforme. */ const BUDGET_TOTAL_MS = 110_000;
+/** Entre deux passes, et seulement si tous les modèles ont saturé. */ const PAUSE_REESSAI_MS = 2_000;
+/** Deux passes : la première bascule de modèle, la seconde patiente. */ const PASSES = 2;
+
+/** Trois pools de capacité distincts : le repli quand l'un sature. */ const MODELES_PAR_DEFAUT = [
+  "gemini-3.7-flash",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash"
+];
+
+/** `GEMINI_MODEL` est un levier d'urgence : il prive du repli, donc il ne sert
+ *  qu'à forcer un modèle précis le temps d'un incident. */ function modelesDisponibles() {
+  const force = Deno.env.get("GEMINI_MODEL");
+  return force ? [
+    force
+  ] : MODELES_PAR_DEFAUT;
+}
 /** Schéma de réponse imposé à Gemini (sous-ensemble OpenAPI supporté). */ const SCHEMA_EXTRACTION = {
   type: "OBJECT",
   properties: {
@@ -173,7 +203,108 @@ function reponse(statut, corps) {
     }
   });
 }
+/**
+ * Interroge Gemini jusqu'à une réponse, ou jusqu'à épuisement du budget.
+ *
+ * Un 503 dit « ce pool est saturé **maintenant** ». Réinterroger le même modèle
+ * deux secondes plus tard, comme on le faisait, dépense le budget à réentendre
+ * le même refus — c'est exactement ce qui a coûté les 150 s du 14/09. On passe
+ * donc immédiatement au modèle suivant, dont la capacité est distincte, et la
+ * seconde passe n'a lieu que si les trois ont saturé.
+ *
+ * Rend toujours de quoi répondre : la réponse obtenue, ou `null` avec la raison.
+ */ async function appelerGemini(cle, corpsGemini, tracer, debut) {
+  const modeles = modelesDisponibles();
+  let derniere = null;
+  let modeleUtilise = modeles[0];
+  for(let passe = 0; passe < PASSES; passe++){
+    if (passe > 0) {
+      // Ne pas dormir sur un budget déjà vide : ces deux secondes ne serviraient
+      // qu'à retarder la réponse d'échec.
+      if (BUDGET_TOTAL_MS - (Date.now() - debut) <= PAUSE_REESSAI_MS) {
+        tracer("budget épuisé, pas de seconde passe");
+        return {
+          rep: derniere,
+          modeleUtilise,
+          modeles,
+          budgetEpuise: true
+        };
+      }
+      tracer("tous les modèles saturés, une pause puis nouvelle passe");
+      await new Promise((r)=>setTimeout(r, PAUSE_REESSAI_MS));
+    }
+    for (const modele of modeles){
+      const restant = BUDGET_TOTAL_MS - (Date.now() - debut);
+      if (restant <= 0) {
+        tracer("budget épuisé");
+        return {
+          rep: derniere,
+          modeleUtilise,
+          modeles,
+          budgetEpuise: true
+        };
+      }
+      modeleUtilise = modele;
+      tracer(`appel ${modele} (passe ${passe + 1}/${PASSES})`);
+      let rep;
+      try {
+        rep = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": cle
+          },
+          body: corpsGemini,
+          signal: AbortSignal.timeout(Math.min(DELAI_GEMINI_MS, restant))
+        });
+      } catch (err) {
+        /* Sans ce `catch`, un `fetch` qui lève fait rejeter le handler
+           `Deno.serve` : le runtime répond alors 500 **sans les en-têtes CORS**,
+           et le navigateur annonce une erreur CORS au lieu du délai dépassé. */ const cause = err?.name === "TimeoutError" || err?.name === "AbortError" ? `pas de réponse en ${Math.round(Math.min(DELAI_GEMINI_MS, restant) / 1000)} s` : String(err?.message ?? err);
+        tracer(`${modele} injoignable : ${cause}`);
+        console.error(`Gemini injoignable (${modele}) : ${cause}`);
+        continue;
+      }
+      derniere = rep;
+      if (rep.ok) {
+        tracer(`${modele} a répondu`);
+        return {
+          rep,
+          modeleUtilise,
+          modeles,
+          budgetEpuise: false
+        };
+      }
+      if (rep.status === 503 || rep.status === 429) {
+        tracer(`${modele} saturé (${rep.status}), modèle suivant`);
+        console.error(`Gemini ${rep.status} (${modele}), bascule sur le modèle suivant`);
+        continue;
+      }
+      if (rep.status === 404) {
+        tracer(`${modele} inconnu (404), modèle suivant`);
+        console.error(`Modèle ${modele} inconnu (404), essai du suivant`);
+        continue;
+      }
+      // 400, 403… : changer de modèle n'y changerait rien.
+      return {
+        rep,
+        modeleUtilise,
+        modeles,
+        budgetEpuise: false
+      };
+    }
+  }
+  return {
+    rep: derniere,
+    modeleUtilise,
+    modeles,
+    budgetEpuise: false
+  };
+}
 Deno.serve(async (req)=>{
+  const debut = Date.now();
+  /* La fonction n'avait que des `console.error` : en marche normale elle était
+     muette, et on ne pouvait pas dire où partait le temps. */ const tracer = (etape)=>console.log(`[${Date.now() - debut} ms] ${etape}`);
   if (req.method === "OPTIONS") return new Response("ok", {
     headers: CORS
   });
@@ -208,13 +339,7 @@ Deno.serve(async (req)=>{
       erreur: "Fichier trop volumineux (limite ~14 Mo)"
     });
   }
-  const modeles = Deno.env.get("GEMINI_MODEL") ? [
-    Deno.env.get("GEMINI_MODEL")
-  ] : [
-    "gemini-3.7-flash",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash"
-  ];
+  tracer(`document reçu (${Math.round(fichierBase64.length / 1000)} k caractères, ${mimeType})`);
   const geminiBody = JSON.stringify({
     contents: [
       {
@@ -237,33 +362,14 @@ Deno.serve(async (req)=>{
       response_schema: SCHEMA_EXTRACTION
     }
   });
-  let rep = null;
-  let modeleUtilise = modeles[0];
-  for (const modele of modeles){
-    modeleUtilise = modele;
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent`;
-    const MAX_TENTATIVES = 2;
-    for(let tentative = 0; tentative < MAX_TENTATIVES; tentative++){
-      rep = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": cle
-        },
-        body: geminiBody
-      });
-      if (rep.status !== 503 && rep.status !== 429) break;
-      console.error(`Gemini ${rep.status} (${modele}) — tentative ${tentative + 1}/${MAX_TENTATIVES}`);
-      if (tentative < MAX_TENTATIVES - 1) {
-        await new Promise((r)=>setTimeout(r, 2000));
-      }
-    }
-    if (rep.ok) break;
-    if (rep.status === 503 || rep.status === 429 || rep.status === 404) {
-      console.error(`${modele} indisponible (${rep.status}), essai du modèle suivant…`);
-      continue;
-    }
-    break;
+  const { rep, modeleUtilise, modeles, budgetEpuise } = await appelerGemini(cle, geminiBody, tracer, debut);
+  const attendu = Math.round((Date.now() - debut) / 1000);
+  /* Les deux cas qui, jusqu'ici, ne produisaient aucune réponse du tout. */ if (budgetEpuise || !rep) {
+    const pourquoi = budgetEpuise ? `budget de ${Math.round(BUDGET_TOTAL_MS / 1000)} s épuisé` : "aucun modèle joignable";
+    console.error(`Extraction abandonnée après ${attendu} s — ${pourquoi} (essayés : ${modeles.join(", ")})`);
+    return reponse(504, {
+      erreur: `Gemini n'a pas répondu en ${attendu} s. Modèles essayés : ${modeles.join(", ")}. Réessayez dans quelques instants.`
+    });
   }
   if (!rep.ok) {
     const detail = await rep.text();
@@ -275,13 +381,14 @@ Deno.serve(async (req)=>{
     }
     if (rep.status === 503 || rep.status === 429) {
       return reponse(503, {
-        erreur: "Tous les modèles Gemini sont temporairement surchargés, réessayez dans quelques secondes."
+        erreur: `Les ${modeles.length} modèles Gemini sont saturés (essayé pendant ${attendu} s). Réessayez dans quelques instants.`
       });
     }
     return reponse(502, {
       erreur: `Erreur Gemini (${rep.status})`
     });
   }
+  tracer("lecture du résultat");
   const json = await rep.json();
   const texte = json.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!texte) {
@@ -291,8 +398,10 @@ Deno.serve(async (req)=>{
     });
   }
   try {
+    const extraction = JSON.parse(texte);
+    tracer(`terminé (${extraction?.lignes?.length ?? 0} lignes, modèle ${modeleUtilise})`);
     return reponse(200, {
-      extraction: JSON.parse(texte)
+      extraction
     });
   } catch  {
     console.error("JSON Gemini invalide :", texte.slice(0, 500));
