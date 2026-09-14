@@ -3551,38 +3551,73 @@ function addChapitre(){ state.editing.lignes.push({type:'chapitre', designation:
 function addCommentaire(){ state.editing.lignes.push({type:'commentaire', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function removeLigne(i){ state.editing.lignes.splice(i,1); if(!state.editing.lignes.length) state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
 let draggedLigneIndex = null;
-function dragStartLigne(ev, i){
+/* Le glisser-déposer des lignes sert deux tableaux : celui des documents —
+   devis, facture, bon de commande — et celui de la pré-facture. Une seule
+   implémentation, paramétrée par le tableau qu'elle réordonne et le conteneur
+   où elle dessine le repère. Deux copies finiraient par diverger, comme la
+   comparaison des métiers l'a déjà fait. */
+const ZONES_DND = {
+  document: {
+    conteneur: '#lignesBody',
+    lignes: ()=> state.editing && state.editing.lignes,
+    apres: ()=> refreshLignesUI(),
+  },
+  prefacture: {
+    conteneur: '#validationDirecteurLignes',
+    lignes: ()=> validationDirecteurCtx && validationDirecteurCtx.lignes,
+    apres: ()=> renderValidationDirecteur(),
+  },
+};
+
+/** La zone d'où part le glisser : on ne dépose pas d'un tableau dans l'autre. */
+let zoneDndCourante = null;
+
+function dragStartLigne(ev, i, zone){
   draggedLigneIndex = i;
+  zoneDndCourante = zone || 'document';
   ev.dataTransfer.effectAllowed = 'move';
   try{ ev.dataTransfer.setData('text/plain', String(i)); }catch(e){}
 }
-function dragOverLigne(ev){
+
+function reperesDnd(zone){
+  const sel = (ZONES_DND[zone] || ZONES_DND.document).conteneur;
+  return document.querySelectorAll(sel + ' tr.drag-over-top, ' + sel + ' tr.drag-over-bottom');
+}
+
+function dragOverLigne(ev, zone){
+  const z = zone || 'document';
+  if(zoneDndCourante && zoneDndCourante !== z) return;
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
   const row = ev.currentTarget;
   const rect = row.getBoundingClientRect();
   const before = (ev.clientY - rect.top) < rect.height/2;
-  document.querySelectorAll('#lignesBody tr.drag-over-top, #lignesBody tr.drag-over-bottom').forEach(r=>{
+  reperesDnd(z).forEach(r=>{
     if(r!==row){ r.classList.remove('drag-over-top','drag-over-bottom'); }
   });
   row.classList.toggle('drag-over-top', before);
   row.classList.toggle('drag-over-bottom', !before);
 }
-function dropLigne(ev, targetIndex){
+
+function dropLigne(ev, targetIndex, zone){
+  const z = zone || 'document';
   ev.preventDefault();
   const row = ev.currentTarget;
-  document.querySelectorAll('#lignesBody tr.drag-over-top, #lignesBody tr.drag-over-bottom').forEach(r=>r.classList.remove('drag-over-top','drag-over-bottom'));
-  if(draggedLigneIndex === null){ return; }
+  reperesDnd(z).forEach(r=>r.classList.remove('drag-over-top','drag-over-bottom'));
+  if(draggedLigneIndex === null || zoneDndCourante !== z){ draggedLigneIndex = null; return; }
   const rect = row.getBoundingClientRect();
   const before = (ev.clientY - rect.top) < rect.height/2;
   if(draggedLigneIndex === targetIndex){ draggedLigneIndex = null; return; }
   let insertPos = before ? targetIndex : targetIndex + 1;
   if(draggedLigneIndex < insertPos) insertPos -= 1;
-  const lignes = state.editing.lignes;
+  const zoneDef = ZONES_DND[z] || ZONES_DND.document;
+  const lignes = zoneDef.lignes();
+  if(!lignes){ draggedLigneIndex = null; return; }
   const [moved] = lignes.splice(draggedLigneIndex, 1);
   lignes.splice(insertPos, 0, moved);
   draggedLigneIndex = null;
-  refreshLignesUI();
+  zoneDndCourante = null;
+  zoneDef.apres();
 }
 function updateLigne(i,field,val){
   const texteFields = field==='designation' || field==='commentaire' || field==='unite';
@@ -5890,13 +5925,13 @@ function chiffrageDirecteurHTML(ctx){
       const allure = type==='chapitre'
         ? 'font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#C24E00;'
         : 'font-style:italic; color:#6B7686;';
-      return `<tr class="${type==='chapitre'?'p-chapitre':'p-comment'}">
-        <td colspan="3"><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+      return `<tr class="dnd-row ${type==='chapitre'?'p-chapitre':'p-comment'}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
+        <td colspan="3"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
         <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
       </tr>`;
     }
-    return `<tr class="${manquant?'p-sans-prix':''}">
-      <td><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+    return `<tr class="dnd-row ${manquant?'p-sans-prix':''}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
+      <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:70px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:52px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
       <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
@@ -5915,10 +5950,16 @@ function chiffrageDirecteurHTML(ctx){
     </tr>`;
   }).join('');
 
+  /* Les lignes du bon vivent dans leur propre `tbody` : c'est lui que le
+     glisser-déposer adresse. Les travaux supplémentaires sont dans un autre,
+     et ne se réordonnent pas — ils viennent d'une table à part, avec leur
+     propre circuit, et leur ordre n'a pas de sens sur le document. */
   return `<table class="lignes-table" style="margin-top:8px;">
-    <tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr>
-    ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
-    ${travaux? `<tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}`:''}
+    <thead><tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr></thead>
+    <tbody id="validationDirecteurLignes">
+      ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
+    </tbody>
+    ${travaux? `<tbody><tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}</tbody>`:''}
   </table>
   <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
     <button type="button" class="btn small" onclick="ajouterLigneDirecteur('ligne')">+ Ligne</button>
