@@ -3529,6 +3529,16 @@ const NOM_FICHIER_DEFAUT = { devis:'devis', facture:'facture', bonCommande:'bon-
  * la table artisanale de la pré-facture, qui masquait chapitres et commentaires.
  */
 function documentImprimable(type, id){
+  /* La pré-facture est la facture à venir, montrée avant qu'elle existe. Elle
+     s'appuie sur les données du bon de commande, mais la rendre sous le titre
+     « BON DE COMMANDE » faisait croire qu'on avait ouvert le mauvais document.
+     Elle n'a pas de numéro — aucun n'est attribué tant qu'elle n'est pas
+     émise — et porte la référence du bon à la place. */
+  if(type==='prefacture'){
+    const b = (state.bonsCommande||[]).find(x=>x.id===id);
+    if(!b) return null;
+    return { doc: { ...b, numero: '', date: todayISO() }, titre: 'PRÉ-FACTURE' };
+  }
   if(type==='bonCommande'){
     const b = (state.bonsCommande||[]).find(x=>x.id===id);
     if(!b) return null;
@@ -3567,7 +3577,13 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
-        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
+        ${/* Une pré-facture n'a pas de numéro : aucun n'est attribué tant
+             qu'elle n'est pas émise. Afficher « N° » vide laisserait croire à
+             une perte ; on donne la référence du bon, celle que le client
+             utilise pour s'y retrouver. */''}
+        <div class="p-docmeta">${type==='prefacture'
+          ? `Date : <b>${fmtDate(doc.date)}</b>${bonCommandeDocMetaHTML(doc)}`
+          : `N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}`}</div>
       </td>
     </tr></table>
     <div class="p-rule"></div>
@@ -3597,10 +3613,13 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <tr><td class="label">TVA</td><td class="val">${fmt(t.tva)}</td></tr>
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
-    <table class="p-sign"><tr>
+    ${/* Une pré-facture ne se signe pas : c'est un document de travail interne,
+         arrêté avant d'émettre. Elle le dit, pour qu'on ne l'envoie pas au
+         client en croyant envoyer la facture. */''}
+    ${type==='prefacture' ? `<div class="p-mentions" style="margin-top:8mm;"><b>Document provisoire</b> — ne vaut pas facture. Les montants sont ceux arrêtés avant émission.</div>` : `<table class="p-sign"><tr>
       <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
       <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
-    </tr></table>
+    </tr></table>`}
     ${blocConditionsHTML(type, doc, s, hidePrices)}
     ${blocMentionsHTML(type, s)}
     <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
@@ -5696,8 +5715,12 @@ function renderValidationDirecteur(){
 }
 
 function apercuPrefactureHTML(ctx){
+  /* « prefacture » et non « bonCommande » : c'est la facture à venir qu'on
+     arrête ici. Rendre le bon de commande donnait un document intitulé BON DE
+     COMMANDE dans une fenêtre appelée pré-facture — on croyait avoir ouvert
+     le mauvais écran. */
   return renderPrintDoc(
-    'bonCommande', ctx.bcId, !ctx.avecPrix,
+    'prefacture', ctx.bcId, !ctx.avecPrix,
     window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut())
   );
 }

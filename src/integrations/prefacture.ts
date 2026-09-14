@@ -119,7 +119,13 @@ export function lignesDocumentDirecteur(
   const document: LigneAffichee[] = [];
 
   if (origine.length) {
-    document.push({ type: "chapitre", designation: CHAPITRE_BON_COMMANDE });
+    /* Le bon porte souvent ses propres chapitres — un par métier. En coiffer
+       d'un autre laissait un « Bon de commande — Sous-total 0,00 € » en tête
+       du document : le sous-total se referme au chapitre suivant, qui arrive
+       aussitôt. On ne coiffe donc que des lignes sans structure. */
+    if (!origine.some((l) => l.type === "chapitre")) {
+      document.push({ type: "chapitre", designation: CHAPITRE_BON_COMMANDE });
+    }
     document.push(...origine);
   }
 

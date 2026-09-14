@@ -273,6 +273,25 @@ describe("Document du directeur", () => {
     expect(doc[0]).toMatchObject({ designation: CHAPITRE_TRAVAUX_SUP });
   });
 
+  /* Un bon à plusieurs métiers porte déjà un chapitre par métier. En coiffer
+     d'un autre laissait « Bon de commande — Sous-total 0,00 € » en tête : le
+     sous-total se referme au chapitre suivant, qui arrive aussitôt. */
+  it("ne coiffe pas un bon qui porte déjà ses propres chapitres", () => {
+    const doc = lignesDocumentDirecteur(
+      [
+        { type: "chapitre", designation: "PEINTURE" },
+        { type: "ligne", designation: "Peinture du logement", prixUnitaire: 3500 },
+        { type: "chapitre", designation: "SOL" },
+        { type: "ligne", designation: "Sol du logement", prixUnitaire: 2500 },
+      ],
+      [{ libelle: "Siphon", origine: "technicien", prix_vente_ht: 85 }]
+    );
+
+    expect(doc[0]).toMatchObject({ type: "chapitre", designation: "PEINTURE" });
+    expect(doc.filter((l) => l.designation === CHAPITRE_BON_COMMANDE)).toHaveLength(0);
+    expect(doc.some((l) => l.designation === CHAPITRE_TRAVAUX_SUP)).toBe(true);
+  });
+
   it("surligne les travaux supplémentaires et distingue leur origine", () => {
     const doc = lignesDocumentDirecteur([], [
       { libelle: "Siphon", origine: "technicien", prix_vente_ht: 85 },
