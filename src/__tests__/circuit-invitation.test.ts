@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/api/client";
 import type { RoleMembre } from "@/api/types";
 import { AUTH_DISPONIBLE, TEST_SOCIETE_CODE } from "./setup";
@@ -31,11 +31,19 @@ const suite = AUTH_DISPONIBLE && SERVICE && EN_LOCAL ? describe : describe.skip;
 const MOT_DE_PASSE = "mot-de-passe-de-test-42";
 
 suite("Circuit d'invitation", () => {
-  const service = createClient(URL, SERVICE, { auth: { persistSession: false } });
+  /* Le corps d'un `describe.skip` est tout de même exécuté : Vitest doit
+     recenser les cas pour pouvoir les annoncer sautés. Construire le client
+     ici faisait donc échouer la CI — qui n'a pas de clé de service — avant
+     même d'arriver au saut, sur un « supabaseKey is required » qui ne disait
+     rien de la vraie cause. Il naît maintenant à l'entrée de la suite, là où
+     la clé est garantie parce que `suite` n'y mène que si elle existe. */
+  let service: SupabaseClient;
   let societeId: string;
   const comptesCrees: string[] = [];
 
   beforeAll(async () => {
+    service = createClient(URL, SERVICE, { auth: { persistSession: false } });
+
     const { data, error } = await supabase
       .from("societes")
       .select("id")
