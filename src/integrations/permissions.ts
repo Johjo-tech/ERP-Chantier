@@ -30,6 +30,7 @@ export type ModuleId =
   | "vehicules"
   | "statistiques"
   | "reglages"
+  | "articles"
   | "utilisateurs";
 
 export const ROLES_LIBELLES: Record<RoleMembre, string> = {
@@ -58,6 +59,7 @@ export const MODULES_LIBELLES: Record<ModuleId, string> = {
   vehicules: "Véhicules",
   statistiques: "Statistiques",
   reglages: "Réglages",
+  articles: "Catalogue d'articles",
   utilisateurs: "Utilisateurs",
 };
 
@@ -72,6 +74,7 @@ export const MODULE_PAR_NAV: Record<string, ModuleId> = {
   chantiers: "chantiers",
   reglements: "reglements",
   clients: "clients",
+  catalogue: "articles",
   rh: "rh",
   sousTraitants: "rh",
   vehicules: "vehicules",
@@ -106,6 +109,8 @@ const MATRICE: Record<RoleMembre, Matrice> = {
     controle_fournisseurs: TOUT,
     rh: TOUT,
     vehicules: TOUT,
+    // Elle chiffre les devis et les factures : le catalogue est son outil.
+    articles: TOUT,
     bons_commande: LECTURE_ECRITURE,
     chantiers: LECTURE,
     materiel: LECTURE,
@@ -127,6 +132,8 @@ const MATRICE: Record<RoleMembre, Matrice> = {
     // découle. Accordé en base le 10/09 ; l'écran l'ignorait encore.
     devis: SAUF_SUPPRESSION,
     factures: LECTURE,
+    // Il chiffre avec le catalogue ; il ne décide pas de ce qui y figure.
+    articles: LECTURE,
     controle_fournisseurs: LECTURE,
     rh: LECTURE,
     statistiques: LECTURE,

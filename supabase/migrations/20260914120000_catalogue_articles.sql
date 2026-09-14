@@ -77,108 +77,39 @@ create index if not exists articles_designation_trgm
 --   * un technicien pouvait écrire un catalogue qu'il ne pouvait pas lire ;
 --   * une secrétaire, qui chiffre au quotidien, ne pouvait pas l'écrire.
 --
--- Le catalogue entre donc dans la matrice avec son propre module. Le reste de
--- la fonction est reproduit à l'identique : une fonction Postgres se remplace
--- en entier, on ne modifie pas une branche isolément.
+-- Le catalogue entre donc dans la matrice avec son propre module. Depuis le
+-- 11/09 la matrice est une **table** : c'est là qu'on écrit, et nulle part
+-- ailleurs. Réécrire `a_permission` reviendrait à lui rendre le CASE en dur
+-- qu'elle avait justement quitté.
+--
+--   admin, secrétaire  tout
+--   conducteur         voir      — il chiffre avec le catalogue, il ne le
+--   lecture            voir        décide pas
+--   technicien         rien      — il ne voit aucun prix de vente
+--   sous-traitant      rien
 
-create or replace function public.a_permission(
-  p_societe_id uuid,
-  p_module text,
-  p_action text
-)
-returns boolean
-language plpgsql
-stable
-security definer
-set search_path to 'public', 'pg_temp'
-as $function$
-declare
-  v_role text := role_dans_societe(p_societe_id);
+insert into public.role_permissions (role, module, action)
+select r, 'articles', a
+  from unnest(array['admin', 'secretaire']::role_membre[]) r,
+       unnest(array['voir', 'creer', 'modifier', 'supprimer']) a
+on conflict do nothing;
+
+insert into public.role_permissions (role, module, action)
+select r, 'articles', 'voir'
+  from unnest(array['conducteur', 'lecture']::role_membre[]) r
+on conflict do nothing;
+
+-- Un module absent de la table n'accorde rien : le technicien et le
+-- sous-traitant sont donc traités sans avoir à l'écrire.
+
+do $$
+declare v_lignes integer;
 begin
-  if v_role is null then
-    return false;
+  select count(*) into v_lignes from public.role_permissions where module = 'articles';
+  if v_lignes <> 10 then
+    raise exception 'Droits du catalogue incomplets : % lignes au lieu de 10.', v_lignes;
   end if;
-  if v_role = 'admin' then
-    return true;
-  end if;
-  if v_role = 'lecture' then
-    return p_action = 'voir' and p_module <> 'utilisateurs';
-  end if;
-
-  if v_role = 'secretaire' then
-    return case p_module
-      when 'clients' then true
-      when 'devis' then true
-      when 'factures' then true
-      when 'facturation_electronique' then true
-      when 'reglements' then true
-      when 'controle_fournisseurs' then true
-      when 'rh' then true
-      when 'vehicules' then true
-      -- Elle chiffre les devis et les factures : le catalogue est son outil.
-      when 'articles' then true
-      when 'bons_commande' then p_action in ('voir', 'modifier')
-      when 'tableau_de_bord' then p_action = 'voir'
-      when 'chantiers' then p_action = 'voir'
-      when 'materiel' then p_action = 'voir'
-      when 'planning' then p_action = 'voir'
-      when 'rapports' then p_action = 'voir'
-      when 'statistiques' then p_action = 'voir'
-      when 'reglages' then p_action = 'voir'
-      else false
-    end;
-  end if;
-
-  if v_role = 'conducteur' then
-    return case p_module
-      when 'chantiers' then true
-      when 'bons_commande' then true
-      when 'materiel' then true
-      when 'planning' then true
-      when 'rapports' then true
-      when 'devis' then p_action in ('voir', 'creer', 'modifier')
-      when 'vehicules' then p_action in ('voir', 'modifier')
-      -- Il chiffre un devis, donc il consulte les prix du catalogue ; il ne
-      -- décide pas de ce qui y figure.
-      when 'articles' then p_action = 'voir'
-      when 'tableau_de_bord' then p_action = 'voir'
-      when 'clients' then p_action = 'voir'
-      when 'factures' then p_action = 'voir'
-      when 'controle_fournisseurs' then p_action = 'voir'
-      when 'rh' then p_action = 'voir'
-      when 'statistiques' then p_action = 'voir'
-      when 'reglages' then p_action = 'voir'
-      else false
-    end;
-  end if;
-
-  if v_role = 'technicien' then
-    return case p_module
-      when 'rapports' then p_action in ('voir', 'creer', 'modifier')
-      when 'materiel' then p_action in ('voir', 'modifier')
-      when 'tableau_de_bord' then p_action = 'voir'
-      when 'chantiers' then p_action = 'voir'
-      when 'planning' then p_action = 'voir'
-      when 'rh' then p_action = 'voir'
-      when 'vehicules' then p_action = 'voir'
-      else false
-    end;
-  end if;
-
-  if v_role = 'sous_traitant' then
-    return case p_module
-      when 'rapports' then p_action in ('voir', 'creer', 'modifier')
-      when 'tableau_de_bord' then p_action = 'voir'
-      when 'chantiers' then p_action = 'voir'
-      when 'planning' then p_action = 'voir'
-      when 'materiel' then p_action = 'voir'
-      else false
-    end;
-  end if;
-
-  return false;
-end;
-$function$;
+end $$;
 
 -- Les quatre politiques cessent d'emprunter celles des devis.
 drop policy if exists articles_select on public.articles;
