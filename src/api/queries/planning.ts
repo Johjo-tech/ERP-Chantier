@@ -412,14 +412,40 @@ export function supprimerTravailSupplementaire(id: Uuid) {
   return remove("tache_travaux_supplementaires", id);
 }
 
+export interface ChiffrageTravail {
+  prixVenteHt: number;
+  /** « Reprise de plinthes sur 4 ml » se chiffre au mètre, pas au forfait. */
+  quantite?: number;
+  unite?: string | null;
+  tva?: number;
+}
+
+/**
+ * Chiffrer un travail constaté sur le chantier.
+ *
+ * La table porte `quantite` et `unite` depuis l'origine, et
+ * `bc_generer_facture` les reprend sur la facture — mais rien ne les écrivait :
+ * l'écran figeait « 1 u » et cette requête n'envoyait que le prix. Un travail
+ * mesuré ne pouvait donc être chiffré qu'au forfait, et la facture affichait
+ * une quantité fausse.
+ */
 export function chiffrerTravailSupplementaire(
   id: Uuid,
-  prixVenteHt: number,
-  tva?: number
+  chiffrage: number | ChiffrageTravail,
+  tvaHeritee?: number
 ) {
+  // L'ancienne signature `(id, prix, tva?)` reste acceptée : elle est appelée
+  // depuis le pont, et la changer des deux côtés à la fois n'apporte rien.
+  const c: ChiffrageTravail =
+    typeof chiffrage === "number"
+      ? { prixVenteHt: chiffrage, tva: tvaHeritee }
+      : chiffrage;
+
   return updateOne("tache_travaux_supplementaires", id, {
-    prix_vente_ht: prixVenteHt,
-    ...(tva !== undefined ? { tva } : {}),
+    prix_vente_ht: c.prixVenteHt,
+    ...(c.quantite !== undefined ? { quantite: c.quantite } : {}),
+    ...(c.unite !== undefined ? { unite: c.unite } : {}),
+    ...(c.tva !== undefined ? { tva: c.tva } : {}),
     statut: "chiffre",
   });
 }

@@ -273,6 +273,24 @@ describe("Document du directeur", () => {
     expect(doc[0]).toMatchObject({ designation: CHAPITRE_TRAVAUX_SUP });
   });
 
+  /* La quantité d'un travail était figée à 1 à l'affichage, alors que la table
+     la porte et que `bc_generer_facture` la reprend : le total montré pendant
+     le chiffrage ne valait pas celui de la facture émise ensuite. */
+  it("chiffre un travail mesuré sur sa quantité, pas au forfait", () => {
+    const doc = lignesDocumentDirecteur([], [
+      { libelle: "Reprise de plinthes", origine: "technicien", quantite: 4, unite: "ml", prix_vente_ht: 12.5 },
+    ]);
+    const ligne = doc[doc.length - 1];
+    expect(ligne).toMatchObject({ qte: 4, unite: "ml", prixUnitaire: 12.5 });
+  });
+
+  it("retombe sur un forfait d'une unité quand le travail n'est pas mesuré", () => {
+    const doc = lignesDocumentDirecteur([], [
+      { libelle: "Siphon", origine: "technicien", prix_vente_ht: 85 },
+    ]);
+    expect(doc[doc.length - 1]).toMatchObject({ qte: 1, unite: "u", prixUnitaire: 85 });
+  });
+
   /* Un bon à plusieurs métiers porte déjà un chapitre par métier. En coiffer
      d'un autre laissait « Bon de commande — Sous-total 0,00 € » en tête : le
      sous-total se referme au chapitre suivant, qui arrive aussitôt. */

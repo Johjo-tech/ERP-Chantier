@@ -5944,7 +5944,7 @@ function chiffrageDirecteurHTML(ctx){
     const manquant = t.statut !== 'chiffre';
     return `<tr class="${manquant?'p-sans-prix':''}">
       <td>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></td>
-      <td class="num">1 u</td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:70px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:52px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
       <td></td>
     </tr>`;
@@ -6098,13 +6098,33 @@ function rafraichirChiffrageDirecteur(){
   majBoutonValidationDirecteur(blocages.length === 0 && ctx.peutValider);
 }
 
-function majPrixTravailDirecteur(id, valeur){
+/**
+ * Un travail constaté se chiffre comme une ligne : quantité, unité, prix.
+ *
+ * La quantité et l'unité étaient figées à « 1 u » à l'écran, alors que la table
+ * les porte et que `bc_generer_facture` les reprend sur la facture. « Reprise
+ * de plinthes sur 4 ml » ne pouvait donc être chiffré qu'au forfait, et la
+ * facture affichait une quantité fausse.
+ */
+function majTravailDirecteur(id, champ, valeur){
   if(!validationDirecteurCtx) return;
   const travail = validationDirecteurCtx.travaux.find(t=>t.id===id);
   if(!travail) return;
-  travail.prix_vente_ht = parseFloat(String(valeur).replace(',', '.')) || 0;
-  travail.statut = 'chiffre';
+
+  if(champ === 'unite'){
+    travail.unite = valeur;
+  } else {
+    travail[champ] = parseFloat(String(valeur).replace(',', '.')) || 0;
+  }
+  /* Le statut ne bascule qu'au prix : une quantité saisie sans montant ne
+     chiffre rien, et `bc_chiffrage_valide` doit continuer de bloquer. */
+  if(champ === 'prix_vente_ht') travail.statut = 'chiffre';
   rafraichirChiffrageDirecteur();
+}
+
+/** Conservée : l'ancien nom est encore cité par le champ de prix. */
+function majPrixTravailDirecteur(id, valeur){
+  majTravailDirecteur(id, 'prix_vente_ht', valeur);
 }
 
 /* Les prix sont enregistrés avant la validation, jamais en même temps : si un
@@ -6119,7 +6139,11 @@ async function enregistrerChiffrageDirecteur(silencieux){
   try{
     for(const t of ctx.travaux){
       if(t.prix_vente_ht == null) continue;
-      await window.chiffrerTravailSupplementaire(t.id, Number(t.prix_vente_ht));
+      await window.chiffrerTravailSupplementaire(t.id, {
+        prixVenteHt: Number(t.prix_vente_ht),
+        quantite: t.quantite != null ? Number(t.quantite) : 1,
+        unite: t.unite || 'u',
+      });
     }
     b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
     b.montant = computeTotals(b.lignes).ht;
