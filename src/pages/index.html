@@ -3505,9 +3505,10 @@ function refreshLignesUI(){
  * Elle **ajoute** et ne retire jamais : un métier coché à la main survit à
  * toute relecture des chapitres.
  */
-function appliquerMetiersDesChapitres(){
+function appliquerMetiersDesChapitres(options){
+  const silencieux = !!(options && options.silencieux);
   const zone = document.getElementById('bc_metiersZone');
-  if(!zone || !window.metiersDesChapitres) return;
+  if(!zone || !window.metiersDesChapitres) return [];
 
   const lu = window.metiersDesChapitres(state.editing.lignes, metiersDisponibles());
   const dejaCoches = getCheckedMetiers('bc');
@@ -3522,10 +3523,14 @@ function appliquerMetiersDesChapitres(){
   /* Passer de un à deux métiers scinde la carte du planning en une par métier,
      chacune avec sa date, son équipe et son montant. Mieux vaut le dire ici que
      le laisser découvrir au planning. */
-  if(avant <= 1 && retenus.length > 1){
+  /* `showToast` n'en garde qu'un à la fois : quand la lecture automatique parle
+     juste après, elle écraserait celui-ci. Elle demande donc le silence et dit
+     les deux choses en un seul message. */
+  if(!silencieux && avant <= 1 && retenus.length > 1){
     showToast(`${retenus.length} métiers lus sur les chapitres — le bon se planifiera en ${retenus.length} interventions.`, 'success', 5000);
   }
   refreshBCMontantFields();
+  return retenus;
 }
 function bcLignesOntDuContenu(lignes){
   return (lignes||[]).some(l=>(l.type||'ligne')==='ligne' && (l.designation || (parseFloat(l.prixUnitaire)||0)>0));
@@ -13312,6 +13317,14 @@ async function lireBonCommande(fichier, input){
        parce que le premier s'efface au bout de quelques secondes. */
     state.ocr = null;
     renderTab();
+
+    /* Le document lu apporte ses chapitres — « PEINTURE TOUT LE LOGEMENT »,
+       « SOL CHAMBRE 1 » — et une lecture est une saisie : les métiers se
+       déduisent donc ici aussi. Sans cet appel, un bon lu automatiquement
+       arriverait avec ses chapitres mais sans métier, et repartirait avec une
+       tâche unique sans métier — le défaut même qu'on vient de corriger. */
+    const metiersLus = appliquerMetiersDesChapitres({ silencieux: true });
+
     const dire = (msg, couleur) => {
       const zone = document.getElementById('ocrStatut');
       if(zone){ zone.textContent = msg; zone.style.color = couleur || 'var(--text-dim)'; }
@@ -13333,7 +13346,13 @@ async function lireBonCommande(fichier, input){
       }
     }
 
-    showToast('Bon de commande lu — relisez avant d\'enregistrer.', 'success', 4000);
+    /* Un seul toast, qui porte les deux nouvelles : le document est lu, et le
+       nombre d'interventions que ses chapitres impliquent au planning. */
+    showToast(
+      metiersLus.length > 1
+        ? `Bon lu — ${metiersLus.length} métiers sur ses chapitres, donc ${metiersLus.length} interventions à planifier. Relisez avant d'enregistrer.`
+        : 'Bon de commande lu — relisez avant d\'enregistrer.',
+      'success', metiersLus.length > 1 ? 7000 : 4000);
   }catch(err){
     console.error('OCR', err);
     const ecoule = state.ocr ? Date.now() - state.ocr.debut : 0;
