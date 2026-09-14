@@ -3967,20 +3967,6 @@ async function transmettreALaPlateforme(factureId){
   if(r.depose){ await loadAll(); renderTab(); }
 }
 
-function dupliquerFacture(factureId){
-  const f = state.factures.find(x=>x.id===factureId);
-  if(!f) return;
-  openForm('facture', {
-    client:f.client, adresse:f.adresse, occupant:f.occupant||'', adresseLocataire:f.adresseLocataire||'',
-    logementStatut:f.logementStatut||'', etage:f.etage||'', numeroLogement:f.numeroLogement||'', precisionCommune:f.precisionCommune||'', ancienLocataire:f.ancienLocataire||'',
-    interlocuteur:f.interlocuteur||'',
-    date: todayISO(), echeance:'',
-    lignes: JSON.parse(JSON.stringify(f.lignes)),
-    remisePourcentage: f.remisePourcentage||0,
-    statut:'brouillon'
-  });
-  showToast('Facture dupliquée — modifiez-la puis enregistrez pour créer une nouvelle facture.', 'success');
-}
 function transformerEnFacture(devisId){
   const d = state.devis.find(x=>x.id===devisId);
   if(!d) return;
@@ -4729,7 +4715,6 @@ function renderFacturesListHTML(list){
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
-      <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
