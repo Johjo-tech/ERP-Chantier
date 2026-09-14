@@ -856,14 +856,22 @@ input[type=file]::file-selector-button:hover{ border-color:var(--accent); color:
 input:disabled{color:var(--text-dim); background:var(--surface-2);}
 textarea{resize:vertical; min-height:64px;}
 .mic-btn{flex-shrink:0; width:36px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); display:flex; align-items:center; justify-content:center;}
-.suggest-box{display:none; position:absolute; top:100%; left:0; right:0; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); margin-top:3px; max-height:220px; overflow-y:auto;}
+/* La liste ne se cale plus sur la largeur du champ : celui-ci fait quelques
+   dizaines de pixels, et « CODE — désignation — prix / unité » y descendait en
+   colonne, illisible. Elle part du bord gauche du champ et prend la place qu'il
+   lui faut, sans dépasser l'écran sur un téléphone. */
+.suggest-box{display:none; position:absolute; top:100%; left:0; z-index:20; min-width:min(360px, 78vw); max-width:min(520px, 90vw); background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); margin-top:3px; max-height:260px; overflow-y:auto;}
 .suggest-item{padding:9px 12px; border-bottom:1px solid var(--border); cursor:pointer; font-size:12.5px;}
 .suggest-item:last-child{border-bottom:none;}
 .suggest-item:hover{background:var(--surface-2);}
 .suggest-item b{display:block; font-size:13px;}
 .suggest-item small{color:var(--text-dim); font-size:11px;}
 .suggest-empty{padding:10px 12px; font-size:12px; color:var(--text-dim);}
-input.art-pick{flex-shrink:0; width:36px !important; font-size:10px; padding:0 3px; color:var(--text-dim);}
+/* 36 pixels et une police de 10 : on ne voyait pas ce qu'on tapait, et un code
+   comme « ART-0040 » n'y tenait pas. Le champ porte une référence, il doit se
+   lire — la désignation, à côté, prend ce qui reste. */
+input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:0 8px;}
+@media(max-width:640px){ input.art-pick{width:84px !important;} }
 .mic-btn.listening{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-2); animation:pulseSoft 1s infinite;}
 @keyframes pulseSoft{0%{box-shadow:0 0 0 0 rgba(255,106,26,.35);}100%{box-shadow:0 0 0 8px rgba(255,106,26,0);}}
 
