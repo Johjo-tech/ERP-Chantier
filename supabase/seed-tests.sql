@@ -18,7 +18,10 @@ declare
   v_comptes constant jsonb := jsonb_build_array(
     jsonb_build_object('id', '11111111-1111-1111-1111-111111111111', 'email', 'tech.a@local',      'nom', 'Technicien A', 'role', 'technicien'),
     jsonb_build_object('id', '44444444-4444-4444-4444-444444444444', 'email', 'tech.b@local',      'nom', 'Technicien B', 'role', 'technicien'),
-    jsonb_build_object('id', '55555555-5555-5555-5555-555555555555', 'email', 'conducteur@local',  'nom', 'Conducteur',   'role', 'conducteur')
+    jsonb_build_object('id', '55555555-5555-5555-5555-555555555555', 'email', 'conducteur@local',  'nom', 'Conducteur',   'role', 'conducteur'),
+    -- La secrétaire chiffre au quotidien : sans elle, les droits du catalogue
+    -- et de la facturation ne s'éprouvaient que par leur refus.
+    jsonb_build_object('id', '66666666-6666-6666-6666-666666666666', 'email', 'secretaire@local',  'nom', 'Secrétaire',   'role', 'secretaire')
   );
   v_compte jsonb;
 begin

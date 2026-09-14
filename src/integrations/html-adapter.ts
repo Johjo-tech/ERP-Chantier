@@ -81,8 +81,26 @@ export interface LigneLegacy {
   unite?: string;
   prixUnitaire?: number;
   tva?: number;
+  /** Code de l'article du catalogue d'où la ligne a été remplie. */
+  articleReference?: string;
 }
 
+/**
+ * La référence d'article traverse enfin le pont.
+ *
+ * `article_reference` existe sur les trois tables de lignes et l'écran la
+ * cherchait déjà — mais elle n'était ni écrite ni relue : **aucune des 922
+ * lignes de production n'en portait**. Choisir un article était sans effet
+ * durable.
+ *
+ * `unite_code` et `tva_categorie` restent hors d'ici, à dessein. Elles sont
+ * **dérivées** de `unite` et de `tva`, et ceux qui s'en servent les recalculent
+ * déjà à l'usage — `l.uniteCode || codeUnite(l.unite)` pour la facture
+ * électronique, `categorieTva(taux, explicite)` pour la ventilation. Les
+ * écrire ici n'ajouterait aucune information, et ferait croire à une
+ * modification là où rien n'a changé : une facture émise, dont les lignes sont
+ * figées, deviendrait impossible à réenregistrer.
+ */
 export function ligneVersDb(ligne: LigneLegacy, position: number) {
   return {
     type: (ligne.type as "ligne" | "chapitre" | "commentaire") ?? "ligne",
@@ -92,6 +110,7 @@ export function ligneVersDb(ligne: LigneLegacy, position: number) {
     unite: ligne.unite,
     prix_unitaire: ligne.prixUnitaire,
     tva: ligne.tva,
+    article_reference: ligne.articleReference || null,
     position,
   };
 }
@@ -105,6 +124,7 @@ export function ligneVersLegacy(row: Record<string, unknown>): LigneLegacy {
     unite: row.unite as string | undefined,
     prixUnitaire: row.prix_unitaire as number | undefined,
     tva: row.tva as number | undefined,
+    articleReference: (row.article_reference as string | undefined) ?? undefined,
   };
 }
 

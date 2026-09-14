@@ -60,8 +60,24 @@ describe("Lignes de document", () => {
       unite: "u",
       prix_unitaire: 120.5,
       tva: 10,
+      article_reference: null,
       position: 3,
     });
+  });
+
+  /* La colonne existait sur les trois tables de lignes et l'écran cherchait
+     déjà un code — mais le pont ne la transmettait pas : aucune des 922 lignes
+     de production n'en portait. Choisir un article restait sans effet. */
+  it("transmet la référence de l'article choisi au catalogue", () => {
+    const avecArticle = { ...legacy, articleReference: "PLB-001" };
+    expect(ligneVersDb(avecArticle, 0).article_reference).toBe("PLB-001");
+    expect(ligneVersLegacy(ligneVersDb(avecArticle, 0)).articleReference).toBe("PLB-001");
+  });
+
+  /* Une ligne libre n'invente pas de référence : `null`, pas la chaîne vide —
+     l'unicité du code ne doit pas se heurter à des lignes « sans article ». */
+  it("laisse la référence nulle quand la ligne n'en porte pas", () => {
+    expect(ligneVersDb({ designation: "Divers" }, 0).article_reference).toBeNull();
   });
 
   it("fait l'aller-retour sans perte", () => {
