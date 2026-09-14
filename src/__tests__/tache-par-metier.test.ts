@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { droitsAttendus } from "./matrice-attendue";
 
 const listTachesBonCommande = vi.fn();
 const planifierTache = vi.fn();
@@ -21,6 +22,9 @@ vi.mock("@/api/queries", () => ({
     { id: "soc-uuid", code: "kta", nom: "KTA" },
   ]),
   monRole: vi.fn(async () => "admin"),
+  // `chargerSession` installe la matrice des droits avant tout le reste : sans
+  // elle, l'application refuse de se rendre, et le mock doit donc la fournir.
+  listRolePermissions: vi.fn(async () => droitsAttendus()),
   listTachesBonCommande: (...args: unknown[]) => listTachesBonCommande(...args),
   planifierTache: (...args: unknown[]) => planifierTache(...args),
 }));

@@ -8,6 +8,7 @@
 import { todayISO } from "@/api/client";
 import * as queries from "@/api/queries";
 import { loadAllData } from "@/integrations/html-adapter";
+import type { LigneFactureInput } from "@/api/queries";
 import type {
   BonCommande,
   Facture,
@@ -154,13 +155,27 @@ export async function calculerSoldeFacture(factureId: Uuid): Promise<number> {
 
 // ============ RAPPORT D'INTERVENTION ============
 
-/** Complète le rapport puis facture l'intervention. */
+/**
+ * Complète le rapport puis facture l'intervention.
+ *
+ * Les lignes sont exigées : une facture sans ligne ne facture rien, et la base
+ * refuse désormais de la numéroter (règle BG-25). Jusqu'ici cette opération en
+ * produisait une vide — personne ne l'appelait, ce qui est la seule raison
+ * pour laquelle elle n'a pas fabriqué de pièces fantômes.
+ */
 export async function completerRapportEtCreerFacture(
   societeId: Uuid,
   interventionId: Uuid,
   constatations: string,
-  preconisations: string
+  preconisations: string,
+  lignes: LigneFactureInput[]
 ): Promise<FactureComplete> {
+  if (!lignes.length) {
+    throw new Error(
+      "Facturer un rapport d'intervention demande au moins une ligne : sans elle, la facture ne facture rien."
+    );
+  }
+
   const intervention = await queries.updateInterventionRapport(
     interventionId,
     constatations,
@@ -182,7 +197,7 @@ export async function completerRapportEtCreerFacture(
     logement_statut: intervention.logement_statut,
     occupant: intervention.occupant,
     precision_commune: intervention.precision_commune,
-  });
+  }, lignes);
 
   console.log(`✅ Rapport ${interventionId} complété → facture ${facture.numero}`);
   return facture;

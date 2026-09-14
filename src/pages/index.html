@@ -66,6 +66,11 @@ body.sidebar-collapsed #sidebar{display:none;}
 .nav-item svg{width:18px; height:18px; flex-shrink:0;}
 .nav-item.active{background:var(--sidebar-active); color:var(--sidebar-text);}
 .nav-item.active svg{color:var(--accent);}
+/* Garder le menu ouvert : une préférence, pas un geste. Le bouton ☰ ferme et
+   ouvre à la demande ; cette bascule empêche seulement la barre de se replier
+   toute seule, ce qu'elle fait à chaque ouverture de formulaire. */
+.sidebar-pin{display:flex; align-items:center; gap:9px; padding:9px 6px; margin-top:auto; color:var(--sidebar-text-dim); font-size:11.5px; cursor:pointer; border-top:1px solid rgba(255,255,255,.08);}
+.sidebar-pin:hover{color:#fff;}
 .sidebar-foot{font-size:11px; color:var(--sidebar-text-dim); padding:10px 6px 0; border-top:1px solid rgba(255,255,255,.08); margin-top:10px;}
 
 #main{flex:1; min-width:0; display:flex; flex-direction:column;}
@@ -807,8 +812,18 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .ghost-toggle-slider:before{ content:""; position:absolute; height:14px; width:14px; left:2.5px; bottom:2.5px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.25); }
 .ghost-toggle input:checked + .ghost-toggle-slider{ background:var(--accent); }
 .ghost-toggle input:checked + .ghost-toggle-slider:before{ transform:translateX(15px); }
-#companyLabelDesktop{ font-size:13px; font-weight:500; color:var(--text-dim); letter-spacing:.02em; }
-#companyLabelMobile{ font-size:12px; font-weight:500; color:var(--text-dim); letter-spacing:.02em; white-space:nowrap; }
+/* Le nom de la société est le bouton qui permet d'en changer : c'est là qu'on
+   le cherche, pas dans un menu caché sous son propre nom, dans une barre
+   latérale repliée. */
+.societe-btn{ display:flex; align-items:center; gap:5px; background:none; border:none; cursor:pointer; padding:3px 6px; border-radius:7px; font-family:inherit; color:var(--text-dim); letter-spacing:.02em; font-weight:500; }
+.societe-btn:hover{ background:var(--surface-2); color:var(--text); }
+.societe-btn .chev{ font-size:9px; opacity:.7; }
+#companyLabelDesktop{ font-size:13px; }
+#companyLabelMobile{ font-size:12px; white-space:nowrap; }
+/* La règle commune (`left:6px; right:6px`) collerait le menu à la largeur du
+   libellé, en colonne illisible. Celui-ci part du bord droit et prend la place
+   qu'il lui faut, sans déborder d'un téléphone. */
+.user-menu--droite{ left:auto; right:0; min-width:min(280px, 84vw); }
 @media(max-width:860px){ #deskTopStrip{ display:none; } }
 @media(min-width:861px){ #companyLabelMobile{ display:none; } }
 #toastBox.success{background:#123A28; color:#C9F5DF; border-color:var(--success);}
@@ -856,14 +871,22 @@ input[type=file]::file-selector-button:hover{ border-color:var(--accent); color:
 input:disabled{color:var(--text-dim); background:var(--surface-2);}
 textarea{resize:vertical; min-height:64px;}
 .mic-btn{flex-shrink:0; width:36px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); display:flex; align-items:center; justify-content:center;}
-.suggest-box{display:none; position:absolute; top:100%; left:0; right:0; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); margin-top:3px; max-height:220px; overflow-y:auto;}
+/* La liste ne se cale plus sur la largeur du champ : celui-ci fait quelques
+   dizaines de pixels, et « CODE — désignation — prix / unité » y descendait en
+   colonne, illisible. Elle part du bord gauche du champ et prend la place qu'il
+   lui faut, sans dépasser l'écran sur un téléphone. */
+.suggest-box{display:none; position:absolute; top:100%; left:0; z-index:20; min-width:min(360px, 78vw); max-width:min(520px, 90vw); background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); margin-top:3px; max-height:260px; overflow-y:auto;}
 .suggest-item{padding:9px 12px; border-bottom:1px solid var(--border); cursor:pointer; font-size:12.5px;}
 .suggest-item:last-child{border-bottom:none;}
 .suggest-item:hover{background:var(--surface-2);}
 .suggest-item b{display:block; font-size:13px;}
 .suggest-item small{color:var(--text-dim); font-size:11px;}
 .suggest-empty{padding:10px 12px; font-size:12px; color:var(--text-dim);}
-input.art-pick{flex-shrink:0; width:36px !important; font-size:10px; padding:0 3px; color:var(--text-dim);}
+/* 36 pixels et une police de 10 : on ne voyait pas ce qu'on tapait, et un code
+   comme « ART-0040 » n'y tenait pas. Le champ porte une référence, il doit se
+   lire — la désignation, à côté, prend ce qui reste. */
+input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:0 8px;}
+@media(max-width:640px){ input.art-pick{width:84px !important;} }
 .mic-btn.listening{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-2); animation:pulseSoft 1s infinite;}
 @keyframes pulseSoft{0%{box-shadow:0 0 0 0 rgba(255,106,26,.35);}100%{box-shadow:0 0 0 8px rgba(255,106,26,0);}}
 
@@ -1024,7 +1047,18 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
 .p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
-.p-footer{ margin-top:10mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+.p-footer{ margin-top:6mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+/* Les mentions légales appartiennent au pied de page, pas à la suite du texte.
+   La page est une colonne haute d'au moins une feuille A4 (297mm moins les
+   14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
+   contre le bord inférieur. Un document plus long repousse simplement le pied
+   après son contenu, ce qui est le comportement voulu. */
+/* La hauteur réservée se lit : une A4, moins les 14 mm de marge de part et
+   d'autre de `#printArea`, moins 5 mm de sûreté. Sans cette marge, le calcul
+   tombait à 297,0 mm pile — mesuré à 297,1 après arrondi des sous-pixels, et
+   html2pdf ajoutait une seconde page entièrement vide. */
+.p-page{ display:flex; flex-direction:column; min-height:calc(297mm - 28mm - 5mm); }
+.p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
 .p-photo{ width:42mm; height:42mm; object-fit:cover; border-radius:2mm; border:1px solid #E2E6ED; }
@@ -1067,6 +1101,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .wf-banner.alerte{ background:#FDECEE; color:#B42318; border:1px solid #F5C2C7; }
 /* Le document rendu dans la modale : mêmes styles d'impression, cadre à l'écran. */
 .print-preview{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; overflow-x:auto; font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; }
+/* Chiffrer, c'est saisir des prix en regardant la commande. Le document de
+   référence — devis ou bon — se met donc à côté du tableau, pas au-dessus :
+   au-dessus, il fallait faire défiler pour comparer. */
+.pf-colonnes{ display:flex; gap:16px; align-items:flex-start; }
+.pf-reference{ flex:0 0 44%; max-height:68vh; overflow:auto; font-size:9pt; }
+.pf-travail{ flex:1; min-width:0; }
+@media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; } }
 .print-preview table{ width:100%; border-collapse:collapse; }
 .wf-tour-moi{ background:var(--accent-soft); color:var(--accent-2); }
 .wf-clos{ display:inline-block; font-size:11.5px; font-weight:700; color:var(--success); }
@@ -1079,13 +1120,16 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <div class="user-menu-wrap">
       <button class="brand user-menu-btn" onclick="toggleUserMenu(event)"><span class="brand-dot"></span><span class="user-menu-name">Aissa Choumane<span class="role-badge" id="roleBadgeDesktop"></span></span><span class="user-menu-chevron">▾</span></button>
       <div class="user-menu" id="userMenu">
-        <div id="userMenuSocietes"></div>
         <div id="userMenuRoles"></div>
         <div class="user-menu-sep"></div>
         <button onclick="logOut()">Se déconnecter</button>
       </div>
     </div>
     <div class="nav-items" id="navDesktop"></div>
+    <label class="sidebar-pin" title="Le menu ne se refermera plus tout seul à l'ouverture d'un formulaire">
+      <span class="ghost-toggle"><input type="checkbox" id="menuEpingleToggle" onchange="toggleMenuEpingle(this.checked)"><span class="ghost-toggle-slider"></span></span>
+      <span>Garder le menu ouvert</span>
+    </label>
     <div class="sidebar-foot" id="sidebarFoot">Données partagées avec toute personne ayant ce lien.</div>
   </aside>
   <div id="main">
@@ -1101,14 +1145,17 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
         <input type="checkbox" id="ghostModeToggleDesktop" onchange="toggleGhostMode(this.checked)">
         <span class="ghost-toggle-slider"></span>
       </label>
-      <span id="companyLabelDesktop">KTA Plomberie</span>
+      <div class="user-menu-wrap">
+        <button class="societe-btn" onclick="toggleUserMenu(event)" title="Changer de société">
+          <span id="companyLabelDesktop">—</span><span class="chev">▾</span>
+        </button>
+        <div class="user-menu user-menu--droite" id="societeMenuDesktop"></div>
+      </div>
     </div>
     <div id="topbar">
       <div class="user-menu-wrap">
         <button class="brand user-menu-btn" onclick="toggleUserMenu(event)"><span class="brand-dot"></span><span class="user-menu-name">Aissa Choumane<span class="role-badge" id="roleBadgeMobile"></span></span><span class="user-menu-chevron">▾</span></button>
         <div class="user-menu" id="userMenuMobile">
-          <div class="user-menu-section-title">Accès</div>
-          <div id="userMenuSocietesMobile"></div>
           <div id="userMenuRolesMobile"></div>
           <div class="user-menu-sep"></div>
           <button onclick="logOut()">Se déconnecter</button>
@@ -1126,7 +1173,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
           <input type="checkbox" id="ghostModeToggleMobile" onchange="toggleGhostMode(this.checked)">
           <span class="ghost-toggle-slider"></span>
         </label>
-        <span id="companyLabelMobile">KTA Plomberie</span>
+        <div class="user-menu-wrap">
+          <button class="societe-btn" onclick="toggleUserMenu(event)" title="Changer de société">
+            <span id="companyLabelMobile">—</span><span class="chev">▾</span>
+          </button>
+          <div class="user-menu user-menu--droite" id="societeMenuMobile"></div>
+        </div>
       </div>
     </div>
     <div id="content"></div>
@@ -1386,14 +1438,20 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 <!-- Le directeur engage le montant facturé : il doit voir le document entier,
      pas une liste de métiers. -->
 <div id="validationDirecteurModal" class="view-modal">
-  <div class="view-modal-panel" style="max-width:960px;">
+  <div class="view-modal-panel" style="max-width:1240px;">
     <button class="view-modal-close" onclick="closeValidationDirecteurModal()">✕</button>
-    <h3 style="margin-top:0;">Validation de la pré-facture</h3>
+    <h3 style="margin-top:0;" id="validationDirecteurTitre">Pré-facture</h3>
     <p class="card-sub" id="validationDirecteurInfo"></p>
     <div id="validationDirecteurCorps"></div>
-    <div style="display:flex; gap:10px; margin-top:18px; align-items:center;">
-      <button class="btn primary" id="validationDirecteurConfirmBtn" onclick="confirmerValidationDirecteur()">✓ Valider le chiffrage</button>
-      <button class="btn ghost" onclick="closeValidationDirecteurModal()">Annuler</button>
+    <!-- Un seul bouton : enregistrer les prix fait partie de valider, ce n'est
+         pas un geste à part. Ce qui reste en suspens est annoncé juste au-dessus. -->
+    <div id="validationDirecteurPied" style="position:sticky; bottom:0; background:var(--card,#fff); padding:14px 0 2px; border-top:1px solid var(--border,#E2E6ED); margin-top:18px;">
+      <div id="validationDirecteurBlocages"></div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn primary" id="validationDirecteurConfirmBtn" onclick="confirmerValidationDirecteur()">✓ Valider la pré-facture</button>
+        <button class="btn" id="validationDirecteurEnregistrerBtn" onclick="enregistrerChiffrageDirecteur()">💾 Enregistrer sans valider</button>
+        <button class="btn ghost" onclick="closeValidationDirecteurModal()">Annuler</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1523,6 +1581,7 @@ const NAV = [
   {id:'planning', label:'Planning'},
   {id:'chantiers', label:'Chantiers'},
   {id:'clients', label:'Clients'},
+  {id:'catalogue', label:'Catalogue'},
   {id:'rh', label:'RH'},
   {id:'vehicules', label:'Véhicules'},
   {id:'materiel', label:'Matériel'},
@@ -1630,7 +1689,7 @@ let state = {
   factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
   factureMetierFilter: '', factureReglementFilter: '',
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
-  devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], articles: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
+  devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]}
 };
@@ -1755,7 +1814,10 @@ async function exportAllData(){
     version: 1, exportedAt: new Date().toISOString(),
     clients: state.clients, devis: state.devis, factures: state.factures,
     interventions: state.interventions, reglements: state.reglements, bonsCommande: state.bonsCommande, conducteurs: state.conducteurs, techniciens: state.techniciens,
-    articles: state.articles, documents: state.documents, interlocuteurs: state.interlocuteurs,
+    /* Le catalogue ne vit plus en mémoire : on le demande ici, sinon la
+       sauvegarde repartirait sans lui, sans le dire. */
+    articles: await window.catalogueComplet(),
+    documents: state.documents, interlocuteurs: state.interlocuteurs,
     settings: state.settings
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -1802,8 +1864,13 @@ async function importAllData(file){
   }
 }
 async function loadAll(){
-  const [devis, factures, interventions, bonsCommande, clients, articles, documents, reglements, interlocuteurs, conducteurs, techniciens, metiersPerso, sousTraitants, chantiers, salaries, vehicules, materiels] = await Promise.all([
-    loadPrefix('devis:'), loadPrefix('facture:'), loadPrefix('intervention:'), loadPrefix('bonCommande:'), loadPrefix('client:'), loadPrefix('article:'), loadPrefix('document:'), loadPrefix('reglement:'), loadPrefix('interlocuteur:'), loadPrefix('conducteur:'), loadPrefix('technicien:'), loadPrefix('metierPerso:'), loadPrefix('sousTraitant:'), loadPrefix('chantier:'), loadPrefix('salarie:'), loadPrefix('vehicule:'), loadPrefix('materiel:')
+  /* `article:` ne figure plus ici : le catalogue peut compter un millier de
+     références, et l'ouverture télécharge déjà seize tables entières. Il se
+     consulte par requête, depuis l'onglet Catalogue et depuis la saisie d'une
+     ligne. Le registre des collections le connaît toujours — la restauration
+     d'une sauvegarde en a besoin. */
+  const [devis, factures, interventions, bonsCommande, clients, documents, reglements, interlocuteurs, conducteurs, techniciens, metiersPerso, sousTraitants, chantiers, salaries, vehicules, materiels] = await Promise.all([
+    loadPrefix('devis:'), loadPrefix('facture:'), loadPrefix('intervention:'), loadPrefix('bonCommande:'), loadPrefix('client:'), loadPrefix('document:'), loadPrefix('reglement:'), loadPrefix('interlocuteur:'), loadPrefix('conducteur:'), loadPrefix('technicien:'), loadPrefix('metierPerso:'), loadPrefix('sousTraitant:'), loadPrefix('chantier:'), loadPrefix('salarie:'), loadPrefix('vehicule:'), loadPrefix('materiel:')
   ]);
   /* Le plus récent d'abord. On prend la première date renseignée parmi celles
      qui font sens pour le document — un bon de commande n'a pas de `date`,
@@ -1813,7 +1880,6 @@ async function loadAll(){
   state.interventions = trierParDate(interventions, ['date']);
   state.bonsCommande = trierParDate(bonsCommande, ['dateReception','datePlanifiee','date']);
   state.clients = clients.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
-  state.articles = articles.sort((a,b)=> (a.code||'').localeCompare(b.code||''));
   state.documents = documents.sort((a,b)=> (a.dateValidite||'9999').localeCompare(b.dateValidite||'9999'));
   state.reglements = trierParDate(reglements, ['date']);
   state.interlocuteurs = interlocuteurs.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
@@ -2027,20 +2093,35 @@ function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:
 /* ---------- Rendu de la coquille ---------- */
 /* Menu utilisateur : sociétés réellement accessibles, et simulation de rôle
    réservée à l'administrateur (sans effet sur la base, la RLS fait foi). */
-function renderUserMenu(){
+/* Les sociétés où ce compte est membre, telles que la base les donne.
+   Une seule fonction les rend, pour le seul endroit qui les propose : le nom
+   de société, en haut. Elles vivaient aussi dans le menu sous le nom de
+   l'utilisateur — deux chemins vers le même geste, qui auraient fini par ne
+   plus dire la même chose. */
+function optionsSocietesHTML(){
   const societes = window.societesAccessibles ? window.societesAccessibles() : [];
-  /* La section est toujours affichée, même avec une seule société : sinon on ne
-     distingue pas « accès limité à une société » de « sélecteur cassé ». */
-  const htmlSocietes = `<div class="user-menu-section-title">Société</div>`
-    + (societes.length
-        ? societes.map(soc =>
-            `<button onclick="changerSociete('${esc(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
-          ).join('')
-          + (societes.length === 1
-              ? `<div style="padding:6px 12px; color:var(--text-dim); font-size:11px; line-height:1.4;">Une seule société vous est rattachée. Pour en obtenir d'autres, un administrateur doit vous ajouter dans <b>membres_societe</b>.</div>`
-              : '')
-        : `<div style="padding:6px 12px; color:var(--danger); font-size:11px;">Aucune société rattachée à ce compte.</div>`);
+  if(!societes.length){
+    return `<div style="padding:8px 12px; color:var(--danger); font-size:11.5px;">Aucune société rattachée à ce compte.</div>`;
+  }
+  /* Le sélecteur s'affiche même avec une seule société : sinon on ne distingue
+     pas « je n'ai accès qu'à une société » de « le sélecteur est cassé ». */
+  return `<div class="user-menu-section-title">Société</div>`
+    + societes.map(soc =>
+        `<button onclick="changerSociete('${esc(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
+      ).join('')
+    + (societes.length === 1
+        ? `<div style="padding:6px 12px; color:var(--text-dim); font-size:11px; line-height:1.4;">Une seule société vous est rattachée. Pour en obtenir d'autres, un administrateur doit vous ajouter dans <b>membres_societe</b>.</div>`
+        : '');
+}
 
+/** Le nom de la société active, pour le bouton qui l'affiche. */
+function nomSocieteActive(){
+  const societes = window.societesAccessibles ? window.societesAccessibles() : [];
+  const active = societes.find(s => s.id === state.societeId);
+  return active ? active.nom : (societeName(state.societeId) || '—');
+}
+
+function renderUserMenu(){
   const estAdmin = window.roleReel && window.roleReel() === 'admin';
   const htmlRoles = estAdmin
     ? `<div class="user-menu-section-title">Voir en tant que</div>` +
@@ -2049,11 +2130,24 @@ function renderUserMenu(){
       .map(([id,label]) => `<button onclick="setRole('${id}')">${state.currentRole===id?'✓ ':''}${label}</button>`).join('')
     : '';
 
-  [['userMenuSocietes','userMenuRoles'],['userMenuSocietesMobile','userMenuRolesMobile']].forEach(([idSoc,idRole])=>{
-    const elSoc = document.getElementById(idSoc);
-    if(elSoc) elSoc.innerHTML = htmlSocietes;
-    const elRole = document.getElementById(idRole);
-    if(elRole) elRole.innerHTML = htmlRoles;
+  ['userMenuRoles','userMenuRolesMobile'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = htmlRoles;
+  });
+
+  /* Les deux barres — large et étroite — portent le même sélecteur : ne
+     traiter que celle qu'on a sous les yeux laisserait l'autre inerte. */
+  const societes = optionsSocietesHTML();
+  const nom = nomSocieteActive();
+  ['societeMenuDesktop','societeMenuMobile'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = societes;
+  });
+  /* Le libellé portait « KTA Plomberie » écrit en dur dans la page : il
+     mentait dès qu'on changeait de société. */
+  ['companyLabelDesktop','companyLabelMobile'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = nom;
   });
 
   const email = window.utilisateurCourant ? window.utilisateurCourant() : '';
@@ -2216,6 +2310,42 @@ function endResizeAttachmentFloat(){
   document.removeEventListener('mousemove', onResizeAttachmentFloat);
   document.removeEventListener('mouseup', endResizeAttachmentFloat);
 }
+/* Le menu se replie tout seul : `openForm` le referme à chaque ouverture de
+   formulaire, et le planning le masque pour récupérer la largeur. Cette
+   préférence l'en empêche.
+
+   Elle vit dans le stockage du navigateur — une préférence d'affichage, propre
+   à cette machine, qui n'a rien à faire en base. Un stockage refusé (navigation
+   privée, réglage du navigateur) ne doit pas empêcher l'application de
+   fonctionner : on retombe alors sur le comportement d'origine. */
+const CLE_MENU_EPINGLE = 'erp.menu.epingle';
+
+function menuEpingle(){
+  try{ return localStorage.getItem(CLE_MENU_EPINGLE) === '1'; }
+  catch(e){ return false; }
+}
+
+function toggleMenuEpingle(coche){
+  try{ localStorage.setItem(CLE_MENU_EPINGLE, coche ? '1' : '0'); }
+  catch(e){ console.warn('Préférence de menu non conservée par le navigateur', e); }
+  appliquerEpinglageMenu();
+  showToast(coche ? 'Le menu reste ouvert.' : 'Le menu se repliera à nouveau.', 'success', 2000);
+}
+
+/* Appelée au démarrage et au basculement, jamais à chaque rendu : sans quoi un
+   clic sur ☰ pour fermer serait aussitôt défait. Le geste explicite garde la
+   main sur la préférence. */
+function appliquerEpinglageMenu(){
+  const epingle = menuEpingle();
+  const el = document.getElementById('menuEpingleToggle');
+  if(el) el.checked = epingle;
+  if(epingle){
+    document.body.classList.remove('sidebar-collapsed');
+    // Le planning masque la barre par une autre règle : il faut la forcer.
+    document.body.classList.add('sidebar-forced');
+  }
+}
+
 function toggleSidebarForced(){
   if(document.body.classList.contains('is-planning-view')){
     document.body.classList.toggle('sidebar-forced');
@@ -2271,13 +2401,13 @@ function renderPlus(){
   `;
 }
 function renderTab(){
-  const renderers = {dashboard:renderDashboard, chantiers:renderChantiers, clients:renderClients, devis:renderDevis, factures:renderFactures, interventions:renderInterventions, bonsCommande:renderBonsCommande, planning:renderPlanning, rh:renderRH, vehicules:renderVehicules, materiel:renderMateriel, piecesCommande:renderPiecesCommande, statistiques:renderStatistiques, parametres:renderParametres, plus:renderPlus};
+  const renderers = {dashboard:renderDashboard, chantiers:renderChantiers, clients:renderClients, devis:renderDevis, factures:renderFactures, interventions:renderInterventions, bonsCommande:renderBonsCommande, planning:renderPlanning, rh:renderRH, vehicules:renderVehicules, materiel:renderMateriel, piecesCommande:renderPiecesCommande, statistiques:renderStatistiques, parametres:renderParametres, plus:renderPlus, catalogue:renderCatalogue};
   const contentEl = document.getElementById('content');
   contentEl.innerHTML = renderers[state.tab]();
   contentEl.classList.toggle('is-planning', state.tab==='planning');
   document.body.classList.toggle('is-planning-view', state.tab==='planning');
-  if(state.tab!=='planning') document.body.classList.remove('sidebar-forced');
-  const isWide = state.tab==='devis' || state.tab==='factures' || state.tab==='interventions' || state.tab==='dashboard' || state.tab==='bonsCommande' || state.tab==='planning' || state.tab==='clients' || state.tab==='chantiers' || state.tab==='rh' || state.tab==='vehicules' || state.tab==='materiel' || state.tab==='piecesCommande' || state.tab==='statistiques';
+  if(state.tab!=='planning' && !menuEpingle()) document.body.classList.remove('sidebar-forced');
+  const isWide = state.tab==='devis' || state.tab==='factures' || state.tab==='interventions' || state.tab==='dashboard' || state.tab==='bonsCommande' || state.tab==='planning' || state.tab==='clients' || state.tab==='chantiers' || state.tab==='rh' || state.tab==='vehicules' || state.tab==='materiel' || state.tab==='piecesCommande' || state.tab==='statistiques' || state.tab==='catalogue';
   contentEl.classList.toggle('content-wide', isWide);
   if(state.tab==='interventions' && state.formOpen.intervention && (state.editing.step||1)===3){
     setTimeout(initSignaturePad, 30);
@@ -2791,7 +2921,7 @@ function openForm(type, prefill){
   Object.keys(state.formOpen).forEach(k=> state.formOpen[k] = false);
   state.formOpen[type] = true;
   pousserHistorique();
-  document.body.classList.add('sidebar-collapsed');
+  if(!menuEpingle()) document.body.classList.add('sidebar-collapsed');
   renderTab();
   const zoneId = 'formZone' + type.charAt(0).toUpperCase() + type.slice(1);
   setTimeout(()=>{ const el = document.getElementById(zoneId); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); },50);
@@ -2805,6 +2935,24 @@ function closeForm(type){
   pousserHistorique(true);
   renderTab();
 }
+/* Unités proposées à la saisie.
+   Elles vivaient au bas de l'ancien écran Articles des Réglages et ont manqué
+   de partir avec lui — or `ligneRow` s'en sert pour **toutes** les lignes de
+   devis, de facture et de bon de commande. Elles sont désormais près de leur
+   usage principal.
+
+   `pièce` et `mm` sont arrivées avec le catalogue : l'export du logiciel de
+   gestion emploie `PC` et `MM`, et sans elles on ne pouvait pas choisir à la
+   main ce que l'import écrivait. */
+const UNITES = ['u','pièce','h','forfait','m','m²','m³','ml','mm','jour'];
+function uniteOptions(current){
+  const opts = UNITES.slice();
+  // Une unité héritée, absente de la liste, reste sélectionnable : sinon
+  // rouvrir une vieille ligne la changerait sans le dire.
+  if(current && !opts.includes(current)) opts.unshift(current);
+  return opts.map(v=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
+}
+
 function ligneRow(l,i){
   const hasComment = !!(l.commentaire && l.commentaire.trim());
   const isOpen = hasComment || state.ligneCommentOuvert===i;
@@ -2812,8 +2960,12 @@ function ligneRow(l,i){
     <td><div class="row-mic">
       <span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span>
       <div style="position:relative; flex-shrink:0;">
+        ${/* La référence était saisie puis perdue : le champ ne portait aucune
+             valeur et rien ne la réaffichait au rechargement. Elle est
+             désormais celle de la ligne, et elle s'enregistre avec. */''}
         <input type="text" class="art-pick" placeholder="Code…" autocomplete="off" title="Tapez un code ou un mot de la désignation"
-          oninput="searchArticleCode(this, ${i})"
+          id="artCode-${i}" value="${esc(l.articleReference||'')}"
+          oninput="searchArticleCode(this, ${i}); updateLigne(${i},'articleReference',this.value)"
           onkeydown="handleArticleCodeKeydown(event, ${i})"
           onblur="setTimeout(()=>{const b=document.getElementById('artSuggest-${i}'); if(b) b.style.display='none';},180)">
         <div id="artSuggest-${i}" class="suggest-box"></div>
@@ -2837,41 +2989,126 @@ function toggleLigneComment(i){
   state.ligneCommentOuvert = state.ligneCommentOuvert===i ? null : i;
   refreshLignesUI();
 }
+/* ---------- Remplir une ligne depuis le catalogue ----------
+   Le catalogue n'est plus en mémoire : chaque frappe interroge la base, une
+   fois la main arrêtée. C'est ce qui permet de garder mille références sans
+   les télécharger à chaque ouverture. */
 let articleMatchesCache = {};
+let articleMinuteur = {};
+const DELAI_RECHERCHE_ARTICLE = 250;
+
+/**
+ * Recopie l'article dans la ligne. On **copie**, on ne lie pas : une
+ * modification ultérieure du catalogue ne doit rien changer à un devis déjà
+ * établi. La quantité n'est jamais touchée — c'est la seule valeur que
+ * l'utilisateur a saisie lui-même.
+ */
 function applyArticleObjectToLigne(i, art){
-  state.editing.lignes[i] = Object.assign({}, state.editing.lignes[i], {type:'ligne', designation: art.designation, prixUnitaire: art.prixUnitaire, tva: art.tva||10});
+  const ligne = state.editing.lignes[i] || {};
+  state.editing.lignes[i] = Object.assign({}, ligne, {
+    type: 'ligne',
+    articleReference: art.code,
+    designation: art.designation,
+    // Une description ne remplace pas un commentaire déjà écrit à la main.
+    commentaire: (ligne.commentaire && ligne.commentaire.trim()) ? ligne.commentaire : (art.description || ''),
+    unite: art.unite || ligne.unite || 'u',
+    prixUnitaire: art.prixUnitaire,
+    tva: art.tva != null ? art.tva : tvaDefaut(),
+  });
   refreshLignesUI();
 }
-function searchArticleCode(inputEl, i){
-  const q = inputEl.value.trim().toLowerCase();
-  const box = document.getElementById('artSuggest-'+i);
-  if(!box) return;
-  if(!q){ box.style.display = 'none'; articleMatchesCache[i] = []; return; }
-  const matches = state.articles.filter(a=>a.societeId===state.societeId &&
-    ((a.code||'').toLowerCase().includes(q) || (a.designation||'').toLowerCase().includes(q))).slice(0,8);
-  articleMatchesCache[i] = matches;
-  if(!matches.length){ box.innerHTML = '<div class="suggest-empty">Aucun article — saisie manuelle possible</div>'; box.style.display = 'block'; return; }
-  box.innerHTML = matches.map((a,idx)=>`<div class="suggest-item" onmousedown="selectArticleMatch(${i}, ${idx})"><b>${esc(a.code)}</b><small>${esc(a.designation)} — ${money(a.prixUnitaire)}</small></div>`).join('');
-  box.style.display = 'block';
-}
-function selectArticleMatch(i, idx){
-  const matches = articleMatchesCache[i] || [];
-  const art = matches[idx];
+
+function fermerSuggestionsArticle(i){
   const box = document.getElementById('artSuggest-'+i);
   if(box) box.style.display = 'none';
-  if(!art) return;
-  applyArticleObjectToLigne(i, art);
 }
-function handleArticleCodeKeydown(ev, i){
-  if(ev.key === 'Enter'){
-    ev.preventDefault();
-    const matches = articleMatchesCache[i] || [];
-    if(matches.length) selectArticleMatch(i, 0);
-  } else if(ev.key === 'Escape'){
-    const box = document.getElementById('artSuggest-'+i);
-    if(box) box.style.display = 'none';
+
+function searchArticleCode(inputEl, i){
+  const q = inputEl.value.trim();
+  const box = document.getElementById('artSuggest-'+i);
+  if(!box) return;
+  clearTimeout(articleMinuteur[i]);
+  if(!q){ box.style.display = 'none'; articleMatchesCache[i] = []; return; }
+
+  articleMinuteur[i] = setTimeout(async ()=>{
+    let matches = [];
+    try{
+      matches = await window.chercherArticlesLigne(q);
+    }catch(err){
+      console.error('Recherche au catalogue impossible', err);
+      box.innerHTML = '<div class="suggest-empty">Catalogue injoignable — saisie manuelle possible</div>';
+      box.style.display = 'block';
+      return;
+    }
+    articleMatchesCache[i] = matches;
+    if(!matches.length){
+      box.innerHTML = `<div class="suggest-empty">Aucun article — saisie manuelle possible<br><button type="button" class="btn small" style="margin-top:6px;" onmousedown="creerArticleDepuisLigne(${i})">+ Créer « ${esc(q)} » dans le catalogue</button></div>`;
+      box.style.display = 'block';
+      return;
+    }
+    box.innerHTML = matches.map((a,idx)=>`<div class="suggest-item" onmousedown="selectArticleMatch(${i}, ${idx})"><b>${esc(a.code)}</b><small>${esc(a.designation)} — ${money(a.prixUnitaire)}${a.unite? ' / '+esc(a.unite):''}</small></div>`).join('');
+    box.style.display = 'block';
+  }, DELAI_RECHERCHE_ARTICLE);
+}
+
+function selectArticleMatch(i, idx){
+  const art = (articleMatchesCache[i] || [])[idx];
+  fermerSuggestionsArticle(i);
+  if(art) applyArticleObjectToLigne(i, art);
+}
+
+/* Entrée et Tab valident tous deux : on tape un code qu'on connaît, on passe
+   au champ suivant, et la ligne doit être remplie — sans détour par la liste.
+   Le code exact l'emporte sur la première proposition, qui pourrait n'être
+   qu'une correspondance partielle. */
+async function handleArticleCodeKeydown(ev, i){
+  if(ev.key === 'Escape'){ fermerSuggestionsArticle(i); return; }
+  if(ev.key !== 'Enter' && ev.key !== 'Tab') return;
+
+  const saisi = (ev.target.value || '').trim();
+  if(!saisi) return;
+  if(ev.key === 'Enter') ev.preventDefault();
+  clearTimeout(articleMinuteur[i]);
+
+  try{
+    const exact = await window.articleParCode(saisi);
+    if(exact){ fermerSuggestionsArticle(i); applyArticleObjectToLigne(i, exact); return; }
+  }catch(err){
+    console.error('Article introuvable', err);
   }
+
+  const matches = articleMatchesCache[i] || [];
+  if(matches.length){ selectArticleMatch(i, 0); return; }
+  // Référence inconnue : la ligne reste libre, on ne devine rien à sa place.
+  fermerSuggestionsArticle(i);
 }
+
+/* La référence n'existe pas : plutôt que d'obliger à quitter le devis, on
+   ouvre le catalogue sur un article pré-rempli de ce qui est déjà saisi. */
+function creerArticleDepuisLigne(i){
+  const ligne = state.editing.lignes[i] || {};
+  const code = (document.getElementById('artCode-'+i)?.value || '').trim();
+  fermerSuggestionsArticle(i);
+
+  catalogueEtat().edition = {
+    id: null,
+    code,
+    designation: ligne.designation || '',
+    description: ligne.commentaire || '',
+    unite: ligne.unite || 'u',
+    prixUnitaire: parseFloat(ligne.prixUnitaire) || 0,
+    prixAchat: null,
+    tva: ligne.tva != null ? ligne.tva : tvaDefaut(),
+    typeArticle: 'service',
+    famille: '',
+    actif: true,
+    gereEnStock: false,
+  };
+  setTab('catalogue');
+  showToast('Complétez la fiche puis enregistrez — vous reviendrez au document ensuite.');
+}
+
+
 function clientSelectOptions(current){
   const list = state.clients.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
   return '<option value="">— Sélectionner un client —</option>' + list.map(c=>`<option value="${esc(c.nom)}" ${c.nom===current?'selected':''}>${esc(c.nom)}</option>`).join('');
@@ -3553,11 +3790,14 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     telephone: s.telephone,
   };
   return `
+    <div class="p-page">
     <table class="p-header"><tr>
       <td style="width:55%;">
         ${logoHTML(s)}
-        <div class="p-company">${esc(em.nom)}</div>
-        ${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}
+        ${/* Le bloc « Émetteur » plus bas porte déjà le nom et l'adresse : les
+             répéter sous le logo les faisait figurer deux fois sur la page.
+             Sans logo, en revanche, l'en-tête doit bien identifier l'émetteur. */
+          logoHTML(s) ? '' : `<div class="p-company">${esc(em.nom)}</div>${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}`}
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
@@ -3578,7 +3818,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
         ${doc.clientSiret? `<div class="p-line">SIRET ${esc(doc.clientSiret)}</div>`:''}
         ${doc.clientTvaIntracom? `<div class="p-line">TVA ${esc(doc.clientTvaIntracom)}</div>`:''}
         ${doc.interlocuteur? `<div class="p-line">À l'attention de ${esc(doc.interlocuteur)}</div>`:''}
-        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
+        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement||doc.occupant||doc.logementStatut||doc.etage)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
       </td>
     </tr></table>
     <table class="p-lignes">
@@ -3591,13 +3831,20 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <tr><td class="label">TVA</td><td class="val">${fmt(t.tva)}</td></tr>
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
-    <table class="p-sign"><tr>
-      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : (type==='bonCommande'? 'Validation de la pré-facture :' : 'Merci de votre confiance.')}<div class="p-sigline"></div></td>
+    ${/* Une facture ne se signe pas : elle constate une créance, elle ne
+         recueille pas d'accord. Les lignes de signature n'y avaient donc rien
+         à faire. Le devis, lui, vit de l'accord du client, et le bon de
+         commande de la validation de sa pré-facture. */
+      type === 'facture' ? '' : `<table class="p-sign"><tr>
+      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
       <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
-    </tr></table>
+    </tr></table>`}
     ${blocConditionsHTML(type, doc, s, hidePrices)}
-    ${blocMentionsHTML(type, s)}
-    <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    <div class="p-bas-de-page">
+      ${blocMentionsHTML(type, s)}
+      <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    </div>
+    </div>
   `;
 }
 
@@ -3954,20 +4201,6 @@ async function transmettreALaPlateforme(factureId){
   if(r.depose){ await loadAll(); renderTab(); }
 }
 
-function dupliquerFacture(factureId){
-  const f = state.factures.find(x=>x.id===factureId);
-  if(!f) return;
-  openForm('facture', {
-    client:f.client, adresse:f.adresse, occupant:f.occupant||'', adresseLocataire:f.adresseLocataire||'',
-    logementStatut:f.logementStatut||'', etage:f.etage||'', numeroLogement:f.numeroLogement||'', precisionCommune:f.precisionCommune||'', ancienLocataire:f.ancienLocataire||'',
-    interlocuteur:f.interlocuteur||'',
-    date: todayISO(), echeance:'',
-    lignes: JSON.parse(JSON.stringify(f.lignes)),
-    remisePourcentage: f.remisePourcentage||0,
-    statut:'brouillon'
-  });
-  showToast('Facture dupliquée — modifiez-la puis enregistrez pour créer une nouvelle facture.', 'success');
-}
 function transformerEnFacture(devisId){
   const d = state.devis.find(x=>x.id===devisId);
   if(!d) return;
@@ -4716,7 +4949,6 @@ function renderFacturesListHTML(list){
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
-      <button class="btn small" onclick="dupliquerFacture('${f.id}')">Dupliquer</button>
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
@@ -5057,7 +5289,6 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${b.pieceJointeData? `<div class="card-sub"><a href="${b.pieceJointeData}" download="${esc(b.pieceJointeNom||'bon-de-commande')}" style="color:var(--accent-2); text-decoration:underline;" onclick="event.stopPropagation()">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a></div>`:''}
       ${factureLiee? `<div class="card-sub">Facture liée : <a href="javascript:void(0)" onclick="goToFacture('${factureLiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(factureLiee.numero)}</a></div>`:''}
       ${savLie? `<div class="card-sub">SAV lié : <a href="javascript:void(0)" onclick="goToBonCommande('${savLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(savLie.numeroBC)}</a></div>`:''}
-      ${(b.travauxSupplementaires||[]).length? `<div class="card-sub" style="color:#7B4FD9;">➕ Travaux supplémentaires (sans prix) : ${b.travauxSupplementaires.map(t=>esc(t.texte)).join(' · ')}</div>`:''}
       ${(b.technicienCommentaire || b.sousTraitantCommentaire || (b.technicienPhotos||[]).length || b.technicienDessin || b.pieceACommanderDetail || b.dateInterventionTerminee)? `<div class="tech-fiche-zone">
         <button class="btn small ghost" onclick="event.stopPropagation(); toggleTechFicheOuverte('${b.id}')">📋 Fiche d'intervention du technicien ${state.techFicheOuverte===b.id?'▲':'▼'}</button>
         ${state.techFicheOuverte===b.id? `<div class="tech-fiche-detail">
@@ -5069,9 +5300,11 @@ function bonCommandeCardHTML(b, workflowCtx){
           ${b.technicienDessin? `<div class="card-sub" style="margin-top:8px;">✏️ Dessin :</div><img src="${b.technicienDessin}" style="max-width:280px; border:1px solid var(--border); border-radius:8px; margin-top:4px; cursor:pointer;" onclick="event.stopPropagation(); openAttachmentPreview('${jsAttr(b.technicienDessin)}','dessin.png')">`:''}
         </div>` : ''}
       </div>`:''}
+      ${/* Un seul chemin vers le chiffrage. L'éditeur qui vivait ici ne lisait
+            que `b.lignes` et ignorait les travaux ajoutés sur le chantier : on
+            pouvait chiffrer une affaire sans jamais les voir. */''}
       ${chiffrageIci? `<div class="tech-fiche-zone">
-        <button class="btn small ghost" onclick="event.stopPropagation(); togglePreFactureOuverte('${b.id}')">🧾 Pré-facture${(b.lignes&&b.lignes.length)? ` (${money(computeTotals(b.lignes).ttc)} TTC)` : ' — non chiffrée'} ${state.preFactureOuverte===b.id?'▲':'▼'}</button>
-        ${state.preFactureOuverte===b.id? renderPrefactureZone(b) : ''}
+        <button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${b.id}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>
       </div>`:''}
       ${b.pieceACommander? `<div class="card-sub" style="color:#C24E00; font-weight:600;">📦 Pièce à commander${b.pieceACommanderDetail? ' : '+esc(b.pieceACommanderDetail) : ''}${b.pieceACommanderDateCommande? ' — commandée le '+fmtDate(b.pieceACommanderDateCommande) : ''}${b.pieceACommanderFournisseur? ' — Fournisseur : '+esc(b.pieceACommanderFournisseur) : ''}</div>`:''}
       ${b.datePlanificationInitiale? `<div class="card-sub">🕓 Planifiée une première fois le ${fmtDate(b.datePlanificationInitiale)} (reportée pour attente de pièce)</div>`:''}
@@ -5097,7 +5330,11 @@ function bonCommandeCardHTML(b, workflowCtx){
     ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('bonCommande','${b.id}')">Modifier</button>
-      ${(factureLiee||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnFacture('${b.id}')" ${!b.valideDirecteur?'disabled title="Validation directeur requise avant facturation"':''}>Transformer en facture</button>`}
+      ${/* Une fois la pré-facture validée, l'étape suivante doit sauter aux yeux :
+            c'est le geste qu'on cherche, pas un bouton gris parmi cinq. */''}
+      ${(factureLiee||isSAV)? '' : (b.valideDirecteur
+        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${b.id}')">🧾 Créer la facture</button>`
+        : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
       ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${b.id}')">Créer un SAV</button>`}
       ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${b.id}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${rapportLie.id}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${b.id}')">🔗 Lier un rapport</button>`}
       <button class="btn small danger" onclick="deleteItem('bonCommande','${b.id}')">Supprimer</button>
@@ -5179,69 +5416,6 @@ function toggleTechFicheOuverte(id){
   state.techFicheOuverte = state.techFicheOuverte===id ? null : id;
   renderTab();
 }
-function togglePreFactureOuverte(id){
-  state.preFactureOuverte = state.preFactureOuverte===id ? null : id;
-  if(state.preFactureOuverte===null) state.prefactureEditId = null;
-  renderTab();
-}
-function renderPrefactureZone(b){
-  if(state.prefactureEditId === b.id){
-    return `<div class="tech-fiche-detail" onclick="event.stopPropagation()">
-      <table class="lignes-table" style="background:#fff;"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
-      <tbody id="lignesBody">${ligneRowsHTML(state.editing.lignes)}</tbody></table>
-      <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-        <button type="button" class="btn small" onclick="addLigne()">+ Ligne</button>
-        <button type="button" class="btn small" onclick="addChapitre()">+ Chapitre</button>
-        <button type="button" class="btn small" onclick="addCommentaire()">+ Commentaire</button>
-      </div>
-      <div class="totals-box" id="totalsBoxContent" style="margin-top:8px;">${totalsBoxInnerHTML(computeTotalsAvecRemise(state.editing.lignes,0))}</div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button type="button" class="btn primary" onclick="enregistrerPrefacture('${b.id}')">✓ Enregistrer les prix</button>
-        <button type="button" class="btn ghost" onclick="annulerEditionPrefacture()">Annuler</button>
-      </div>
-    </div>`;
-  }
-  const hasLignes = b.lignes && b.lignes.length;
-  return `<div class="tech-fiche-detail" onclick="event.stopPropagation()">
-    ${hasLignes? `<table class="lignes-table" style="background:#fff;"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th>Total HT</th></tr></thead>
-    <tbody>${b.lignes.filter(l=>(l.type||'ligne')==='ligne').map(l=>`<tr><td>${esc(l.designation)}</td><td>${l.qte}</td><td>${esc(l.unite||'u')}</td><td>${money(l.prixUnitaire)}</td><td>${l.tva}%</td><td>${money((parseFloat(l.qte)||0)*(parseFloat(l.prixUnitaire)||0))}</td></tr>`).join('')}</tbody></table>
-    <div class="totals-box" style="margin-top:8px;">${totalsBoxInnerHTML(computeTotalsAvecRemise(b.lignes,0))}</div>`
-    : `<div class="empty">Aucun prix détaillé pour l'instant.</div>`}
-    <button type="button" class="btn small primary" style="margin-top:10px;" onclick="ouvrirEditionPrefacture('${b.id}')">${hasLignes? '✏️ Modifier les prix' : '+ Créer la pré-facture'}</button>
-  </div>`;
-}
-function ouvrirEditionPrefacture(bcId){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  state.prefactureEditId = bcId;
-  const lignesDepart = (b.lignes&&b.lignes.length) ? JSON.parse(JSON.stringify(b.lignes)) : [];
-  const designationsExistantes = new Set(lignesDepart.filter(l=>(l.type||'ligne')==='ligne').map(l=>l.designation));
-  (b.travauxSupplementaires||[]).forEach(t=>{
-    if(!designationsExistantes.has(t.texte)){
-      lignesDepart.push({ type:'ligne', designation: t.texte, qte:1, prixUnitaire:0, tva: tvaDefaut() });
-    }
-  });
-  if(!lignesDepart.length) lignesDepart.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()});
-  state.editing = { id: bcId, lignes: lignesDepart };
-  renderTab();
-}
-function annulerEditionPrefacture(){
-  state.prefactureEditId = null;
-  renderTab();
-}
-async function enregistrerPrefacture(bcId){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  const lignesRenseignees = bcLignesOntDuContenu(state.editing.lignes);
-  b.lignes = lignesRenseignees ? state.editing.lignes : [];
-  if(lignesRenseignees) b.montant = computeTotals(b.lignes).ht;
-  const r = await stSet('bonCommande:'+bcId, b);
-  if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
-  state.prefactureEditId = null;
-  renderTab();
-  showToast('Pré-facture enregistrée.', 'success');
-}
 function bcInterventionFaite(b){
   const metiers = bcMetiersDuBC(b);
   const dates = bcToutesDatesDuBC(b);
@@ -5302,7 +5476,9 @@ function bcWorkflowStepperHTML(b, ctx){
         `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}')">✓ Valider (conducteur)</button>`
         : `<div class="bc-attente-message">⏳ En attente — tous les métiers doivent être marqués comme réalisés par le technicien avant de pouvoir passer à la validation du conducteur.</div>`
       ) : ''}
-      ${ctx==='validation' && etape2 && !etape3 && (!window.actionsFacturation || window.actionsFacturation().peutValiderPrefacture)? `<button class="btn small primary" onclick="openValidationDirecteurModal('${b.id}')">✓ Valider (directeur)</button>` : ''}
+      ${/* Le stepper dit où en est le dossier ; le geste, lui, a un seul bouton,
+            porté par la zone « pré-facture » de la carte — avec son montant. En
+            mettre un second ici rendrait deux boutons pour la même chose. */''}
     </div>
   </div>`;
 }
@@ -5519,8 +5695,13 @@ let validationDirecteurCtx = null;
 async function openValidationDirecteurModal(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
-  if(window.actionsFacturation && !window.actionsFacturation().peutValiderPrefacture){
-    showToast("La validation de la pré-facture est réservée à l'administrateur.");
+  /* Chiffrer et valider sont deux droits distincts : la secrétaire chiffre,
+     l'administrateur arrête le montant. La fenêtre s'ouvre donc pour les deux —
+     la refuser à la secrétaire la renvoyait vers un éditeur qui ne montre pas
+     les travaux ajoutés sur le chantier. Seul le bouton du bas est réservé. */
+  const droits = window.actionsFacturation ? window.actionsFacturation() : { peutModifierPrefacture:true, peutValiderPrefacture:true };
+  if(!droits.peutModifierPrefacture){
+    showToast("La pré-facture se chiffre depuis un compte administrateur ou secrétariat.");
     return;
   }
 
@@ -5531,10 +5712,15 @@ async function openValidationDirecteurModal(bcId){
     travaux: [],
     lignes: JSON.parse(JSON.stringify(b.lignes || [])),
     avecPrix: prixVisibles,
-    prixVisibles
+    prixVisibles,
+    peutValider: droits.peutValiderPrefacture,
+    // Rien d'ouvert au départ : le tableau des prix prend toute la largeur.
+    reference: null
   };
 
-  document.getElementById('validationDirecteurInfo').textContent = `${b.numeroInterne||b.numeroBC||'sans numéro'} — ${b.client||''}`;
+  document.getElementById('validationDirecteurTitre').textContent =
+    `Pré-facture — BC ${b.numeroInterne||b.numeroBC||'sans numéro'}`;
+  document.getElementById('validationDirecteurInfo').textContent = `${b.client||''}`;
   document.getElementById('validationDirecteurCorps').innerHTML = '<div class="empty">Chargement du dossier…</div>';
   document.getElementById('validationDirecteurModal').style.display = 'flex';
   // Rien n'est encore contrôlé : le bouton ne s'ouvre qu'après lecture du dossier
@@ -5563,7 +5749,12 @@ function closeValidationDirecteurModal(){
 
 function majBoutonValidationDirecteur(actif){
   const btn = document.getElementById('validationDirecteurConfirmBtn');
-  if(btn) btn.disabled = !actif;
+  if(btn){
+    const peutValider = !validationDirecteurCtx || validationDirecteurCtx.peutValider;
+    btn.disabled = !actif;
+    // Inutile de montrer à la secrétaire un bouton qu'elle ne peut pas presser.
+    btn.style.display = peutValider ? '' : 'none';
+  }
 }
 
 function toggleValidationDirecteurPrix(coche){
@@ -5581,51 +5772,122 @@ function blocagesDirecteur(b, ctx){
   });
 }
 
-function blocagesDirecteurHTML(blocages){
-  if(!blocages.length){
-    return `<div class="wf-banner ok">✓ Rien ne reste en suspens : le chiffrage peut être validé.</div>`;
+function blocagesDirecteurHTML(blocages, ctx){
+  if(blocages.length){
+    return `<div class="wf-banner alerte" style="margin-bottom:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">⚠ Il reste ${blocages.length===1?'un point':'des points'} à traiter avant de valider</div>
+      <ul style="margin:0; padding-left:18px;">
+        ${blocages.map(x=>`<li>${esc(x.libelle)}${x.details.length? ` <span class="card-sub">— ${esc(x.details.join(', '))}</span>`:''}</li>`).join('')}
+      </ul>
+    </div>`;
   }
-  return `<div class="wf-banner alerte">
-    <div style="font-weight:700; margin-bottom:6px;">⚠ Validation impossible</div>
-    <ul style="margin:0; padding-left:18px;">
-      ${blocages.map(x=>`<li>${esc(x.libelle)}${x.details.length? ` <span class="card-sub">— ${esc(x.details.join(', '))}</span>`:''}</li>`).join('')}
-    </ul>
-  </div>`;
+  /* Chiffrer et valider sont deux droits : la secrétaire complète le dossier,
+     l'administrateur arrête le montant. Le dire, plutôt que griser en silence. */
+  if(ctx && !ctx.peutValider){
+    return `<div class="wf-banner" style="margin-bottom:10px;">Le dossier est complet. La validation revient à un administrateur — enregistrez, il prendra la suite.</div>`;
+  }
+  return `<div class="wf-banner ok" style="margin-bottom:10px;">✓ Rien ne reste en suspens : la pré-facture peut être validée.</div>`;
 }
 
 /* Chiffrage : toute ligne et tout travail supplémentaire y passe, pour que le
    directeur valide chaque montant et pas seulement ceux qui manquent. */
 function chiffrageDirecteurHTML(ctx){
-  const lignes = (ctx.lignes||[])
-    .map((l,i)=>({l,i}))
-    .filter(x=>(x.l.type||'ligne')==='ligne');
+  /* Tout est rendu, chapitres et commentaires compris. Les filtrer ici les
+     laissait s'ajouter dans le dossier sans jamais apparaître : le bouton
+     répondait, l'écran non. Leur index d'origine est conservé — c'est lui que
+     la saisie et la suppression adressent. */
+  const lignes = (ctx.lignes||[]).map((l,i)=>({l,i}));
 
+  /* Le tableau se **saisit**, il ne fait pas que se chiffrer : 600 bons de
+     commande sur 829 n'ont aucune ligne, et c'est ici qu'on les construit.
+     C'est ce que faisait l'éditeur retiré de la carte ; la capacité déménage,
+     elle ne disparaît pas.
+
+     `oninput` et non `onchange` : le total suit la frappe. Seuls l'aperçu, le
+     total et le pied sont redessinés — jamais les champs, sinon la saisie
+     perdrait le focus à chaque caractère. Ajouter ou retirer une ligne, en
+     revanche, refait le tableau : la structure a changé. */
   const rows = lignes.map(({l,i})=>{
-    const manquant = !(parseFloat(l.prixUnitaire) > 0);
+    const type = l.type || 'ligne';
+    const manquant = type === 'ligne' && !(parseFloat(l.prixUnitaire) > 0);
+    if(type !== 'ligne'){
+      /* Un chapitre et un commentaire ne se saisissent pas dans le même champ
+         gris : on doit voir ce qu'on construit. Le champ porte donc l'allure
+         qu'aura la ligne sur le document. */
+      const allure = type==='chapitre'
+        ? 'font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#C24E00;'
+        : 'font-style:italic; color:#6B7686;';
+      return `<tr class="${type==='chapitre'?'p-chapitre':'p-comment'}">
+        <td colspan="3"><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+        <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
+      </tr>`;
+    }
     return `<tr class="${manquant?'p-sans-prix':''}">
-      <td>${esc(l.designation||'—')}</td>
-      <td class="num">${esc(l.qte||1)} ${esc(l.unite||'u')}</td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" style="width:100px; text-align:right;" onchange="majPrixLigneDirecteur(${i}, this.value)"></td>
+      <td><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:70px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:52px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
+      <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
     </tr>`;
   }).join('');
 
+  /* Les travaux supplémentaires vivent dans leur propre table et ont leur
+     circuit : on les chiffre ici, on ne les invente ni ne les efface. */
   const travaux = (ctx.travaux||[]).map(t=>{
     const manquant = t.statut !== 'chiffre';
     return `<tr class="${manquant?'p-sans-prix':''}">
       <td>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></td>
       <td class="num">1 u</td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" style="width:100px; text-align:right;" onchange="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+      <td></td>
     </tr>`;
   }).join('');
 
-  if(!rows && !travaux) return '<div class="empty">Ce bon de commande ne porte aucune ligne à chiffrer.</div>';
-
   return `<table class="lignes-table" style="margin-top:8px;">
-    <tr><th>Désignation</th><th class="num">Qté</th><th class="num">Prix U. HT</th></tr>
-    ${rows}
-    ${travaux? `<tr class="p-chapitre"><td colspan="3">Travaux supplémentaires</td></tr>${travaux}`:''}
+    <tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr>
+    ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
+    ${travaux? `<tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}`:''}
   </table>
-  <button class="btn primary" style="margin-top:10px;" onclick="enregistrerChiffrageDirecteur()">💾 Enregistrer les prix</button>`;
+  <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+    <button type="button" class="btn small" onclick="ajouterLigneDirecteur('ligne')">+ Ligne</button>
+    <button type="button" class="btn small" onclick="ajouterLigneDirecteur('chapitre')">+ Chapitre</button>
+    <button type="button" class="btn small" onclick="ajouterLigneDirecteur('commentaire')">+ Commentaire</button>
+  </div>
+  <div class="totals-box" id="validationDirecteurTotal" style="margin-top:10px;">${totalChiffrageHTML(ctx)}</div>`;
+}
+
+/** Une valeur change : l'aperçu et le total suivent, les champs ne bougent pas. */
+function majLigneDirecteur(index, champ, valeur){
+  if(!validationDirecteurCtx) return;
+  const ligne = validationDirecteurCtx.lignes[index];
+  if(!ligne) return;
+  ligne[champ] = (champ === 'designation' || champ === 'unite')
+    ? valeur
+    : (parseFloat(String(valeur).replace(',', '.')) || 0);
+  rafraichirChiffrageDirecteur();
+}
+
+/** La structure change : le tableau se refait, le focus part sur la nouveauté. */
+function ajouterLigneDirecteur(type){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  ctx.lignes.push(type === 'ligne'
+    ? { type:'ligne', designation:'', qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut() }
+    : { type, designation:'' });
+  renderValidationDirecteur();
+}
+
+function supprimerLigneDirecteur(index){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  ctx.lignes.splice(index, 1);
+  renderValidationDirecteur();
+}
+
+/** Le total de ce qui est saisi à l'instant, lignes et travaux confondus. */
+function totalChiffrageHTML(ctx){
+  return totalsBoxInnerHTML(computeTotalsAvecRemise(
+    window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut()), 0
+  ));
 }
 
 function comptesRendusHTML(ctx){
@@ -5651,29 +5913,75 @@ function renderValidationDirecteur(){
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
   if(!b) return;
 
-  const lignesDoc = window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut());
-  const blocages = blocagesDirecteur(b, ctx);
-
+  /* L'ordre suit celui du travail : ce qui a été commandé et ce que le terrain
+     a ajouté, ce qu'il en a dit, puis les prix. Ce qui bloque et le bouton
+     vivent dans le pied, toujours visible. */
+  /* Ce qu'on fait ici, c'est saisir des prix. Le tableau est donc le sujet, et
+     la pièce d'origine — devis ou bon de commande — s'ouvre à côté quand on
+     veut la consulter. Rendre la pré-facture elle-même n'apprenait rien : on
+     la regarde une fois émise, pas pendant qu'on la chiffre. */
   document.getElementById('validationDirecteurCorps').innerHTML = `
-    ${blocagesDirecteurHTML(blocages)}
-    <label class="bc-tache-row" style="margin:12px 0;">
-      <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
-      <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
-    </label>
-    <div class="print-preview">${renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix, lignesDoc)}</div>
-    <div class="section-title" style="margin-top:18px;">💶 Chiffrage — chaque ligne au bon prix</div>
-    ${chiffrageDirecteurHTML(ctx)}
-    <div class="section-title" style="margin-top:18px;">💬 Comptes rendus du terrain</div>
-    ${comptesRendusHTML(ctx)}
+    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+      ${referencesPrefactureHTML(ctx, b)}
+      <label class="bc-tache-row" style="margin:0;">
+        <input type="checkbox" ${ctx.avecPrix?'checked':''} ${ctx.prixVisibles?'':'disabled'} onchange="toggleValidationDirecteurPrix(this.checked)">
+        <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
+      </label>
+    </div>
+    <div class="pf-colonnes">
+      ${ctx.reference? `<div class="print-preview pf-reference">${referenceDocumentHTML(ctx, b)}</div>` : ''}
+      <div class="pf-travail">
+        <div class="section-title" style="margin-top:0;">💶 Les prix — chaque poste, commandé ou ajouté</div>
+        ${chiffrageDirecteurHTML(ctx)}
+        <div class="section-title" style="margin-top:18px;">💬 Ce que le terrain a rapporté</div>
+        ${comptesRendusHTML(ctx)}
+      </div>
+    </div>
   `;
-  majBoutonValidationDirecteur(blocages.length === 0);
+  rafraichirChiffrageDirecteur();
 }
 
-function majPrixLigneDirecteur(index, valeur){
+/** Les pièces consultables : le bon toujours, le devis s'il y en a un. */
+function referencesPrefactureHTML(ctx, b){
+  const devis = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
+  const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${cle}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
+  return `<div style="display:flex; gap:6px; flex-wrap:wrap;">
+    <span class="card-sub" style="align-self:center;">Consulter :</span>
+    ${bouton('bonCommande', '📄 Bon de commande')}
+    ${devis? bouton('devis', `📄 Devis ${esc(devis.numero||'')}`) : ''}
+  </div>`;
+}
+
+function referenceDocumentHTML(ctx, b){
+  if(ctx.reference === 'devis' && b.devisId) return renderPrintDoc('devis', b.devisId, !ctx.avecPrix);
+  return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
+}
+
+/* Un second clic referme : la référence est une aide, pas un décor permanent —
+   refermée, le tableau reprend toute la largeur. */
+function basculerReferencePrefacture(cle){
   if(!validationDirecteurCtx) return;
-  const ligne = validationDirecteurCtx.lignes[index];
-  if(!ligne) return;
-  ligne.prixUnitaire = parseFloat(String(valeur).replace(',', '.')) || 0;
+  validationDirecteurCtx.reference = validationDirecteurCtx.reference === cle ? null : cle;
+  renderValidationDirecteur();
+}
+
+/* Redessine ce qui dépend des prix, et **seulement** cela : les champs de
+   saisie ne sont pas reconstruits, donc le focus et le curseur ne bougent pas
+   pendant la frappe. */
+function rafraichirChiffrageDirecteur(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return;
+
+  const total = document.getElementById('validationDirecteurTotal');
+  if(total) total.innerHTML = totalChiffrageHTML(ctx);
+
+  const blocages = blocagesDirecteur(b, ctx);
+  const zone = document.getElementById('validationDirecteurBlocages');
+  if(zone) zone.innerHTML = blocagesDirecteurHTML(blocages, ctx);
+
+  majBoutonValidationDirecteur(blocages.length === 0 && ctx.peutValider);
 }
 
 function majPrixTravailDirecteur(id, valeur){
@@ -5682,15 +5990,17 @@ function majPrixTravailDirecteur(id, valeur){
   if(!travail) return;
   travail.prix_vente_ht = parseFloat(String(valeur).replace(',', '.')) || 0;
   travail.statut = 'chiffre';
+  rafraichirChiffrageDirecteur();
 }
 
 /* Les prix sont enregistrés avant la validation, jamais en même temps : si un
-   enregistrement échoue, le directeur doit le savoir sans avoir rien validé. */
-async function enregistrerChiffrageDirecteur(){
+   enregistrement échoue, le directeur doit le savoir sans avoir rien validé.
+   Renvoie vrai si tout est passé — l'appelant décide de la suite. */
+async function enregistrerChiffrageDirecteur(silencieux){
   const ctx = validationDirecteurCtx;
-  if(!ctx) return;
+  if(!ctx) return false;
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
-  if(!b) return;
+  if(!b) return false;
 
   try{
     for(const t of ctx.travaux){
@@ -5700,31 +6010,42 @@ async function enregistrerChiffrageDirecteur(){
     b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
     b.montant = computeTotals(b.lignes).ht;
     const r = await stSet('bonCommande:'+b.id, b);
-    if(!r){ showToast(saveFailedMessage()); return; }
+    if(!r){ showToast(saveFailedMessage()); return false; }
 
     ctx.travaux = await window.listTravauxSupplementaires(ctx.bcId);
     renderValidationDirecteur();
-    showToast('Prix enregistrés.', 'success');
+    if(!silencieux) showToast('Prix enregistrés.', 'success');
+    return true;
   }catch(err){
     console.error('Enregistrement du chiffrage refusé', err);
     showToast(err.message || "Enregistrement impossible.");
+    return false;
   }
 }
 
+/* Un seul geste pour l'utilisateur : enregistrer fait partie de valider. Les
+   deux restent deux appels, pour qu'un échec d'enregistrement n'ait jamais
+   l'air d'une validation — et le message dit lequel des deux a échoué. */
 async function confirmerValidationDirecteur(){
   const ctx = validationDirecteurCtx;
   if(!ctx) return;
+
+  const enregistre = await enregistrerChiffrageDirecteur(true);
+  if(!enregistre){
+    showToast("Les prix n'ont pas pu être enregistrés : rien n'a été validé.");
+    return;
+  }
 
   try{
     await window.validerChiffrage(ctx.bcId);
     await loadAll();
     closeValidationDirecteurModal();
     renderTab();
-    showToast('Chiffrage validé — le bon passe à la facturation.', 'success');
+    showToast('Pré-facture validée — le bon passe à « À facturer ».', 'success', 3000);
   }catch(err){
     // Le motif vient de la base : le montrer, plutôt qu'un message générique
     console.error('Validation directeur refusée', err);
-    showToast(err.message || "Validation refusée.");
+    showToast('Prix enregistrés, mais validation refusée : ' + (err.message || 'motif inconnu'));
   }
 }
 function bcMetiersChecklistHTML(b){
@@ -8689,7 +9010,6 @@ const REGLAGES_GROUPES = [
   ]},
   { titre:'Référentiels', items:[
     {id:'travaux', label:'Travaux & unités', icone:'🛠️', desc:'Métiers et unités'},
-    {id:'articles', label:'Articles', icone:'📦', desc:'Catalogue de prix'},
     {id:'intervenants', label:'Intervenants', icone:'🦺', desc:'Conducteurs, techniciens, sous-traitants'},
     {id:'rh', label:'RH', icone:'🧑‍🔧', desc:'Seuils d\'alerte'},
     {id:'vehicules', label:'Véhicules', icone:'🚚', desc:'Seuils d\'alerte'},
@@ -8716,7 +9036,6 @@ function renderReglagesOnglet(){
     case 'documents':     return renderReglagesDocumentsSection();
     case 'numerotation':  return renderNumerotationSection();
     case 'travaux':       return renderMetiersSection() + renderUnitesSection();
-    case 'articles':      return renderArticlesSection();
     case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection();
     case 'rh':            return renderSeuilsSection('rh');
     case 'vehicules':     return renderSeuilsSection('vehicules');
@@ -12933,64 +13252,366 @@ function technicienFilterOptions(current, allLabel){
   }).join('');
 }
 
-function renderArticlesSection(){
-  const list = state.articles.filter(a=>a.societeId===state.societeId);
+/* ---------- Catalogue d'articles ----------
+   Le catalogue ne vit pas en mémoire, contrairement aux autres collections :
+   un millier de références alourdiraient une ouverture qui télécharge déjà
+   dix-sept tables entières, alors qu'on n'en consulte qu'une poignée à la
+   fois. Chaque écran interroge donc la base, et `state.catalogue` ne garde que
+   la page affichée. */
+function catalogueEtat(){
+  if(!state.catalogue){
+    state.catalogue = { recherche:'', actif:'true', type:'', famille:'', page:1,
+      articles:[], total:0, pages:1, familles:[], chargement:true, edition:null, import:null };
+  }
+  return state.catalogue;
+}
+
+function renderCatalogue(){
+  const c = catalogueEtat();
+  // Le rendu est synchrone, les données ne le sont pas : on demande la page
+  // puis on redessine la zone, plutôt que d'afficher un écran vide sans rien dire.
+  if(c.chargement) setTimeout(rafraichirCatalogue, 0);
+
+  const peutEcrire = !window.autorise || window.autorise('articles','modifier');
   return `
-    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
-      <span>Articles &amp; prestations</span>
-      <button class="btn small primary" onclick="openForm('article')">+ Nouvel article</button>
+    <div class="page-head"><h1>Catalogue</h1>
+      ${peutEcrire && !c.edition && !c.import? `<div style="display:flex; gap:8px;">
+        <button class="btn" onclick="ouvrirImportCatalogue()">📥 Importer un fichier</button>
+        <button class="btn primary" onclick="ouvrirArticleCatalogue(null)">+ Nouvel article</button>
+      </div>`:''}
     </div>
-    <div id="formZoneArticle">${state.formOpen.article? articleForm() : ''}</div>
-    ${list.map(a=>`
-      <div class="card"><div class="card-row">
-        <div><div class="card-title">${esc(a.designation)}</div><div class="card-sub numref">${esc(a.code)}${a.unite? ' · '+esc(a.unite):''}</div></div>
-        <div class="amount" style="text-align:right;">${money(a.prixUnitaire)}<div style="color:var(--text-dim); font-weight:400; font-size:11px; font-family:'Inter',sans-serif;">HT · TVA ${a.tva}%</div></div>
-      </div>
-      <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('article','${a.id}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('article','${a.id}')">Supprimer</button>
-      </div></div>`).join('') || '<div class="empty">Aucun article enregistré pour cette société.</div>'}
+    <div id="catalogueZone">${c.import? importCatalogueHTML(c) : c.edition? articleCatalogueFormHTML(c) : catalogueListeHTML(c)}</div>
   `;
 }
-const UNITES = ['u','h','forfait','m','m²','m³','ml','jour'];
-function uniteOptions(current){
-  const opts = UNITES.slice();
-  if(current && !opts.includes(current)) opts.unshift(current);
-  return opts.map(v=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
+
+async function rafraichirCatalogue(){
+  const c = catalogueEtat();
+  try{
+    const [page, familles] = await Promise.all([
+      window.chercherCatalogue({
+        recherche: c.recherche,
+        actif: c.actif === '' ? null : c.actif === 'true',
+        typeArticle: c.type || null,
+        famille: c.famille || null,
+        page: c.page,
+      }),
+      c.familles.length? Promise.resolve(c.familles) : window.famillesCatalogue(),
+    ]);
+    c.articles = page.articles;
+    c.total = page.total;
+    c.pages = page.pages;
+    c.familles = familles;
+    c.chargement = false;
+  }catch(err){
+    console.error('Catalogue indisponible', err);
+    c.chargement = false;
+    c.erreur = err && err.message ? err.message : 'erreur inconnue';
+  }
+  if(state.tab === 'catalogue') renderTab();
 }
-function articleForm(){
-  const e = state.editing;
+
+function relancerCatalogue(champ, valeur){
+  const c = catalogueEtat();
+  c[champ] = valeur;
+  if(champ !== 'page') c.page = 1;
+  c.chargement = true;
+  renderTab();
+}
+
+/* La frappe ne déclenche pas une requête par caractère : on attend que la main
+   s'arrête. 250 ms, c'est le temps d'une hésitation, pas d'une attente. */
+let catalogueMinuteur = null;
+function chercherDansCatalogue(valeur){
+  const c = catalogueEtat();
+  c.recherche = valeur;
+  clearTimeout(catalogueMinuteur);
+  catalogueMinuteur = setTimeout(()=>{ c.page = 1; c.chargement = true; renderTab(); }, 250);
+}
+
+function catalogueListeHTML(c){
+  if(c.erreur) return `<div class="empty">Catalogue indisponible : ${esc(c.erreur)}</div>`;
+
+  const peutEcrire = !window.autorise || window.autorise('articles','modifier');
+  const filtres = `
+    <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+      <input type="text" style="flex:1; min-width:220px;" value="${esc(c.recherche)}" placeholder="Rechercher : code ou désignation…" oninput="chercherDansCatalogue(this.value)">
+      <select style="width:auto;" onchange="relancerCatalogue('actif', this.value)">
+        <option value="true" ${c.actif==='true'?'selected':''}>Actifs</option>
+        <option value="false" ${c.actif==='false'?'selected':''}>Retirés</option>
+        <option value="" ${c.actif===''?'selected':''}>Tous</option>
+      </select>
+      <select style="width:auto;" onchange="relancerCatalogue('type', this.value)">
+        <option value="" ${!c.type?'selected':''}>Tous types</option>
+        <option value="service" ${c.type==='service'?'selected':''}>Prestations</option>
+        <option value="bien" ${c.type==='bien'?'selected':''}>Biens</option>
+      </select>
+      <select style="width:auto;" onchange="relancerCatalogue('famille', this.value)">
+        <option value="" ${!c.famille?'selected':''}>Toutes familles</option>
+        ${c.familles.map(f=>`<option value="${esc(f)}" ${c.famille===f?'selected':''}>${esc(f)}</option>`).join('')}
+      </select>
+    </div>`;
+
+  if(c.chargement) return filtres + '<div class="empty">Chargement du catalogue…</div>';
+  if(!c.articles.length) return filtres + `<div class="empty">${c.recherche||c.type||c.famille? 'Aucun article ne correspond.' : 'Le catalogue est vide. Importez un fichier ou créez un premier article.'}</div>`;
+
+  const lignes = c.articles.map(a=>`
+    <tr${a.actif? '' : ' style="opacity:.55;"'}>
+      <td><span class="numref">${esc(a.code)}</span></td>
+      <td>${esc(a.designation)}${a.description? `<div class="card-sub" style="white-space:pre-wrap;">${esc(a.description.slice(0,120))}${a.description.length>120?'…':''}</div>`:''}</td>
+      <td>${esc(a.famille)}</td>
+      <td>${a.typeArticle==='bien'?'Bien':'Prestation'}</td>
+      <td class="num">${esc(a.unite)}</td>
+      <td class="num">${money(a.prixUnitaire)}</td>
+      <td class="num">${a.tva}%</td>
+      <td style="white-space:nowrap;">
+        ${peutEcrire? `<button class="btn small" onclick="ouvrirArticleCatalogue('${a.id}')">Modifier</button>
+        ${a.actif
+          ? `<button class="btn small danger" onclick="retirerDuCatalogue('${a.id}')" title="Retirer du catalogue sans l'effacer : des documents citent ce code">Retirer</button>`
+          : `<button class="btn small" onclick="remettreAuCatalogue('${a.id}')">Remettre</button>`}`
+        : ''}
+      </td>
+    </tr>`).join('');
+
+  const pagination = c.pages > 1 ? `
+    <div style="display:flex; gap:8px; align-items:center; justify-content:center; margin-top:14px;">
+      <button class="btn small" ${c.page<=1?'disabled':''} onclick="relancerCatalogue('page', ${c.page-1})">← Précédent</button>
+      <span class="card-sub">Page ${c.page} sur ${c.pages}</span>
+      <button class="btn small" ${c.page>=c.pages?'disabled':''} onclick="relancerCatalogue('page', ${c.page+1})">Suivant →</button>
+    </div>` : '';
+
+  return filtres + `
+    <div class="card-sub" style="margin-bottom:8px;">${c.total} article${c.total>1?'s':''}</div>
+    <table class="lignes-table" style="background:#fff;">
+      <thead><tr><th style="width:14%;">Code</th><th>Désignation</th><th style="width:12%;">Famille</th><th style="width:10%;">Type</th><th class="num" style="width:8%;">Unité</th><th class="num" style="width:10%;">Prix HT</th><th class="num" style="width:7%;">TVA</th><th style="width:14%;"></th></tr></thead>
+      <tbody>${lignes}</tbody>
+    </table>${pagination}`;
+}
+
+function ouvrirArticleCatalogue(id){
+  const c = catalogueEtat();
+  const existant = id ? c.articles.find(a=>a.id===id) : null;
+  c.edition = existant
+    ? { ...existant }
+    : { id:null, code:'', designation:'', description:'', unite:'u', prixUnitaire:0, prixAchat:null,
+        tva: tvaDefaut(), typeArticle:'service', famille:'', actif:true, gereEnStock:false };
+  renderTab();
+}
+
+function fermerArticleCatalogue(){
+  catalogueEtat().edition = null;
+  renderTab();
+}
+
+function majArticleCatalogue(champ, valeur){
+  const e = catalogueEtat().edition;
+  if(!e) return;
+  e[champ] = valeur;
+}
+
+function articleCatalogueFormHTML(c){
+  const e = c.edition;
   return `
   <div class="form-panel">
-    <h3>${e.id?"Modifier l'article":'Nouvel article'}</h3>
+    <h3>${e.id? "Modifier l'article" : 'Nouvel article'}</h3>
     <div class="field-grid">
-      <div class="field"><label>Code article</label><input type="text" id="a_code" value="${esc(e.code)}" placeholder="PLB-001"></div>
-      <div class="field"><label>Unité</label><select id="a_unite">${uniteOptions(e.unite)}</select></div>
-      <div class="field full"><label>Désignation</label><input type="text" id="a_designation" value="${esc(e.designation)}"></div>
-      <div class="field"><label>Prix unitaire HT</label><input type="number" step="0.01" id="a_prix" value="${e.prixUnitaire||''}"></div>
-      <div class="field"><label>TVA par défaut</label><select id="a_tva">${optionsTvaHTML(e.tva)}</select></div>
+      <div class="field"><label>Code article</label><input type="text" id="cat_code" value="${esc(e.code)}" placeholder="PLB-001" oninput="majArticleCatalogue('code', this.value)"></div>
+      <div class="field"><label>Famille</label><input type="text" id="cat_famille" value="${esc(e.famille)}" list="famillesCatalogue" oninput="majArticleCatalogue('famille', this.value)">
+        <datalist id="famillesCatalogue">${c.familles.map(f=>`<option value="${esc(f)}">`).join('')}</datalist></div>
+      <div class="field full"><label>Désignation</label><input type="text" id="cat_designation" value="${esc(e.designation)}" oninput="majArticleCatalogue('designation', this.value)"></div>
+      <div class="field full"><label>Description</label><textarea id="cat_description" style="min-height:70px;" oninput="majArticleCatalogue('description', this.value)">${esc(e.description)}</textarea>
+        <div class="card-sub">Reprise en commentaire de la ligne quand on choisit cet article.</div></div>
+      <div class="field"><label>Type</label><select onchange="majArticleCatalogue('typeArticle', this.value)">
+        <option value="service" ${e.typeArticle==='service'?'selected':''}>Prestation</option>
+        <option value="bien" ${e.typeArticle==='bien'?'selected':''}>Bien</option></select></div>
+      <div class="field"><label>Unité</label><select onchange="majArticleCatalogue('unite', this.value)">${uniteOptions(e.unite)}</select></div>
+      <div class="field"><label>Prix de vente HT</label><input type="number" step="0.01" value="${e.prixUnitaire||''}" oninput="majArticleCatalogue('prixUnitaire', parseFloat(this.value)||0)"></div>
+      <div class="field"><label>Prix d'achat</label><input type="number" step="0.0001" value="${e.prixAchat==null?'':e.prixAchat}" oninput="majArticleCatalogue('prixAchat', this.value===''? null : parseFloat(this.value))"></div>
+      <div class="field"><label>TVA</label><select onchange="majArticleCatalogue('tva', parseFloat(this.value))">${optionsTvaHTML(e.tva)}</select></div>
+      <div class="field"><label>&nbsp;</label><label class="bc-tache-row" style="margin:0;"><input type="checkbox" ${e.gereEnStock?'checked':''} onchange="majArticleCatalogue('gereEnStock', this.checked)"><span>Géré en stock</span></label></div>
     </div>
     <div style="display:flex; gap:10px;">
-      <button class="btn primary" onclick="saveArticle()">Enregistrer</button>
-      <button class="btn ghost" onclick="closeForm('article')">Annuler</button>
+      <button class="btn primary" onclick="enregistrerArticleCatalogue()">Enregistrer</button>
+      <button class="btn ghost" onclick="fermerArticleCatalogue()">Annuler</button>
     </div>
   </div>`;
 }
-async function saveArticle(){
-  const e = state.editing;
-  const code = document.getElementById('a_code').value.trim();
-  const designation = document.getElementById('a_designation').value.trim();
-  if(!code || !designation){ alert('Le code et la désignation sont requis.'); return; }
-  const id = e.id || uid();
-  const obj = { id, societeId: state.societeId, code, designation,
-    unite: document.getElementById('a_unite').value,
-    prixUnitaire: parseFloat(document.getElementById('a_prix').value)||0,
-    tva: parseFloat(document.getElementById('a_tva').value)||10 };
-  const r = await stSet('article:'+id, obj);
-  if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
-  closeForm('article');
+
+async function enregistrerArticleCatalogue(){
+  const c = catalogueEtat();
+  const e = c.edition;
+  if(!e) return;
+  if(!e.code.trim() || !e.designation.trim()){
+    showToast('Le code et la désignation sont requis.');
+    return;
+  }
+  try{
+    await window.enregistrerArticle(e.id, e);
+    c.edition = null;
+    c.familles = [];
+    c.chargement = true;
+    renderTab();
+    showToast('Article enregistré.', 'success');
+  }catch(err){
+    console.error('Enregistrement refusé', err);
+    // Le motif vient de la base : un code en double s'y lit noir sur blanc.
+    showToast(/duplicate|unique/i.test(err.message||'')
+      ? `Le code « ${e.code} » existe déjà dans le catalogue.`
+      : (err.message || 'Enregistrement impossible.'));
+  }
 }
+
+async function retirerDuCatalogue(id){
+  if(!confirm("Retirer cet article du catalogue ?\n\nIl reste cité par les documents qui l'emploient, mais ne sera plus proposé à la saisie.")) return;
+  try{
+    await window.retirerArticle(id);
+    catalogueEtat().chargement = true;
+    renderTab();
+  }catch(err){ showToast(err.message || 'Retrait impossible.'); }
+}
+
+/* ---------- Import d'un catalogue ----------
+   Le fichier vient d'un logiciel de gestion : point-virgule, Windows-1252,
+   guillemets non échappés. Sa lecture vit dans `regles-import-articles.ts`,
+   sans base ni DOM ; ici on ne fait que la déclencher, montrer ce qu'elle a
+   compris, et n'écrire qu'après accord. */
+function ouvrirImportCatalogue(){
+  catalogueEtat().import = { etape:'fichier', nom:'', rapport:null, apercu:null, resultat:null, enCours:false };
+  renderTab();
+}
+
+function fermerImportCatalogue(){
+  const c = catalogueEtat();
+  c.import = null;
+  c.chargement = true;
+  c.familles = [];
+  renderTab();
+}
+
+async function lireFichierCatalogue(fichier){
+  const c = catalogueEtat();
+  if(!fichier || !c.import) return;
+  c.import.nom = fichier.name;
+  c.import.enCours = true;
+  renderTab();
+
+  try{
+    const octets = await fichier.arrayBuffer();
+    const rapport = window.lireExportArticles(octets);
+    const apercu = rapport.articles.length
+      ? await window.previsualiserImport(rapport.articles)
+      : { aCreer:0, aMettreAJour:0 };
+    c.import.rapport = rapport;
+    c.import.apercu = apercu;
+    c.import.etape = 'apercu';
+  }catch(err){
+    console.error('Lecture du fichier impossible', err);
+    c.import.erreur = err && err.message ? err.message : 'fichier illisible';
+  }
+  c.import.enCours = false;
+  renderTab();
+}
+
+async function lancerImportCatalogue(){
+  const c = catalogueEtat();
+  const i = c.import;
+  if(!i || !i.rapport) return;
+  i.enCours = true;
+  renderTab();
+  try{
+    i.resultat = await window.importerCatalogue(i.rapport.articles);
+    i.etape = 'termine';
+  }catch(err){
+    console.error('Import refusé', err);
+    i.erreur = err && err.message ? err.message : 'import refusé';
+  }
+  i.enCours = false;
+  renderTab();
+}
+
+function telechargerRejetsCatalogue(){
+  const i = catalogueEtat().import;
+  if(!i || !i.rapport) return;
+  const lignes = [...i.rapport.rejets];
+  // Les signalements ne sont pas des rejets, mais ils s'expliquent de la même
+  // façon : on les joint pour n'avoir qu'un fichier à relire.
+  i.rapport.signalements.forEach(sg => lignes.push({ ligne:sg.ligne, motif:sg.motif, contenu:'article '+sg.code }));
+  lignes.sort((a,b)=>a.ligne-b.ligne);
+  const csv = window.rapportRejetsCsv(lignes);
+  // Windows-1252 pour être relu par le même tableur que le fichier d'origine.
+  const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
+  telechargerBlob(blob, 'import-articles-rapport');
+}
+
+function importCatalogueHTML(c){
+  const i = c.import;
+  const retour = `<button class="btn ghost" onclick="fermerImportCatalogue()">Retour au catalogue</button>`;
+
+  if(i.erreur) return `<div class="form-panel">
+    <div class="wf-banner alerte"><b>Import impossible</b><div>${esc(i.erreur)}</div></div>
+    <div style="margin-top:12px;">${retour}</div></div>`;
+
+  if(i.enCours) return `<div class="form-panel"><div class="empty">Traitement de ${esc(i.nom||'votre fichier')}…</div></div>`;
+
+  if(i.etape === 'fichier') return `<div class="form-panel">
+    <h3>Importer un catalogue</h3>
+    <p class="card-sub">Fichier exporté du logiciel de gestion : colonnes séparées par des points-virgules, encodage Windows‑1252. Rien n'est écrit avant votre accord.</p>
+    <div style="margin:16px 0;">
+      <input type="file" accept=".csv,.txt,text/csv" onchange="lireFichierCatalogue(this.files[0])">
+    </div>
+    ${retour}
+  </div>`;
+
+  if(i.etape === 'apercu'){
+    const r = i.rapport;
+    const aEcrire = r.articles.length;
+    return `<div class="form-panel">
+      <h3>${esc(i.nom)}</h3>
+      <div style="display:flex; gap:18px; flex-wrap:wrap; margin:14px 0;">
+        <div><div class="hero-stat-value">${i.apercu.aCreer}</div><div class="card-sub">à créer</div></div>
+        <div><div class="hero-stat-value">${i.apercu.aMettreAJour}</div><div class="card-sub">à mettre à jour</div></div>
+        <div><div class="hero-stat-value" style="color:${r.rejets.length?'var(--danger)':'inherit'};">${r.rejets.length}</div><div class="card-sub">rejetés</div></div>
+        <div><div class="hero-stat-value" style="color:${r.signalements.length?'#C24E00':'inherit'};">${r.signalements.length}</div><div class="card-sub">signalés</div></div>
+      </div>
+      ${r.rejets.length? `<div class="wf-banner alerte">
+        <div style="font-weight:700; margin-bottom:6px;">Lignes écartées</div>
+        <ul style="margin:0; padding-left:18px;">${r.rejets.slice(0,8).map(x=>`<li>Ligne ${x.ligne} — ${esc(x.motif)}</li>`).join('')}</ul>
+        ${r.rejets.length>8? `<div class="card-sub" style="margin-top:6px;">…et ${r.rejets.length-8} autres, dans le rapport.</div>`:''}
+      </div>`:''}
+      ${r.signalements.length? `<div class="wf-banner" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Décidé à la place du fichier</div>
+        <ul style="margin:0; padding-left:18px;">${r.signalements.slice(0,6).map(x=>`<li>Ligne ${x.ligne} (${esc(x.code)}) — ${esc(x.motif)}</li>`).join('')}</ul>
+        ${r.signalements.length>6? `<div class="card-sub" style="margin-top:6px;">…et ${r.signalements.length-6} autres.</div>`:''}
+      </div>`:''}
+      <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+        <button class="btn primary" ${aEcrire?'':'disabled'} onclick="lancerImportCatalogue()">Importer ${aEcrire} article${aEcrire>1?'s':''}</button>
+        ${(r.rejets.length||r.signalements.length)? `<button class="btn" onclick="telechargerRejetsCatalogue()">📄 Rapport</button>`:''}
+        ${retour}
+      </div>
+    </div>`;
+  }
+
+  const res = i.resultat || { crees:0, misAJour:0, echecs:[] };
+  return `<div class="form-panel">
+    <div class="wf-banner ok"><b>Import terminé</b> — ${res.crees} créé${res.crees>1?'s':''}, ${res.misAJour} mis à jour.</div>
+    ${res.echecs.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+      <div style="font-weight:700;">${res.echecs.length} lot${res.echecs.length>1?'s':''} refusé${res.echecs.length>1?'s':''}</div>
+      <ul style="margin:0; padding-left:18px;">${res.echecs.map(e=>`<li>${esc(e.motif)} <span class="card-sub">(${e.codes.length} article(s))</span></li>`).join('')}</ul>
+    </div>`:''}
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      ${(i.rapport.rejets.length||i.rapport.signalements.length)? `<button class="btn" onclick="telechargerRejetsCatalogue()">📄 Rapport</button>`:''}
+      ${retour}
+    </div>
+  </div>`;
+}
+
+async function remettreAuCatalogue(id){
+  try{
+    await window.reactiverArticle(id);
+    catalogueEtat().chargement = true;
+    renderTab();
+  }catch(err){ showToast(err.message || 'Remise impossible.'); }
+}
+
 
 /* ---------- Documents de la société (Kbis, URSSAF, assurance…) ---------- */
 function docStatus(dateValidite){
@@ -13083,6 +13704,10 @@ async function saveDocument(){
     document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
     const autorises = navPourRole().map(n=>n.id);
     if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
+    /* Dans le try : le pont refuse de servir une collection tronquée, et cette
+       erreur doit atteindre l'écran. Hors du try, elle partait en promesse
+       rejetée — console seulement — et l'application s'affichait à moitié. */
+    await loadAll();
   }catch(e){
     console.error('Couche données indisponible', e);
     document.body.innerHTML = '<div style="max-width:640px; margin:56px auto; padding:24px; border:1px solid #E2E6ED; border-radius:12px; font:14px/1.6 system-ui; color:#1F2937;">'
@@ -13096,6 +13721,8 @@ async function saveDocument(){
   // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
   pousserHistorique(true);
   renderShell();
+  // La préférence d'affichage du menu, relue à l'ouverture de la session.
+  appliquerEpinglageMenu();
   renderTab();
   if(!hasRealStorage){
     const foot = document.getElementById('sidebarFoot');

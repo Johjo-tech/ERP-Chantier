@@ -13,6 +13,7 @@ import { getCurrentSession } from "./api/client";
    comme des globales, et elles arrivaient jusqu'ici par balise CDN. */
 import "./integrations/librairies-documents";
 import { injectGlobalFunctions, viderCache } from "./integrations/html-adapter";
+import { injecterCatalogue } from "./integrations/catalogue";
 import { protectRoute, watchAuthState } from "./integrations/auth-guard";
 import {
   chargerIntervenants,
@@ -38,6 +39,7 @@ async function init() {
 
     injectGlobalFunctions();
     injecterSession();
+    injecterCatalogue();
 
     const session = await getCurrentSession();
     setIdentite(session?.user.email ?? "");

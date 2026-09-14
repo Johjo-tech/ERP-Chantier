@@ -81,8 +81,26 @@ export interface LigneLegacy {
   unite?: string;
   prixUnitaire?: number;
   tva?: number;
+  /** Code de l'article du catalogue d'où la ligne a été remplie. */
+  articleReference?: string;
 }
 
+/**
+ * La référence d'article traverse enfin le pont.
+ *
+ * `article_reference` existe sur les trois tables de lignes et l'écran la
+ * cherchait déjà — mais elle n'était ni écrite ni relue : **aucune des 922
+ * lignes de production n'en portait**. Choisir un article était sans effet
+ * durable.
+ *
+ * `unite_code` et `tva_categorie` restent hors d'ici, à dessein. Elles sont
+ * **dérivées** de `unite` et de `tva`, et ceux qui s'en servent les recalculent
+ * déjà à l'usage — `l.uniteCode || codeUnite(l.unite)` pour la facture
+ * électronique, `categorieTva(taux, explicite)` pour la ventilation. Les
+ * écrire ici n'ajouterait aucune information, et ferait croire à une
+ * modification là où rien n'a changé : une facture émise, dont les lignes sont
+ * figées, deviendrait impossible à réenregistrer.
+ */
 export function ligneVersDb(ligne: LigneLegacy, position: number) {
   return {
     type: (ligne.type as "ligne" | "chapitre" | "commentaire") ?? "ligne",
@@ -92,6 +110,7 @@ export function ligneVersDb(ligne: LigneLegacy, position: number) {
     unite: ligne.unite,
     prix_unitaire: ligne.prixUnitaire,
     tva: ligne.tva,
+    article_reference: ligne.articleReference || null,
     position,
   };
 }
@@ -105,6 +124,7 @@ export function ligneVersLegacy(row: Record<string, unknown>): LigneLegacy {
     unite: row.unite as string | undefined,
     prixUnitaire: row.prix_unitaire as number | undefined,
     tva: row.tva as number | undefined,
+    articleReference: (row.article_reference as string | undefined) ?? undefined,
   };
 }
 
@@ -390,6 +410,56 @@ export function viderCache() {
   societesChargees = false;
 }
 
+/**
+ * PostgREST plafonne toute réponse — réglage `max_rows`, 1 000 par défaut — et
+ * tronque **sans le dire** : pas d'erreur, pas d'indice dans la réponse. Une
+ * collection coupée donne une application qui a l'air normale mais à qui il
+ * manque les enregistrements les plus récents. On facturerait alors sur des
+ * données incomplètes, et un bon de commande introuvable passerait pour perdu.
+ *
+ * On demande donc le total à part, et on refuse de servir un chargement
+ * partiel. Le comptage exact coûte un parcours de plus ; à l'échelle du
+ * projet il se mesure en millisecondes, et c'est le prix d'un chargement dont
+ * on sait qu'il est entier.
+ *
+ * Le plafond n'est pas lisible depuis le client : on compare ce qu'on reçoit à
+ * ce qui existe, ce qui reste juste quel que soit le réglage.
+ */
+export function refuserSiTronque(
+  source: string,
+  recus: number,
+  total: number | null
+): void {
+  if (total === null || recus >= total) return;
+  throw new Error(
+    `Chargement incomplet : « ${source} » a renvoyé ${recus} enregistrements ` +
+      `sur ${total}. La réponse a été tronquée par le plafond « Max rows » de ` +
+      `l'API Supabase (Dashboard → Settings → API). Relevez-le : afficher des ` +
+      `données partielles fausserait les totaux et masquerait les ` +
+      `enregistrements les plus récents.`
+  );
+}
+
+/**
+ * Faut-il faire naître cette facture brouillon avant de l'émettre ?
+ *
+ * Oui dès qu'on demande un statut émis sans fournir de numéro : la base
+ * refuserait de numéroter une pièce que rien ne facture, et ses lignes ne
+ * peuvent pas arriver dans la même requête.
+ *
+ * Non pour une facture de sous-traitance, qui porte son propre numéro hors
+ * compteur : le trigger la laisse passer telle quelle.
+ */
+export function emissionADifferer(
+  prefixe: string,
+  row: Record<string, unknown>
+): boolean {
+  if (prefixe !== "facture") return false;
+  const statut = row.statut;
+  if (typeof statut !== "string" || statut === "brouillon") return false;
+  return !String(row.numero ?? "").trim();
+}
+
 async function chargerCollection(prefixe: string): Promise<string[]> {
   const collection = COLLECTIONS[prefixe];
   if (!collection) return [];
@@ -403,11 +473,17 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
     ? `*, ${collection.societeVia.table}(societe_id)`
     : "*";
   const source = collection.vueLecture ?? collection.table;
-  const { data, error } = await dyn().from(source).select(select);
+  const { data, error, count } = await dyn()
+    .from(source)
+    .select(select, { count: "exact" });
+  /* Une erreur franche — réseau coupé, RLS qui refuse — dégrade déjà de façon
+     visible : le bandeau « Supabase inaccessible » s'affiche. La troncature,
+     elle, ne se voit nulle part : c'est le seul cas qu'on transforme en refus. */
   if (error) {
     console.error("Chargement de collection impossible", source, error);
     return [];
   }
+  refuserSiTronque(source, (data ?? []).length, count);
 
   const cles: string[] = [];
   const uuidParPrefixe = new Map<Uuid, string>();
@@ -887,7 +963,7 @@ async function attacher(
     enLots([...uuidParPrefixe.keys()]).map((lot) =>
       dyn()
         .from(source)
-        .select("*")
+        .select("*", { count: "exact" })
         .in(enfant.fk, lot)
         .order("position", { ascending: true })
     )
@@ -897,6 +973,11 @@ async function attacher(
   if (refus) {
     console.error("Chargement de table fille impossible", source, refus.error);
     return;
+  }
+  /* Les lignes filles sont bien plus nombreuses que leurs parents : c'est ici
+     que le plafond se heurte en premier. Chaque lot répond pour lui-même. */
+  for (const reponse of reponses) {
+    refuserSiTronque(source, (reponse.data ?? []).length, reponse.count);
   }
   const data = reponses.flatMap((r) => r.data ?? []);
 
@@ -981,6 +1062,15 @@ export async function stSet(
       else if (id) row.legacy_id = id;
     }
 
+    /* Une facture et ses lignes n'arrivent pas dans la même requête : la
+       première crée la pièce, la seconde la garnit. Demander d'emblée un
+       statut émis reviendrait donc à numéroter une facture vide — ce que la
+       base refuse désormais, et ce qui avait produit 55 pièces numérotées sans
+       rien à facturer. On la fait naître brouillon, on pose les lignes, et on
+       applique le statut voulu ensuite. L'écran, lui, n'a rien changé. */
+    const statutVoulu = emissionADifferer(prefixe, row) ? (row.statut as string) : null;
+    if (statutVoulu) row.statut = "brouillon";
+
     const { data, error } = await dyn()
       .from(collection.table)
       .upsert(row)
@@ -988,7 +1078,8 @@ export async function stSet(
       .single();
     if (error) throw error;
 
-    const parentId = (data as Record<string, unknown>).id as Uuid;
+    let data_ = data as Record<string, unknown>;
+    const parentId = data_.id as Uuid;
     uuidParCle.set(cle, parentId);
 
     if (collection.lignes) {
@@ -1024,6 +1115,19 @@ export async function stSet(
       await appliquerWorkflow(parentId, cle, valeur);
     }
 
+    /* Les lignes sont posées : la facture peut être émise. Le numéro est
+       attribué ici, par le trigger, et relu juste après. */
+    if (statutVoulu) {
+      const { data: emise, error: refus } = await dyn()
+        .from(collection.table)
+        .update({ statut: statutVoulu })
+        .eq("id", parentId)
+        .select()
+        .single();
+      if (refus) throw refus;
+      data_ = emise as Record<string, unknown>;
+    }
+
     /* La base ne se contente plus d'accepter ce qu'on lui envoie : elle
        attribue le numéro de facture à l'émission. Garder en cache la valeur
        *émise* laisserait l'écran afficher une facture sans numéro jusqu'au
@@ -1031,7 +1135,7 @@ export async function stSet(
        les champs calculés priment sur ceux qu'on a proposés. */
     cache.set(cle, {
       ...valeur,
-      ...champsCalcules(prefixe, data as Record<string, unknown>),
+      ...champsCalcules(prefixe, data_),
       id,
     });
     return true;
