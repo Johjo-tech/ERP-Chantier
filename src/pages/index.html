@@ -845,6 +845,10 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .bc-numref-duo{ grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .metier-checkbox-list{display:flex; flex-wrap:wrap; gap:8px 16px; background:var(--surface-2); border-radius:10px; padding:10px 12px;}
 .metier-checkbox-item{display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;}
+/* Un métier lu sur un chapitre dit d'où il vient : sans cela, une déduction
+   fausse serait indiscernable d'un clic oublié. */
+.metier-checkbox-item.est-deduit{font-weight:600;}
+.metier-origine{color:var(--text-dim); font-size:11px; font-weight:400; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis;}
 .metier-checkbox-item input{width:auto; margin:0;}
 .address-trio{grid-column:1/-1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px;}
 .field{display:flex; flex-direction:column; gap:3px; margin-bottom:13px;}
@@ -1098,6 +1102,9 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    deux circuits se lisent comme un seul. */
 .wf-bandeau + .wf-bandeau{ margin-top:10px; }
 .wf-metier{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+/* Une tâche que plus aucun métier du bon ne réclame : elle bloque le passage au
+   chiffrage, elle doit donc se voir et s'arbitrer comme les autres. */
+.wf-hors-metier{ color:var(--warning, #B8860B); }
 .wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
 .wf-planifiee{ background:#EEF2F7; color:#4A566E; }
 .wf-realisee{ background:#FFF3E4; color:#9A5B00; }
@@ -3484,6 +3491,41 @@ function refreshLignesUI(){
   const body = document.getElementById('lignesBody');
   if(body) body.innerHTML = ligneRowsHTML(state.editing.lignes);
   refreshRemiseUI();
+  appliquerMetiersDesChapitres();
+}
+
+/**
+ * Les métiers se lisent sur les chapitres du bon, au lieu de se cocher.
+ *
+ * Ne s'exécute que dans le formulaire de bon de commande — la zone n'existe pas
+ * ailleurs. C'est la garde qui empêche les 830 bons déjà en base de se voir
+ * attribuer des métiers, et leur planning de se scinder, à la simple ouverture :
+ * la déduction n'a lieu qu'à la saisie.
+ *
+ * Elle **ajoute** et ne retire jamais : un métier coché à la main survit à
+ * toute relecture des chapitres.
+ */
+function appliquerMetiersDesChapitres(){
+  const zone = document.getElementById('bc_metiersZone');
+  if(!zone || !window.metiersDesChapitres) return;
+
+  const lu = window.metiersDesChapitres(state.editing.lignes, metiersDisponibles());
+  const dejaCoches = getCheckedMetiers('bc');
+  const retenus = [...dejaCoches];
+  for(const m of lu.metiers){
+    if(!retenus.some(c=>window.memeMetier(c, m))) retenus.push(m);
+  }
+
+  const avant = dejaCoches.length;
+  zone.innerHTML = metierCheckboxesHTML('bc', retenus, 'onchange="refreshBCMontantFields()"', lu.origines);
+
+  /* Passer de un à deux métiers scinde la carte du planning en une par métier,
+     chacune avec sa date, son équipe et son montant. Mieux vaut le dire ici que
+     le laisser découvrir au planning. */
+  if(avant <= 1 && retenus.length > 1){
+    showToast(`${retenus.length} métiers lus sur les chapitres — le bon se planifiera en ${retenus.length} interventions.`, 'success', 5000);
+  }
+  refreshBCMontantFields();
 }
 function bcLignesOntDuContenu(lignes){
   return (lignes||[]).some(l=>(l.type||'ligne')==='ligne' && (l.designation || (parseFloat(l.prixUnitaire)||0)>0));
@@ -3535,7 +3577,15 @@ function dropLigne(ev, targetIndex){
 function updateLigne(i,field,val){
   const texteFields = field==='designation' || field==='commentaire' || field==='unite';
   state.editing.lignes[i][field] = texteFields ? val : (parseFloat(val)||0);
-  if(texteFields) return;
+  if(texteFields){
+    /* Le titre d'un chapitre porte le métier : le relire à la frappe évite de
+       le faire cocher. On ne redessine que la zone des métiers — refaire le
+       tableau des lignes ferait perdre le focus à chaque caractère. */
+    if(field==='designation' && (state.editing.lignes[i].type||'ligne')==='chapitre'){
+      appliquerMetiersDesChapitres();
+    }
+    return;
+  }
   refreshTotalsOnly();
 }
 
@@ -6199,7 +6249,7 @@ function bonCommandeForm(){
       <div class="field-grid">
         <div class="field"><label>Conducteur de travaux</label><select id="bc_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
         <div class="field"><label>Nature des travaux</label><input type="text" id="bc_natureTravaux" value="${esc(e.natureTravaux)}" placeholder="Ex : Remise en état logement, Fuite d'eau…"></div>
-        <div class="field full"><label>Métier(s)</label>${metierCheckboxesHTML('bc', e.metiers || (e.metier? [e.metier] : []), 'onchange="refreshBCMontantFields()"')}</div>
+        <div class="field full"><label>Métier(s)</label><div id="bc_metiersZone">${metierCheckboxesHTML('bc', e.metiers || (e.metier? [e.metier] : []), 'onchange="refreshBCMontantFields()"', metiersDesChapitresDuBrouillon(e))}</div></div>
         <div class="field full"><label>Notes</label><input type="text" id="bc_notes" value="${esc(e.notes)}" placeholder="Remarques…"></div>
       </div>
     </div>
@@ -7388,6 +7438,21 @@ async function chargerWorkflowTache(b, dayIso){
          créeraient deux tâches pour un même métier. */
       chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m) });
     }
+
+    /* Une tâche qu'aucun métier déclaré ne réclame — au métier vide, ou à un
+       métier retiré du bon depuis — n'apparaîtrait sous aucun bandeau. Elle
+       resterait pourtant comptée par `bc_passer_pret_a_chiffrer`, qui exige que
+       **toutes** les tâches soient validées : le bon se bloque avant le
+       chiffrage sans que rien ne le dise. C'est ce qui est arrivé à
+       BC-2026-0866. Une tâche qui existe doit toujours être atteignable. */
+    const reclamees = new Set(chargees.map(e => e.tache && e.tache.id));
+    const toutes = await window.listTachesBonCommande(b.id);
+    for(const t of (toutes || [])){
+      if(reclamees.has(t.id)) continue;
+      if(cibles.some(m => window.memeMetier(m, t.metier))) continue;
+      chargees.push({ metier: t.metier || null, tache: t, horsMetier: true });
+    }
+
     wfTaches = chargees;
     renderWorkflowTaches();
   }catch(err){
@@ -7457,6 +7522,7 @@ function bandeauTacheHTML(entree, i){
 
   return `<div class="wf-bandeau">
     ${entree.metier ? `<div class="wf-metier">${esc(metierDisplayLabel(entree.metier))}</div>` : ''}
+    ${entree.horsMetier ? `<div class="wf-metier wf-hors-metier">Hors métier${entree.metier ? '' : ' — tâche sans métier'}</div>` : ''}
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
     ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
     ${histoire.length ? `<div class="wf-meta">${histoire.join('<br>')}</div>` : ''}
@@ -13325,7 +13391,12 @@ function refreshBCMontantFields(){
       const chapterTotals = devisChapterTotals(devis);
       checked.forEach(metier=>{
         if(existingAmounts[metier] == null || existingAmounts[metier] === ''){
-          const chapKey = Object.keys(chapterTotals).find(ch => ch.toLowerCase().includes(metier.toLowerCase()) || metier.toLowerCase().includes(ch.toLowerCase()));
+          /* Même règle que partout ailleurs : le métier se lit sur le titre du
+             chapitre, en mots entiers. L'appariement par sous-chaîne qui vivait
+             ici trouvait « SOL » dans « ISOLATION » et ne connaissait ni les
+             accents ni les fautes de frappe. */
+          const chapKey = Object.keys(chapterTotals).find(ch =>
+            !!window.metierDuChapitre(ch, [metier]));
           if(chapKey) existingAmounts[metier] = chapterTotals[chapKey];
           else sansChapitre.push(metier);
         }
@@ -13335,19 +13406,55 @@ function refreshBCMontantFields(){
   const zone = document.getElementById('bcMontantFieldsZone');
   if(zone) zone.innerHTML = bcMontantFieldsHTML(checked, existingAmounts, previousSimple, sansChapitre);
 }
-function metierCheckboxesHTML(idPrefix, currentMetiers, onChangeAttr){
-  const seen = new Set();
-  const list = state.metiersPerso
+/**
+ * Les métiers proposés à la saisie, pour la société courante.
+ *
+ * La table `metiers` ne suffit pas : KTA n'y déclare que CARRELAGE, PEINTURE et
+ * SOL, alors que ses bons portent aussi PLOMBERIE (49 bons) et ETANCHEITE (47).
+ * Ces deux-là avaient disparu de la liste à cocher, donc impossibles à recocher
+ * — et un chapitre « PLOMBERIE » serait resté lettre morte.
+ */
+function metiersDisponibles(){
+  const declares = state.metiersPerso
     .filter(m=>m.societeId===state.societeId)
-    .filter(m=>{ const key=(m.nom||'').trim().toLowerCase(); if(seen.has(key)) return false; seen.add(key); return true; })
-    .sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+    .map(m=>m.nom);
+  const employes = [];
+  state.bonsCommande.forEach(b=>{
+    if(b.societeId!==state.societeId) return;
+    bcMetiersDuBC(b).forEach(m=>{ if(m) employes.push(m); });
+  });
+  return window.referentielMetiers ? window.referentielMetiers(declares, employes) : declares;
+}
+
+/**
+ * Les chapitres du brouillon, seulement pour dire d'où vient un métier.
+ *
+ * N'ajoute aucun métier : ouvrir un bon ancien qui porte des chapitres ne doit
+ * rien changer à ce qu'il déclare, sinon son planning se scinderait sans que
+ * personne l'ait demandé. Les métiers ne s'ajoutent qu'à la saisie, par
+ * `appliquerMetiersDesChapitres`.
+ */
+function metiersDesChapitresDuBrouillon(e){
+  if(!window.metiersDesChapitres) return null;
+  return window.metiersDesChapitres(e && e.lignes, metiersDisponibles()).origines;
+}
+
+function metierCheckboxesHTML(idPrefix, currentMetiers, onChangeAttr, origines){
+  const list = metiersDisponibles();
   const current = [...new Set(currentMetiers || [])];
   if(!list.length) return '<div class="empty">Aucun métier créé pour l\'instant (Réglages → Métiers).</div>';
-  return `<div class="metier-checkbox-list">${list.map(m=>`
-    <label class="metier-checkbox-item">
-      <input type="checkbox" name="${idPrefix}_metiers" value="${esc(m.nom)}" ${current.includes(m.nom)?'checked':''} ${onChangeAttr||''}>
-      <span>${esc(m.nom)}</span>
-    </label>`).join('')}</div>`;
+  const meme = (a,b)=> window.memeMetier ? window.memeMetier(a,b) : a===b;
+  return `<div class="metier-checkbox-list">${list.map(nom=>{
+    const coche = current.some(c=>meme(c, nom));
+    // Le chapitre qui a produit ce métier, s'il vient d'une lecture du bon.
+    const cle = origines ? Object.keys(origines).find(k=>meme(k, nom)) : null;
+    return `
+    <label class="metier-checkbox-item${cle?' est-deduit':''}"${cle?` title="Lu sur le chapitre « ${esc(origines[cle])} »"`:''}>
+      <input type="checkbox" name="${idPrefix}_metiers" value="${esc(nom)}" ${coche?'checked':''} ${onChangeAttr||''}>
+      <span>${esc(nom)}</span>
+      ${cle?`<small class="metier-origine">← ${esc(origines[cle])}</small>`:''}
+    </label>`;
+  }).join('')}</div>`;
 }
 function getCheckedMetiers(idPrefix){
   const values = Array.from(document.querySelectorAll(`input[name="${idPrefix}_metiers"]:checked`)).map(el=>el.value);

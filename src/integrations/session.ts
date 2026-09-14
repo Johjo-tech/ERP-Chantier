@@ -74,6 +74,12 @@ import {
   messageBlocages,
 } from "@/api/regles-bc";
 import {
+  memeMetier,
+  metierDuChapitre,
+  metiersDesChapitres,
+  referentielMetiers,
+} from "@/api/regles-metiers";
+import {
   badgeOrigine,
   comptesRendusTerrain,
   lignesDocumentDirecteur,
@@ -365,6 +371,13 @@ export function injecterSession() {
   w.tacheDuBonCommande = tacheDuBonCommande;
   w.actionsTache = actionsTache;
   w.actionsFacturation = actionsFacturation;
+  /* Le métier, lu sur les chapitres du bon plutôt que coché. `memeMetier` est
+     la comparaison partagée : l'écran, l'adaptateur et la session doivent en
+     employer une seule, faute de quoi une tâche devient inatteignable. */
+  w.memeMetier = memeMetier;
+  w.metierDuChapitre = metierDuChapitre;
+  w.metiersDesChapitres = metiersDesChapitres;
+  w.referentielMetiers = referentielMetiers;
   // Recherche et filtrage : une seule définition pour tous les écrans
   w.sansAccents = sansAccents;
   w.multiWordMatch = multiWordMatch;
