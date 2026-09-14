@@ -1030,7 +1030,11 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
    contre le bord inférieur. Un document plus long repousse simplement le pied
    après son contenu, ce qui est le comportement voulu. */
-.p-page{ display:flex; flex-direction:column; min-height:269mm; }
+/* La hauteur réservée se lit : une A4, moins les 14 mm de marge de part et
+   d'autre de `#printArea`, moins 5 mm de sûreté. Sans cette marge, le calcul
+   tombait à 297,0 mm pile — mesuré à 297,1 après arrondi des sous-pixels, et
+   html2pdf ajoutait une seconde page entièrement vide. */
+.p-page{ display:flex; flex-direction:column; min-height:calc(297mm - 28mm - 5mm); }
 .p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
