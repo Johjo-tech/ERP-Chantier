@@ -849,6 +849,7 @@ body.has-no-storage-banner #app{ padding-top:42px; }
    fausse serait indiscernable d'un clic oublié. */
 .metier-checkbox-item.est-deduit{font-weight:600;}
 .metier-origine{color:var(--text-dim); font-size:11px; font-weight:400; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis;}
+.metier-lu{margin-top:8px; font-size:12px; color:var(--success, #1E6B37);}
 .metier-checkbox-item input{width:auto; margin:0;}
 .address-trio{grid-column:1/-1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px;}
 .field{display:flex; flex-direction:column; gap:3px; margin-bottom:13px;}
@@ -3518,7 +3519,7 @@ function appliquerMetiersDesChapitres(options){
   }
 
   const avant = dejaCoches.length;
-  zone.innerHTML = metierCheckboxesHTML('bc', retenus, 'onchange="refreshBCMontantFields()"', lu.origines);
+  zone.innerHTML = bcMetiersZoneHTML(retenus, lu.origines, retenus.length - avant);
 
   /* Passer de un à deux métiers scinde la carte du planning en une par métier,
      chacune avec sa date, son équipe et son montant. Mieux vaut le dire ici que
@@ -6254,7 +6255,7 @@ function bonCommandeForm(){
       <div class="field-grid">
         <div class="field"><label>Conducteur de travaux</label><select id="bc_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
         <div class="field"><label>Nature des travaux</label><input type="text" id="bc_natureTravaux" value="${esc(e.natureTravaux)}" placeholder="Ex : Remise en état logement, Fuite d'eau…"></div>
-        <div class="field full"><label>Métier(s)</label><div id="bc_metiersZone">${metierCheckboxesHTML('bc', e.metiers || (e.metier? [e.metier] : []), 'onchange="refreshBCMontantFields()"', metiersDesChapitresDuBrouillon(e))}</div></div>
+        <div class="field full"><label>Métier(s)</label><div id="bc_metiersZone">${(()=>{ const m = metiersDuBrouillon(e); return bcMetiersZoneHTML(m.retenus, m.origines, m.ajoutes); })()}</div></div>
         <div class="field full"><label>Notes</label><input type="text" id="bc_notes" value="${esc(e.notes)}" placeholder="Remarques…"></div>
       </div>
     </div>
@@ -13453,9 +13454,41 @@ function metiersDisponibles(){
  * personne l'ait demandé. Les métiers ne s'ajoutent qu'à la saisie, par
  * `appliquerMetiersDesChapitres`.
  */
-function metiersDesChapitresDuBrouillon(e){
-  if(!window.metiersDesChapitres) return null;
-  return window.metiersDesChapitres(e && e.lignes, metiersDisponibles()).origines;
+/**
+ * Les métiers du bon en cours de saisie : ceux qu'il déclare, plus ceux que
+ * ses chapitres livrent.
+ *
+ * Ouvrir un bon dans le formulaire **est** une saisie : les métiers lus y sont
+ * cochés, et ils sont enregistrés si l'on enregistre. La garde qui compte n'est
+ * pas là — elle est dans le fait que cette fonction ne tourne que depuis le
+ * formulaire. Ni le chargement des collections ni le rendu du planning ne
+ * l'appellent, donc aucun des 830 bons ne change tout seul.
+ *
+ * La déduction ajoute et ne retire jamais : ce que l'on a coché à la main reste.
+ */
+function metiersDuBrouillon(e){
+  const declares = (e && e.metiers && e.metiers.length) ? [...e.metiers] : (e && e.metier ? [e.metier] : []);
+  if(!window.metiersDesChapitres) return { retenus: declares, origines: null, ajoutes: 0 };
+
+  const lu = window.metiersDesChapitres(e && e.lignes, metiersDisponibles());
+  const retenus = [...declares];
+  for(const m of lu.metiers){
+    if(!retenus.some(c=>window.memeMetier(c, m))) retenus.push(m);
+  }
+  return { retenus, origines: lu.origines, ajoutes: retenus.length - declares.length };
+}
+
+/** Le contenu du champ « Métier(s) », rendu à l'identique par les deux chemins. */
+function bcMetiersZoneHTML(retenus, origines, ajoutes){
+  const cases = metierCheckboxesHTML('bc', retenus, 'onchange="refreshBCMontantFields()"', origines);
+  if(!ajoutes) return cases;
+  /* Dit en place, et pas seulement en toast : un toast s'efface au bout de
+     quelques secondes, et scinder un planning en deux mérite une trace que
+     l'on retrouve au moment d'enregistrer. */
+  const suite = retenus.length > 1
+    ? ` Ce bon se planifiera en ${retenus.length} interventions, une par métier.`
+    : '';
+  return cases + `<div class="metier-lu">✓ ${ajoutes} métier${ajoutes>1?'s':''} lu${ajoutes>1?'s':''} sur les chapitres du bon.${suite}</div>`;
 }
 
 function metierCheckboxesHTML(idPrefix, currentMetiers, onChangeAttr, origines){
