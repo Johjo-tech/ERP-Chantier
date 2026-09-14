@@ -203,6 +203,58 @@ export function metierDuChapitre(
   return null;
 }
 
+/** Une tâche déjà posée, réduite à ce qui la rend reconnaissable. */
+export interface TachePosee {
+  metier?: string | null;
+  date_tache?: string | null;
+}
+
+export interface TacheACreer {
+  date: string;
+  metier: string | null;
+}
+
+/**
+ * Les couples (jour, métier) qui n'ont pas encore de tâche.
+ *
+ * `datesSupplementaires` n'a pas de colonne : il est dérivé des tâches à la
+ * lecture et écarté en silence à l'écriture. Se demander « cette date est-elle
+ * nouvelle ? » en la comparant à un état jamais persisté rendait toujours oui,
+ * et chaque enregistrement recréait une tâche par métier — quatre doublons du
+ * même jour sur BC-2026-0866, tous invisibles à l'écran mais tous comptés par
+ * `bc_passer_pret_a_chiffrer`, qui exige que toutes les tâches soient validées.
+ *
+ * Les tâches déjà posées sont la seule mesure qui survive au rechargement.
+ */
+export function tachesAcreer(
+  posees: TachePosee[],
+  dates: (string | null | undefined)[],
+  metiers: (string | null | undefined)[]
+): TacheACreer[] {
+  const aCreer: TacheACreer[] = [];
+  const dejaVues = posees.map((t) => ({
+    date: t.date_tache ?? "",
+    metier: normaliserLibelle(t.metier),
+  }));
+
+  for (const dateBrute of dates) {
+    const date = (dateBrute ?? "").trim();
+    if (!date) continue;
+
+    for (const metierBrut of metiers) {
+      const metier = (metierBrut ?? "").trim() || null;
+      const cle = normaliserLibelle(metier);
+      if (dejaVues.some((t) => t.date === date && t.metier === cle)) continue;
+
+      // Mémorisé tout de suite : la même date listée deux fois n'en crée qu'une.
+      dejaVues.push({ date, metier: cle });
+      aCreer.push({ date, metier });
+    }
+  }
+
+  return aCreer;
+}
+
 /**
  * Les métiers que portent les chapitres d'un document.
  *

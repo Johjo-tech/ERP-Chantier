@@ -15,6 +15,7 @@ import {
   metiersDesChapitres,
   normaliserLibelle,
   referentielMetiers,
+  tachesAcreer,
 } from "@/api/regles-metiers";
 
 /** Le référentiel réel de KTA Plomberie : déclarés, puis employés sur ses bons. */
@@ -163,6 +164,52 @@ describe("Les métiers d'un document", () => {
   it("ne renvoie rien sur un document sans chapitre", () => {
     expect(metiersDesChapitres([], CONNUS).metiers).toEqual([]);
     expect(metiersDesChapitres(null, CONNUS).metiers).toEqual([]);
+  });
+});
+
+describe("Quelles tâches restent à créer", () => {
+  const posee = (date: string, metier: string | null) => ({ date_tache: date, metier });
+
+  /* La régression de BC-2026-0866 : trois enregistrements du même bon, le même
+     jour, deux métiers — sept tâches là où trois suffisaient, et cinq d'entre
+     elles non validées bloquaient le passage au chiffrage. */
+  it("ne recrée rien quand le jour et le métier ont déjà leur tâche", () => {
+    const posees = [posee("2026-09-14", "PEINTURE"), posee("2026-09-14", "SOL")];
+    expect(tachesAcreer(posees, ["2026-09-14"], ["PEINTURE", "SOL"])).toEqual([]);
+  });
+
+  it("crée la tâche du métier qui manque, et lui seul", () => {
+    const posees = [posee("2026-09-14", "PEINTURE")];
+    expect(tachesAcreer(posees, ["2026-09-14"], ["PEINTURE", "SOL"])).toEqual([
+      { date: "2026-09-14", metier: "SOL" },
+    ]);
+  });
+
+  it("distingue deux journées du même métier", () => {
+    const posees = [posee("2026-09-14", "PEINTURE")];
+    expect(tachesAcreer(posees, ["2026-09-16"], ["PEINTURE"])).toEqual([
+      { date: "2026-09-16", metier: "PEINTURE" },
+    ]);
+  });
+
+  it("traite « pas de métier » comme une valeur, pas comme une absence", () => {
+    expect(tachesAcreer([posee("2026-09-14", "")], ["2026-09-14"], [null])).toEqual([]);
+    expect(tachesAcreer([posee("2026-09-14", null)], ["2026-09-14"], [""])).toEqual([]);
+  });
+
+  it("ignore la casse, comme partout ailleurs", () => {
+    expect(tachesAcreer([posee("2026-09-14", "Plomberie")], ["2026-09-14"], ["PLOMBERIE"]))
+      .toEqual([]);
+  });
+
+  it("ne crée qu'une tâche si la même date est listée deux fois", () => {
+    expect(tachesAcreer([], ["2026-09-16", "2026-09-16"], ["SOL"])).toEqual([
+      { date: "2026-09-16", metier: "SOL" },
+    ]);
+  });
+
+  it("écarte les dates vides", () => {
+    expect(tachesAcreer([], ["", null, "   "], ["SOL"])).toEqual([]);
   });
 });
 

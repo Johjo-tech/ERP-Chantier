@@ -1085,6 +1085,9 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    deux circuits se lisent comme un seul. */
 .wf-bandeau + .wf-bandeau{ margin-top:10px; }
 .wf-metier{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+/* Une tâche que plus aucun métier du bon ne réclame : elle bloque le passage au
+   chiffrage, elle doit donc se voir et s'arbitrer comme les autres. */
+.wf-hors-metier{ color:var(--warning, #B8860B); }
 .wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
 .wf-planifiee{ background:#EEF2F7; color:#4A566E; }
 .wf-realisee{ background:#FFF3E4; color:#9A5B00; }
@@ -7369,6 +7372,21 @@ async function chargerWorkflowTache(b, dayIso){
          créeraient deux tâches pour un même métier. */
       chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m) });
     }
+
+    /* Une tâche qu'aucun métier déclaré ne réclame — au métier vide, ou à un
+       métier retiré du bon depuis — n'apparaîtrait sous aucun bandeau. Elle
+       resterait pourtant comptée par `bc_passer_pret_a_chiffrer`, qui exige que
+       **toutes** les tâches soient validées : le bon se bloque avant le
+       chiffrage sans que rien ne le dise. C'est ce qui est arrivé à
+       BC-2026-0866. Une tâche qui existe doit toujours être atteignable. */
+    const reclamees = new Set(chargees.map(e => e.tache && e.tache.id));
+    const toutes = await window.listTachesBonCommande(b.id);
+    for(const t of (toutes || [])){
+      if(reclamees.has(t.id)) continue;
+      if(cibles.some(m => window.memeMetier(m, t.metier))) continue;
+      chargees.push({ metier: t.metier || null, tache: t, horsMetier: true });
+    }
+
     wfTaches = chargees;
     renderWorkflowTaches();
   }catch(err){
@@ -7438,6 +7456,7 @@ function bandeauTacheHTML(entree, i){
 
   return `<div class="wf-bandeau">
     ${entree.metier ? `<div class="wf-metier">${esc(metierDisplayLabel(entree.metier))}</div>` : ''}
+    ${entree.horsMetier ? `<div class="wf-metier wf-hors-metier">Hors métier${entree.metier ? '' : ' — tâche sans métier'}</div>` : ''}
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
     ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
     ${histoire.length ? `<div class="wf-meta">${histoire.join('<br>')}</div>` : ''}

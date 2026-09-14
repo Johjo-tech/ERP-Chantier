@@ -26,6 +26,7 @@ import {
   todayISO,
 } from "@/api/client";
 import { colonnesDe, valeursEnum } from "@/api/columns";
+import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
 import { fusionnerReglages } from "./reglages";
 import * as queries from "@/api/queries";
 import type { Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
@@ -819,16 +820,24 @@ async function appliquerWorkflow(
     return;
   }
 
+  /* `date_tache` sert à ne pas recréer une tâche qui existe déjà pour ce jour
+     et ce métier : c'est la seule mesure fiable, `datesSupplementaires` n'ayant
+     pas de colonne et étant lui-même dérivé des tâches. */
   const { data, error } = await dyn()
     .from("planning_taches")
-    .select("id, metier, statut")
+    .select("id, metier, statut, date_tache")
     .eq("bon_commande_id", bcUuid);
 
   if (error) {
     console.error("Circuit de validation : lecture des tâches impossible", error);
     return;
   }
-  const taches = (data ?? []) as { id: Uuid; metier: string | null; statut: string | null }[];
+  const taches = (data ?? []) as {
+    id: Uuid;
+    metier: string | null;
+    statut: string | null;
+    date_tache: string | null;
+  }[];
 
   /* L'app historique ne crée pas de tâche : elle coche un métier sur le bon.
      On matérialise la tâche au premier pointage, faute de quoi le circuit
@@ -839,22 +848,37 @@ async function appliquerWorkflow(
   const dateTache =
     (valeur.datePlanifiee as string) || (valeur.dateReception as string) || todayISO();
 
-  async function tachePourMetier(metier: string | null): Promise<Uuid | null> {
-    const existante = taches.find((t) => t.metier === metier);
-    if (existante) return existante.id;
+  /** Crée la tâche du jour et du métier demandés, si elle n'existe pas déjà. */
+  async function materialiser(metier: string | null, date: string): Promise<Uuid | null> {
     if (!societeUuid) return null;
 
     const creee = await queries.planifierTache(societeUuid, {
       bon_commande_id: bcUuid,
       libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
-      date_tache: dateTache,
-      metier,
+      date_tache: date,
+      /* Jamais la chaîne vide : une tâche au métier `""` n'est réclamée par
+         aucun bandeau de validation et devient définitivement invalidable. */
+      metier: metier || null,
       // L'équipe est choisie à la planification, sur le bon ; c'est ici qu'elle
       // rejoint la tâche, seul endroit où la garde saura la lire.
       technicien_id: await uuidEquipe(valeur.technicien as string | undefined),
     });
-    taches.push({ id: creee.id, metier, statut: creee.statut });
+    taches.push({
+      id: creee.id,
+      metier: metier || null,
+      statut: creee.statut,
+      date_tache: date,
+    });
     return creee.id;
+  }
+
+  async function tachePourMetier(metier: string | null): Promise<Uuid | null> {
+    /* `memeMetier` plutôt que `===` : `null` et `""` désignent le même cas, et
+       la casse ne compte pas. La comparaison stricte laissait une tâche au
+       métier vide inatteignable sur un bon qui déclarait ses métiers. */
+    const existante = taches.find((t) => memeMetier(t.metier, metier));
+    if (existante) return existante.id;
+    return materialiser(metier, dateTache);
   }
 
   try {
@@ -929,20 +953,21 @@ async function appliquerWorkflow(
       }
     }
 
-    /* Une date supplémentaire devient une tâche sur cette journée-là. */
+    /* Une date supplémentaire devient une tâche sur cette journée-là — mais une
+       seule fois.
+
+       `datesSupplementaires` n'a pas de colonne : il est dérivé des tâches à la
+       lecture et écarté en silence à l'écriture. `datesAjoutees`, qui le compare
+       à un état jamais persisté, tenait donc chaque enregistrement pour un ajout
+       et recréait une tâche par métier à chaque fois — quatre tâches en double
+       sur BC-2026-0866, toutes le même jour. On se compare désormais aux tâches
+       elles-mêmes, seule mesure qui survive au rechargement. */
     if (datesAjoutees.length && societeUuid) {
       const metiers = (valeur.metiers as string[])?.length
         ? (valeur.metiers as string[])
         : [(valeur.metier as string) || null];
-      for (const date of datesAjoutees) {
-        for (const metier of metiers) {
-          await queries.planifierTache(societeUuid, {
-            bon_commande_id: bcUuid,
-            libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
-            date_tache: date,
-            metier,
-          });
-        }
+      for (const { date, metier } of tachesAcreer(taches, datesAjoutees, metiers)) {
+        await materialiser(metier, date);
       }
     }
 
