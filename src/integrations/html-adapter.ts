@@ -87,6 +87,22 @@ export interface LigneLegacy {
 }
 
 /**
+ * Un montant absent vaut zéro, jamais `NULL`.
+ *
+ * `quantite`, `prix_unitaire` et `tva` sont `NOT NULL` avec un défaut à 0 —
+ * mais ce défaut ne s'applique jamais : supabase-js construit `columns=` à
+ * partir de l'**union** des clés de toutes les lignes envoyées, si bien qu'une
+ * clé absente d'une seule ligne y est écrite `NULL`. Un chapitre lu par OCR
+ * n'a ni quantité ni prix, et son `NULL` faisait rejeter l'insertion **entière**
+ * des lignes (23502) — l'en-tête était déjà créé et les lignes précédentes
+ * déjà supprimées. L'écran, lui, annonçait « connexion à Supabase impossible ».
+ */
+function nombre(valeur: unknown): number {
+  const n = Number(valeur);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
  * La référence d'article traverse enfin le pont.
  *
  * `article_reference` existe sur les trois tables de lignes et l'écran la
@@ -107,10 +123,10 @@ export function ligneVersDb(ligne: LigneLegacy, position: number) {
     type: (ligne.type as "ligne" | "chapitre" | "commentaire") ?? "ligne",
     designation: ligne.designation ?? "",
     commentaire: ligne.commentaire,
-    quantite: ligne.qte,
+    quantite: nombre(ligne.qte),
     unite: ligne.unite,
-    prix_unitaire: ligne.prixUnitaire,
-    tva: ligne.tva,
+    prix_unitaire: nombre(ligne.prixUnitaire),
+    tva: nombre(ligne.tva),
     article_reference: ligne.articleReference || null,
     position,
   };

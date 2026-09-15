@@ -88,6 +88,28 @@ describe("Lignes de document", () => {
   it("retombe sur le type « ligne » quand il manque", () => {
     expect(ligneVersDb({ designation: "Divers" }, 0).type).toBe("ligne");
   });
+
+  /* Un chapitre lu par OCR arrive sans quantité ni prix. Laisser ces champs
+     indéfinis les faisait écrire `NULL` — supabase-js déclare `columns=` sur
+     l'union des clés, donc le défaut à 0 de la colonne ne s'applique pas — et
+     les trois colonnes sont `NOT NULL` : l'insertion de *toutes* les lignes du
+     bon était rejetée, en-tête déjà créé et lignes précédentes déjà effacées. */
+  it("écrit zéro, jamais nul, quand la ligne n'a ni quantité ni prix", () => {
+    const chapitre = ligneVersDb({ type: "chapitre", designation: "Plomberie" }, 0);
+    expect(chapitre.quantite).toBe(0);
+    expect(chapitre.prix_unitaire).toBe(0);
+    expect(chapitre.tva).toBe(0);
+  });
+
+  /* L'app historique écrit `""` pour « non renseigné ». */
+  it("ramène une chaîne vide à zéro", () => {
+    const vide = ligneVersDb(
+      { designation: "Divers", qte: "" as unknown as number, tva: "" as unknown as number },
+      0
+    );
+    expect(vide.quantite).toBe(0);
+    expect(vide.tva).toBe(0);
+  });
 });
 
 describe("Robustesse de la traduction vers la base", () => {
