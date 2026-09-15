@@ -391,8 +391,14 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Ce que les fonctions lisent avec `Deno.env` en local. En production, les
+# mêmes noms sont posés par `supabase secrets set` ; ici, `env(...)` va chercher
+# la valeur dans l'environnement du shell ou dans le `.env` à la racine — tous
+# deux hors du dépôt. Sans cette déclaration, le conteneur démarre sans clé et
+# `extraire-bc` répond « MISTRAL_API_KEY absente », ce qui ressemble à s'y
+# méprendre à un secret oublié côté Supabase.
+[edge_runtime.secrets]
+MISTRAL_API_KEY = "env(MISTRAL_API_KEY)"
 
 [analytics]
 enabled = true
@@ -426,14 +432,14 @@ enabled = true
 
 # --- Fonctions edge ---------------------------------------------------------
 #
-# `extraire-bc` lit un bon de commande scanné via Gemini. Elle tourne en
-# production depuis le 2026-05, mais son code ne vivait que sur les serveurs
-# Supabase : il n'était versionné nulle part. Récupéré le 2026-09-09 par
-# `supabase functions download`.
+# `extraire-bc` lit un bon de commande scanné. Elle tourne en production depuis
+# le 2026-05, mais son code ne vivait que sur les serveurs Supabase : il
+# n'était versionné nulle part. Récupéré le 2026-09-09 par
+# `supabase functions download`, puis porté sur Mistral le 2026-09-15.
 #
-# Elle est déployée avec `verify_jwt = false`, alors que son propre en-tête
-# affirme le contraire. N'importe qui connaissant l'URL consomme donc le quota
-# Gemini du projet. La déclaration ci-dessous ferme la porte au prochain
+# Elle était déployée avec `verify_jwt = false`, alors que son propre en-tête
+# affirmait le contraire. N'importe qui connaissant l'URL consommait donc le
+# quota du projet. La déclaration ci-dessous ferme la porte au prochain
 # déploiement.
 [functions.extraire-bc]
 verify_jwt = true

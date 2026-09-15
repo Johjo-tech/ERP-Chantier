@@ -80,6 +80,9 @@ function totalMs(m: Mesure[]): number {
 }
 
 function coutEuros(mesures: Mesure[]): number | null {
+  // Sans appel, il n'y a rien à estimer : afficher « 0,0000 € » laisserait
+  // croire à une extraction gratuite là où il n'y a pas eu d'extraction.
+  if (!mesures.length) return null;
   let total = 0;
   for (const m of mesures) {
     const t = TARIFS[m.modele];

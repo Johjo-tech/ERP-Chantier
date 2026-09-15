@@ -1,412 +1,344 @@
 /**
- * Extraction structurée d'un bon de commande (PDF ou image) via Gemini.
+ * Extraction structurée d'un bon de commande (PDF ou image) via Mistral.
  *
- * La clé API vit dans les secrets Supabase (`GEMINI_API_KEY`), lue avec
- * Deno.env et passée en en-tête `x-goog-api-key` — jamais dans l'URL, pour
+ * La lecture se fait en deux temps, et c'est délibéré :
+ *
+ *   1. `mistral-ocr-latest` transcrit le document en Markdown — tableaux
+ *      compris, ce qui est tout l'enjeu sur un bon de travaux.
+ *   2. `mistral-medium-latest` structure ce Markdown sous `json_schema` strict.
+ *
+ * Le pipeline précédent envoyait le PDF à un modèle de vision d'un seul tenant.
+ * Il a été remplacé le 2026-09-15 après mesure (`_diagnostic`) : la lecture en
+ * deux temps remplissait 16 champs sur 16 en moins de 4 s là où la précédente
+ * ne répondait plus du tout.
+ *
+ * La clé API vit dans les secrets Supabase (`MISTRAL_API_KEY`), lue avec
+ * Deno.env et passée en en-tête `Authorization` — jamais dans l'URL, pour
  * qu'elle n'apparaisse pas dans les logs. La fonction est déployée avec
  * verify_jwt : seul un utilisateur connecté de l'application peut l'appeler.
  *
  * Entrée  : { fichierBase64, mimeType }
- * Sortie  : { extraction: ExtractionBC } — champs alignés sur BonCommandeSaisi
+ * Sortie  : { extraction: BonCommande } — champs alignés sur BonCommandeSaisi
  *           côté front, plus une liste d'avertissements de lecture.
- */ const CORS = {
+ */
+
+import { ecartsDeForme, PROMPT_SYSTEME, SCHEMA_JSON } from "../_shared/contrat-bc.ts";
+
+const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
 const MIMES_ACCEPTES = new Set([
   "application/pdf",
   "image/jpeg",
   "image/png",
-  "image/webp"
+  "image/webp",
 ]);
-/** ~14 Mo une fois décodé : au-delà, demander un PDF allégé. */ const BASE64_MAX = 20_000_000;
+
+/** ~14 Mo une fois décodé : au-delà, demander un PDF allégé. */
+const BASE64_MAX = 20_000_000;
 
 /* --- Le budget de temps ---------------------------------------------------
  *
  * La plateforme tue l'isolat à 150 s de temps mural. Le 14/09/2026, un appel
- * Gemini resté sans réponse a consommé ce budget en entier : la fonction est
- * morte sans émettre la moindre réponse HTTP (`reason: WallClockTime`,
+ * resté sans réponse a consommé ce budget en entier : la fonction est morte
+ * sans émettre la moindre réponse HTTP (`reason: WallClockTime`,
  * `cpu_time_used: 26 ms`), et le navigateur, dont la promesse ne s'est jamais
  * résolue, affichait encore « Lecture en cours » indéfiniment.
  *
- * Ces trois constantes garantissent qu'on rend toujours la main, et à temps
- * pour le dire. */
+ * La leçon survit au changement de fournisseur : on rend toujours la main, et
+ * assez tôt pour dire pourquoi. Le budget se partage maintenant entre deux
+ * appels au lieu d'un — d'où deux délais distincts, dont la somme tient dans
+ * le total avec de la marge pour le reste. */
 
-/** Au-delà, on tient pour acquis que ce modèle ne répondra pas. */ const DELAI_GEMINI_MS = 45_000;
-/** Ce qu'on s'autorise en tout : 40 s de marge sur la limite de la plateforme. */ const BUDGET_TOTAL_MS = 110_000;
-/** Entre deux passes, et seulement si tous les modèles ont saturé. */ const PAUSE_REESSAI_MS = 2_000;
-/** Deux passes : la première bascule de modèle, la seconde patiente. */ const PASSES = 2;
+/** Au-delà, on tient pour acquis que l'OCR ne répondra pas. */
+const DELAI_OCR_MS = 50_000;
+/** Structurer quelques pages de Markdown est court : ce délai est déjà large. */
+const DELAI_EXTRACTION_MS = 45_000;
+/** Ce qu'on s'autorise en tout : 40 s de marge sur la limite de la plateforme. */
+const BUDGET_TOTAL_MS = 110_000;
+/** Une seule reprise, et seulement sur un refus passager (429, 5xx). */
+const PAUSE_REESSAI_MS = 2_000;
 
-/** Trois pools de capacité distincts : le repli quand l'un sature. */ const MODELES_PAR_DEFAUT = [
-  "gemini-3.7-flash",
-  "gemini-3.8-flash",
-  "gemini-3.6-flash"
-];
+const MODELE_OCR = "mistral-ocr-latest";
 
-/** `GEMINI_MODEL` est un levier d'urgence : il prive du repli, donc il ne sert
- *  qu'à forcer un modèle précis le temps d'un incident. */ function modelesDisponibles() {
-  const force = Deno.env.get("GEMINI_MODEL");
-  return force ? [
-    force
-  ] : MODELES_PAR_DEFAUT;
+/** En deçà, il n'y a pas de quoi remplir un bon : c'est un scan raté. */
+const MINIMUM_LISIBLE = 20;
+
+/**
+ * Ce qui reste du Markdown une fois ôté ce qui n'est pas du texte.
+ *
+ * Ne sert qu'à décider si la page dit quelque chose — le modèle, lui, reçoit le
+ * Markdown intact. Les références de figures et de tableaux que l'OCR n'a pas
+ * su transcrire, les traits de séparation entre pages et les espaces ne
+ * comptent pas comme du texte lu.
+ */
+function texteUtile(markdown: string): string {
+  return markdown
+    .replace(/!?\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/^[-_*\s]*$/gm, "")
+    .trim();
 }
-/** Schéma de réponse imposé à Gemini (sous-ensemble OpenAPI supporté). */ const SCHEMA_EXTRACTION = {
-  type: "OBJECT",
-  properties: {
-    client: {
-      type: "STRING",
-      description: "Nom du donneur d'ordre / client qui émet le bon de commande",
-      nullable: true
-    },
-    numeroBC: {
-      type: "STRING",
-      description: "Numéro du bon de commande attribué par le client",
-      nullable: true
-    },
-    dateBC: {
-      type: "STRING",
-      description: "Date du bon au format YYYY-MM-DD",
-      nullable: true
-    },
-    interlocuteur: {
-      type: "STRING",
-      description: "Personne de contact chez le client (gestionnaire, chargé d'affaires…)",
-      nullable: true
-    },
-    adresse: {
-      type: "STRING",
-      description: "Adresse du client (rue)",
-      nullable: true
-    },
-    codePostal: {
-      type: "STRING",
-      nullable: true
-    },
-    ville: {
-      type: "STRING",
-      nullable: true
-    },
-    adresseIntervention: {
-      type: "STRING",
-      description: "Lieu d'intervention / de chantier s'il diffère de l'adresse du client, sinon null",
-      nullable: true
-    },
-    numeroLogement: {
-      type: "STRING",
-      description: "Numéro de logement ou d'appartement",
-      nullable: true
-    },
-    logementStatut: {
-      type: "STRING",
-      description: "occupé, vacant ou commune (partie commune) ; null si non précisé",
-      enum: [
-        "occupé",
-        "vacant",
-        "commune"
-      ],
-      nullable: true
-    },
-    occupant: {
-      type: "STRING",
-      description: "Nom du locataire / occupant",
-      nullable: true
-    },
-    etage: {
-      type: "STRING",
-      nullable: true
-    },
-    notes: {
-      type: "STRING",
-      description: "Consignes ou remarques utiles figurant sur le bon (accès, horaires…)",
-      nullable: true
-    },
-    montantTotalHT: {
-      type: "NUMBER",
-      description: "Montant total HT du bon",
-      nullable: true
-    },
-    lignes: {
-      type: "ARRAY",
-      description: "Détail des travaux dans l'ordre du document. Les titres de sections deviennent des lignes de type chapitre.",
-      items: {
-        type: "OBJECT",
-        properties: {
-          type: {
-            type: "STRING",
-            enum: [
-              "ligne",
-              "chapitre",
-              "commentaire"
-            ]
-          },
-          designation: {
-            type: "STRING"
-          },
-          qte: {
-            type: "NUMBER",
-            nullable: true
-          },
-          unite: {
-            type: "STRING",
-            description: "u, m², ml, h, forfait…",
-            nullable: true
-          },
-          prixUnitaire: {
-            type: "NUMBER",
-            description: "Prix unitaire HT",
-            nullable: true
-          },
-          tva: {
-            type: "NUMBER",
-            description: "Taux de TVA en % si indiqué",
-            nullable: true
-          }
-        },
-        required: [
-          "type",
-          "designation"
-        ]
-      }
-    },
-    avertissements: {
-      type: "ARRAY",
-      description: "Ce qui n'a pas pu être lu avec certitude : champ illisible, montant incohérent, page manquante…",
-      items: {
-        type: "STRING"
-      }
-    }
-  },
-  required: [
-    "lignes",
-    "avertissements"
-  ]
-};
-const PROMPT = `Tu lis un bon de commande de travaux du bâtiment envoyé par un donneur d'ordre
-(bailleur social, syndic, entreprise…) à une entreprise du BTP.
 
-Extrais fidèlement les informations demandées par le schéma JSON. Règles :
-- Ne devine jamais : un champ absent ou illisible vaut null, et tu le signales
-  dans "avertissements".
-- "client" est l'ÉMETTEUR du bon (le donneur d'ordre), pas l'entreprise de
-  travaux destinataire.
-- Recopie les désignations de travaux telles quelles, sans reformuler.
-- Les montants sont en euros HT ; convertis "1 234,56" en 1234.56.
-- Les dates sont au format YYYY-MM-DD.
-- Si le total affiché sur le document ne correspond pas à la somme des lignes,
-  signale-le dans "avertissements".`;
-function reponse(statut, corps) {
+/** `MISTRAL_MODEL` est un levier d'urgence : il ne sert qu'à forcer un autre
+ *  modèle d'extraction le temps d'un incident, sans redéployer. */
+function modeleExtraction() {
+  return Deno.env.get("MISTRAL_MODEL") || "mistral-medium-latest";
+}
+
+function reponse(statut: number, corps: unknown) {
   return new Response(JSON.stringify(corps), {
     status: statut,
-    headers: {
-      ...CORS,
-      "Content-Type": "application/json"
-    }
+    headers: { ...CORS, "Content-Type": "application/json" },
   });
 }
-/**
- * Interroge Gemini jusqu'à une réponse, ou jusqu'à épuisement du budget.
- *
- * Un 503 dit « ce pool est saturé **maintenant** ». Réinterroger le même modèle
- * deux secondes plus tard, comme on le faisait, dépense le budget à réentendre
- * le même refus — c'est exactement ce qui a coûté les 150 s du 14/09. On passe
- * donc immédiatement au modèle suivant, dont la capacité est distincte, et la
- * seconde passe n'a lieu que si les trois ont saturé.
- *
- * Rend toujours de quoi répondre : la réponse obtenue, ou `null` avec la raison.
- */ async function appelerGemini(cle, corpsGemini, tracer, debut) {
-  const modeles = modelesDisponibles();
-  let derniere = null;
-  let modeleUtilise = modeles[0];
-  for(let passe = 0; passe < PASSES; passe++){
-    if (passe > 0) {
-      // Ne pas dormir sur un budget déjà vide : ces deux secondes ne serviraient
-      // qu'à retarder la réponse d'échec.
-      if (BUDGET_TOTAL_MS - (Date.now() - debut) <= PAUSE_REESSAI_MS) {
-        tracer("budget épuisé, pas de seconde passe");
-        return {
-          rep: derniere,
-          modeleUtilise,
-          modeles,
-          budgetEpuise: true
-        };
-      }
-      tracer("tous les modèles saturés, une pause puis nouvelle passe");
-      await new Promise((r)=>setTimeout(r, PAUSE_REESSAI_MS));
-    }
-    for (const modele of modeles){
-      const restant = BUDGET_TOTAL_MS - (Date.now() - debut);
-      if (restant <= 0) {
-        tracer("budget épuisé");
-        return {
-          rep: derniere,
-          modeleUtilise,
-          modeles,
-          budgetEpuise: true
-        };
-      }
-      modeleUtilise = modele;
-      tracer(`appel ${modele} (passe ${passe + 1}/${PASSES})`);
-      let rep;
-      try {
-        rep = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": cle
-          },
-          body: corpsGemini,
-          signal: AbortSignal.timeout(Math.min(DELAI_GEMINI_MS, restant))
-        });
-      } catch (err) {
-        /* Sans ce `catch`, un `fetch` qui lève fait rejeter le handler
-           `Deno.serve` : le runtime répond alors 500 **sans les en-têtes CORS**,
-           et le navigateur annonce une erreur CORS au lieu du délai dépassé. */ const cause = err?.name === "TimeoutError" || err?.name === "AbortError" ? `pas de réponse en ${Math.round(Math.min(DELAI_GEMINI_MS, restant) / 1000)} s` : String(err?.message ?? err);
-        tracer(`${modele} injoignable : ${cause}`);
-        console.error(`Gemini injoignable (${modele}) : ${cause}`);
-        continue;
-      }
-      derniere = rep;
-      if (rep.ok) {
-        tracer(`${modele} a répondu`);
-        return {
-          rep,
-          modeleUtilise,
-          modeles,
-          budgetEpuise: false
-        };
-      }
-      if (rep.status === 503 || rep.status === 429) {
-        tracer(`${modele} saturé (${rep.status}), modèle suivant`);
-        console.error(`Gemini ${rep.status} (${modele}), bascule sur le modèle suivant`);
-        continue;
-      }
-      if (rep.status === 404) {
-        tracer(`${modele} inconnu (404), modèle suivant`);
-        console.error(`Modèle ${modele} inconnu (404), essai du suivant`);
-        continue;
-      }
-      // 400, 403… : changer de modèle n'y changerait rien.
-      return {
-        rep,
-        modeleUtilise,
-        modeles,
-        budgetEpuise: false
-      };
-    }
-  }
-  return {
-    rep: derniere,
-    modeleUtilise,
-    modeles,
-    budgetEpuise: false
-  };
+
+/** Ce qu'un appel rend, qu'il ait abouti ou non : jamais une exception. */
+interface Tentative {
+  rep: Response | null;
+  /** Renseigné quand aucune réponse n'a pu être obtenue. */
+  echec: string | null;
 }
-Deno.serve(async (req)=>{
+
+/**
+ * Un appel à Mistral, réessayé une fois sur un refus passager.
+ *
+ * Sans le `catch`, un `fetch` qui lève fait rejeter le handler `Deno.serve` :
+ * le runtime répond alors 500 **sans les en-têtes CORS**, et le navigateur
+ * annonce une erreur CORS au lieu du délai dépassé.
+ */
+async function appeler(
+  url: string,
+  cle: string,
+  corps: string,
+  delaiMs: number,
+  quoi: string,
+  tracer: (etape: string) => void,
+  debut: number,
+): Promise<Tentative> {
+  let derniere: Response | null = null;
+
+  for (let essai = 0; essai < 2; essai++) {
+    const restant = BUDGET_TOTAL_MS - (Date.now() - debut);
+    if (restant <= 0) {
+      tracer(`${quoi} : budget épuisé`);
+      return { rep: derniere, echec: derniere ? null : "budget épuisé" };
+    }
+
+    if (essai > 0) {
+      // Ne pas dormir sur un budget déjà vide : ces deux secondes ne
+      // serviraient qu'à retarder la réponse d'échec.
+      if (restant <= PAUSE_REESSAI_MS) {
+        tracer(`${quoi} : budget épuisé, pas de reprise`);
+        return { rep: derniere, echec: null };
+      }
+      tracer(`${quoi} : refus passager, une pause puis reprise`);
+      await new Promise((r) => setTimeout(r, PAUSE_REESSAI_MS));
+    }
+
+    tracer(`${quoi} : appel (tentative ${essai + 1}/2)`);
+    try {
+      derniere = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${cle}` },
+        body: corps,
+        signal: AbortSignal.timeout(Math.min(delaiMs, restant)),
+      });
+    } catch (err) {
+      const cause =
+        (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError"
+          ? `pas de réponse en ${Math.round(Math.min(delaiMs, restant) / 1000)} s`
+          : String((err as Error)?.message ?? err);
+      tracer(`${quoi} injoignable : ${cause}`);
+      console.error(`Mistral injoignable (${quoi}) : ${cause}`);
+      return { rep: null, echec: cause };
+    }
+
+    if (derniere.status !== 429 && derniere.status < 500) return { rep: derniere, echec: null };
+    tracer(`${quoi} : ${derniere.status}`);
+    console.error(`Mistral ${derniere.status} sur ${quoi}`);
+  }
+
+  return { rep: derniere, echec: null };
+}
+
+/** Le message que l'écran affichera, à partir du statut rendu par Mistral. */
+function motif(statut: number, quoi: string): { code: number; erreur: string } {
+  if (statut === 401 || statut === 403) {
+    return {
+      code: 502,
+      erreur: "Clé Mistral refusée : vérifier MISTRAL_API_KEY dans les secrets Supabase.",
+    };
+  }
+  if (statut === 429) {
+    return {
+      code: 503,
+      erreur: "Mistral est saturé ou le quota est atteint. Réessayez dans quelques instants.",
+    };
+  }
+  if (statut === 413 || statut === 422) {
+    return { code: 502, erreur: `Document refusé par ${quoi} : format ou taille non supportés.` };
+  }
+  return { code: 502, erreur: `Erreur ${quoi} (${statut})` };
+}
+
+Deno.serve(async (req) => {
   const debut = Date.now();
   /* La fonction n'avait que des `console.error` : en marche normale elle était
-     muette, et on ne pouvait pas dire où partait le temps. */ const tracer = (etape)=>console.log(`[${Date.now() - debut} ms] ${etape}`);
-  if (req.method === "OPTIONS") return new Response("ok", {
-    headers: CORS
-  });
-  if (req.method !== "POST") return reponse(405, {
-    erreur: "Méthode non autorisée"
-  });
-  const cle = Deno.env.get("GEMINI_API_KEY");
-  if (!cle) return reponse(500, {
-    erreur: "GEMINI_API_KEY absente des secrets Supabase"
-  });
-  let corps;
+     muette, et on ne pouvait pas dire où partait le temps. */
+  const tracer = (etape: string) => console.log(`[${Date.now() - debut} ms] ${etape}`);
+
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (req.method !== "POST") return reponse(405, { erreur: "Méthode non autorisée" });
+
+  const cle = Deno.env.get("MISTRAL_API_KEY");
+  if (!cle) return reponse(500, { erreur: "MISTRAL_API_KEY absente des secrets Supabase" });
+
+  let corps: { fichierBase64?: string; mimeType?: string };
   try {
     corps = await req.json();
-  } catch  {
-    return reponse(400, {
-      erreur: "Corps JSON invalide"
-    });
+  } catch {
+    return reponse(400, { erreur: "Corps JSON invalide" });
   }
+
   const { fichierBase64, mimeType } = corps;
   if (!fichierBase64 || !mimeType) {
-    return reponse(400, {
-      erreur: "fichierBase64 et mimeType sont requis"
-    });
+    return reponse(400, { erreur: "fichierBase64 et mimeType sont requis" });
   }
   if (!MIMES_ACCEPTES.has(mimeType)) {
-    return reponse(400, {
-      erreur: `Type de fichier non pris en charge : ${mimeType}`
-    });
+    return reponse(400, { erreur: `Type de fichier non pris en charge : ${mimeType}` });
   }
   if (fichierBase64.length > BASE64_MAX) {
-    return reponse(413, {
-      erreur: "Fichier trop volumineux (limite ~14 Mo)"
-    });
+    return reponse(413, { erreur: "Fichier trop volumineux (limite ~14 Mo)" });
   }
+
   tracer(`document reçu (${Math.round(fichierBase64.length / 1000)} k caractères, ${mimeType})`);
-  const geminiBody = JSON.stringify({
-    contents: [
-      {
-        parts: [
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: fichierBase64
-            }
-          },
-          {
-            text: PROMPT
-          }
-        ]
-      }
-    ],
-    generationConfig: {
-      temperature: 0,
-      response_mime_type: "application/json",
-      response_schema: SCHEMA_EXTRACTION
-    }
-  });
-  const { rep, modeleUtilise, modeles, budgetEpuise } = await appelerGemini(cle, geminiBody, tracer, debut);
-  const attendu = Math.round((Date.now() - debut) / 1000);
-  /* Les deux cas qui, jusqu'ici, ne produisaient aucune réponse du tout. */ if (budgetEpuise || !rep) {
-    const pourquoi = budgetEpuise ? `budget de ${Math.round(BUDGET_TOTAL_MS / 1000)} s épuisé` : "aucun modèle joignable";
-    console.error(`Extraction abandonnée après ${attendu} s — ${pourquoi} (essayés : ${modeles.join(", ")})`);
+
+  // ---- 1. Le document devient du Markdown -----------------------------------
+
+  /* L'API distingue les deux : un PDF est paginé, une image ne l'est pas. */
+  const document = mimeType === "application/pdf"
+    ? { type: "document_url", document_url: `data:${mimeType};base64,${fichierBase64}` }
+    : { type: "image_url", image_url: `data:${mimeType};base64,${fichierBase64}` };
+
+  const ocr = await appeler(
+    "https://api.mistral.ai/v1/ocr",
+    cle,
+    JSON.stringify({
+      model: MODELE_OCR,
+      document,
+      table_format: "html",
+      // Ni images encodées ni boîtes englobantes : on ne paie que le texte.
+      include_image_base64: false,
+    }),
+    DELAI_OCR_MS,
+    "l'OCR",
+    tracer,
+    debut,
+  );
+
+  if (!ocr.rep) {
+    const attendu = Math.round((Date.now() - debut) / 1000);
+    console.error(`OCR abandonné après ${attendu} s — ${ocr.echec}`);
     return reponse(504, {
-      erreur: `Gemini n'a pas répondu en ${attendu} s. Modèles essayés : ${modeles.join(", ")}. Réessayez dans quelques instants.`
+      erreur: `L'OCR n'a pas répondu en ${attendu} s. Réessayez dans quelques instants.`,
     });
   }
-  if (!rep.ok) {
-    const detail = await rep.text();
-    console.error(`Gemini ${rep.status} (modèle ${modeleUtilise}) : ${detail.slice(0, 500)}`);
-    if (rep.status === 403) {
-      return reponse(502, {
-        erreur: "Accès Gemini refusé (PERMISSION_DENIED) : vérifier la clé, ou ajouter le rôle " + "roles/serviceusage.serviceUsageConsumer au compte de service dans IAM."
-      });
-    }
-    if (rep.status === 503 || rep.status === 429) {
-      return reponse(503, {
-        erreur: `Les ${modeles.length} modèles Gemini sont saturés (essayé pendant ${attendu} s). Réessayez dans quelques instants.`
-      });
-    }
+  if (!ocr.rep.ok) {
+    const detail = await ocr.rep.text();
+    console.error(`OCR ${ocr.rep.status} : ${detail.slice(0, 500)}`);
+    const m = motif(ocr.rep.status, "l'OCR");
+    return reponse(m.code, { erreur: m.erreur });
+  }
+
+  const resultatOcr = await ocr.rep.json();
+  const pages: { markdown?: string }[] = resultatOcr.pages ?? [];
+  const markdown = pages.map((p) => p.markdown ?? "").join("\n\n---\n\n").trim();
+
+  /* Un document illisible rend des pages vides. Envoyer ce vide au modèle de
+     structuration ne coûterait pas moins cher et rendrait un bon entièrement
+     nul, sans dire pourquoi : autant le nommer ici.
+
+     Mais « vide » ne veut pas dire « chaîne vide ». Sur une photo floue, l'OCR
+     rend `[tbl-0.html](tbl-0.html)` — une référence à un tableau qu'il n'a pas
+     su transcrire. Vingt-quatre caractères, aucun texte : le premier garde-fou
+     écrit ici la laissait passer, et l'utilisateur récupérait un formulaire
+     entièrement vide sans un mot d'explication. */
+  if (texteUtile(markdown).length < MINIMUM_LISIBLE) {
+    console.error(`OCR sans texte exploitable (${pages.length} page(s)) : ${markdown.slice(0, 200)}`);
     return reponse(502, {
-      erreur: `Erreur Gemini (${rep.status})`
+      erreur: "Aucun texte n'a pu être lu sur ce document. Vérifiez la netteté du scan.",
     });
   }
-  tracer("lecture du résultat");
-  const json = await rep.json();
-  const texte = json.candidates?.[0]?.content?.parts?.[0]?.text;
+  tracer(`OCR terminé (${pages.length} page(s), ${markdown.length} caractères)`);
+
+  // ---- 2. Le Markdown devient le contrat ------------------------------------
+
+  const modele = modeleExtraction();
+  const extraction = await appeler(
+    "https://api.mistral.ai/v1/chat/completions",
+    cle,
+    JSON.stringify({
+      model: modele,
+      temperature: 0,
+      messages: [
+        { role: "system", content: PROMPT_SYSTEME },
+        { role: "user", content: `Voici le bon en Markdown :\n\n${markdown}` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "bon_commande", strict: true, schema: SCHEMA_JSON },
+      },
+    }),
+    DELAI_EXTRACTION_MS,
+    `${modele}`,
+    tracer,
+    debut,
+  );
+
+  const attendu = Math.round((Date.now() - debut) / 1000);
+
+  if (!extraction.rep) {
+    console.error(`Extraction abandonnée après ${attendu} s — ${extraction.echec}`);
+    return reponse(504, {
+      erreur: `Le document a été lu, mais ${modele} n'a pas répondu en ${attendu} s. Réessayez dans quelques instants.`,
+    });
+  }
+  if (!extraction.rep.ok) {
+    const detail = await extraction.rep.text();
+    console.error(`${modele} ${extraction.rep.status} : ${detail.slice(0, 500)}`);
+    const m = motif(extraction.rep.status, modele);
+    return reponse(m.code, { erreur: m.erreur });
+  }
+
+  const json = await extraction.rep.json();
+  const texte = json.choices?.[0]?.message?.content;
   if (!texte) {
-    console.error("Réponse Gemini sans contenu :", JSON.stringify(json).slice(0, 500));
-    return reponse(502, {
-      erreur: "Réponse Gemini vide ou bloquée"
-    });
+    console.error("Réponse sans contenu :", JSON.stringify(json).slice(0, 500));
+    return reponse(502, { erreur: "Réponse du modèle vide ou bloquée" });
   }
+
+  let bon: Record<string, unknown>;
   try {
-    const extraction = JSON.parse(texte);
-    tracer(`terminé (${extraction?.lignes?.length ?? 0} lignes, modèle ${modeleUtilise})`);
-    return reponse(200, {
-      extraction
-    });
-  } catch  {
-    console.error("JSON Gemini invalide :", texte.slice(0, 500));
-    return reponse(502, {
-      erreur: "Extraction illisible, réessayer"
-    });
+    bon = JSON.parse(texte);
+  } catch {
+    console.error("JSON invalide :", texte.slice(0, 500));
+    return reponse(502, { erreur: "Extraction illisible, réessayer" });
   }
+
+  /* Le schéma strict fait l'essentiel, mais il n'est pas une garantie : ce qui
+     passe malgré lui doit être signalé à l'utilisateur plutôt que d'atterrir
+     tel quel dans le formulaire. */
+  const ecarts = ecartsDeForme(bon);
+  if (ecarts.length) {
+    console.error(`Écarts au contrat (${modele}) : ${ecarts.join(" ; ")}`);
+    const avertissements = Array.isArray(bon.avertissements) ? bon.avertissements : [];
+    bon.avertissements = [...avertissements, "Lecture partiellement incertaine, relisez les champs."];
+  }
+
+  tracer(
+    `terminé en ${attendu} s (${(bon.lignes as unknown[])?.length ?? 0} lignes, ${pages.length} page(s), modèle ${modele})`,
+  );
+  return reponse(200, { extraction: bon });
 });
