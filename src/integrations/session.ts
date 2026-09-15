@@ -71,8 +71,10 @@ import {
   UNITES_DEFAUT,
 } from "./reglages";
 import {
+  attenteAvantChiffrage,
   blocagesChiffrage,
   blocagesValidationConducteur,
+  etapeValidation,
   messageBlocages,
 } from "@/api/regles-bc";
 import {
@@ -453,6 +455,9 @@ export function injecterSession() {
   w.integrerTravailSupplementaire = queries.integrerTravailSupplementaire;
 
   // Validation directeur : ce qui bloque, et le document qui le montre
+  /* La file de validation : quels bons y entrent, et ce qu'on y attend. */
+  w.etapeValidation = etapeValidation;
+  w.attenteAvantChiffrage = attenteAvantChiffrage;
   w.blocagesChiffrage = blocagesChiffrage;
   w.blocagesValidationConducteur = blocagesValidationConducteur;
   w.messageBlocages = messageBlocages;
