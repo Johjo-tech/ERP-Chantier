@@ -44,6 +44,12 @@ export interface ExtractionBC {
   adresse?: string | null;
   codePostal?: string | null;
   ville?: string | null;
+  /* Là où la facture doit être envoyée, quand le bon le dit — un bailleur
+     facture rarement à son siège. Distinct des trois précédents, qui désignent
+     le chantier. */
+  facturationAdresse?: string | null;
+  facturationCodePostal?: string | null;
+  facturationVille?: string | null;
   numeroLogement?: string | null;
   logementStatut?: string | null;
   occupant?: string | null;
@@ -274,6 +280,9 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     adresse: e.adresse ?? "",
     codePostal: e.codePostal ?? "",
     ville: e.ville ?? "",
+    facturationAdresse: e.facturationAdresse ?? "",
+    facturationCodePostal: e.facturationCodePostal ?? "",
+    facturationVille: e.facturationVille ?? "",
     logementStatut,
     numeroLogement: e.numeroLogement ?? "",
     occupant: e.occupant ?? "",

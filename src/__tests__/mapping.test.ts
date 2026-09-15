@@ -122,6 +122,28 @@ describe("Robustesse de la traduction vers la base", () => {
     expect(colonnesDe("table_inexistante")).toBeNull();
   });
 
+  /* Le générateur découpait `database.types.ts` sur la première occurrence de
+     « Tables: { » — celle de `graphql_public`, qui est vide. Il écrivait donc
+     une carte sans aucune table, et `colonnesDe()` aurait écarté chaque champ
+     de chaque insertion sans un mot. Il s'arrête maintenant, mais la carte
+     étant un fichier commité, ce cas doit se voir ici aussi. */
+  it("porte toutes les tables, jamais une carte vide", () => {
+    for (const table of ["devis", "factures", "bons_commande", "articles", "clients"]) {
+      expect(colonnesDe(table)?.size ?? 0).toBeGreaterThan(5);
+    }
+  });
+
+  /* La carte avait dérivé du schéma : ces colonnes-là existaient en base et
+     manquaient ici. L'écran les écrivait, `versDb` les jetait, et personne ne
+     voyait rien — ni erreur, ni donnée. */
+  it("suit le schéma quand il s'enrichit", () => {
+    expect(colonnesDe("bons_commande")?.has("facturation_adresse")).toBe(true);
+    const articles = colonnesDe("articles");
+    for (const colonne of ["actif", "famille", "prix_achat", "type_article", "gere_en_stock"]) {
+      expect(articles?.has(colonne)).toBe(true);
+    }
+  });
+
   it("expose les valeurs admises des colonnes énumérées", () => {
     expect(valeursEnum("devis", "logement_statut")).toEqual([
       "occupé",

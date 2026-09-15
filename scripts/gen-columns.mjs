@@ -9,7 +9,17 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const src = readFileSync("src/api/database.types.ts", "utf8");
-const tablesBlock = src.split("Tables: {")[1].split("\n    Views: {")[0];
+
+/* Le fichier généré décrit deux schémas, et `graphql_public` vient en premier.
+   Découper sur la première occurrence de « Tables: { » ramenait donc son bloc,
+   qui est vide (`[_ in never]: never`) : la carte sortait sans aucune table, et
+   `colonnesDe()` aurait filtré *toutes* les colonnes de *toutes* les insertions.
+   On vise le schéma par son nom. */
+const schemaPublic = src.split("\n  public: {")[1];
+if (!schemaPublic) {
+  throw new Error("database.types.ts : schéma `public` introuvable");
+}
+const tablesBlock = schemaPublic.split("    Tables: {")[1].split("\n    Views: {")[0];
 
 const tables = {};
 const re = /^      (\w+): \{\n(?:.*\n)*?        Insert: \{\n((?:.*\n)*?)        \}\n/gm;
@@ -22,7 +32,7 @@ while ((m = re.exec(tablesBlock))) {
 // Valeurs admises par colonne énumérée : une valeur hors liste ferait rejeter
 // l'insertion entière (22P02), là où l'ignorer ne perd qu'un champ.
 const enumsParNom = {};
-const blocEnums = src.split("Enums: {")[1].split("CompositeTypes")[0];
+const blocEnums = schemaPublic.split("    Enums: {")[1].split("    CompositeTypes")[0];
 for (const m of blocEnums.matchAll(/^      (\w+):((?:[^\n]*\n(?:\s*\|[^\n]*\n)*))/gm)) {
   const valeurs = [...m[2].matchAll(/"([^"]+)"/g)].map((v) => v[1]);
   if (valeurs.length) enumsParNom[m[1]] = valeurs;
@@ -56,6 +66,16 @@ const lignesEnums = Object.entries(enumsParTable)
 const lignes = Object.entries(tables)
   .map(([t, cols]) => `  ${t}: [${cols.map((c) => `"${c}"`).join(", ")}],`)
   .join("\n");
+
+/* Une carte vide n'est pas un résultat, c'est une panne : elle ferait écarter
+   chaque champ de chaque insertion, sans que rien ne le dise. Le générateur
+   s'arrête plutôt que d'écraser un fichier juste par un fichier muet — c'est
+   exactement ce qu'il venait de faire quand le découpage de schéma a changé. */
+if (!Object.keys(tables).length) {
+  throw new Error(
+    "database.types.ts : aucune table lue — format inattendu, `columns.ts` laissé intact"
+  );
+}
 
 writeFileSync(
   "src/api/columns.ts",

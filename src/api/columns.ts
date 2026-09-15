@@ -7,10 +7,10 @@
  */
 
 const COLONNES: Record<string, readonly string[]> = {
-  articles: ["code", "cree_le", "designation", "id", "legacy_id", "maj_le", "metier", "prix_unitaire", "societe_id", "tva", "unite"],
+  articles: ["actif", "code", "cree_le", "description", "designation", "famille", "gere_en_stock", "id", "legacy_id", "maj_le", "metier", "prix_achat", "prix_unitaire", "societe_id", "tva", "type_article", "unite"],
   bon_commande_lignes: ["article_reference", "bon_commande_id", "commentaire", "cree_le", "designation", "id", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "type", "unite", "unite_code"],
   bon_commande_photos: ["bon_commande_id", "chemin", "cree_le", "id", "legende", "position"],
-  bons_commande: ["adresse", "adresse_locataire", "ancien_locataire", "bon_commande_parent_id", "client_id", "client_nom", "code_postal", "conducteur", "cree_le", "date", "date_fin_travaux", "date_planifiee", "date_planifiee_fin", "date_reception", "devis_id", "duree_dernier_jour", "duree_heures", "en_attente_bc", "etage", "gratuite", "gratuite_motif", "heure_dernier_jour", "heure_planifiee", "id", "interlocuteur", "legacy_id", "logement_statut", "maj_le", "metier", "metiers", "montant", "montant_par_metier", "montant_sous_traitant", "notes", "numero_bc", "numero_interne", "numero_logement", "occupant", "precision_commune", "probleme_description", "sans_bc", "schedule_par_metier", "societe_id", "statut", "statut_workflow", "technicien", "ville"],
+  bons_commande: ["adresse", "adresse_locataire", "ancien_locataire", "bon_commande_parent_id", "client_id", "client_nom", "code_postal", "conducteur", "cree_le", "date", "date_fin_travaux", "date_planifiee", "date_planifiee_fin", "date_reception", "devis_id", "duree_dernier_jour", "duree_heures", "en_attente_bc", "etage", "facturation_adresse", "facturation_code_postal", "facturation_ville", "gratuite", "gratuite_motif", "heure_dernier_jour", "heure_planifiee", "id", "interlocuteur", "legacy_id", "logement_statut", "maj_le", "metier", "metiers", "montant", "montant_par_metier", "montant_sous_traitant", "notes", "numero_bc", "numero_interne", "numero_logement", "occupant", "precision_commune", "probleme_description", "sans_bc", "schedule_par_metier", "societe_id", "statut", "statut_workflow", "technicien", "ville"],
   chantier_achats: ["chantier_id", "cree_le", "date_achat", "designation", "fichier_chemin", "fichier_nom", "fournisseur", "id", "legacy_id", "maj_le", "montant"],
   chantier_affectations: ["chantier_id", "cree_le", "id", "maj_le", "profile_id", "role_sur_chantier", "societe_id"],
   chantier_avancement_factures: ["avancement_apres", "avancement_avant", "cree_le", "dpgf_ligne_id", "facture_id", "id", "montant_facture"],
@@ -28,7 +28,7 @@ const COLONNES: Record<string, readonly string[]> = {
   devis_lignes: ["article_reference", "commentaire", "cree_le", "designation", "devis_id", "id", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "type", "unite", "unite_code"],
   documents_legaux: ["cree_le", "date_validite", "fichier_chemin", "fichier_nom", "id", "legacy_id", "maj_le", "nom", "societe_id", "type"],
   ereporting_depots: ["cree_le", "donnees", "echeance", "flux", "id", "maj_le", "message", "nb_factures", "pdp_depot_id", "periode", "regime", "societe_id", "statut", "total_ht", "total_ttc", "total_tva", "transmis_le"],
-  facture_cycle_vie: ["auteur_id", "cree_le", "date_statut", "donnees", "facture_id", "id", "message", "statut"],
+  facture_cycle_vie: ["auteur_id", "code_plateforme", "cree_le", "date_statut", "donnees", "facture_id", "id", "message", "pdp_evenement_id", "statut"],
   facture_entrante_lignes: ["cree_le", "designation", "facture_entrante_id", "id", "montant_ht", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "unite_code"],
   facture_lignes: ["article_reference", "commentaire", "cree_le", "designation", "facture_id", "id", "montant_ht", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "tva_motif_exoneration", "type", "unite", "unite_code"],
   factures: ["acomptes_deduits", "adresse", "adresse_locataire", "ancien_locataire", "bon_commande_id", "cadre_facturation", "chantier_id", "client_code_routage", "client_code_service", "client_id", "client_nom", "client_pays_code", "client_siren", "client_siret", "client_tva_intracom", "code_postal", "conditions_reglement", "conducteur", "cree_le", "date", "date_fin_execution", "date_livraison", "depose_le", "devis_id", "devise", "echeance", "emetteur_adresse", "emetteur_code_postal", "emetteur_iban", "emetteur_nom", "emetteur_pays_code", "emetteur_siren", "emetteur_siret", "emetteur_tva_intracom", "emetteur_ville", "escompte_pourcentage", "etage", "facturation_adresse", "facturation_code_postal", "facturation_pays_code", "facturation_ville", "facture_rectifiee_id", "id", "identifiant_unique", "indemnite_recouvrement", "interlocuteur", "intervention_id", "legacy_id", "livraison_adresse", "livraison_code_postal", "livraison_pays_code", "livraison_ville", "logement_statut", "maj_le", "mode_paiement", "motif_rectification", "net_a_payer", "numero", "numero_logement", "occupant", "pdp_identifiant", "pdp_transmission_id", "penalites_retard", "precision_commune", "ref_bon_commande_client", "ref_contrat", "ref_marche", "remise_pourcentage", "societe_id", "statut", "statut_cycle", "taux_change", "total_ht", "total_remise", "total_ttc", "total_tva", "tva_categorie", "tva_motif_exoneration", "tva_sur_encaissements", "type_document", "ventilation_tva", "verrouillee", "ville"],
@@ -48,10 +48,11 @@ const COLONNES: Record<string, readonly string[]> = {
   metiers: ["cree_le", "id", "legacy_id", "libelle", "maj_le", "societe_id"],
   pdp_connexion_secrets: ["access_token", "bail_refresh", "connexion_id", "cree_le", "dernier_refresh_le", "expire_le", "maj_le", "refresh_token"],
   pdp_connexions: ["adresse_electronique_schema", "adresse_electronique_valeur", "connecte_le", "cree_le", "environnement", "etat", "expire_le", "fournisseur", "id", "maj_le", "message", "pdp_company_id", "pdp_seller_number", "societe_id"],
-  pdp_oauth_etats: ["cree_le", "etat", "expire_le", "id", "profile_id", "redirect_uri", "societe_id"],
+  pdp_oauth_etats: ["code_verifier", "cree_le", "environnement", "etat", "expire_le", "id", "profile_id", "redirect_uri", "retour_url", "societe_id"],
   planning_taches: ["bon_commande_id", "chantier_id", "commentaire", "cree_le", "croquis", "date_tache", "dpgf_ligne_id", "heure_debut", "heure_fin", "id", "legacy_id", "libelle", "maj_le", "metier", "piece_a_commander", "piece_date_commande", "piece_description", "piece_fournisseur", "piece_recue_le", "quantite_planifiee", "realisee_le", "realisee_par", "refus_motif", "societe_id", "sous_traitant_id", "statut", "technicien_id", "validee_le", "validee_par"],
   profiles: ["actif", "cree_le", "email", "id", "maj_le", "nom"],
   reglements: ["cree_le", "date", "facture_id", "id", "legacy_id", "maj_le", "mode", "montant", "reference", "societe_id"],
+  role_permissions: ["action", "module", "role"],
   salarie_absences: ["approuve_par", "commentaire", "cree_le", "date_approbation", "date_debut", "date_fin", "id", "justificatif_chemin", "justificatif_nom", "legacy_id", "maj_le", "motif", "nb_jours", "salarie_id", "statut", "type"],
   salarie_contacts_urgence: ["adresse", "cree_le", "email", "id", "lien_parente", "maj_le", "nom", "principal", "salarie_id", "telephone"],
   salarie_contrats: ["cree_le", "date_document", "fichier_chemin", "fichier_nom", "id", "legacy_id", "maj_le", "nom", "salarie_id", "type"],
@@ -102,6 +103,7 @@ const ENUMS: Record<string, Record<string, readonly string[]>> = {
   interventions: { logement_statut: ["occupé", "vacant", "commune"], metier: ["plomberie", "electricite", "etancheite"] },
   invitations: { role: ["admin", "conducteur", "technicien", "lecture", "secretaire", "sous_traitant"] },
   membres_societe: { role: ["admin", "conducteur", "technicien", "lecture", "secretaire", "sous_traitant"] },
+  role_permissions: { role: ["admin", "conducteur", "technicien", "lecture", "secretaire", "sous_traitant"] },
 };
 
 /** Colonnes acceptées par la table, ou `null` si la table est inconnue. */

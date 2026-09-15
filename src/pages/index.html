@@ -4416,6 +4416,9 @@ function setBCMode(mode){
   e.adresse = grab('bc_adresse') ?? e.adresse;
   e.codePostal = grab('bc_codePostal') ?? e.codePostal;
   e.ville = grab('bc_ville') ?? e.ville;
+  e.facturationAdresse = grab('bc_facturationAdresse') ?? e.facturationAdresse;
+  e.facturationCodePostal = grab('bc_facturationCodePostal') ?? e.facturationCodePostal;
+  e.facturationVille = grab('bc_facturationVille') ?? e.facturationVille;
   e.logementStatut = grab('bc_logementStatut') ?? e.logementStatut;
   e.precisionCommune = grab('bc_precisionCommune') ?? e.precisionCommune;
   e.ancienLocataire = grab('bc_ancienLocataire') ?? e.ancienLocataire;
@@ -6359,6 +6362,14 @@ function bonCommandeForm(){
         <div class="field"><label>Interlocuteur</label><select id="bc_interlocuteur" onchange="refreshDevisLieSelect()">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
         ${isSAV? '' : `<div class="field"><label>Devis lié (si applicable)</label><select id="bc_devisId" onchange="applyDevisMontant(this.value)">${devisSelectOptions(e.client, e.devisId, e.id, e.interlocuteur)}</select></div>`}
       </div>
+      <p class="card-sub">Adresse de facturation : à remplir seulement si le bon en désigne une — service comptable, centre de gestion. Vide, c'est le siège du client qui sert.</p>
+      <div class="field-grid">
+        <div class="address-trio">
+          <div class="field"><label>Adresse de facturation</label><input type="text" id="bc_facturationAdresse" autocomplete="off" value="${esc(e.facturationAdresse)}" placeholder="Où envoyer la facture"></div>
+          <div class="field"><label>Code postal</label><input type="text" id="bc_facturationCodePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.facturationCodePostal)}" oninput="lookupVilleParCodePostal(this.value,'bc_facturationVille')"></div>
+          <div class="field"><label>Ville</label><input type="text" id="bc_facturationVille" autocomplete="off" value="${esc(e.facturationVille)}"></div>
+        </div>
+      </div>
     </div>
     <div class="form-section">
       <div class="form-section-head">${isSAV? 'SAV' : 'Bon de commande'}</div>
@@ -6508,6 +6519,12 @@ async function saveBonCommande(){
       precisionCommune: document.getElementById('bc_precisionCommune').value,
       ancienLocataire: document.getElementById('bc_ancienLocataire').value
     }),
+    /* Le bon dit où envoyer la facture ; `bc_generer_facture` recopie ces trois
+       champs dans `factures.facturation_*`, que la facture électronique lit
+       avant l'adresse du client. Laissés vides, c'est le siège qui sert. */
+    facturationAdresse: document.getElementById('bc_facturationAdresse').value,
+    facturationCodePostal: document.getElementById('bc_facturationCodePostal').value,
+    facturationVille: document.getElementById('bc_facturationVille').value,
     dateReception: dateReceptionInput? (dateReceptionInput.value || todayISO()) : (e.dateReception||todayISO()),
     dateFinTravaux: document.getElementById('bc_dateFinTravaux').value,
     montant: montantTotal,

@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -231,6 +236,9 @@ export type Database = {
           duree_heures: number | null
           en_attente_bc: boolean
           etage: string | null
+          facturation_adresse: string | null
+          facturation_code_postal: string | null
+          facturation_ville: string | null
           gratuite: boolean
           gratuite_motif: string | null
           heure_dernier_jour: string | null
@@ -280,6 +288,9 @@ export type Database = {
           duree_heures?: number | null
           en_attente_bc?: boolean
           etage?: string | null
+          facturation_adresse?: string | null
+          facturation_code_postal?: string | null
+          facturation_ville?: string | null
           gratuite?: boolean
           gratuite_motif?: string | null
           heure_dernier_jour?: string | null
@@ -331,6 +342,9 @@ export type Database = {
           duree_heures?: number | null
           en_attente_bc?: boolean
           etage?: string | null
+          facturation_adresse?: string | null
+          facturation_code_postal?: string | null
+          facturation_ville?: string | null
           gratuite?: boolean
           gratuite_motif?: string | null
           heure_dernier_jour?: string | null
@@ -5298,6 +5312,9 @@ export type Database = {
           duree_heures: number | null
           en_attente_bc: boolean | null
           etage: string | null
+          facturation_adresse: string | null
+          facturation_code_postal: string | null
+          facturation_ville: string | null
           gratuite: boolean | null
           gratuite_motif: string | null
           heure_dernier_jour: string | null
@@ -5347,6 +5364,9 @@ export type Database = {
           duree_heures?: number | null
           en_attente_bc?: boolean | null
           etage?: string | null
+          facturation_adresse?: string | null
+          facturation_code_postal?: string | null
+          facturation_ville?: string | null
           gratuite?: boolean | null
           gratuite_motif?: string | null
           heure_dernier_jour?: string | null
@@ -5398,6 +5418,9 @@ export type Database = {
           duree_heures?: number | null
           en_attente_bc?: boolean | null
           etage?: string | null
+          facturation_adresse?: string | null
+          facturation_code_postal?: string | null
+          facturation_ville?: string | null
           gratuite?: boolean | null
           gratuite_motif?: string | null
           heure_dernier_jour?: string | null
@@ -6126,4 +6149,3 @@ export const Constants = {
     },
   },
 } as const
-
