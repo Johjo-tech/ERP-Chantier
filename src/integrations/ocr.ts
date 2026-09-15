@@ -10,6 +10,7 @@
  */
 
 import { supabase, todayISO } from "@/api/client";
+import { essentielsDeLecture } from "@/api/regles-bc";
 import {
   DELAI_BASCULE_ANALYSE_MS,
   DELAI_LECTURE_MS,
@@ -251,10 +252,23 @@ export async function extraireBonCommande(
     }
     if (!data?.extraction) throw new Error("Lecture du bon impossible : réponse vide.");
 
+    const lignes = data.extraction.lignes ?? [];
+
+    /* Le modèle remplit `avertissements` à sa discrétion, et il se tait
+       justement quand il n'a rien vu : une lecture qui rentre sans numéro, sans
+       adresse de chantier ni ligne de travaux se présentait comme une réussite.
+       On complète donc son compte rendu par ce qu'on sait manquer. */
     return {
       ...data.extraction,
-      lignes: data.extraction.lignes ?? [],
-      avertissements: data.extraction.avertissements ?? [],
+      lignes,
+      avertissements: [
+        ...(data.extraction.avertissements ?? []),
+        ...essentielsDeLecture({
+          numeroBC: data.extraction.numeroBC,
+          adresse: data.extraction.adresse,
+          lignes,
+        }).map((m) => m.libelle),
+      ],
     };
   } finally {
     clearTimeout(bascule);

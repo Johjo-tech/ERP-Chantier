@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { lignesDeTravaux, manquesBonCommande } from "@/api/regles-bc";
+import { essentielsDeLecture, lignesDeTravaux, manquesBonCommande } from "@/api/regles-bc";
 
 const ADRESSE = "33 rue du Grand Veymont";
 
@@ -98,5 +98,59 @@ describe("Ce qu'un bon de commande doit porter", () => {
     const [adresse, ligne] = manquesBonCommande({}).map((m) => m.libelle);
     expect(adresse).toContain("Lieu d'intervention");
     expect(ligne).toContain("Le prix peut attendre");
+  });
+});
+
+/**
+ * Ce qu'une lecture automatique doit avoir ramené.
+ *
+ * Le modèle remplit `avertissements` à sa discrétion et se tait précisément
+ * quand il n'a rien vu : une lecture vide se présentait comme une réussite.
+ */
+describe("Les essentiels d'une lecture", () => {
+  const COMPLETE = {
+    numeroBC: "E816222",
+    adresse: "33 rue du Grand Veymont",
+    lignes: [{ type: "ligne", designation: "Reprise peinture séjour" }],
+  };
+
+  it("ne signale rien quand les trois sont là", () => {
+    expect(essentielsDeLecture(COMPLETE)).toEqual([]);
+  });
+
+  it("signale le numéro de bon non lu", () => {
+    const codes = essentielsDeLecture({ ...COMPLETE, numeroBC: null }).map((m) => m.code);
+    expect(codes).toEqual(["numero_bc"]);
+  });
+
+  it("signale l'adresse de chantier non lue", () => {
+    const codes = essentielsDeLecture({ ...COMPLETE, adresse: "" }).map((m) => m.code);
+    expect(codes).toEqual(["adresse_intervention"]);
+  });
+
+  /* Un bon lu sans tableau chiffré : le modèle doit résumer les travaux. S'il
+     ne rend que la structure, il n'a rien rapporté d'utilisable. */
+  it("ne prend pas un chapitre seul pour une ligne de travaux", () => {
+    const codes = essentielsDeLecture({
+      ...COMPLETE,
+      lignes: [{ type: "chapitre", designation: "PLOMBERIE" }],
+    }).map((m) => m.code);
+    expect(codes).toEqual(["ligne_travaux"]);
+  });
+
+  it("les énumère tous les trois sur une lecture vide", () => {
+    expect(essentielsDeLecture({}).map((m) => m.code)).toEqual([
+      "numero_bc",
+      "adresse_intervention",
+      "ligne_travaux",
+    ]);
+  });
+
+  /* Le numéro se signale mais ne refuse rien : « Sans BC » est un cas réel.
+     Les deux autres, eux, bloquent l'enregistrement. */
+  it("signale le numéro sans pour autant interdire d'enregistrer", () => {
+    const bon = { adresse: COMPLETE.adresse, lignes: COMPLETE.lignes };
+    expect(essentielsDeLecture({ ...bon }).map((m) => m.code)).toContain("numero_bc");
+    expect(manquesBonCommande(bon)).toEqual([]);
   });
 });

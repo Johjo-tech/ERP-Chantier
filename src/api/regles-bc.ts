@@ -327,7 +327,7 @@ export function attenteAvantChiffrage(bon: BonEnFile): string | null {
 
 // ============ CE QU'UN BON DE COMMANDE DOIT PORTER ============
 
-export type CodeManque = "adresse_intervention" | "ligne_travaux";
+export type CodeManque = "adresse_intervention" | "ligne_travaux" | "numero_bc";
 
 export interface Manque {
   code: CodeManque;
@@ -396,6 +396,62 @@ export function manquesBonCommande(bon: SaisieBonCommande): Manque[] {
         "Au moins une ligne de travaux est obligatoire : décrivez en gros ce " +
         "qu'il y a à faire. Le prix peut attendre le chiffrage, la description " +
         "non — sans elle, la facture ne dira pas ce qui a été fait.",
+    });
+  }
+
+  return manques;
+}
+
+/**
+ * Ce qu'une lecture automatique doit avoir ramené pour être exploitable.
+ *
+ * Trois choses, et elles se voient toutes en aval :
+ *
+ * - le **numéro du bon**, la référence sous laquelle le client connaît
+ *   l'affaire — sans elle, personne ne rapproche la facture de la commande ;
+ * - l'**adresse du chantier**, qui devient le « Lieu d'intervention » du
+ *   document (`bons_commande.adresse` → `factures.adresse_locataire`) ;
+ * - au moins une **ligne de travaux**, faute de quoi la facture s'invente la
+ *   sienne au montant global.
+ *
+ * Cette vérification est faite ici, après coup, et non laissée au modèle :
+ * `avertissements` est rempli à sa discrétion, et il se tait précisément quand
+ * il n'a rien vu. L'écran, lui, doit dire ce qui manque même — surtout — quand
+ * la lecture s'est crue complète.
+ *
+ * Le numéro ne bloque pas l'enregistrement, à la différence des deux autres
+ * (`manquesBonCommande`) : « Sans BC » et « En attente de BC » sont des cas
+ * réels du métier. Il se signale, il ne se refuse pas.
+ */
+export function essentielsDeLecture(lu: {
+  numeroBC?: string | null;
+  adresse?: string | null;
+  lignes?: LigneChiffrable[] | null;
+}): Manque[] {
+  const manques: Manque[] = [];
+
+  if ((lu.numeroBC ?? "").trim() === "") {
+    manques.push({
+      code: "numero_bc",
+      libelle:
+        "numéro de bon non lu — vérifiez-le sur le document, ou cochez " +
+        "« Sans BC » / « En attente de BC »",
+    });
+  }
+
+  if ((lu.adresse ?? "").trim() === "") {
+    manques.push({
+      code: "adresse_intervention",
+      libelle:
+        "adresse du chantier non lue — c'est elle qui devient le « Lieu " +
+        "d'intervention » de la facture",
+    });
+  }
+
+  if (!lignesDeTravaux(lu.lignes).length) {
+    manques.push({
+      code: "ligne_travaux",
+      libelle: "aucune ligne de travaux lue — décrivez en gros ce qu'il y a à faire",
     });
   }
 
