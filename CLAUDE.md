@@ -91,6 +91,10 @@ Un bug corrigé se double d'un test qui le reproduit.
   vide sur une énumération ou une date. L'adaptateur convertit en `null`.
 - Un champ sans colonne fait rejeter l'insertion **entière** par PostgREST :
   `colonnesDe()` filtre avant envoi.
+- Un champ **absent** ne prend pas le défaut de sa colonne : supabase-js déclare
+  `columns=` sur l'union des clés de toutes les lignes envoyées, et PostgREST y
+  écrit `NULL`. Sur une colonne `NOT NULL`, c'est l'insertion entière qui tombe
+  (23502). Donner une valeur, pas compter sur le `default`.
 - La racine Vite est `src/pages` : un `src="../x.ts"` dans le HTML sort de la
   racine et n'est pas servi. Passer par `src/pages/entry.ts`.
 
