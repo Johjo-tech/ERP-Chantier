@@ -75,6 +75,7 @@ import {
   blocagesChiffrage,
   blocagesValidationConducteur,
   etapeValidation,
+  manquesBonCommande,
   messageBlocages,
 } from "@/api/regles-bc";
 import {
@@ -461,6 +462,7 @@ export function injecterSession() {
   w.blocagesChiffrage = blocagesChiffrage;
   w.blocagesValidationConducteur = blocagesValidationConducteur;
   w.messageBlocages = messageBlocages;
+  w.manquesBonCommande = manquesBonCommande;
   w.lignesDocumentDirecteur = lignesDocumentDirecteur;
   w.comptesRendusTerrain = comptesRendusTerrain;
   w.badgeOrigine = badgeOrigine;

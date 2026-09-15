@@ -6390,8 +6390,8 @@ function bonCommandeForm(){
       <div class="field-grid">
         <div class="address-trio">
           <div class="field" style="position:relative;">
-            <label>Adresse</label>
-            <input type="text" id="bc_adresse" autocomplete="off" value="${esc(e.adresse)}" placeholder="Adresse d'intervention" data-suggest="bcAdresseSuggestions"
+            <label>Adresse d'intervention *</label>
+            <input type="text" id="bc_adresse" autocomplete="off" value="${esc(e.adresse)}" placeholder="Où les travaux ont lieu — pas l'adresse du client" data-suggest="bcAdresseSuggestions"
                    oninput="searchAdresse(this, {adresse:'bc_adresse', codePostal:'bc_codePostal', ville:'bc_ville'})"
                    onblur="setTimeout(()=>{const b=document.getElementById('bcAdresseSuggestions'); if(b) b.style.display='none';},150)">
             <div id="bcAdresseSuggestions" class="suggest-box"></div>
@@ -6422,11 +6422,11 @@ function bonCommandeForm(){
         <div class="field full" id="bcMontantFieldsZone">${bcMontantFieldsHTML(e.metiers || (e.metier? [e.metier] : []), e.montantParMetier || {}, e.montant)}</div>
       </div>
       <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; border-top:none; padding-top:0;">
-        <span>Prestations détaillées (pré-facture)</span>
-        <button type="button" class="btn small ${bcLignesOntDuContenu(e.lignes)? 'ghost' : 'primary'}" onclick="toggleBCLignesZone()">${bcLignesOntDuContenu(e.lignes)? '▲ Masquer' : '▼ Ajouter lignes de prix et commentaires'}</button>
+        <span>Travaux à réaliser *</span>
+        <button type="button" class="btn small ghost" onclick="toggleBCLignesZone()">▲ Masquer</button>
       </div>
-      <p class="card-sub">Facultatif — chiffrez les prestations ligne par ligne (avec prix, chapitres et lignes de commentaire), comme sur un devis. Si vous remplissez cette section, le montant ci-dessus sera recalculé automatiquement.</p>
-      <div id="bcLignesZone" style="display:${bcLignesOntDuContenu(e.lignes)?'block':'none'};">
+      <p class="card-sub">Au moins une ligne est obligatoire : décrivez en gros ce qu'il y a à faire. Le prix peut rester à zéro, il se saisit au chiffrage — la description, elle, part sur la facture. Si vous chiffrez ici, le montant ci-dessus sera recalculé automatiquement.</p>
+      <div id="bcLignesZone" style="display:block;">
         <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
         <tbody id="lignesBody">${ligneRowsHTML(e.lignes&&e.lignes.length? e.lignes : [{type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}])}</tbody></table>
         <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
@@ -6451,6 +6451,14 @@ async function saveBonCommande(){
   const e = state.editing;
   const client = document.getElementById('bc_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); bcSaveInProgress = false; return; }
+  /* La règle vit dans `regles-bc.ts`, pas ici : la couche `queries` s'en sert
+     pour refuser et cet écran pour expliquer. Le refus et son message ne
+     peuvent donc pas diverger. */
+  const manques = window.manquesBonCommande({
+    adresse: document.getElementById('bc_adresse').value,
+    lignes: state.editing.lignes,
+  });
+  if(manques.length){ alert(manques.map(m=>'• '+m.libelle).join('\n\n')); bcSaveInProgress = false; return; }
   const id = e.id || uid();
   const sansBC = !!e.sansBC;
   const enAttenteBC = !!e.enAttenteBC;

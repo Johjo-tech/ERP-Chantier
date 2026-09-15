@@ -324,3 +324,80 @@ export function attenteAvantChiffrage(bon: BonEnFile): string | null {
   // Tout est déclaré fait, rien n'est arbitré : c'est le conducteur qu'on attend.
   return "Travaux déclarés faits — en attente d'arbitrage du conducteur";
 }
+
+// ============ CE QU'UN BON DE COMMANDE DOIT PORTER ============
+
+export type CodeManque = "adresse_intervention" | "ligne_travaux";
+
+export interface Manque {
+  code: CodeManque;
+  libelle: string;
+}
+
+/** Ce que la règle a besoin de savoir du bon saisi. */
+export interface SaisieBonCommande {
+  /** L'adresse d'intervention : le chantier, jamais le siège du client. */
+  adresse?: string | null;
+  lignes?: LigneChiffrable[] | null;
+}
+
+/**
+ * Une ligne de travaux est une ligne qui **dit ce qu'il y a à faire**.
+ *
+ * Le prix n'entre pas dans le compte : un bon arrive souvent avant tout
+ * chiffrage, et l'exiger reviendrait à interdire de l'enregistrer au moment où
+ * on le reçoit. Un chapitre ou un commentaire ne compte pas davantage : ils
+ * structurent le document, ils ne décrivent aucun travail.
+ */
+export function lignesDeTravaux(lignes: LigneChiffrable[] | null | undefined) {
+  return (lignes ?? []).filter(
+    (l) =>
+      (l.type ?? TYPE_LIGNE_DEFAUT) === TYPE_LIGNE_DEFAUT &&
+      (l.designation ?? "").trim() !== ""
+  );
+}
+
+/**
+ * Ce qui manque à un bon de commande pour être enregistrable.
+ *
+ * Deux exigences, et elles ne sont pas de confort :
+ *
+ * L'**adresse d'intervention** est le lieu des travaux, pas le siège du client.
+ * C'est elle que `bc_generer_facture` recopie dans `factures.adresse_locataire`,
+ * et c'est elle seule qui remplit le bloc « Lieu d'intervention » du document
+ * imprimé. Un bon sans adresse produit donc une facture qui ne dit pas où le
+ * travail a eu lieu — sur 394 factures de production, 4 en portaient une.
+ *
+ * Au moins une **ligne de travaux**, parce que sans elle la facture s'invente
+ * la sienne : faute de lignes, `bc_generer_facture` insère « Travaux — BC n°… »
+ * au montant global. Le client reçoit une facture qui ne décrit rien, et
+ * personne ne peut plus rapprocher ce qui a été fait de ce qui a été payé.
+ *
+ * Les messages disent quoi faire, pas ce qui est faux : ils s'affichent à
+ * quelqu'un qui est en train de saisir.
+ */
+export function manquesBonCommande(bon: SaisieBonCommande): Manque[] {
+  const manques: Manque[] = [];
+
+  if ((bon.adresse ?? "").trim() === "") {
+    manques.push({
+      code: "adresse_intervention",
+      libelle:
+        "L'adresse d'intervention est obligatoire : c'est le lieu des travaux, " +
+        "pas l'adresse du client. Elle est reportée sur la facture sous « Lieu " +
+        "d'intervention ».",
+    });
+  }
+
+  if (!lignesDeTravaux(bon.lignes).length) {
+    manques.push({
+      code: "ligne_travaux",
+      libelle:
+        "Au moins une ligne de travaux est obligatoire : décrivez en gros ce " +
+        "qu'il y a à faire. Le prix peut attendre le chiffrage, la description " +
+        "non — sans elle, la facture ne dira pas ce qui a été fait.",
+    });
+  }
+
+  return manques;
+}
