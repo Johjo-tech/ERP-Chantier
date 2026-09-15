@@ -111,8 +111,14 @@ async function normaliserImage(fichier: File): Promise<File> {
   });
 }
 
-/** Prépare le fichier : conversion et allègement si nécessaire. */
-async function preparer(fichier: File): Promise<File> {
+/**
+ * Prépare le fichier : conversion et allègement si nécessaire.
+ *
+ * Exportée parce que le champ « Pièce jointe » du formulaire doit en passer par
+ * la même préparation que la lecture automatique. Deux normalisations pour un
+ * même document finiraient par accepter d'un côté ce que l'autre refuse.
+ */
+export async function preparer(fichier: File): Promise<File> {
   const estImage = fichier.type.startsWith("image/") || !fichier.type;
 
   if (estImage && (!MIMES_ACCEPTES.includes(fichier.type) || fichier.size > TAILLE_RECOMPRESSION)) {
@@ -196,6 +202,16 @@ export interface OptionsLecture {
   signal?: AbortSignal;
   /** Appelé à chaque étape : c'est ce qui rend le travail visible. */
   surEtape?: (etape: EtapeLecture) => void;
+  /**
+   * Le document, une fois préparé, pour que l'écran puisse le conserver.
+   *
+   * C'est le fichier **préparé** qui est rendu, pas celui déposé : un HEIC
+   * d'iPhone y est déjà devenu un JPEG, et archiver l'original reviendrait à
+   * garder un document qu'aucun navigateur ne sait rouvrir. Un PDF, lui,
+   * traverse la préparation intact — le bon du client reste bit pour bit celui
+   * qu'on a reçu.
+   */
+  surFichierPret?: (fichier: File) => void;
 }
 
 export async function extraireBonCommande(
@@ -206,6 +222,7 @@ export async function extraireBonCommande(
 
   dire("preparation");
   const fichier = await preparer(brut);
+  options.surFichierPret?.(fichier);
 
   dire("encodage");
   const fichierBase64 = await fichierEnBase64(fichier);

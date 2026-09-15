@@ -1139,6 +1139,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    au-dessus, il fallait faire défiler pour comparer. */
 .pf-colonnes{ display:flex; gap:16px; align-items:flex-start; }
 .pf-reference{ flex:0 0 44%; max-height:68vh; overflow:auto; font-size:9pt; }
+/* Un document du client n'est pas du HTML de document : sans hauteur propre,
+   l'iframe se replie à zéro dans un conteneur dimensionné par son contenu. */
+.pf-reference-fichier{ width:100%; height:66vh; border:0; display:block; }
+img.pf-reference-fichier{ height:auto; max-height:66vh; object-fit:contain; }
 .pf-travail{ flex:1; min-width:0; }
 @media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; } }
 .print-preview table{ width:100%; border-collapse:collapse; }
@@ -2263,26 +2267,68 @@ function setTab(id){
   renderShell();
   renderTab();
 }
-function openAttachmentPreviewFor(kind, id){
+async function openAttachmentPreviewFor(kind, id){
   const resolved = resolvePlanningItem(kind, id);
-  if(!resolved || !resolved.bc.pieceJointeData) return;
-  openAttachmentPreview(resolved.bc.pieceJointeData, resolved.bc.pieceJointeNom);
+  if(resolved) await ouvrirBonDuClient(resolved.bc.id);
 }
-function openAttachmentPreview(dataUrl, nom){
-  if(!dataUrl) return;
+
+/* Depuis une facture : le document du client s'il existe, la fiche du bon
+   sinon. Le repli est le comportement d'avant, à l'identique. */
+async function ouvrirBonCommandeOrigine(bcId){
+  const b = state.bonsCommande.find(x=>x.id===bcId);
+  if(b && (b.pieceJointeChemin || b.pieceJointeData)) return ouvrirBonDuClient(bcId);
+  goToBonCommande(bcId);
+}
+
+/* Le point d'entrée unique pour consulter le bon reçu du client, quel que soit
+   l'écran. Le repli sur la data-URL couvre les pièces déposées avant que le
+   document ne parte au stockage. */
+async function ouvrirBonDuClient(bcId){
+  if(await ouvrirPieceJointeBC(bcId)) return;
+  const b = state.bonsCommande.find(x=>x.id===bcId);
+  if(b && b.pieceJointeData) openAttachmentPreview(b.pieceJointeData, b.pieceJointeNom);
+}
+
+/* Le bon du client vit dans un bucket privé : son URL se demande, elle ne se
+   déduit pas d'un chemin. Rend vrai si le document a pu être ouvert — les
+   appelants s'en servent pour décider de leur repli. */
+async function ouvrirPieceJointeBC(bcId){
+  const b = state.bonsCommande.find(x=>x.id===bcId);
+  if(!b || !b.pieceJointeChemin) return false;
+  try{
+    const [url, urlTelechargement] = await Promise.all([
+      window.urlPieceJointe(b.pieceJointeChemin),
+      window.urlTelechargementPieceJointe(b.pieceJointeChemin)
+    ]);
+    openAttachmentPreview(url, b.pieceJointeNom || 'Bon de commande', b.pieceJointeMime, urlTelechargement);
+    return true;
+  }catch(err){
+    /* Le chemin désigne un objet disparu, ou les droits ont changé. Le dire :
+       un aperçu qui ne s'ouvre pas sans un mot laisse croire à un clic raté. */
+    console.error('Pièce jointe illisible', b.pieceJointeChemin, err);
+    showToast("Le document du client n'a pas pu être ouvert.");
+    return false;
+  }
+}
+/* `source` est soit une data-URL — le cas historique — soit une URL signée, ce
+   que rend un bucket privé. `mime` et `urlTelechargement` ne servent qu'au
+   second cas : une URL signée ne porte pas son type, et l'attribut `download`
+   est ignoré par le navigateur sur un autre domaine — le fichier s'ouvrirait
+   dans un onglet au lieu de s'enregistrer. */
+function openAttachmentPreview(source, nom, mime, urlTelechargement){
+  if(!source) return;
   const modal = document.getElementById('attachmentPreviewModal');
   const body = document.getElementById('attachmentPreviewBody');
   const title = document.getElementById('attachmentPreviewTitle');
   const dl = document.getElementById('attachmentPreviewDownload');
   title.textContent = nom || 'Pièce jointe';
-  dl.href = dataUrl;
+  dl.href = urlTelechargement || source;
   dl.download = nom || 'piece-jointe';
-  const mimeMatch = dataUrl.match(/^data:([^;]+);/);
-  const mime = mimeMatch ? mimeMatch[1] : '';
-  if(mime.startsWith('image/')){
-    body.innerHTML = `<img src="${dataUrl}" draggable="false">`;
-  } else if(mime === 'application/pdf'){
-    body.innerHTML = `<iframe src="${dataUrl}"></iframe>`;
+  const mode = window.apercuDe(source, mime, nom);
+  if(mode === 'image'){
+    body.innerHTML = `<img src="${esc(source)}" draggable="false">`;
+  } else if(mode === 'pdf'){
+    body.innerHTML = `<iframe src="${esc(source)}"></iframe>`;
   } else {
     body.innerHTML = `<div class="empty">Aperçu non disponible pour ce type de fichier — utilisez le téléchargement.</div>`;
   }
@@ -4443,22 +4489,45 @@ function setBCMode(mode){
   const zone = document.getElementById('formZoneBonCommande');
   if(zone) zone.innerHTML = bonCommandeForm();
 }
-function handleBCAttachment(inputEl){
-  const file = inputEl.files[0];
-  if(!file) return;
-  if(file.size > 5*1024*1024){ showToast('Fichier trop volumineux (5 Mo maximum).'); inputEl.value=''; return; }
-  const reader = new FileReader();
-  reader.onload = function(ev){
-    state.editing.pieceJointeData = ev.target.result;
-    state.editing.pieceJointeNom = file.name;
-    const preview = document.getElementById('bcAttachmentPreview');
-    if(preview) preview.innerHTML = `<div class="card-sub" style="margin-bottom:6px;">📎 ${esc(file.name)} <button class="btn small danger" type="button" onclick="removeBCAttachment()">✕</button></div>`;
-  };
-  reader.readAsDataURL(file);
+/* Le document n'est plus encodé en data-URL : il part au stockage à
+   l'enregistrement. Il passe par la même préparation que la lecture
+   automatique — un HEIC d'iPhone y devient un JPEG — et par le même contrôle,
+   pour que les deux zones de dépôt n'acceptent pas des choses différentes. */
+async function handleBCAttachment(inputEl){
+  const brut = inputEl.files[0];
+  if(!brut) return;
+  let file = brut;
+  try{
+    file = await window.preparerPieceJointe(brut);
+  }catch(err){
+    console.error('Préparation de la pièce jointe impossible', err);
+    showToast(err.message || "Ce fichier n'a pas pu être préparé.");
+    inputEl.value = '';
+    return;
+  }
+  const verdict = window.verifierPieceJointe({ nom: file.name, type: file.type, taille: file.size });
+  if(!verdict.ok){ showToast(verdict.motif); inputEl.value=''; return; }
+  retenirPieceJointeBC(file);
 }
+
+/* Le point de rendez-vous des deux dépôts : la lecture automatique et le champ
+   manuel posent le même fichier au même endroit. */
+function retenirPieceJointeBC(file){
+  state.editing.pieceJointeFichier = file;
+  state.editing.pieceJointeNom = file.name;
+  state.editing.pieceJointeData = null;
+  const preview = document.getElementById('bcAttachmentPreview');
+  if(preview) preview.innerHTML = `<div class="card-sub" style="margin-bottom:6px;">📎 ${esc(file.name)} <button class="btn small danger" type="button" onclick="removeBCAttachment()">✕</button></div>`;
+}
+
 function removeBCAttachment(){
+  state.editing.pieceJointeFichier = null;
   state.editing.pieceJointeData = null;
   state.editing.pieceJointeNom = '';
+  /* `null` explicite, et non « absent » : c'est ce qui distingue « retirer la
+     pièce » de « enregistrer sans y toucher », et donc ce qui décide si le
+     document déjà stocké doit être effacé. */
+  state.editing.pieceJointeChemin = null;
   const preview = document.getElementById('bcAttachmentPreview');
   if(preview) preview.innerHTML = '';
   const fileInput = document.getElementById('bc_pieceJointe');
@@ -4483,6 +4552,10 @@ function transformerBonCommandeEnFacture(bcId, ignorerValidationDirecteur){
     date:todayISO(), echeance:'',
     lignes: (b.lignes&&b.lignes.length)? JSON.parse(JSON.stringify(b.lignes)) : [{type:'ligne', designation:`Travaux — BC ${b.numeroBC||''}`, qte:1, prixUnitaire:b.montant||0, tva: tvaDefaut()}],
     remisePourcentage:0, bonCommandeId:b.id, chantierId:b.chantierId||null, statut:'impayée',
+    /* BT-13 de l'EN 16931 : la référence de commande de l'acheteur. Normalisée
+       par la même règle que `bc_generer_facture`, pour que les deux chemins de
+       création ne produisent pas deux valeurs différentes. */
+    refBonCommandeClient: window.refBonCommandeClient(b.numeroBC),
     interventionId: (state.interventions.find(x=>x.bonCommandeId===b.id)||{}).id || null
   });
 }
@@ -5131,7 +5204,7 @@ function renderFacturesListHTML(list){
       <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${esc(f.numero)}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
       ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${devisOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
-      ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="goToBonCommande('${bonCommandeOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
+      ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="event.stopPropagation(); ouvrirBonCommandeOrigine('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;" title="${bonCommandeOrigine.pieceJointeChemin? 'Voir le bon reçu du client' : 'Aller au bon de commande'}">${esc(bonCommandeOrigine.numeroBC)}${bonCommandeOrigine.pieceJointeChemin? ' 📎':''}</a></div>`:''}
       </div>
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}<span class="badge ${badgeClass(f.statut)}">${esc(f.statut)}</span></div></div>
     </div>
@@ -5218,7 +5291,7 @@ async function saveFacture(){
      référence même si la saisie est abandonnée — c'est ce qui creusait des
      trous dans une série que la loi veut continue. */
   const numero = e.numero || '';
-  const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, chantierId: document.getElementById('f_chantierId').value || null, client,
+  const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, refBonCommandeClient: e.refBonCommandeClient || null, chantierId: document.getElementById('f_chantierId').value || null, client,
     adresse: resolveClientAdresse(client),
     interlocuteur: document.getElementById('f_interlocuteur').value,
     adresseLocataire: document.getElementById('f_adresseLocataire').value,
@@ -5477,7 +5550,7 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${locataireCardLine(b)}
       ${isSAV? (b.problemeDescription? `<div class="card-sub" style="color:var(--danger);"><span style="color:var(--danger);">⚠</span> ${esc(b.problemeDescription)}</div>`:'') : `<div class="card-sub">${b.dateReception? 'Reçu le '+fmtDate(b.dateReception):''}${b.dateFinTravaux? ' · Fin travaux : '+fmtDate(b.dateFinTravaux):''}</div>`}
       ${isSAV && b.photos && b.photos.length? `<div class="card-sub">📷 ${b.photos.length} photo${b.photos.length>1?'s':''}</div>`:''}
-      ${b.pieceJointeData? `<div class="card-sub"><a href="${b.pieceJointeData}" download="${esc(b.pieceJointeNom||'bon-de-commande')}" style="color:var(--accent-2); text-decoration:underline;" onclick="event.stopPropagation()">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a></div>`:''}
+      ${(b.pieceJointeChemin||b.pieceJointeData)? `<div class="card-sub"><a href="javascript:void(0)" style="color:var(--accent-2); text-decoration:underline;" onclick="event.stopPropagation(); ouvrirBonDuClient('${jsAttr(b.id)}')" title="Voir le bon reçu du client">📎 ${esc(b.pieceJointeNom||'Bon du client')}</a></div>`:''}
       ${factureLiee? `<div class="card-sub">Facture liée : <a href="javascript:void(0)" onclick="goToFacture('${factureLiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(factureLiee.numero)}</a></div>`:''}
       ${savLie? `<div class="card-sub">SAV lié : <a href="javascript:void(0)" onclick="goToBonCommande('${savLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(savLie.numeroBC)}</a></div>`:''}
       ${(b.technicienCommentaire || b.sousTraitantCommentaire || (b.technicienPhotos||[]).length || b.technicienDessin || b.pieceACommanderDetail || b.dateInterventionTerminee)? `<div class="tech-fiche-zone">
@@ -6138,27 +6211,63 @@ function renderValidationDirecteur(){
   rafraichirChiffrageDirecteur();
 }
 
-/** Les pièces consultables : le bon toujours, le devis s'il y en a un. */
+/**
+ * Les pièces consultables : le bon toujours, le devis s'il y en a un.
+ *
+ * Quand le bon reçu du client est là, c'est LUI qu'on propose d'abord : au
+ * moment de facturer, ce qui fait foi est le document signé par le client, pas
+ * notre re-rendu de ses lignes. La fiche interne reste à côté — elle sert
+ * encore, mais elle cesse d'être ce qu'on obtient par défaut.
+ */
 function referencesPrefactureHTML(ctx, b){
   const devis = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
   const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${cle}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
+  const aLeDocument = !!b.pieceJointeChemin;
   return `<div style="display:flex; gap:6px; flex-wrap:wrap;">
     <span class="card-sub" style="align-self:center;">Consulter :</span>
-    ${bouton('bonCommande', '📄 Bon de commande')}
+    ${aLeDocument? bouton('bonClient', '📎 Bon du client') : ''}
+    ${bouton('bonCommande', aLeDocument? '🧾 Fiche interne' : '📄 Bon de commande')}
     ${devis? bouton('devis', `📄 Devis ${esc(devis.numero||'')}`) : ''}
   </div>`;
 }
 
 function referenceDocumentHTML(ctx, b){
+  if(ctx.reference === 'bonClient'){
+    /* L'URL a été obtenue par `basculerReferencePrefacture` : elle est signée,
+       donc asynchrone, alors que ce rendu ne l'est pas. Si elle manque, c'est
+       que la signature a échoué — on montre la fiche plutôt qu'un cadre vide. */
+    if(ctx.urlBonClient){
+      const mode = window.apercuDe(ctx.urlBonClient, b.pieceJointeMime, b.pieceJointeNom);
+      if(mode === 'pdf') return `<iframe class="pf-reference-fichier" src="${esc(ctx.urlBonClient)}"></iframe>`;
+      if(mode === 'image') return `<img class="pf-reference-fichier" src="${esc(ctx.urlBonClient)}" alt="${esc(b.pieceJointeNom||'Bon du client')}">`;
+    }
+    return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
+  }
   if(ctx.reference === 'devis' && b.devisId) return renderPrintDoc('devis', b.devisId, !ctx.avecPrix);
   return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
 }
 
 /* Un second clic referme : la référence est une aide, pas un décor permanent —
    refermée, le tableau reprend toute la largeur. */
-function basculerReferencePrefacture(cle){
-  if(!validationDirecteurCtx) return;
-  validationDirecteurCtx.reference = validationDirecteurCtx.reference === cle ? null : cle;
+async function basculerReferencePrefacture(cle){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  ctx.reference = ctx.reference === cle ? null : cle;
+
+  /* L'URL signée est demandée ici, une fois, et non au rendu : la modale se
+     redessine à chaque frappe dans un champ de prix, et re-signer à chaque fois
+     rechargerait le document sous les yeux de l'utilisateur. */
+  if(ctx.reference === 'bonClient' && !ctx.urlBonClient){
+    const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+    if(b && b.pieceJointeChemin){
+      try{
+        ctx.urlBonClient = await window.urlPieceJointe(b.pieceJointeChemin);
+      }catch(err){
+        console.error('Bon du client illisible', b.pieceJointeChemin, err);
+        showToast("Le document du client n'a pas pu être ouvert — voici la fiche interne.");
+      }
+    }
+  }
   renderValidationDirecteur();
 }
 
@@ -6536,8 +6645,13 @@ async function saveBonCommande(){
     natureTravaux: document.getElementById('bc_natureTravaux').value,
     metiers: getCheckedMetiers('bc'),
     metier: getCheckedMetiers('bc')[0] || '',
+    /* Le fichier ne traverse pas la base : le pont le range au stockage et
+       n'écrit que son chemin. `pieceJointeChemin` n'est transmis que s'il a été
+       explicitement mis à `null` par un retrait — absent, le pont laisse en
+       place le document déjà stocké. */
     pieceJointeNom: e.pieceJointeNom || '',
-    pieceJointeData: e.pieceJointeData || null,
+    pieceJointeFichier: e.pieceJointeFichier || null,
+    ...(e.pieceJointeChemin === null ? { pieceJointeChemin: null } : {}),
     metiersFait: e.metiersFait || {},
     dateOrigineFait: e.dateOrigineFait || false,
     technicienCommentaire: e.technicienCommentaire || '',
@@ -6742,7 +6856,7 @@ function planningItems(){
         bcId: b.id,
         client:b.client, numero: metierKey? `${b.numeroBC} (${metierDisplayLabel(metierKey)})` : b.numeroBC,
         conducteur:b.conducteur, interlocuteur:b.interlocuteur,
-        pieceJointeNom:b.pieceJointeNom, pieceJointeData:b.pieceJointeData, problemeDescription:b.problemeDescription,
+        pieceJointeNom:b.pieceJointeNom, pieceJointeChemin:b.pieceJointeChemin, pieceJointeData:b.pieceJointeData, problemeDescription:b.problemeDescription,
         adresse:b.adresse, adresseLocataire:b.adresseLocataire, numeroLogement:b.numeroLogement, logementStatut:b.logementStatut,
         codePostal:b.codePostal, ville:b.ville, etage:b.etage,
         technicien: schedField(b, metierKey, 'technicien'),
@@ -7391,7 +7505,7 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
     ${planningPrixSTZoneHTML(b, assigneeField)}
     <input type="date" class="planning-quick-date" onchange="quickScheduleBC('${b.kind}','${b.id}', this.value, '${assigneeField||''}', '${jsAttr(assigneeValue||'')}')" title="Choisir une date (alternative au glisser-déposer)">
     ${(b.montant!=null && state.currentRole!=='soustraitant')? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
-    ${b.pieceJointeData? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a>`:''}
+    ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a>`:''}
     ${savTriangle}
   </div>`;
 }
@@ -7498,7 +7612,7 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     ${state.currentRole==='soustraitant'? '' : `<input type="date" class="planning-enddate" value="${b.datePlanifieeFin||b.datePlanifiee||''}" min="${b.datePlanifiee||''}" onchange="updateBCDateFin('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Étirer jusqu'à cette date">`}
     ${(b.montant!=null && state.currentRole!=='soustraitant')? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
     ${planningPrixSTZoneHTML(b, assigneeField)}
-    ${b.pieceJointeData? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎</a>`:''}
+    ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎</a>`:''}
     ${savTriangle}
     ${state.currentRole==='soustraitant'? '' : `<button class="planning-shift-left" onclick="event.stopPropagation(); shiftBCUnJourPlusTot('${b.kind}','${b.id}')" title="Annuler l'étirement (puis déplanifier au clic suivant)">←</button>`}
     ${state.currentRole==='soustraitant'? '' : `<div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${b.kind}','${b.id}',false)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>`}
@@ -13578,6 +13692,10 @@ async function lireBonCommande(fichier, input){
     const extraction = await window.extraireBonCommande(fichier, {
       signal: controleur.signal,
       surEtape: (etape)=>{ if(state.ocr){ state.ocr.etape = etape; majChronoOCR(); } },
+      /* Le document déposé devient la pièce jointe du bon. Posé ici, avant
+         l'appel distant : si la lecture échoue, le scan reste attaché — c'est
+         précisément le cas où l'on ressaisit à la main et où l'avoir compte. */
+      surFichierPret: (pret)=>{ retenirPieceJointeBC(pret); },
     });
     const saisie = window.versSaisieBonCommande(extraction);
 

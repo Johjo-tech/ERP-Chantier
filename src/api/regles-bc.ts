@@ -457,3 +457,30 @@ export function essentielsDeLecture(lu: {
 
   return manques;
 }
+
+/**
+ * La référence du bon telle que le client la connaît, ou rien.
+ *
+ * Miroir exact de `public.ref_bc_client` : c'est la même valeur qui part dans
+ * `factures.ref_bon_commande_client`, que la facture soit créée par la base
+ * (`bc_generer_facture`) ou par l'écran. BT-13 de l'EN 16931 attend la
+ * référence de commande de l'acheteur — donc la sienne, jamais notre
+ * `numero_interne`.
+ *
+ * Trois valeurs sont écartées, et c'est le cœur de la règle : « Sans BC » et
+ * « En attente de BC » sont des sentinelles que la saisie écrit quand il n'y a
+ * pas de numéro, et un numéro SAV appartient à notre propre série. Les laisser
+ * partir remplirait un champ normalisé avec une phrase française ou une
+ * référence que l'acheteur ne reconnaîtrait pas — pire que de le laisser vide.
+ *
+ * Le champ est un textarea : un bon peut en citer plusieurs, seule la première
+ * ligne fait référence.
+ */
+export function refBonCommandeClient(numeroBC?: string | null): string | null {
+  const brut = (numeroBC ?? "").trim();
+  if (!brut || brut.startsWith("SAV-")) return null;
+
+  const premiere = brut.split("\n")[0].trim();
+  if (!premiere || premiere === "Sans BC" || premiere === "En attente de BC") return null;
+  return premiere;
+}

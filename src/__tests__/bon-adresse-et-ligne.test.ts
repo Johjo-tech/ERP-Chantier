@@ -10,7 +10,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { essentielsDeLecture, lignesDeTravaux, manquesBonCommande } from "@/api/regles-bc";
+import {
+  essentielsDeLecture,
+  lignesDeTravaux,
+  manquesBonCommande,
+  refBonCommandeClient,
+} from "@/api/regles-bc";
 
 const ADRESSE = "33 rue du Grand Veymont";
 
@@ -152,5 +157,45 @@ describe("Les essentiels d'une lecture", () => {
     const bon = { adresse: COMPLETE.adresse, lignes: COMPLETE.lignes };
     expect(essentielsDeLecture({ ...bon }).map((m) => m.code)).toContain("numero_bc");
     expect(manquesBonCommande(bon)).toEqual([]);
+  });
+});
+
+/**
+ * La référence de commande qui part sur la facture (BT-13 de l'EN 16931).
+ *
+ * Elle valait `null` sur les 428 factures de production : la colonne existait,
+ * le mapping vers la facture électronique aussi, seule la valeur manquait.
+ * Cette fonction est le miroir exact de `public.ref_bc_client` — les factures
+ * nées en base et celles nées à l'écran doivent porter la même.
+ */
+describe("La référence du bon telle que le client la connaît", () => {
+  it("rend le numéro du client", () => {
+    expect(refBonCommandeClient("E816222")).toBe("E816222");
+  });
+
+  /* Le champ est un textarea : un bon peut en citer plusieurs, seule la
+     première ligne fait référence. */
+  it("ne retient que la première ligne", () => {
+    expect(refBonCommandeClient("BC-123\nBC-456")).toBe("BC-123");
+  });
+
+  /* « Sans BC » et « En attente de BC » sont écrits par la saisie quand il n'y
+     a pas de numéro : ce sont des phrases françaises, pas des références. */
+  it("écarte les sentinelles de saisie", () => {
+    expect(refBonCommandeClient("Sans BC")).toBeNull();
+    expect(refBonCommandeClient("En attente de BC")).toBeNull();
+  });
+
+  /* Un SAV porte un numéro de NOTRE série : l'envoyer à l'acheteur comme sa
+     propre référence de commande serait une erreur de fond. */
+  it("écarte un numéro de notre série SAV", () => {
+    expect(refBonCommandeClient("SAV-2026-0053")).toBeNull();
+  });
+
+  it("rend nul plutôt que vide", () => {
+    expect(refBonCommandeClient("   ")).toBeNull();
+    expect(refBonCommandeClient("")).toBeNull();
+    expect(refBonCommandeClient(null)).toBeNull();
+    expect(refBonCommandeClient(undefined)).toBeNull();
   });
 });

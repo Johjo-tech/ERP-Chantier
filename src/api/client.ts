@@ -394,9 +394,29 @@ export async function uploadFile(
   return path;
 }
 
-export function getFileUrl(path: string): string {
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+/**
+ * Une URL de lecture, valable un temps.
+ *
+ * `getPublicUrl` a été retiré d'ici : le bucket `terrain` est **privé**, il
+ * rendait donc une URL qui ne répond pas — sans appelant, mais prête à piéger
+ * le premier qui l'aurait trouvée.
+ *
+ * `telechargement` change ce que fait le navigateur : sans lui le document
+ * s'affiche (c'est ce que veut une visionneuse), avec lui il s'enregistre.
+ * L'attribut HTML `download` est ignoré sur une URL d'un autre domaine, donc
+ * c'est ici que ça se décide, pas dans le lien.
+ */
+export async function getSignedFileUrl(
+  path: string,
+  { secondes = 3600, telechargement = false }: { secondes?: number; telechargement?: boolean } = {}
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, secondes, telechargement ? { download: true } : undefined);
+  if (error || !data) {
+    throw new SupabaseError("Signed URL failed", error?.name ?? "unknown", error);
+  }
+  return data.signedUrl;
 }
 
 export async function deleteFile(path: string): Promise<void> {

@@ -137,7 +137,14 @@ describe("Robustesse de la traduction vers la base", () => {
      manquaient ici. L'écran les écrivait, `versDb` les jetait, et personne ne
      voyait rien — ni erreur, ni donnée. */
   it("suit le schéma quand il s'enrichit", () => {
-    expect(colonnesDe("bons_commande")?.has("facturation_adresse")).toBe(true);
+    const bons = colonnesDe("bons_commande");
+    expect(bons?.has("facturation_adresse")).toBe(true);
+    /* Le document du client : le chemin et le nom ont une colonne, le fichier
+       lui-même n'en a pas — il part au stockage. */
+    for (const colonne of ["piece_jointe_chemin", "piece_jointe_nom", "piece_jointe_mime"]) {
+      expect(bons?.has(colonne)).toBe(true);
+    }
+    expect(bons?.has("piece_jointe_fichier")).toBe(false);
     const articles = colonnesDe("articles");
     for (const colonne of ["actif", "famille", "prix_achat", "type_article", "gere_en_stock"]) {
       expect(articles?.has(colonne)).toBe(true);

@@ -28,6 +28,7 @@ import {
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
 import { fusionnerReglages } from "./reglages";
+import { supprimerPieceJointe, televerserPieceJointeBC } from "./pieces-jointes";
 import * as queries from "@/api/queries";
 import type { Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
 
@@ -56,6 +57,18 @@ export function toCamel(key: string): string {
 
 /** Champs traités explicitement, jamais par la conversion mécanique. */
 const CHAMPS_SPECIAUX = new Set([
+  /* Le document du client appartient au pont, pas à l'upsert.
+     `pieceJointeFichier` n'a pas de colonne — il part au stockage. Et les trois
+     colonnes qui en découlent sont écrites **après** l'upsert par
+     `rangerPieceJointe`, qui a besoin d'y lire l'ancien chemin pour effacer le
+     fichier remplacé : les laisser passer ici l'écraserait d'abord, et le
+     bucket accumulerait des orphelins.
+     `pieceJointeData` est la data-URL d'avant le stockage : jamais en base. */
+  "pieceJointeFichier",
+  "pieceJointeChemin",
+  "pieceJointeNom",
+  "pieceJointeMime",
+  "pieceJointeData",
   "id",
   "legacy_id",
   "societeId",
@@ -1143,6 +1156,70 @@ function champsCalcules(
   return calcules;
 }
 
+/**
+ * Range le bon tel que le client l'a envoyé, et rend de quoi l'afficher.
+ *
+ * Le téléversement a lieu **ici** et pas dans l'écran : le chemin de stockage
+ * porte l'uuid de la ligne, et cet uuid n'existe qu'une fois l'upsert fait —
+ * l'identifiant que le formulaire manipule est un base36 hérité.
+ *
+ * Trois cas, et le troisième est celui qui compte :
+ * - un fichier est fourni : on le range, et on efface celui qu'il remplace ;
+ * - la pièce a été retirée : on efface, et on vide les colonnes ;
+ * - **rien n'est fourni** : on ne touche à rien. C'est le cas de tous les
+ *   enregistrements ordinaires — changer un statut, encaisser — et perdre le
+ *   document à cette occasion serait la régression la plus facile à écrire.
+ *
+ * Une erreur de téléversement remonte : `stSet` rendra faux et l'écran gardera
+ * le formulaire. Annoncer « enregistré » en ayant perdu le document du client
+ * serait exactement le défaut qu'on est en train de corriger.
+ */
+async function rangerPieceJointe(
+  parentId: Uuid,
+  enBase: Record<string, unknown>,
+  valeur: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const fichier = valeur.pieceJointeFichier;
+  const ancien = (enBase.piece_jointe_chemin as string | null) ?? null;
+  const retiree = fichier == null && valeur.pieceJointeChemin === null && ancien;
+
+  if (!(fichier instanceof File) && !retiree) return {};
+
+  const societeId = enBase.societe_id as Uuid;
+  const range =
+    fichier instanceof File
+      ? await televerserPieceJointeBC(societeId, parentId, fichier)
+      : { chemin: null, nom: null, mime: null };
+
+  const { error } = await dyn()
+    .from("bons_commande")
+    .update({
+      piece_jointe_chemin: range.chemin,
+      piece_jointe_nom: range.nom,
+      piece_jointe_mime: range.mime,
+    })
+    .eq("id", parentId);
+  if (error) throw error;
+
+  /* L'ancien fichier part après que la ligne ne le désigne plus : dans l'ordre
+     inverse, une panne entre les deux laisserait un chemin vers un objet
+     disparu, et l'aperçu tomberait sans qu'on sache pourquoi. */
+  if (ancien && ancien !== range.chemin) {
+    try {
+      await supprimerPieceJointe(ancien);
+    } catch (err) {
+      // La ligne est juste ; il ne reste qu'un fichier orphelin dans le bucket.
+      console.warn("Ancienne pièce jointe non supprimée", ancien, err);
+    }
+  }
+
+  return {
+    pieceJointeChemin: range.chemin,
+    pieceJointeNom: range.nom,
+    pieceJointeMime: range.mime,
+  };
+}
+
 /** Remplace : `async function stSet(key, val)`. */
 export async function stSet(
   cle: string,
@@ -1192,6 +1269,9 @@ export async function stSet(
     let data_ = data as Record<string, unknown>;
     const parentId = data_.id as Uuid;
     uuidParCle.set(cle, parentId);
+    /* Ce que le rangement du document du client a produit, à reporter dans le
+       cache : l'écran doit le voir sans attendre le rechargement suivant. */
+    let pieceJointe: Record<string, unknown> = {};
 
     if (collection.lignes) {
       const lignes = (valeur.lignes as LigneLegacy[]) ?? [];
@@ -1223,6 +1303,7 @@ export async function stSet(
     }
 
     if (prefixe === "bonCommande") {
+      pieceJointe = await rangerPieceJointe(parentId, data_, valeur);
       await appliquerWorkflow(parentId, cle, valeur);
     }
 
@@ -1244,9 +1325,13 @@ export async function stSet(
        *émise* laisserait l'écran afficher une facture sans numéro jusqu'au
        rechargement suivant. On relit donc ce qui a réellement été écrit, et
        les champs calculés priment sur ceux qu'on a proposés. */
+    /* Le `File` reste dehors : `exportAllData` sérialise ce cache, et un
+       fichier n'y laisserait qu'un objet vide — une sauvegarde qui ment. */
+    const { pieceJointeFichier: _ecarte, ...sansFichier } = valeur;
     cache.set(cle, {
-      ...valeur,
+      ...sansFichier,
       ...champsCalcules(prefixe, data_),
+      ...pieceJointe,
       id,
     });
     return true;

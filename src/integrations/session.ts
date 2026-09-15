@@ -44,7 +44,9 @@ import {
   verifierEntite,
 } from "@/api/regles-efacture";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
-import { extraireBonCommande, rapprocherClient, versSaisieBonCommande } from "./ocr";
+import { apercuDe, verifierPieceJointe } from "@/api/regles-piece-jointe";
+import { extraireBonCommande, preparer, rapprocherClient, versSaisieBonCommande } from "./ocr";
+import { urlPieceJointe, urlTelechargementPieceJointe } from "./pieces-jointes";
 import {
   attenteAnnoncee,
   etatAnnule,
@@ -77,6 +79,7 @@ import {
   etapeValidation,
   manquesBonCommande,
   messageBlocages,
+  refBonCommandeClient,
 } from "@/api/regles-bc";
 import {
   memeMetier,
@@ -463,6 +466,7 @@ export function injecterSession() {
   w.blocagesValidationConducteur = blocagesValidationConducteur;
   w.messageBlocages = messageBlocages;
   w.manquesBonCommande = manquesBonCommande;
+  w.refBonCommandeClient = refBonCommandeClient;
   w.lignesDocumentDirecteur = lignesDocumentDirecteur;
   w.comptesRendusTerrain = comptesRendusTerrain;
   w.badgeOrigine = badgeOrigine;
@@ -503,6 +507,14 @@ export function injecterSession() {
   w.attenteAnnoncee = attenteAnnoncee;
   w.versSaisieBonCommande = versSaisieBonCommande;
   w.rapprocherClient = rapprocherClient;
+
+  /* Le bon tel que le client l'a envoyé : ce qu'on accepte, et comment on le
+     rouvre depuis un bucket privé. */
+  w.verifierPieceJointe = verifierPieceJointe;
+  w.preparerPieceJointe = preparer;
+  w.apercuDe = apercuDe;
+  w.urlPieceJointe = urlPieceJointe;
+  w.urlTelechargementPieceJointe = urlTelechargementPieceJointe;
 
   // Alertes d'échéance, calées sur les colonnes réelles
   w.alertesVehicule = alertesVehicule;

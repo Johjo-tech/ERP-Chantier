@@ -258,6 +258,9 @@ export type Database = {
           numero_interne: string | null
           numero_logement: string | null
           occupant: string | null
+          piece_jointe_chemin: string | null
+          piece_jointe_mime: string | null
+          piece_jointe_nom: string | null
           precision_commune: string | null
           probleme_description: string | null
           sans_bc: boolean
@@ -312,6 +315,9 @@ export type Database = {
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
+          piece_jointe_chemin?: string | null
+          piece_jointe_mime?: string | null
+          piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
           sans_bc?: boolean
@@ -366,6 +372,9 @@ export type Database = {
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
+          piece_jointe_chemin?: string | null
+          piece_jointe_mime?: string | null
+          piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
           sans_bc?: boolean
@@ -5334,6 +5343,9 @@ export type Database = {
           numero_interne: string | null
           numero_logement: string | null
           occupant: string | null
+          piece_jointe_chemin: string | null
+          piece_jointe_mime: string | null
+          piece_jointe_nom: string | null
           precision_commune: string | null
           probleme_description: string | null
           sans_bc: boolean | null
@@ -5388,6 +5400,9 @@ export type Database = {
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
+          piece_jointe_chemin?: string | null
+          piece_jointe_mime?: string | null
+          piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
           sans_bc?: boolean | null
@@ -5442,6 +5457,9 @@ export type Database = {
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
+          piece_jointe_chemin?: string | null
+          piece_jointe_mime?: string | null
+          piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
           sans_bc?: boolean | null
@@ -5880,6 +5898,7 @@ export type Database = {
         Args: { p_annee?: number; p_societe: string; p_type: string }
         Returns: string
       }
+      ref_bc_client: { Args: { p_numero: string }; Returns: string }
       reparer_adresses: {
         Args: never
         Returns: {
