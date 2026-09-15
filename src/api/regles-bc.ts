@@ -484,3 +484,35 @@ export function refBonCommandeClient(numeroBC?: string | null): string | null {
   if (!premiere || premiere === "Sans BC" || premiere === "En attente de BC") return null;
   return premiere;
 }
+
+/**
+ * Le lieu des travaux, en une ligne, et s'il est renseigné.
+ *
+ * Le motif était recopié cinq fois — deux littéraux dans le document imprimé,
+ * trois `withVille(adresseLocataire || adresse, …)` dans les cartes. Il vit ici
+ * une fois, parce que l'écran de validation doit poser la même question que le
+ * document : ce bon dit-il où l'on est allé ?
+ *
+ * `adresseLocataire` prime quand il existe — devis, factures et interventions
+ * le portent. Un bon de commande, lui, n'en a pas : son formulaire saisit le
+ * chantier dans `adresse`. D'où le repli, et non l'un ou l'autre.
+ *
+ * `renseigne` ne se déduit pas de `texte` : « 38000 Grenoble » sans rue est un
+ * texte non vide qui ne dit pas où aller. C'est la rue qui décide.
+ */
+export function lieuIntervention(bon: {
+  adresse?: string | null;
+  adresseLocataire?: string | null;
+  codePostal?: string | null;
+  ville?: string | null;
+}): { texte: string; renseigne: boolean } {
+  const rue = ((bon.adresseLocataire ?? "").trim() || (bon.adresse ?? "").trim());
+  const commune = [(bon.codePostal ?? "").trim(), (bon.ville ?? "").trim()]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    texte: [rue, commune].filter(Boolean).join(", "),
+    renseigne: rue !== "",
+  };
+}

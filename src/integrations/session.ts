@@ -77,6 +77,7 @@ import {
   blocagesChiffrage,
   blocagesValidationConducteur,
   etapeValidation,
+  lieuIntervention,
   manquesBonCommande,
   messageBlocages,
   refBonCommandeClient,
@@ -467,6 +468,7 @@ export function injecterSession() {
   w.messageBlocages = messageBlocages;
   w.manquesBonCommande = manquesBonCommande;
   w.refBonCommandeClient = refBonCommandeClient;
+  w.lieuIntervention = lieuIntervention;
   w.lignesDocumentDirecteur = lignesDocumentDirecteur;
   w.comptesRendusTerrain = comptesRendusTerrain;
   w.badgeOrigine = badgeOrigine;

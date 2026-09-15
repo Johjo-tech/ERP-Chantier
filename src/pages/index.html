@@ -1138,6 +1138,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    référence — devis ou bon — se met donc à côté du tableau, pas au-dessus :
    au-dessus, il fallait faire défiler pour comparer. */
 .pf-colonnes{ display:flex; gap:16px; align-items:flex-start; }
+.pf-entete{ display:flex; gap:14px; flex-wrap:wrap; padding:10px 12px; margin-bottom:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; }
+.pf-entete-champ label{ display:block; font-size:11px; color:var(--text-dim); margin-bottom:4px; }
+.pf-entete-champ input{ width:100%; }
+/* Ce qui manque doit se voir sans se lire : sur 195 bons de la file, la
+   référence client est vide, et c'est ici qu'on la remarque ou jamais. */
+.pf-entete-manque{ color:var(--danger); font-weight:600; }
 .pf-reference{ flex:0 0 44%; max-height:68vh; overflow:auto; font-size:9pt; }
 /* Un document du client n'est pas du HTML de document : sans hauteur propre,
    l'iframe se replie à zéro dans un conteneur dimensionné par son contenu. */
@@ -5978,6 +5984,15 @@ async function openValidationDirecteurModal(bcId){
     avecPrix: prixVisibles,
     prixVisibles,
     peutValider: droits.peutValiderPrefacture,
+    /* Le lieu et la référence du client, saisissables ici : ils manquent sur la
+       quasi-totalité des bons de la file, et c'est au moment de chiffrer qu'on
+       s'en aperçoit. Copiés dans le contexte comme les lignes — l'objet du bon
+       ne bouge qu'à l'enregistrement, sinon une fermeture sans enregistrer
+       laisserait les cartes afficher ce qui n'est pas en base. */
+    adresse: b.adresse || '',
+    codePostal: b.codePostal || '',
+    ville: b.ville || '',
+    numeroBC: b.numeroBC || '',
     // Rien d'ouvert au départ : le tableau des prix prend toute la largeur.
     reference: null
   };
@@ -6198,6 +6213,7 @@ function renderValidationDirecteur(){
         <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
       </label>
     </div>
+    ${enteteDossierHTML(ctx, b)}
     <div class="pf-colonnes">
       ${ctx.reference? `<div class="print-preview pf-reference">${referenceDocumentHTML(ctx, b)}</div>` : ''}
       <div class="pf-travail">
@@ -6209,6 +6225,74 @@ function renderValidationDirecteur(){
     </div>
   `;
   rafraichirChiffrageDirecteur();
+}
+
+/**
+ * Où l'on est allé, et sous quelle référence le client connaît l'affaire.
+ *
+ * Les deux figurent sur la carte de la file… et disparaissaient à l'ouverture
+ * de la modale, c'est-à-dire au moment précis où l'on chiffre ce qu'ils vont
+ * déterminer : le bloc « Lieu d'intervention » du document, et la référence de
+ * commande que porte la facture électronique.
+ *
+ * Saisissables, et pas seulement affichés : sur les 211 bons de la file, 195
+ * n'ont aucune référence client et 119 sur 120 des bons prêts à chiffrer n'ont
+ * pas d'adresse. Renvoyer l'utilisateur au formulaire du bon pour les remplir,
+ * c'est lui faire perdre le chiffrage en cours.
+ *
+ * L'occupant et le statut du logement restent en lecture : ils obéissent à des
+ * règles de cohérence (`cleanLogementFields`) qui vivent dans le formulaire.
+ */
+function enteteDossierHTML(ctx, b){
+  const lieu = window.lieuIntervention(ctx);
+  const ref = window.refBonCommandeClient(ctx.numeroBC);
+  const occupant = [b.occupant, b.numeroLogement? 'Log. '+b.numeroLogement : '', b.etage? 'Étage '+b.etage : '']
+    .filter(Boolean).map(esc).join(' · ');
+
+  return `<div class="pf-entete">
+    <div class="pf-entete-champ" style="flex:2 1 320px;">
+      <label>Lieu d'intervention${lieu.renseigne? '' : ' <span class="pf-entete-manque">non renseigné</span>'}</label>
+      <input type="text" value="${esc(ctx.adresse)}" placeholder="Adresse des travaux" aria-label="Adresse d'intervention"
+             oninput="majEnteteDirecteur('adresse', this.value)">
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <input type="text" style="flex:0 0 90px;" maxlength="5" inputmode="numeric" value="${esc(ctx.codePostal)}" placeholder="CP" aria-label="Code postal"
+               oninput="majEnteteDirecteur('codePostal', this.value)">
+        <input type="text" style="flex:1;" value="${esc(ctx.ville)}" placeholder="Ville" aria-label="Ville"
+               oninput="majEnteteDirecteur('ville', this.value)">
+      </div>
+      ${occupant? `<div class="card-sub" style="margin-top:6px;">${occupant}</div>`:''}
+      ${b.logementStatut? `<div style="margin-top:6px;">${logementBadge(b.logementStatut)}</div>`:''}
+    </div>
+    <div class="pf-entete-champ" style="flex:1 1 220px;">
+      <label>N° de bon de commande du client</label>
+      <input type="text" value="${esc(ctx.numeroBC)}" placeholder="Numéro figurant sur le bon reçu" aria-label="Numéro de bon de commande du client"
+             oninput="majEnteteDirecteur('numeroBC', this.value)">
+      <div class="card-sub" id="pfEnteteRef" style="margin-top:6px;">${refPartanteHTML(ref)}</div>
+      ${b.numeroInterne? `<div class="card-sub" style="margin-top:4px;">Notre n° interne : ${esc(b.numeroInterne)}</div>`:''}
+    </div>
+  </div>`;
+}
+
+/* Ce qui partira réellement sur la facture : « Sans BC » et les numéros de
+   notre série SAV sont écartés par la même règle que la base. Le dire ici évite
+   de découvrir le champ vide sur la facture électronique. */
+function refPartanteHTML(ref){
+  return ref
+    ? `Référence transmise au client : <b>${esc(ref)}</b>`
+    : `<span class="pf-entete-manque">Aucune référence ne partira sur la facture</span>`;
+}
+
+/* Le contexte seul est touché, et rien n'est redessiné : reconstruire le
+   bandeau à la frappe ferait sauter le curseur. C'est le patron de
+   `majLigneDirecteur`, pour la même raison. */
+function majEnteteDirecteur(champ, valeur){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  ctx[champ] = valeur;
+  if(champ === 'numeroBC'){
+    const zone = document.getElementById('pfEnteteRef');
+    if(zone) zone.innerHTML = refPartanteHTML(window.refBonCommandeClient(valeur));
+  }
 }
 
 /**
@@ -6339,6 +6423,14 @@ async function enregistrerChiffrageDirecteur(silencieux){
     }
     b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
     b.montant = computeTotals(b.lignes).ht;
+    /* Le lieu et la référence du client partent dans la même écriture que les
+       prix : un seul geste pour l'utilisateur, une seule ligne touchée. Le
+       déclencheur `bons_commande_etat_reserve` ne se réveille que si
+       `statut_workflow` change — ce n'est pas le cas ici. */
+    b.adresse = ctx.adresse;
+    b.codePostal = ctx.codePostal;
+    b.ville = ctx.ville;
+    b.numeroBC = ctx.numeroBC;
     const r = await stSet('bonCommande:'+b.id, b);
     if(!r){ showToast(saveFailedMessage()); return false; }
 

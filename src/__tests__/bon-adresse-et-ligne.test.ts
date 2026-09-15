@@ -12,6 +12,7 @@
 import { describe, it, expect } from "vitest";
 import {
   essentielsDeLecture,
+  lieuIntervention,
   lignesDeTravaux,
   manquesBonCommande,
   refBonCommandeClient,
@@ -197,5 +198,54 @@ describe("La référence du bon telle que le client la connaît", () => {
     expect(refBonCommandeClient("")).toBeNull();
     expect(refBonCommandeClient(null)).toBeNull();
     expect(refBonCommandeClient(undefined)).toBeNull();
+  });
+});
+
+/**
+ * Le lieu des travaux, tel que l'écran de validation doit le poser.
+ *
+ * Le motif était recopié cinq fois dans l'écran — deux littéraux dans le
+ * document imprimé, trois compositions dans les cartes. Il vit désormais ici.
+ */
+describe("Le lieu d'intervention", () => {
+  it("compose la rue et la commune", () => {
+    expect(lieuIntervention({ adresse: "33 rue du Grand Veymont", codePostal: "38320", ville: "Eybens" }))
+      .toEqual({ texte: "33 rue du Grand Veymont, 38320 Eybens", renseigne: true });
+  });
+
+  /* Un bon de commande n'a pas d'`adresseLocataire` — son formulaire saisit le
+     chantier dans `adresse`. Devis et factures, si. D'où le repli. */
+  it("préfère l'adresse du locataire quand elle existe", () => {
+    const lu = lieuIntervention({
+      adresse: "11 boulevard Jean Pain",
+      adresseLocataire: "LAEP Salle Mistral",
+      ville: "Grenoble",
+    });
+    expect(lu.texte).toBe("LAEP Salle Mistral, Grenoble");
+  });
+
+  it("se contente de la rue quand la commune manque", () => {
+    expect(lieuIntervention({ adresse: "33 rue du Grand Veymont" }).texte)
+      .toBe("33 rue du Grand Veymont");
+  });
+
+  /* Le cas qui motive le drapeau : « 38000 Grenoble » est un texte non vide qui
+     ne dit pas où aller. C'est la rue qui décide, pas la longueur du texte. */
+  it("ne tient pas une commune seule pour un lieu renseigné", () => {
+    const sansRue = lieuIntervention({ codePostal: "38000", ville: "Grenoble" });
+    expect(sansRue.texte).toBe("38000 Grenoble");
+    expect(sansRue.renseigne).toBe(false);
+  });
+
+  it("ne se laisse pas prendre par des champs à blanc", () => {
+    expect(lieuIntervention({ adresse: "   ", ville: "  " })).toEqual({ texte: "", renseigne: false });
+    expect(lieuIntervention({})).toEqual({ texte: "", renseigne: false });
+  });
+
+  /* La file de validation compte 195 bons sans référence client : si le numéro
+     devenait obligatoire à l'enregistrement, elle se bloquerait tout entière. */
+  it("laisse `manquesBonCommande` indifférent au numéro de bon", () => {
+    const bon = { adresse: "33 rue du Grand Veymont", lignes: [{ type: "ligne", designation: "Siphon" }] };
+    expect(manquesBonCommande(bon)).toEqual([]);
   });
 });
