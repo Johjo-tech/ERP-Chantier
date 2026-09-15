@@ -1110,6 +1110,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    savoir pourquoi les boutons lui sont fermés. */
 .wf-equipe{ font-size:12px; color:var(--text-dim); margin:6px 0 2px; }
 .wf-sans-equipe{ color:var(--warning, #B8860B); }
+/* Cette fenêtre ne montre qu'un métier, mais tout ce qui suit s'écrit sur le
+   bon entier : cocher « date terminée » sur la carte SOL clôt aussi PEINTURE.
+   Le taire rendrait la fenêtre plus trompeuse, pas moins. */
+.tout-le-bon{ font-size:11px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--text-dim); margin-left:6px; }
 .wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
 .wf-planifiee{ background:#EEF2F7; color:#4A566E; }
 .wf-realisee{ background:#FFF3E4; color:#9A5B00; }
@@ -1331,20 +1335,20 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <!-- Circuit de validation : un bandeau par métier du bon, chacun avec son
          état et les actions ouvertes au rôle. Les cases « Métiers réalisés »
          qui vivaient ici ne persistaient rien et doublaient ces bandeaux. -->
-    <div class="section-title" style="margin-top:14px;">🔧 Métiers</div>
+    <div class="section-title" style="margin-top:14px;">🔧 Métier de cette carte</div>
     <div id="techModalWorkflow" style="margin-top:12px;"></div>
 
-    <div class="section-title" style="margin-top:16px;">📅 Cette date</div>
+    <div class="section-title" style="margin-top:16px;">📅 Cette date <span class="tout-le-bon">pour tout le bon</span></div>
     <label class="bc-tache-row" style="background:var(--surface-2); border-radius:8px;">
       <input type="checkbox" id="techModalDateFaite">
       <span style="flex:1;">Cette date est terminée</span>
     </label>
     <p class="card-sub" id="techModalDatesRestantes"></p>
 
-    <div class="section-title" style="margin-top:16px;">💬 Commentaire</div>
+    <div class="section-title" style="margin-top:16px;">💬 Commentaire <span class="tout-le-bon">pour tout le bon</span></div>
     <textarea id="techModalCommentaire" rows="3" placeholder="Remarque sur l'intervention (optionnel)…" style="width:100%;"></textarea>
 
-    <div class="section-title" style="margin-top:16px;">📦 Pièce</div>
+    <div class="section-title" style="margin-top:16px;">📦 Pièce <span class="tout-le-bon">pour tout le bon</span></div>
     <label class="bc-tache-row" style="background:var(--surface-2); border-radius:8px;">
       <input type="checkbox" id="techModalPieceCommander" onchange="togglePieceCommanderInput(this.checked)">
       <span style="flex:1;">Pièce à commander</span>
@@ -7517,8 +7521,13 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   if(!resolved) return;
   const b = resolved.bc;
   const estDateOrigine = !dayIso || !(b.datesSupplementaires||[]).some(d=>d.date===dayIso);
-  techModalCtx = { kind, bcId: b.id, dayIso: estDateOrigine ? null : dayIso };
-  document.getElementById('techModalTitre').textContent = (b.numeroBC || b.client) + (estDateOrigine ? '' : ` — ${fmtDate(dayIso)}`);
+  /* Le métier de la carte cliquée était rendu par `resolvePlanningItem` puis
+     jeté : la fiche montrait donc tous les métiers du bon, et matérialisait au
+     passage les tâches de ceux qu'on n'avait pas ouverts. */
+  techModalCtx = { kind, bcId: b.id, metierKey: resolved.metierKey || null, dayIso: estDateOrigine ? null : dayIso };
+  document.getElementById('techModalTitre').textContent = (b.numeroBC || b.client)
+    + (resolved.metierKey ? ` — ${metierDisplayLabel(resolved.metierKey)}` : '')
+    + (estDateOrigine ? '' : ` — ${fmtDate(dayIso)}`);
   document.getElementById('techModalInfo').textContent = `${esc(b.client)} — ${withVille(b.adresse, b.codePostal, b.ville)||''}`;
   const occSuppl = techModalCtx.dayIso ? (b.datesSupplementaires||[]).find(d=>d.date===techModalCtx.dayIso) : null;
   document.getElementById('techModalDateFaite').checked = techModalCtx.dayIso ? !!(occSuppl && occSuppl.fait) : !!b.dateOrigineFait;
@@ -7534,7 +7543,7 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   renderTechModalPhotos(b);
   document.getElementById('technicienInterventionModal').style.display = 'flex';
   setTimeout(()=> setupTechDessinCanvas(b), 30);
-  chargerWorkflowTache(b, techModalCtx.dayIso);
+  chargerWorkflowTache(b, techModalCtx.dayIso, techModalCtx.metierKey);
 }
 /* ---------- Circuit de validation d'une tâche ----------
    L'état et les actions viennent de la base : `planning_taches` porte le
@@ -7553,7 +7562,7 @@ const WF_LIBELLES = {
   refusee: 'Refusée',
 };
 
-async function chargerWorkflowTache(b, dayIso){
+async function chargerWorkflowTache(b, dayIso, metierKey){
   const zone = document.getElementById('techModalWorkflow');
   if(!zone) return;
   zone.innerHTML = '<div class="wf-bandeau"><span class="wf-meta">Chargement du suivi…</span></div>';
@@ -7565,13 +7574,22 @@ async function chargerWorkflowTache(b, dayIso){
     /* Un bon sans métier déclaré garde une tâche unique sans métier : son
        circuit reste exactement celui d'avant. */
     const metiers = bcMetiersDuBC(b);
-    const cibles = metiers.length ? metiers : [null];
+    const tous = metiers.length ? metiers : [null];
+
+    /* On ouvre la fiche d'**une** carte : elle ne montre que son métier. Les
+       afficher tous mélangeait deux interventions distinctes, et matérialisait
+       au passage les tâches des métiers qu'on n'avait pas ouverts. */
+    const monMetier = metierKey && tous.some(m => window.memeMetier(m, metierKey))
+      ? tous.find(m => window.memeMetier(m, metierKey))
+      : (metiers.length ? tous[0] : null);
+    const cibles = [monMetier];
 
     const chargees = [];
     for(const m of cibles){
       /* En série : deux matérialisations concurrentes sur le même bon
          créeraient deux tâches pour un même métier. */
-      chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m) });
+      const equipe = equipeDeLaCarte(b, m);
+      chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m, equipe) });
     }
 
     /* Une tâche qu'aucun métier déclaré ne réclame — au métier vide, ou à un
@@ -7580,12 +7598,16 @@ async function chargerWorkflowTache(b, dayIso){
        **toutes** les tâches soient validées : le bon se bloque avant le
        chiffrage sans que rien ne le dise. C'est ce qui est arrivé à
        BC-2026-0866. Une tâche qui existe doit toujours être atteignable. */
-    const reclamees = new Set(chargees.map(e => e.tache && e.tache.id));
-    const toutes = await window.listTachesBonCommande(b.id);
-    for(const t of (toutes || [])){
-      if(reclamees.has(t.id)) continue;
-      if(cibles.some(m => window.memeMetier(m, t.metier))) continue;
-      chargees.push({ metier: t.metier || null, tache: t, horsMetier: true });
+    const surLaPremiere = !metiers.length || window.memeMetier(monMetier, tous[0]);
+    if(surLaPremiere){
+      const reclamees = new Set(chargees.map(e => e.tache && e.tache.id));
+      const toutes = await window.listTachesBonCommande(b.id);
+      for(const t of (toutes || [])){
+        if(reclamees.has(t.id)) continue;
+        // Réclamée par un autre métier du bon : elle a sa propre carte.
+        if(tous.some(m => window.memeMetier(m, t.metier))) continue;
+        chargees.push({ metier: t.metier || null, tache: t, horsMetier: true });
+      }
     }
 
     wfTaches = chargees;
@@ -7623,6 +7645,20 @@ function renderWorkflowTaches(){
  * → équipe. On la refait ici pour que l'écran sache, **avant** le clic, si la
  * tâche est celle de l'utilisateur.
  */
+/**
+ * L'uuid de l'équipe choisie au planning pour ce métier.
+ *
+ * `schedField` rend le **nom** de l'équipe ; la tâche, elle, la référence par
+ * uuid. On traduit ici, faute de quoi une tâche matérialisée à l'ouverture
+ * d'une carte naîtrait sans équipe — et n'en recevrait plus jamais.
+ */
+function equipeDeLaCarte(b, metier){
+  const nom = schedField(b, metier || null, 'technicien') || b.technicien || '';
+  if(!nom) return null;
+  const e = state.techniciens.find(x => x.societeId===state.societeId && (x.nom1===nom || x.id===nom));
+  return e ? e.id : null;
+}
+
 function monEquipeId(){
   const moi = window.monCompteId && window.monCompteId();
   if(!moi) return null;

@@ -261,7 +261,15 @@ export async function tacheDuBonCommande(
   bcId: Uuid,
   date: string,
   libelle: string,
-  metier?: string | null
+  metier?: string | null,
+  /**
+   * L'équipe du métier, telle que le planning l'a choisie.
+   *
+   * Sans elle, une tâche matérialisée à l'ouverture d'une carte naissait
+   * orpheline — et rien ne lui donnait d'équipe ensuite. `est_de_l_equipe()`
+   * répondait alors faux, et le terrain se voyait refuser sa propre tâche.
+   */
+  equipeId?: Uuid | null
 ): Promise<PlanningTache> {
   const societe = societeActive();
   if (!societe) throw new Error("Aucune société active.");
@@ -278,6 +286,7 @@ export async function tacheDuBonCommande(
     libelle,
     date_tache: date,
     metier: metier || null,
+    technicien_id: equipeId ?? null,
   });
 }
 

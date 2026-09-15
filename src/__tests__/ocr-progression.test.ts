@@ -83,26 +83,26 @@ describe("Les étapes de la lecture", () => {
      formuler et n'aura pas à changer. */
   it("sait déjà nommer un réessai du serveur", () => {
     const etat = etatLecture("analyse", 20_000, [
-      { type: "saturation", modele: "gemini-3.7-flash" },
+      { type: "saturation", modele: "mistral-ocr-latest" },
     ]);
-    expect(etat.alerte).toContain("gemini-3.7-flash");
+    expect(etat.alerte).toContain("mistral-ocr-latest");
     expect(etat.alerte).toMatch(/satur/i);
     expect(etat.ton).toBe("attention");
   });
 
   it("sait nommer une bascule de modèle", () => {
     const etat = etatLecture("analyse", 25_000, [
-      { type: "bascule", modele: "gemini-3.8-flash" },
+      { type: "bascule", modele: "mistral-medium-latest" },
     ]);
-    expect(etat.alerte).toContain("gemini-3.8-flash");
+    expect(etat.alerte).toContain("mistral-medium-latest");
   });
 
   it("retient le dernier évènement, pas le premier", () => {
     const etat = etatLecture("analyse", 25_000, [
-      { type: "saturation", modele: "gemini-3.7-flash" },
-      { type: "bascule", modele: "gemini-3.8-flash" },
+      { type: "saturation", modele: "mistral-ocr-latest" },
+      { type: "bascule", modele: "mistral-medium-latest" },
     ]);
-    expect(etat.alerte).toContain("gemini-3.8-flash");
+    expect(etat.alerte).toContain("mistral-medium-latest");
   });
 });
 

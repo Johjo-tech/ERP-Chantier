@@ -1,9 +1,9 @@
 /**
  * Ce que l'écran dit pendant la lecture automatique d'un bon de commande.
  *
- * La lecture passe par un modèle de vision distant : elle dure entre quinze
- * secondes et deux minutes, et rien, dans le navigateur, ne permet de deviner
- * où elle en est. Jusqu'ici l'écran affichait une phrase figée. Le 14/09/2026,
+ * La lecture passe par deux appels distants — un OCR, puis une structuration :
+ * elle dure entre quelques secondes et deux minutes, et rien, dans le
+ * navigateur, ne permet de deviner où elle en est. Jusqu'ici l'écran affichait une phrase figée. Le 14/09/2026,
  * une lecture est morte côté serveur sans émettre de réponse : cette phrase
  * serait restée à l'écran indéfiniment, sans moyen de savoir s'il fallait
  * attendre ou recommencer.

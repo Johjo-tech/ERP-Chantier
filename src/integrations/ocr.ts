@@ -1,9 +1,9 @@
 /**
  * Lecture automatique d'un bon de commande (PDF ou image).
  *
- * L'edge function `extraire-bc`, déjà déployée sur le projet, interroge Gemini
- * avec un schéma JSON strict ; la clé API reste dans les secrets Supabase et le
- * navigateur n'envoie que le fichier.
+ * L'edge function `extraire-bc` transcrit le document avec l'OCR de Mistral,
+ * puis structure le Markdown obtenu sous schéma JSON strict ; la clé API reste
+ * dans les secrets Supabase et le navigateur n'envoie que le fichier.
  *
  * Le résultat **préremplit** le formulaire : rien n'est enregistré
  * automatiquement, l'utilisateur relit et corrige avant de valider.
@@ -25,15 +25,25 @@ export interface LigneExtraite {
   tva?: number | null;
 }
 
+/**
+ * Le contrat de sortie, miroir de `supabase/functions/_shared/contrat-bc.ts`.
+ *
+ * `adresse` / `codePostal` / `ville` désignent le **lieu d'intervention** —
+ * c'est ce que porte le formulaire du bon de commande, et le seul jeu de champs
+ * que `saveBonCommande` enregistre. L'ancien `adresseIntervention`, lui,
+ * atterrissait dans un champ que la sauvegarde ne lisait jamais.
+ */
 export interface ExtractionBC {
   client?: string | null;
   numeroBC?: string | null;
   dateBC?: string | null;
+  referenceChantier?: string | null;
+  natureTravaux?: string | null;
+  dateFinTravaux?: string | null;
   interlocuteur?: string | null;
   adresse?: string | null;
   codePostal?: string | null;
   ville?: string | null;
-  adresseIntervention?: string | null;
   numeroLogement?: string | null;
   logementStatut?: string | null;
   occupant?: string | null;
@@ -44,8 +54,8 @@ export interface ExtractionBC {
   avertissements: string[];
 }
 
-/** Formats que Gemini accepte tels quels. */
-const MIMES_GEMINI = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+/** Formats que l'OCR accepte tels quels. */
+const MIMES_ACCEPTES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 
 /** Au-delà, l'edge function refuse la charge utile. */
 const TAILLE_MAX = 14_000_000;
@@ -60,7 +70,7 @@ const COTE_MAX = 2200;
  * Ramène une image à un format et un poids acceptables.
  *
  * Deux cas courants sur le terrain : une photo HEIC prise à l'iPhone, que
- * Gemini ne lit pas, et un scan de plusieurs dizaines de méga-octets. Le
+ * l'OCR ne lit pas, et un scan de plusieurs dizaines de méga-octets. Le
  * navigateur sait décoder les deux et les réencoder en JPEG — inutile de
  * renvoyer l'utilisateur à ses réglages.
  */
@@ -98,7 +108,7 @@ async function normaliserImage(fichier: File): Promise<File> {
 async function preparer(fichier: File): Promise<File> {
   const estImage = fichier.type.startsWith("image/") || !fichier.type;
 
-  if (estImage && (!MIMES_GEMINI.includes(fichier.type) || fichier.size > TAILLE_RECOMPRESSION)) {
+  if (estImage && (!MIMES_ACCEPTES.includes(fichier.type) || fichier.size > TAILLE_RECOMPRESSION)) {
     return normaliserImage(fichier);
   }
 
@@ -108,7 +118,7 @@ async function preparer(fichier: File): Promise<File> {
     );
   }
 
-  if (!MIMES_GEMINI.includes(fichier.type)) {
+  if (!MIMES_ACCEPTES.includes(fichier.type)) {
     throw new Error(
       `Format non pris en charge (${fichier.type || "inconnu"}). Utilisez un PDF ou une photo.`
     );
@@ -258,8 +268,10 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     numeroBC: e.numeroBC ?? "",
     sansBC: !e.numeroBC,
     dateReception: e.dateBC ?? todayISO(),
+    referenceChantier: e.referenceChantier ?? "",
+    natureTravaux: e.natureTravaux ?? "",
+    dateFinTravaux: e.dateFinTravaux ?? "",
     adresse: e.adresse ?? "",
-    adresseLocataire: e.adresseIntervention ?? "",
     codePostal: e.codePostal ?? "",
     ville: e.ville ?? "",
     logementStatut,
