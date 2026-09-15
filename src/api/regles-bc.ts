@@ -260,3 +260,67 @@ export function messageBlocages(blocages: Blocage[]): string {
     .map((b) => b.libelle + resumerDetails(b.details))
     .join("\n");
 }
+
+// ============ LA FILE DE VALIDATION ============
+
+/**
+ * Ce que l'écran connaît d'un bon sans relire ses tâches.
+ *
+ * `reconstituerWorkflow` pose ces champs sur le bon à chaque chargement : le
+ * nombre de tâches, celles qui ne sont pas encore pointées, et si toutes sont
+ * validées. Cela suffit à situer le bon dans la file.
+ */
+export interface BonEnFile {
+  valideConducteur?: boolean;
+  valideDirecteur?: boolean;
+  nbTaches?: number;
+  /** Tâches ni réalisées ni validées, désignées par leur métier ou leur date. */
+  tachesNonPointees?: string[];
+}
+
+export type EtapeValidation = "pret" | "travaux_en_cours" | "hors_file";
+
+/**
+ * Où se situe un bon dans la file de validation.
+ *
+ * L'onglet ne montrait que les bons entièrement validés — 122 sur 496 en
+ * production. Le directeur ne voyait donc rien venir : ni les 88 bons dont les
+ * travaux ont commencé sans être terminés, ni la raison de leur attente. Un bon
+ * dont toutes les tâches sont *réalisées* mais qu'aucune n'a été arbitrée est
+ * précisément ce qu'il faut voir — c'est lui qui attend une décision.
+ *
+ * Restent dehors les bons déjà chiffrés, qui ont dépassé cette étape, et ceux
+ * dont personne n'a encore touché une tâche : ils n'appellent aucune décision,
+ * ils appellent une intervention.
+ */
+export function etapeValidation(bon: BonEnFile): EtapeValidation {
+  if (bon.valideDirecteur) return "hors_file";
+
+  const total = bon.nbTaches ?? 0;
+  if (total === 0) return "hors_file";
+  if (bon.valideConducteur) return "pret";
+
+  const nonPointees = (bon.tachesNonPointees ?? []).length;
+  // Au moins une tâche déclarée faite : les travaux ont commencé.
+  return total > nonPointees ? "travaux_en_cours" : "hors_file";
+}
+
+/**
+ * Pourquoi ce bon n'est pas encore chiffrable, en clair.
+ *
+ * `null` quand il l'est. La formulation dit ce qui manque, pas ce qui va mal :
+ * un chantier en cours n'est pas une anomalie.
+ */
+export function attenteAvantChiffrage(bon: BonEnFile): string | null {
+  if (etapeValidation(bon) !== "travaux_en_cours") return null;
+
+  const restantes = (bon.tachesNonPointees ?? []).length;
+  if (restantes > 0) {
+    const quoi = (bon.tachesNonPointees ?? []).slice(0, 2).join(", ");
+    return restantes === 1
+      ? `Travaux non terminés — reste ${quoi}`
+      : `Travaux non terminés — reste ${restantes} tâches (${quoi}…)`;
+  }
+  // Tout est déclaré fait, rien n'est arbitré : c'est le conducteur qu'on attend.
+  return "Travaux déclarés faits — en attente d'arbitrage du conducteur";
+}

@@ -26,6 +26,7 @@ import {
   todayISO,
 } from "@/api/client";
 import { colonnesDe, valeursEnum } from "@/api/columns";
+import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
 import { fusionnerReglages } from "./reglages";
 import * as queries from "@/api/queries";
 import type { Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
@@ -640,11 +641,41 @@ async function uuidEquipe(valeur: string | undefined): Promise<Uuid | null> {
   return null;
 }
 
+/**
+ * L'équipe affectée à un métier du bon.
+ *
+ * Elle vit à deux endroits selon le nombre de métiers. `setSchedField` range le
+ * choix du planning dans `scheduleParMetier[metier].technicien` dès qu'un
+ * métier est connu, et dans `bc.technicien` sinon. Ne lire que le second — ce
+ * que faisait la matérialisation des tâches — revenait à ignorer toute
+ * affectation sur un bon multi-métiers : **aucune des 606 tâches de production
+ * ne portait d'équipe**, alors que 84 portaient un sous-traitant, dont le
+ * chemin, lui, était complet.
+ *
+ * `memeMetier` plutôt qu'un accès direct : la clé du planning et le métier de
+ * la tâche peuvent différer par la casse ou les accents.
+ */
+function equipeDuMetier(
+  valeur: Record<string, unknown>,
+  metier: string | null
+): string | undefined {
+  const planning = valeur.scheduleParMetier as
+    | Record<string, { technicien?: string }>
+    | undefined;
+
+  if (metier && planning) {
+    for (const [cle, reglage] of Object.entries(planning)) {
+      if (memeMetier(cle, metier) && reglage?.technicien) return reglage.technicien;
+    }
+  }
+  return (valeur.technicien as string | undefined) || undefined;
+}
+
 /** Colonnes du circuit, lues d'un bloc pour toute la collection. */
 const CHAMPS_TACHE =
   "id, bon_commande_id, metier, statut, validee_le, realisee_le, commentaire," +
   " croquis, piece_a_commander, piece_description, piece_fournisseur," +
-  " piece_date_commande, sous_traitant_id, date_tache";
+  " piece_date_commande, sous_traitant_id, technicien_id, date_tache";
 
 /** Complète les bons de commande chargés avec l'état réel du circuit. */
 async function reconstituerWorkflow(
@@ -799,6 +830,23 @@ async function appliquerWorkflow(
 
   const stModifie = (avant.sousTraitant ?? "") !== (valeur.sousTraitant ?? "");
 
+  /* Le bon désigne-t-il une équipe, quelque part ?
+     
+     On ne compare **pas** à `avant` : le cache range une copie de surface
+     (`{ ...valeur }`), si bien que `scheduleParMetier` y est la *même
+     référence* que l'objet de l'écran. Le modifier modifie aussi le « avant »,
+     et toute comparaison conclut à tort que rien n'a bougé. Le sous-traitant y
+     échappe parce qu'il est comparé sur un scalaire de premier niveau.
+     
+     On se contente donc de savoir s'il y a une équipe à poser ; la comparaison
+     utile se fait plus bas, contre le `technicien_id` réel des tâches — seule
+     mesure qui ne partage de référence avec personne. */
+  const equipeDeclaree =
+    !!(valeur.technicien as string | undefined) ||
+    Object.values(
+      (valeur.scheduleParMetier as Record<string, { technicien?: string }> | undefined) ?? {}
+    ).some((r) => !!r?.technicien);
+
   /* Dates supplémentaires ajoutées depuis la vignette du planning. */
   const datesAvant = new Set(
     ((avant.datesSupplementaires as { date: string }[]) ?? []).map((d) => d.date)
@@ -814,21 +862,31 @@ async function appliquerWorkflow(
     !dateFranchie &&
     !terrainModifie &&
     !stModifie &&
+    !equipeDeclaree &&
     !datesAjoutees.length
   ) {
     return;
   }
 
+  /* `date_tache` sert à ne pas recréer une tâche qui existe déjà pour ce jour
+     et ce métier : c'est la seule mesure fiable, `datesSupplementaires` n'ayant
+     pas de colonne et étant lui-même dérivé des tâches. */
   const { data, error } = await dyn()
     .from("planning_taches")
-    .select("id, metier, statut")
+    .select("id, metier, statut, date_tache, technicien_id")
     .eq("bon_commande_id", bcUuid);
 
   if (error) {
     console.error("Circuit de validation : lecture des tâches impossible", error);
     return;
   }
-  const taches = (data ?? []) as { id: Uuid; metier: string | null; statut: string | null }[];
+  const taches = (data ?? []) as {
+    id: Uuid;
+    metier: string | null;
+    statut: string | null;
+    date_tache: string | null;
+    technicien_id: Uuid | null;
+  }[];
 
   /* L'app historique ne crée pas de tâche : elle coche un métier sur le bon.
      On matérialise la tâche au premier pointage, faute de quoi le circuit
@@ -839,22 +897,38 @@ async function appliquerWorkflow(
   const dateTache =
     (valeur.datePlanifiee as string) || (valeur.dateReception as string) || todayISO();
 
-  async function tachePourMetier(metier: string | null): Promise<Uuid | null> {
-    const existante = taches.find((t) => t.metier === metier);
-    if (existante) return existante.id;
+  /** Crée la tâche du jour et du métier demandés, si elle n'existe pas déjà. */
+  async function materialiser(metier: string | null, date: string): Promise<Uuid | null> {
     if (!societeUuid) return null;
 
     const creee = await queries.planifierTache(societeUuid, {
       bon_commande_id: bcUuid,
       libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
-      date_tache: dateTache,
-      metier,
+      date_tache: date,
+      /* Jamais la chaîne vide : une tâche au métier `""` n'est réclamée par
+         aucun bandeau de validation et devient définitivement invalidable. */
+      metier: metier || null,
       // L'équipe est choisie à la planification, sur le bon ; c'est ici qu'elle
       // rejoint la tâche, seul endroit où la garde saura la lire.
-      technicien_id: await uuidEquipe(valeur.technicien as string | undefined),
+      technicien_id: await uuidEquipe(equipeDuMetier(valeur, metier)),
     });
-    taches.push({ id: creee.id, metier, statut: creee.statut });
+    taches.push({
+      id: creee.id,
+      metier: metier || null,
+      statut: creee.statut,
+      date_tache: date,
+      technicien_id: (creee.technicien_id as Uuid | null) ?? null,
+    });
     return creee.id;
+  }
+
+  async function tachePourMetier(metier: string | null): Promise<Uuid | null> {
+    /* `memeMetier` plutôt que `===` : `null` et `""` désignent le même cas, et
+       la casse ne compte pas. La comparaison stricte laissait une tâche au
+       métier vide inatteignable sur un bon qui déclarait ses métiers. */
+    const existante = taches.find((t) => memeMetier(t.metier, metier));
+    if (existante) return existante.id;
+    return materialiser(metier, dateTache);
   }
 
   try {
@@ -929,20 +1003,41 @@ async function appliquerWorkflow(
       }
     }
 
-    /* Une date supplémentaire devient une tâche sur cette journée-là. */
+    /* L'équipe, elle, est **par métier** : chaque tâche reçoit celle de son
+       propre métier.
+
+       Cette branche manquait entièrement. L'équipe n'était posée qu'à la
+       création de la tâche, et depuis le mauvais champ : une tâche née sans
+       équipe n'en recevait plus jamais, même après l'avoir choisie au planning.
+       Résultat mesuré en production : **0 tâche sur 606** portait une équipe,
+       contre 84 un sous-traitant — dont le chemin, lui, était complet.
+
+       Sans `technicien_id`, `est_de_l_equipe()` répond faux et
+       `tache_marquer_realisee` refuse tout compte terrain. */
+    if (equipeDeclaree) {
+      for (const tache of taches) {
+        const voulue = await uuidEquipe(equipeDuMetier(valeur, tache.metier));
+        if ((tache.technicien_id ?? null) === (voulue ?? null)) continue;
+        await queries.updateTache(tache.id, { technicien_id: voulue });
+        tache.technicien_id = voulue;
+      }
+    }
+
+    /* Une date supplémentaire devient une tâche sur cette journée-là — mais une
+       seule fois.
+
+       `datesSupplementaires` n'a pas de colonne : il est dérivé des tâches à la
+       lecture et écarté en silence à l'écriture. `datesAjoutees`, qui le compare
+       à un état jamais persisté, tenait donc chaque enregistrement pour un ajout
+       et recréait une tâche par métier à chaque fois — quatre tâches en double
+       sur BC-2026-0866, toutes le même jour. On se compare désormais aux tâches
+       elles-mêmes, seule mesure qui survive au rechargement. */
     if (datesAjoutees.length && societeUuid) {
       const metiers = (valeur.metiers as string[])?.length
         ? (valeur.metiers as string[])
         : [(valeur.metier as string) || null];
-      for (const date of datesAjoutees) {
-        for (const metier of metiers) {
-          await queries.planifierTache(societeUuid, {
-            bon_commande_id: bcUuid,
-            libelle: metier ? `${libelleBase} — ${metier}` : libelleBase,
-            date_tache: date,
-            metier,
-          });
-        }
+      for (const { date, metier } of tachesAcreer(taches, datesAjoutees, metiers)) {
+        await materialiser(metier, date);
       }
     }
 

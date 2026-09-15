@@ -845,6 +845,11 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .bc-numref-duo{ grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .metier-checkbox-list{display:flex; flex-wrap:wrap; gap:8px 16px; background:var(--surface-2); border-radius:10px; padding:10px 12px;}
 .metier-checkbox-item{display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;}
+/* Un métier lu sur un chapitre dit d'où il vient : sans cela, une déduction
+   fausse serait indiscernable d'un clic oublié. */
+.metier-checkbox-item.est-deduit{font-weight:600;}
+.metier-origine{color:var(--text-dim); font-size:11px; font-weight:400; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis;}
+.metier-lu{margin-top:8px; font-size:12px; color:var(--success, #1E6B37);}
 .metier-checkbox-item input{width:auto; margin:0;}
 .address-trio{grid-column:1/-1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px;}
 .field{display:flex; flex-direction:column; gap:3px; margin-bottom:13px;}
@@ -889,6 +894,19 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 @media(max-width:640px){ input.art-pick{width:84px !important;} }
 .mic-btn.listening{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-2); animation:pulseSoft 1s infinite;}
 @keyframes pulseSoft{0%{box-shadow:0 0 0 0 rgba(255,106,26,.35);}100%{box-shadow:0 0 0 8px rgba(255,106,26,0);}}
+/* L'écran de lecture d'un bon de commande.
+   Pas de barre de progression : il n'existe aucun pourcentage honnête pour
+   « on attend le modèle », et une barre calée sur le temps écoulé serait un
+   mensonge. Un compteur de secondes, lui, ne ment pas. */
+.ocr-ecran{display:flex; flex-direction:column; align-items:center; gap:10px; padding:38px 24px; text-align:center;}
+.ocr-titre{display:flex; align-items:center; gap:10px; font-size:17px; font-weight:700;}
+.ocr-pastille{width:10px; height:10px; border-radius:50%; background:var(--accent-2, #FF6A1A); animation:pulseSoft 1.1s infinite;}
+.ocr-fichier{font-size:13px; color:var(--text-dim); word-break:break-all; max-width:460px;}
+.ocr-chrono{font-variant-numeric:tabular-nums; font-size:30px; font-weight:700; letter-spacing:-.5px;}
+.ocr-attente{font-size:12.5px; color:var(--text-dim);}
+.ocr-alerte{font-size:13px; color:var(--accent-2, #C24E00); max-width:460px;}
+.ocr-actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:6px;}
+@media (prefers-reduced-motion:reduce){ .ocr-pastille{animation:none;} }
 
 .lignes-table{width:100%; border-collapse:collapse; margin-top:4px;}
 .lignes-table th{font-size:10.5px; color:var(--text-dim); text-transform:uppercase; text-align:left; padding:4px 6px; letter-spacing:.05em;}
@@ -1085,6 +1103,21 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    deux circuits se lisent comme un seul. */
 .wf-bandeau + .wf-bandeau{ margin-top:10px; }
 .wf-metier{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+/* Une tâche que plus aucun métier du bon ne réclame : elle bloque le passage au
+   chiffrage, elle doit donc se voir et s'arbitrer comme les autres. */
+.wf-hors-metier{ color:var(--warning, #B8860B); }
+/* À qui la tâche est confiée : sans cette ligne, le terrain ne pouvait pas
+   savoir pourquoi les boutons lui sont fermés. */
+.wf-equipe{ font-size:12px; color:var(--text-dim); margin:6px 0 2px; }
+.wf-sans-equipe{ color:var(--warning, #B8860B); }
+/* Cette fenêtre ne montre qu'un métier, mais tout ce qui suit s'écrit sur le
+   bon entier : cocher « date terminée » sur la carte SOL clôt aussi PEINTURE.
+   Le taire rendrait la fenêtre plus trompeuse, pas moins. */
+/* Un bon dont les travaux ne sont pas finis entre désormais dans la file de
+   validation : il faut dire ce qu'on y attend, sinon sa présence intrigue. */
+.attente-chiffrage{ font-size:12.5px; color:var(--warning, #B8860B); margin-top:4px; }
+.dossier-attente{ font-size:12px; color:var(--warning, #B8860B); white-space:nowrap; margin-left:2px; }
+.tout-le-bon{ font-size:11px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--text-dim); margin-left:6px; }
 .wf-etat{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px; border-radius:999px; }
 .wf-planifiee{ background:#EEF2F7; color:#4A566E; }
 .wf-realisee{ background:#FFF3E4; color:#9A5B00; }
@@ -1306,20 +1339,27 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
     <!-- Circuit de validation : un bandeau par métier du bon, chacun avec son
          état et les actions ouvertes au rôle. Les cases « Métiers réalisés »
          qui vivaient ici ne persistaient rien et doublaient ces bandeaux. -->
-    <div class="section-title" style="margin-top:14px;">🔧 Métiers</div>
+    <div class="section-title" style="margin-top:14px;">🔧 Métier de cette carte</div>
     <div id="techModalWorkflow" style="margin-top:12px;"></div>
 
-    <div class="section-title" style="margin-top:16px;">📅 Cette date</div>
+    <!-- Le suivi des contacts n'existait nulle part dans cette fiche : on
+         enregistrait un appel depuis la vignette, on ouvrait la fiche pour le
+         relire, et il n'y avait rien à relire. -->
+    <div class="section-title" style="margin-top:16px;">📞 Contacts et relances <span class="tout-le-bon">pour tout le bon</span></div>
+    <div id="techModalContacts"></div>
+    <p class="card-sub" id="techModalContactsVide" style="display:none;">Aucun appel ni relance enregistré pour ce bon.</p>
+
+    <div class="section-title" style="margin-top:16px;">📅 Cette date <span class="tout-le-bon">pour tout le bon</span></div>
     <label class="bc-tache-row" style="background:var(--surface-2); border-radius:8px;">
       <input type="checkbox" id="techModalDateFaite">
       <span style="flex:1;">Cette date est terminée</span>
     </label>
     <p class="card-sub" id="techModalDatesRestantes"></p>
 
-    <div class="section-title" style="margin-top:16px;">💬 Commentaire</div>
+    <div class="section-title" style="margin-top:16px;">💬 Commentaire <span class="tout-le-bon">pour tout le bon</span></div>
     <textarea id="techModalCommentaire" rows="3" placeholder="Remarque sur l'intervention (optionnel)…" style="width:100%;"></textarea>
 
-    <div class="section-title" style="margin-top:16px;">📦 Pièce</div>
+    <div class="section-title" style="margin-top:16px;">📦 Pièce <span class="tout-le-bon">pour tout le bon</span></div>
     <label class="bc-tache-row" style="background:var(--surface-2); border-radius:8px;">
       <input type="checkbox" id="techModalPieceCommander" onchange="togglePieceCommanderInput(this.checked)">
       <span style="flex:1;">Pièce à commander</span>
@@ -3471,6 +3511,46 @@ function refreshLignesUI(){
   const body = document.getElementById('lignesBody');
   if(body) body.innerHTML = ligneRowsHTML(state.editing.lignes);
   refreshRemiseUI();
+  appliquerMetiersDesChapitres();
+}
+
+/**
+ * Les métiers se lisent sur les chapitres du bon, au lieu de se cocher.
+ *
+ * Ne s'exécute que dans le formulaire de bon de commande — la zone n'existe pas
+ * ailleurs. C'est la garde qui empêche les 830 bons déjà en base de se voir
+ * attribuer des métiers, et leur planning de se scinder, à la simple ouverture :
+ * la déduction n'a lieu qu'à la saisie.
+ *
+ * Elle **ajoute** et ne retire jamais : un métier coché à la main survit à
+ * toute relecture des chapitres.
+ */
+function appliquerMetiersDesChapitres(options){
+  const silencieux = !!(options && options.silencieux);
+  const zone = document.getElementById('bc_metiersZone');
+  if(!zone || !window.metiersDesChapitres) return [];
+
+  const lu = window.metiersDesChapitres(state.editing.lignes, metiersDisponibles());
+  const dejaCoches = getCheckedMetiers('bc');
+  const retenus = [...dejaCoches];
+  for(const m of lu.metiers){
+    if(!retenus.some(c=>window.memeMetier(c, m))) retenus.push(m);
+  }
+
+  const avant = dejaCoches.length;
+  zone.innerHTML = bcMetiersZoneHTML(retenus, lu.origines, retenus.length - avant);
+
+  /* Passer de un à deux métiers scinde la carte du planning en une par métier,
+     chacune avec sa date, son équipe et son montant. Mieux vaut le dire ici que
+     le laisser découvrir au planning. */
+  /* `showToast` n'en garde qu'un à la fois : quand la lecture automatique parle
+     juste après, elle écraserait celui-ci. Elle demande donc le silence et dit
+     les deux choses en un seul message. */
+  if(!silencieux && avant <= 1 && retenus.length > 1){
+    showToast(`${retenus.length} métiers lus sur les chapitres — le bon se planifiera en ${retenus.length} interventions.`, 'success', 5000);
+  }
+  refreshBCMontantFields();
+  return retenus;
 }
 function bcLignesOntDuContenu(lignes){
   return (lignes||[]).some(l=>(l.type||'ligne')==='ligne' && (l.designation || (parseFloat(l.prixUnitaire)||0)>0));
@@ -3486,43 +3566,138 @@ function addChapitre(){ state.editing.lignes.push({type:'chapitre', designation:
 function addCommentaire(){ state.editing.lignes.push({type:'commentaire', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function removeLigne(i){ state.editing.lignes.splice(i,1); if(!state.editing.lignes.length) state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
 let draggedLigneIndex = null;
-function dragStartLigne(ev, i){
+/* Le glisser-déposer des lignes sert deux tableaux : celui des documents —
+   devis, facture, bon de commande — et celui de la pré-facture. Une seule
+   implémentation, paramétrée par le tableau qu'elle réordonne et le conteneur
+   où elle dessine le repère. Deux copies finiraient par diverger, comme la
+   comparaison des métiers l'a déjà fait. */
+const ZONES_DND = {
+  document: {
+    conteneur: '#lignesBody',
+    lignes: ()=> state.editing && state.editing.lignes,
+    apres: ()=> refreshLignesUI(),
+  },
+  prefacture: {
+    conteneur: '#validationDirecteurLignes',
+    lignes: ()=> validationDirecteurCtx && validationDirecteurCtx.lignes,
+    apres: ()=> renderValidationDirecteur(),
+  },
+};
+
+/** La zone d'où part le glisser : on ne dépose pas d'un tableau dans l'autre. */
+let zoneDndCourante = null;
+/** Le travail supplémentaire en cours de glisser, s'il y en a un. */
+let travailGlisse = null;
+
+function dragStartTravail(ev, id){
+  travailGlisse = id;
+  draggedLigneIndex = null;
+  zoneDndCourante = 'travail';
+  ev.dataTransfer.effectAllowed = 'move';
+  try{ ev.dataTransfer.setData('text/plain', id); }catch(e){}
+}
+
+/**
+ * Un travail constaté devient une ligne du bon, à l'endroit où on le dépose.
+ *
+ * Il n'est pas supprimé mais passé à `integre` : ni `bc_generer_facture`, qui
+ * ne reprend que `chiffre`, ni `bc_chiffrage_valide`, qui ne compte que
+ * `a_chiffrer`, ne le verront plus. Le supprimer laisserait une fenêtre où la
+ * ligne existe déjà et le travail aussi — une interruption entre les deux
+ * écritures ferait facturer deux fois.
+ */
+function integrerTravailDansLignes(id, insertPos){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const i = ctx.travaux.findIndex(t=>t.id===id);
+  if(i < 0) return;
+  const t = ctx.travaux[i];
+
+  ctx.lignes.splice(insertPos, 0, {
+    type:'ligne',
+    designation: t.libelle || '',
+    qte: t.quantite != null ? Number(t.quantite) : 1,
+    unite: t.unite || 'u',
+    prixUnitaire: Number(t.prix_vente_ht) || 0,
+    tva: Number(t.tva) || tvaDefaut(),
+  });
+  ctx.travaux.splice(i, 1);
+  // Enregistré au même moment que les lignes, jamais avant.
+  ctx.travauxIntegres = (ctx.travauxIntegres || []).concat(id);
+  renderValidationDirecteur();
+  showToast('Travail repris comme ligne du bon — enregistrez pour le conserver.', 'success', 5000);
+}
+
+function dragStartLigne(ev, i, zone){
   draggedLigneIndex = i;
+  zoneDndCourante = zone || 'document';
   ev.dataTransfer.effectAllowed = 'move';
   try{ ev.dataTransfer.setData('text/plain', String(i)); }catch(e){}
 }
-function dragOverLigne(ev){
+
+function reperesDnd(zone){
+  const sel = (ZONES_DND[zone] || ZONES_DND.document).conteneur;
+  return document.querySelectorAll(sel + ' tr.drag-over-top, ' + sel + ' tr.drag-over-bottom');
+}
+
+function dragOverLigne(ev, zone){
+  const z = zone || 'document';
+  const travailVersLignes = zoneDndCourante === 'travail' && z === 'prefacture';
+  if(zoneDndCourante && zoneDndCourante !== z && !travailVersLignes) return;
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
   const row = ev.currentTarget;
   const rect = row.getBoundingClientRect();
   const before = (ev.clientY - rect.top) < rect.height/2;
-  document.querySelectorAll('#lignesBody tr.drag-over-top, #lignesBody tr.drag-over-bottom').forEach(r=>{
+  reperesDnd(z).forEach(r=>{
     if(r!==row){ r.classList.remove('drag-over-top','drag-over-bottom'); }
   });
   row.classList.toggle('drag-over-top', before);
   row.classList.toggle('drag-over-bottom', !before);
 }
-function dropLigne(ev, targetIndex){
+
+function dropLigne(ev, targetIndex, zone){
+  const z = zone || 'document';
   ev.preventDefault();
   const row = ev.currentTarget;
-  document.querySelectorAll('#lignesBody tr.drag-over-top, #lignesBody tr.drag-over-bottom').forEach(r=>r.classList.remove('drag-over-top','drag-over-bottom'));
-  if(draggedLigneIndex === null){ return; }
+  reperesDnd(z).forEach(r=>r.classList.remove('drag-over-top','drag-over-bottom'));
+  /* Un travail supplémentaire déposé parmi les lignes les rejoint : c'est le
+     seul franchissement de zone autorisé, et il va dans ce sens-là seulement. */
+  if(zoneDndCourante === 'travail' && z === 'prefacture' && travailGlisse){
+    const rectT = row.getBoundingClientRect();
+    const avant = (ev.clientY - rectT.top) < rectT.height/2;
+    const id = travailGlisse;
+    travailGlisse = null; zoneDndCourante = null; draggedLigneIndex = null;
+    integrerTravailDansLignes(id, avant ? targetIndex : targetIndex + 1);
+    return;
+  }
+  if(draggedLigneIndex === null || zoneDndCourante !== z){ draggedLigneIndex = null; return; }
   const rect = row.getBoundingClientRect();
   const before = (ev.clientY - rect.top) < rect.height/2;
   if(draggedLigneIndex === targetIndex){ draggedLigneIndex = null; return; }
   let insertPos = before ? targetIndex : targetIndex + 1;
   if(draggedLigneIndex < insertPos) insertPos -= 1;
-  const lignes = state.editing.lignes;
+  const zoneDef = ZONES_DND[z] || ZONES_DND.document;
+  const lignes = zoneDef.lignes();
+  if(!lignes){ draggedLigneIndex = null; return; }
   const [moved] = lignes.splice(draggedLigneIndex, 1);
   lignes.splice(insertPos, 0, moved);
   draggedLigneIndex = null;
-  refreshLignesUI();
+  zoneDndCourante = null;
+  zoneDef.apres();
 }
 function updateLigne(i,field,val){
   const texteFields = field==='designation' || field==='commentaire' || field==='unite';
   state.editing.lignes[i][field] = texteFields ? val : (parseFloat(val)||0);
-  if(texteFields) return;
+  if(texteFields){
+    /* Le titre d'un chapitre porte le métier : le relire à la frappe évite de
+       le faire cocher. On ne redessine que la zone des métiers — refaire le
+       tableau des lignes ferait perdre le focus à chaque caractère. */
+    if(field==='designation' && (state.editing.lignes[i].type||'ligne')==='chapitre'){
+      appliquerMetiersDesChapitres();
+    }
+    return;
+  }
   refreshTotalsOnly();
 }
 
@@ -4542,7 +4717,11 @@ function renderFactures(){
     `;
   }
   const list = state.factures.filter(f=>f.societeId===soc && !f.sousTraitantEmetteur);
-  const enValidation = state.bonsCommande.filter(b=>b.societeId===soc && b.valideConducteur && !b.valideDirecteur);
+  /* La file ne montrait que les bons entièrement validés — 122 sur 496 en
+     production. Le directeur ne voyait donc rien venir : ni les 88 bons dont
+     les travaux ont commencé sans être terminés, ni la raison de leur attente.
+     La règle vit dans `regles-bc.ts`, avec ses cas. */
+  const enValidation = state.bonsCommande.filter(b=>b.societeId===soc && window.etapeValidation(b) !== 'hors_file');
   const aFacturer = state.bonsCommande.filter(b=>b.societeId===soc && b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
   return `
     <div class="plus-subnav" style="justify-content:center;">
@@ -4750,11 +4929,17 @@ function renderDossiersClients(list, workflowCtx){
        dans du vide. */
     const ouvert = actif || state.dossierOuvert === cle;
     const noms = documents.map(b=>b.numeroBC).filter(Boolean).join(', ');
+    /* Les dossiers sont fermés par défaut : sans ce compte, le directeur ne
+       saurait qu'en ouvrant que la moitié de sa file n'est pas chiffrable. */
+    const enCours = workflowCtx==='validation' && window.etapeValidation
+      ? documents.filter(b=>window.etapeValidation(b)==='travaux_en_cours').length
+      : 0;
     return `<div class="dossier-client">
       <div class="dossier-header" onclick="toggleDossier('${jsAttr(cle)}')">
         <span class="dossier-icon">${ouvert? '📂':'📁'}</span>
         <span class="dossier-nom">${esc(client)}</span>
         <span class="dossier-badge">${documents.length}</span>
+        ${enCours? `<span class="dossier-attente" title="Travaux non terminés — pas encore chiffrables">⏳ ${enCours}</span>`:''}
         ${!ouvert? `<span class="dossier-apercu">${esc(noms)}</span>`:''}
         <span class="dossier-chevron">${ouvert? '▲':'▼'}</span>
       </div>
@@ -5140,6 +5325,7 @@ function renderClientBCZoneHTML(){
         ${b.pieceACommander && b.pieceACommanderDetail? `<div class="card-sub" style="margin-top:6px;">🔧 Pièce : ${esc(b.pieceACommanderDetail)}${b.pieceACommanderDateCommande? ' — commandée le '+fmtDate(b.pieceACommanderDateCommande):''}</div>`:''}
         ${b.datePlanificationInitiale && b.pieceACommander? `<div class="card-sub">🕓 1ère intervention le ${fmtDate(b.datePlanificationInitiale)} — reportée en attente de la pièce</div>`:''}
         ${tentatives.length? `<div class="client-tentatives">📵 <b>Locataire injoignable</b> — nos tentatives : ${tentatives.map(t=>`<span class="contact-tag contact-tag-${t.type}">${t.type==='appel'?'📞 Appel':'💬 SMS'} ${fmtDate(t.date)}${t.heure? ' '+t.heure:''}</span>`).join(' ')}</div>`:''}
+        ${b.rappelDate && !b.dateInterventionTerminee? `<div class="card-sub">🔄 Prochain contact prévu le ${fmtDate(b.rappelDate)}</div>`:''}
         ${b.dateInterventionTerminee? `<div class="card-sub" style="color:var(--success); font-weight:600; margin-top:6px;">✅ Réalisé le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
       </div>`;
     }).join('') : '<div class="empty">Aucun bon de commande'+(filtre? ' dans cette catégorie':'')+'.</div>'}
@@ -5277,12 +5463,14 @@ function bonCommandeCardHTML(b, workflowCtx){
       <div class="card-row">
       <div style="flex:1; min-width:0;"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.interlocuteur? ' · 👤 '+esc(b.interlocuteur):''}${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}${(b.metiers&&b.metiers.length)||b.metier? ' · 🔧 '+esc(metiersDisplayJoin(b)):''}</div>
       <div class="card-sub">${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>
-      ${planningContactZoneHTML(b, true)}
+      ${planningContactZoneHTML(b)}
       ${b.natureTravaux? `<div class="card-sub">🛠️ ${esc(b.natureTravaux)}</div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="goToBonCommande('${bonCommandeOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
       ${devisLie? `<div class="card-sub">Devis lié : <a href="javascript:void(0)" onclick="goToDevis('${devisLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisLie.numero)}</a></div>`:''}
       ${rapportLie? `<div class="card-sub">Rapport lié : <a href="javascript:void(0)" onclick="goToIntervention('${rapportLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportLie.numero)}</a></div>`:''}
       ${b.referenceChantier? `<div class="card-sub">🏗️ Chantier : ${esc(b.referenceChantier)}</div>`:''}
+      ${(workflowCtx==='validation' && window.attenteAvantChiffrage && window.attenteAvantChiffrage(b))
+        ? `<div class="attente-chiffrage">⏳ ${esc(window.attenteAvantChiffrage(b))}</div>` : ''}
       ${locataireCardLine(b)}
       ${isSAV? (b.problemeDescription? `<div class="card-sub" style="color:var(--danger);"><span style="color:var(--danger);">⚠</span> ${esc(b.problemeDescription)}</div>`:'') : `<div class="card-sub">${b.dateReception? 'Reçu le '+fmtDate(b.dateReception):''}${b.dateFinTravaux? ' · Fin travaux : '+fmtDate(b.dateFinTravaux):''}</div>`}
       ${isSAV && b.photos && b.photos.length? `<div class="card-sub">📷 ${b.photos.length} photo${b.photos.length>1?'s':''}</div>`:''}
@@ -5306,7 +5494,7 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${chiffrageIci? `<div class="tech-fiche-zone">
         <button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${b.id}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>
       </div>`:''}
-      ${b.pieceACommander? `<div class="card-sub" style="color:#C24E00; font-weight:600;">📦 Pièce à commander${b.pieceACommanderDetail? ' : '+esc(b.pieceACommanderDetail) : ''}${b.pieceACommanderDateCommande? ' — commandée le '+fmtDate(b.pieceACommanderDateCommande) : ''}${b.pieceACommanderFournisseur? ' — Fournisseur : '+esc(b.pieceACommanderFournisseur) : ''}</div>`:''}
+      ${pieceAttendueLigne(b, 'card-sub')}
       ${b.datePlanificationInitiale? `<div class="card-sub">🕓 Planifiée une première fois le ${fmtDate(b.datePlanificationInitiale)} (reportée pour attente de pièce)</div>`:''}
       ${b.dateInterventionTerminee? `<div class="card-sub" style="color:#2E9BF0; font-weight:600;">✅ Intervention terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
       ${(workflowCtx==='pieceCommande' && b.pieceACommander)? `<div class="piece-replanifier-zone">
@@ -5732,7 +5920,7 @@ async function openValidationDirecteurModal(bcId){
       window.listTravauxSupplementaires(bcId)
     ]);
     validationDirecteurCtx.taches = taches || [];
-    validationDirecteurCtx.travaux = travaux || [];
+    validationDirecteurCtx.travaux = (travaux || []).filter(t=>t.statut !== 'integre');
     renderValidationDirecteur();
   }catch(err){
     console.error('Dossier de validation indisponible', err);
@@ -5817,13 +6005,13 @@ function chiffrageDirecteurHTML(ctx){
       const allure = type==='chapitre'
         ? 'font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#C24E00;'
         : 'font-style:italic; color:#6B7686;';
-      return `<tr class="${type==='chapitre'?'p-chapitre':'p-comment'}">
-        <td colspan="3"><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+      return `<tr class="dnd-row ${type==='chapitre'?'p-chapitre':'p-comment'}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
+        <td colspan="3"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
         <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
       </tr>`;
     }
-    return `<tr class="${manquant?'p-sans-prix':''}">
-      <td><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></td>
+    return `<tr class="dnd-row ${manquant?'p-sans-prix':''}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
+      <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:70px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:52px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
       <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
@@ -5835,17 +6023,23 @@ function chiffrageDirecteurHTML(ctx){
   const travaux = (ctx.travaux||[]).map(t=>{
     const manquant = t.statut !== 'chiffre';
     return `<tr class="${manquant?'p-sans-prix':''}">
-      <td>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></td>
-      <td class="num">1 u</td>
+      <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartTravail(event, '${jsAttr(t.id)}')" title="Glisser dans une ligne du bon pour l'y intégrer">⠿</span><span>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></span></div></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:70px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:52px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
       <td></td>
     </tr>`;
   }).join('');
 
+  /* Les lignes du bon vivent dans leur propre `tbody` : c'est lui que le
+     glisser-déposer adresse. Les travaux supplémentaires sont dans un autre,
+     et ne se réordonnent pas — ils viennent d'une table à part, avec leur
+     propre circuit, et leur ordre n'a pas de sens sur le document. */
   return `<table class="lignes-table" style="margin-top:8px;">
-    <tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr>
-    ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
-    ${travaux? `<tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}`:''}
+    <thead><tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr></thead>
+    <tbody id="validationDirecteurLignes">
+      ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
+    </tbody>
+    ${travaux? `<tbody><tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}</tbody>`:''}
   </table>
   <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
     <button type="button" class="btn small" onclick="ajouterLigneDirecteur('ligne')">+ Ligne</button>
@@ -5984,13 +6178,33 @@ function rafraichirChiffrageDirecteur(){
   majBoutonValidationDirecteur(blocages.length === 0 && ctx.peutValider);
 }
 
-function majPrixTravailDirecteur(id, valeur){
+/**
+ * Un travail constaté se chiffre comme une ligne : quantité, unité, prix.
+ *
+ * La quantité et l'unité étaient figées à « 1 u » à l'écran, alors que la table
+ * les porte et que `bc_generer_facture` les reprend sur la facture. « Reprise
+ * de plinthes sur 4 ml » ne pouvait donc être chiffré qu'au forfait, et la
+ * facture affichait une quantité fausse.
+ */
+function majTravailDirecteur(id, champ, valeur){
   if(!validationDirecteurCtx) return;
   const travail = validationDirecteurCtx.travaux.find(t=>t.id===id);
   if(!travail) return;
-  travail.prix_vente_ht = parseFloat(String(valeur).replace(',', '.')) || 0;
-  travail.statut = 'chiffre';
+
+  if(champ === 'unite'){
+    travail.unite = valeur;
+  } else {
+    travail[champ] = parseFloat(String(valeur).replace(',', '.')) || 0;
+  }
+  /* Le statut ne bascule qu'au prix : une quantité saisie sans montant ne
+     chiffre rien, et `bc_chiffrage_valide` doit continuer de bloquer. */
+  if(champ === 'prix_vente_ht') travail.statut = 'chiffre';
   rafraichirChiffrageDirecteur();
+}
+
+/** Conservée : l'ancien nom est encore cité par le champ de prix. */
+function majPrixTravailDirecteur(id, valeur){
+  majTravailDirecteur(id, 'prix_vente_ht', valeur);
 }
 
 /* Les prix sont enregistrés avant la validation, jamais en même temps : si un
@@ -6005,14 +6219,26 @@ async function enregistrerChiffrageDirecteur(silencieux){
   try{
     for(const t of ctx.travaux){
       if(t.prix_vente_ht == null) continue;
-      await window.chiffrerTravailSupplementaire(t.id, Number(t.prix_vente_ht));
+      await window.chiffrerTravailSupplementaire(t.id, {
+        prixVenteHt: Number(t.prix_vente_ht),
+        quantite: t.quantite != null ? Number(t.quantite) : 1,
+        unite: t.unite || 'u',
+      });
     }
     b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
     b.montant = computeTotals(b.lignes).ht;
     const r = await stSet('bonCommande:'+b.id, b);
     if(!r){ showToast(saveFailedMessage()); return false; }
 
-    ctx.travaux = await window.listTravauxSupplementaires(ctx.bcId);
+    /* Après l'enregistrement des lignes, jamais avant : si le bon n'avait pas
+       pu s'écrire, un travail déjà marqué « intégré » aurait disparu des deux
+       côtés — ni dans la liste des travaux, ni sur le document. */
+    for(const id of (ctx.travauxIntegres || [])){
+      await window.integrerTravailSupplementaire(id);
+    }
+    ctx.travauxIntegres = [];
+
+    ctx.travaux = (await window.listTravauxSupplementaires(ctx.bcId)).filter(t=>t.statut !== 'integre');
     renderValidationDirecteur();
     if(!silencieux) showToast('Prix enregistrés.', 'success');
     return true;
@@ -6100,6 +6326,12 @@ async function validerBCEtape(bcId, etape){
    explicitement de la rouvrir, pour qu'un arbitrage ne s'efface pas sans trace.
    Rouvrir une affaire validée est une décision de gestion, pas un correctif. */
 function bonCommandeForm(){
+  /* Pendant une lecture automatique, l'écran se consacre à la lecture. Le
+     formulaire reviendra prérempli. Rendre le suivi depuis `state.ocr` plutôt
+     qu'en manipulant le DOM est ce qui lui permet de survivre à `renderTab()` —
+     l'ancien message de fin, lui, était effacé par le rendu qui le suivait. */
+  if(state.ocr && (state.ocr.enCours || state.ocr.etat)) return ocrEcranHTML();
+
   const e = state.editing;
   const statuts = ['en attente','en cours','terminé','annulé'];
   const sansBC = !!e.sansBC;
@@ -6180,7 +6412,7 @@ function bonCommandeForm(){
       <div class="field-grid">
         <div class="field"><label>Conducteur de travaux</label><select id="bc_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
         <div class="field"><label>Nature des travaux</label><input type="text" id="bc_natureTravaux" value="${esc(e.natureTravaux)}" placeholder="Ex : Remise en état logement, Fuite d'eau…"></div>
-        <div class="field full"><label>Métier(s)</label>${metierCheckboxesHTML('bc', e.metiers || (e.metier? [e.metier] : []), 'onchange="refreshBCMontantFields()"')}</div>
+        <div class="field full"><label>Métier(s)</label><div id="bc_metiersZone">${(()=>{ const m = metiersDuBrouillon(e); return bcMetiersZoneHTML(m.retenus, m.origines, m.ajoutes); })()}</div></div>
         <div class="field full"><label>Notes</label><input type="text" id="bc_notes" value="${esc(e.notes)}" placeholder="Remarques…"></div>
       </div>
     </div>
@@ -7013,6 +7245,7 @@ async function confirmerRappel(){
   await loadAll();
   closeRappelModal();
   renderTab();
+  majContactsFicheTechnicien();
   showToast('🔄 Rappel programmé pour le '+fmtDate(dateVal)+'.', 'success');
 }
 async function annulerRappel(kind, id){
@@ -7024,8 +7257,15 @@ async function annulerRappel(kind, id){
   await loadAll();
   renderTab();
 }
+/* Le suivi des contacts : ce qu'on a tenté, et ce qu'on a prévu.
+
+   La zone ne s'affichait que pour un logement occupé. Un bon repassé en
+   « vacant » ou en parties communes perdait donc à l'écran les appels déjà
+   enregistrés — la base les gardait, l'écran ne les montrait plus. Et on ne
+   joint pas qu'un locataire : un gardien, un syndic, un gestionnaire se
+   relancent aussi. La zone se montre désormais partout ; en lecture seule,
+   elle reste muette tant qu'il n'y a rien à dire. */
 function planningContactZoneHTML(b, readOnly){
-  if(b.logementStatut !== 'occupé') return '';
   const kind = b.kind || 'bonCommande';
   const tentatives = b.tentativesContact||[];
   if(readOnly){
@@ -7043,6 +7283,21 @@ function planningContactZoneHTML(b, readOnly){
     ${tentatives.map(t=>`<span class="contact-tag contact-tag-${t.type}">${t.type==='appel'?'📞':'💬'} ${fmtDate(t.date)} ${t.heure} <button onclick="removeTentativeContact('${kind}','${b.id}','${t.id}')" title="Retirer">✕</button></span>`).join('')}
   </div>`;
 }
+/* La pièce attendue, en une ligne.
+
+   Deux écrans internes disaient la même chose dans deux markups différents, et
+   le planning la réduisait à un badge dont le détail demandait un survol — ce
+   qu'un technicien sur un téléphone de chantier ne fait pas. Le portail client
+   garde sa propre formulation : le nom du fournisseur ne le regarde pas. */
+function pieceAttendueLigne(b, classe){
+  if(!b.pieceACommander && !b.pieceACommanderDetail) return '';
+  const detail = [
+    b.pieceACommanderDetail? esc(b.pieceACommanderDetail) : 'pièce non précisée',
+    b.pieceACommanderDateCommande? 'commandée le '+fmtDate(b.pieceACommanderDateCommande) : 'pas encore commandée',
+    b.pieceACommanderFournisseur? 'chez '+esc(b.pieceACommanderFournisseur) : ''
+  ].filter(Boolean).join(' — ');
+  return `<div class="${classe}" style="color:#C24E00; font-weight:600;">📦 ${detail}</div>`;
+}
 async function logTentativeContact(kind, id, type){
   const resolved = resolvePlanningItem(kind, id);
   if(!resolved) return;
@@ -7052,6 +7307,7 @@ async function logTentativeContact(kind, id, type){
   bc.tentativesContact.push({ id: uid(), type, date: todayISO(), heure: now.toTimeString().slice(0,5) });
   await stSet(planningKeyPrefix(kind)+bcId, bc);
   renderTab();
+  majContactsFicheTechnicien();
   showToast(type==='appel' ? '📞 Tentative d\'appel enregistrée !' : '💬 SMS enregistré !', 'success', 1800);
 }
 async function removeTentativeContact(kind, id, tentativeId){
@@ -7061,6 +7317,7 @@ async function removeTentativeContact(kind, id, tentativeId){
   bc.tentativesContact = (bc.tentativesContact||[]).filter(t=>t.id!==tentativeId);
   await stSet(planningKeyPrefix(kind)+bcId, bc);
   renderTab();
+  majContactsFicheTechnicien();
 }
 function planningPrixSTZoneHTML(b, assigneeField){
   if(assigneeField!=='sousTraitant') return '';
@@ -7103,6 +7360,7 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
     ${b.logementStatut? `<div class="planning-card-sub" style="margin-top:2px;">${logementBadge(b.logementStatut)}</div>`:''}
     ${(b.etage || b.numeroLogement)? `<div class="planning-card-sub">${[b.etage? 'Étage '+esc(b.etage):'', b.numeroLogement? 'N° '+esc(b.numeroLogement):''].filter(Boolean).join(' · ')}</div>`:''}
     ${b.isSAV && b.problemeDescription? `<div class="planning-card-sub" style="color:var(--danger);">⚠ ${esc(b.problemeDescription)}</div>`:''}
+    ${pieceAttendueLigne(b, 'planning-card-sub')}
     ${b.datePlanificationInitiale? `<div class="planning-card-sub" title="Reportée pour attente de pièce">🕓 1ère planif. : ${fmtDate(b.datePlanificationInitiale)}</div>`:''}
     ${b.dateInterventionTerminee? `<div class="planning-card-sub" style="color:#2E9BF0;">✅ Terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
     ${planningPrixSTZoneHTML(b, assigneeField)}
@@ -7308,13 +7566,30 @@ async function saveSousTraitantValidation(){
   showToast('✓ Travaux validés — merci !', 'success');
 }
 let techModalCtx = null;
+/* La fiche est peuplée une fois, à l'ouverture. Sans ce rafraîchissement, un
+   appel enregistré depuis la fiche elle-même n'y apparaîtrait qu'au prochain
+   passage — c'est-à-dire jamais, du point de vue de celui qui vient de cliquer. */
+function majContactsFicheTechnicien(){
+  const zone = document.getElementById('techModalContacts');
+  if(!zone || !techModalCtx) return;
+  const resolved = resolvePlanningItem(techModalCtx.kind, techModalCtx.bcId);
+  if(!resolved) return;
+  zone.innerHTML = planningContactZoneHTML(resolved.bc);
+  const rien = !(resolved.bc.tentativesContact||[]).length && !resolved.bc.rappelDate;
+  document.getElementById('techModalContactsVide').style.display = rien? '' : 'none';
+}
 function openTechnicienInterventionModal(kind, id, dayIso){
   const resolved = resolvePlanningItem(kind, id);
   if(!resolved) return;
   const b = resolved.bc;
   const estDateOrigine = !dayIso || !(b.datesSupplementaires||[]).some(d=>d.date===dayIso);
-  techModalCtx = { kind, bcId: b.id, dayIso: estDateOrigine ? null : dayIso };
-  document.getElementById('techModalTitre').textContent = (b.numeroBC || b.client) + (estDateOrigine ? '' : ` — ${fmtDate(dayIso)}`);
+  /* Le métier de la carte cliquée était rendu par `resolvePlanningItem` puis
+     jeté : la fiche montrait donc tous les métiers du bon, et matérialisait au
+     passage les tâches de ceux qu'on n'avait pas ouverts. */
+  techModalCtx = { kind, bcId: b.id, metierKey: resolved.metierKey || null, dayIso: estDateOrigine ? null : dayIso };
+  document.getElementById('techModalTitre').textContent = (b.numeroBC || b.client)
+    + (resolved.metierKey ? ` — ${metierDisplayLabel(resolved.metierKey)}` : '')
+    + (estDateOrigine ? '' : ` — ${fmtDate(dayIso)}`);
   document.getElementById('techModalInfo').textContent = `${esc(b.client)} — ${withVille(b.adresse, b.codePostal, b.ville)||''}`;
   const occSuppl = techModalCtx.dayIso ? (b.datesSupplementaires||[]).find(d=>d.date===techModalCtx.dayIso) : null;
   document.getElementById('techModalDateFaite').checked = techModalCtx.dayIso ? !!(occSuppl && occSuppl.fait) : !!b.dateOrigineFait;
@@ -7328,9 +7603,10 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   document.getElementById('techTravailSupInput').value = '';
   rafraichirTravauxSupplementaires(b.id, 'techTravailSupListe');
   renderTechModalPhotos(b);
+  majContactsFicheTechnicien();
   document.getElementById('technicienInterventionModal').style.display = 'flex';
   setTimeout(()=> setupTechDessinCanvas(b), 30);
-  chargerWorkflowTache(b, techModalCtx.dayIso);
+  chargerWorkflowTache(b, techModalCtx.dayIso, techModalCtx.metierKey);
 }
 /* ---------- Circuit de validation d'une tâche ----------
    L'état et les actions viennent de la base : `planning_taches` porte le
@@ -7349,7 +7625,7 @@ const WF_LIBELLES = {
   refusee: 'Refusée',
 };
 
-async function chargerWorkflowTache(b, dayIso){
+async function chargerWorkflowTache(b, dayIso, metierKey){
   const zone = document.getElementById('techModalWorkflow');
   if(!zone) return;
   zone.innerHTML = '<div class="wf-bandeau"><span class="wf-meta">Chargement du suivi…</span></div>';
@@ -7361,14 +7637,42 @@ async function chargerWorkflowTache(b, dayIso){
     /* Un bon sans métier déclaré garde une tâche unique sans métier : son
        circuit reste exactement celui d'avant. */
     const metiers = bcMetiersDuBC(b);
-    const cibles = metiers.length ? metiers : [null];
+    const tous = metiers.length ? metiers : [null];
+
+    /* On ouvre la fiche d'**une** carte : elle ne montre que son métier. Les
+       afficher tous mélangeait deux interventions distinctes, et matérialisait
+       au passage les tâches des métiers qu'on n'avait pas ouverts. */
+    const monMetier = metierKey && tous.some(m => window.memeMetier(m, metierKey))
+      ? tous.find(m => window.memeMetier(m, metierKey))
+      : (metiers.length ? tous[0] : null);
+    const cibles = [monMetier];
 
     const chargees = [];
     for(const m of cibles){
       /* En série : deux matérialisations concurrentes sur le même bon
          créeraient deux tâches pour un même métier. */
-      chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m) });
+      const equipe = equipeDeLaCarte(b, m);
+      chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m, equipe) });
     }
+
+    /* Une tâche qu'aucun métier déclaré ne réclame — au métier vide, ou à un
+       métier retiré du bon depuis — n'apparaîtrait sous aucun bandeau. Elle
+       resterait pourtant comptée par `bc_passer_pret_a_chiffrer`, qui exige que
+       **toutes** les tâches soient validées : le bon se bloque avant le
+       chiffrage sans que rien ne le dise. C'est ce qui est arrivé à
+       BC-2026-0866. Une tâche qui existe doit toujours être atteignable. */
+    const surLaPremiere = !metiers.length || window.memeMetier(monMetier, tous[0]);
+    if(surLaPremiere){
+      const reclamees = new Set(chargees.map(e => e.tache && e.tache.id));
+      const toutes = await window.listTachesBonCommande(b.id);
+      for(const t of (toutes || [])){
+        if(reclamees.has(t.id)) continue;
+        // Réclamée par un autre métier du bon : elle a sa propre carte.
+        if(tous.some(m => window.memeMetier(m, t.metier))) continue;
+        chargees.push({ metier: t.metier || null, tache: t, horsMetier: true });
+      }
+    }
+
     wfTaches = chargees;
     renderWorkflowTaches();
   }catch(err){
@@ -7397,10 +7701,57 @@ function renderWorkflowTaches(){
   zone.innerHTML = bandeaux + suite;
 }
 
+/**
+ * L'équipe du compte connecté, dans la société active.
+ *
+ * C'est la chaîne que la base emprunte pour sa propre garde : compte → salarié
+ * → équipe. On la refait ici pour que l'écran sache, **avant** le clic, si la
+ * tâche est celle de l'utilisateur.
+ */
+/**
+ * L'uuid de l'équipe choisie au planning pour ce métier.
+ *
+ * `schedField` rend le **nom** de l'équipe ; la tâche, elle, la référence par
+ * uuid. On traduit ici, faute de quoi une tâche matérialisée à l'ouverture
+ * d'une carte naîtrait sans équipe — et n'en recevrait plus jamais.
+ */
+function equipeDeLaCarte(b, metier){
+  const nom = schedField(b, metier || null, 'technicien') || b.technicien || '';
+  if(!nom) return null;
+  const e = state.techniciens.find(x => x.societeId===state.societeId && (x.nom1===nom || x.id===nom));
+  return e ? e.id : null;
+}
+
+function monEquipeId(){
+  const moi = window.monCompteId && window.monCompteId();
+  if(!moi) return null;
+  const salarie = state.salaries.find(s => s.profileId === moi && s.societeId === state.societeId);
+  return (salarie && salarie.technicienId) || null;
+}
+
+/** À qui la tâche est confiée, vu du compte qui regarde. */
+function appartenanceTache(t){
+  const equipeTache = t.technicien_id || t.technicienId || null;
+  return {
+    aUneEquipe: !!equipeTache,
+    enFaitPartie: !!equipeTache && equipeTache === monEquipeId(),
+  };
+}
+
 function bandeauTacheHTML(entree, i){
   const t = entree.tache;
   const statut = t.statut || 'planifiee';
-  const droits = window.actionsTache(statut);
+  const appartenance = appartenanceTache(t);
+  const droits = window.actionsTache(statut, undefined, appartenance);
+  /* Le terrain voit toutes les tâches du bon — connaître l'avancement du
+     chantier entier a du sens — mais il n'agit que sur les siennes. Le motif
+     reprend mot pour mot celui que la base opposerait. */
+  const lectureSeule = window.motifLectureSeule
+    ? window.motifLectureSeule(appartenance)
+    : null;
+  const equipe = (t.technicien_id || t.technicienId)
+    ? (state.techniciens.find(e => e.id === (t.technicien_id || t.technicienId)) || {}).nom1
+    : null;
 
   const boutons = [];
   if(droits.peutSaisir){
@@ -7438,13 +7789,15 @@ function bandeauTacheHTML(entree, i){
 
   return `<div class="wf-bandeau">
     ${entree.metier ? `<div class="wf-metier">${esc(metierDisplayLabel(entree.metier))}</div>` : ''}
+    ${entree.horsMetier ? `<div class="wf-metier wf-hors-metier">Hors métier${entree.metier ? '' : ' — tâche sans métier'}</div>` : ''}
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
+    ${equipe ? `<div class="wf-equipe">👷 Confiée à ${esc(equipe)}</div>` : '<div class="wf-equipe wf-sans-equipe">👷 Aucune équipe affectée</div>'}
     ${t.refus_motif && statut === 'refusee' ? `<div class="wf-motif">↩ ${esc(t.refus_motif)}</div>` : ''}
     ${histoire.length ? `<div class="wf-meta">${histoire.join('<br>')}</div>` : ''}
     <div class="wf-attente">${attente}</div>
     ${boutons.length
       ? `<div class="wf-actions">${boutons.join('')}</div>`
-      : `<div class="wf-meta">Aucune action ouverte à votre rôle à cette étape.</div>`}
+      : `<div class="wf-meta">${esc(lectureSeule || 'Aucune action ouverte à votre rôle à cette étape.')}</div>`}
   </div>`;
 }
 
@@ -13082,15 +13435,125 @@ async function importerBonCommande(fichier, input){
   await lireBonCommande(fichier, input);
 }
 
-/* ---------- Lecture automatique d'un bon de commande ---------- */
+/* ---------- Lecture automatique d'un bon de commande ----------
+
+   Ce que l'écran affichait : une phrase figée, « Lecture du document en
+   cours… », en douze pixels sous le bouton. Aucun mouvement, aucun délai, aucun
+   moyen d'abandonner. Et le 14/09 la fonction est morte sans émettre de réponse
+   HTTP : la promesse ne s'est jamais résolue, donc le `catch` n'a jamais été
+   atteint et la phrase serait restée là indéfiniment.
+
+   Désormais l'écran se consacre à la lecture, un chronomètre tourne, la durée
+   habituelle est annoncée, on peut renoncer, et **toute** issue produit un
+   message qui survit au rendu — y compris le silence du serveur. */
+
+let ocrChronoTimer = null;
+
+function arreterChronoOCR(){
+  if(ocrChronoTimer){ clearInterval(ocrChronoTimer); ocrChronoTimer = null; }
+}
+
+/* Le chronomètre ne redessine jamais l'écran : il réécrit trois nœuds. Un
+   `renderTab()` chaque seconde emporterait le focus et ferait clignoter la
+   page. Il se re-résout à chaque tic et abandonne en silence si l'écran a
+   changé — le prochain rendu recalculera la valeur depuis `state.ocr.debut`. */
+function majChronoOCR(){
+  const o = state.ocr;
+  if(!o || !o.enCours){ arreterChronoOCR(); return; }
+  const chrono = document.getElementById('ocrChrono');
+  if(!chrono) return;
+
+  const ecoule = Date.now() - o.debut;
+  const etat = window.etatLecture(o.etape, ecoule, o.evenements || []);
+  chrono.textContent = window.formaterDuree(ecoule);
+  const libelle = document.getElementById('ocrLibelle');
+  if(libelle) libelle.textContent = etat.libelle;
+  const alerte = document.getElementById('ocrAlerte');
+  if(alerte){
+    alerte.textContent = etat.alerte || '';
+    alerte.style.display = etat.alerte ? '' : 'none';
+  }
+}
+
+function demarrerChronoOCR(){
+  arreterChronoOCR();
+  ocrChronoTimer = setInterval(majChronoOCR, 1000);
+}
+
+function annulerLectureBC(){
+  const o = state.ocr;
+  if(!o || !o.enCours) return;
+  o.annuleParUtilisateur = true;
+  o.controleur.abort();
+}
+
+/** Reprendre la main à la main, après un échec ou un abandon. */
+function quitterLectureBC(){
+  state.ocr = null;
+  renderTab();
+}
+
+/** L'écran pendant et après la lecture : il remplace le formulaire. */
+function ocrEcranHTML(){
+  const o = state.ocr;
+  const ecoule = Date.now() - o.debut;
+
+  if(!o.enCours && o.etat){
+    const couleur = o.etat.ton === 'erreur' ? 'var(--danger)' : 'var(--text-dim)';
+    return `<div class="form-panel ocr-ecran">
+      <div class="ocr-titre" style="color:${couleur};">${esc(o.etat.libelle)}</div>
+      ${o.etat.alerte? `<div class="ocr-alerte">${esc(o.etat.alerte)}</div>`:''}
+      <div class="ocr-fichier">${esc(o.nom)}</div>
+      <div class="ocr-actions">
+        <label class="btn primary" style="cursor:pointer;">↻ Réessayer
+          <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="relancerLectureBC(this.files[0], this)">
+        </label>
+        <button type="button" class="btn" onclick="quitterLectureBC()">Saisir à la main</button>
+      </div>
+    </div>`;
+  }
+
+  const etat = window.etatLecture(o.etape, ecoule, o.evenements || []);
+  return `<div class="form-panel ocr-ecran">
+    <div class="ocr-titre"><span class="ocr-pastille"></span><span id="ocrLibelle">${esc(etat.libelle)}</span></div>
+    <div class="ocr-fichier">${esc(o.nom)}</div>
+    <div class="ocr-chrono" id="ocrChrono">${esc(window.formaterDuree(ecoule))}</div>
+    <div class="ocr-attente">${esc(window.attenteAnnoncee())}</div>
+    <div class="ocr-alerte" id="ocrAlerte" style="display:${etat.alerte?'':'none'};">${esc(etat.alerte||'')}</div>
+    <div class="ocr-actions">
+      <button type="button" class="btn ghost" onclick="annulerLectureBC()">Annuler la lecture</button>
+    </div>
+  </div>`;
+}
+
+function relancerLectureBC(fichier, input){
+  state.ocr = null;
+  return lireBonCommande(fichier, input);
+}
+
 async function lireBonCommande(fichier, input){
   if(!fichier) return;
-  const statut = document.getElementById('ocrStatut');
-  const dire = (msg, couleur) => { if(statut){ statut.textContent = msg; statut.style.color = couleur || 'var(--text-dim)'; } };
+  /* Le bouton n'était ni désactivé ni renommé : on pouvait lancer une seconde
+     lecture par-dessus la première. */
+  if(state.ocr && state.ocr.enCours){
+    showToast('Une lecture est déjà en cours.');
+    return;
+  }
 
-  dire('Lecture du document en cours…');
+  const controleur = new AbortController();
+  state.ocr = {
+    enCours: true, etape: 'preparation', debut: Date.now(),
+    nom: fichier.name, controleur, evenements: [], etat: null,
+    annuleParUtilisateur: false,
+  };
+  renderTab();
+  demarrerChronoOCR();
+
   try{
-    const extraction = await window.extraireBonCommande(fichier);
+    const extraction = await window.extraireBonCommande(fichier, {
+      signal: controleur.signal,
+      surEtape: (etape)=>{ if(state.ocr){ state.ocr.etape = etape; majChronoOCR(); } },
+    });
     const saisie = window.versSaisieBonCommande(extraction);
 
     /* Le nom lu correspond rarement au libellé enregistré : on le rapproche du
@@ -13112,12 +13575,27 @@ async function lireBonCommande(fichier, input){
     else if(!rapp.reconnu) messages.push('client « ' + rapp.nom + ' » à confirmer');
     messages.push(...avert);
 
+    /* La lecture a abouti : l'écran rend la main au formulaire, désormais
+       prérempli. Le compte rendu part en toast **et** dans le bloc de statut,
+       parce que le premier s'efface au bout de quelques secondes. */
+    state.ocr = null;
+    renderTab();
+
+    /* Le document lu apporte ses chapitres — « PEINTURE TOUT LE LOGEMENT »,
+       « SOL CHAMBRE 1 » — et une lecture est une saisie : les métiers se
+       déduisent donc ici aussi. Sans cet appel, un bon lu automatiquement
+       arriverait avec ses chapitres mais sans métier, et repartirait avec une
+       tâche unique sans métier — le défaut même qu'on vient de corriger. */
+    const metiersLus = appliquerMetiersDesChapitres({ silencieux: true });
+
+    const dire = (msg, couleur) => {
+      const zone = document.getElementById('ocrStatut');
+      if(zone){ zone.textContent = msg; zone.style.color = couleur || 'var(--text-dim)'; }
+    };
     dire(messages.length
       ? 'Document lu — à vérifier : ' + messages.join(' · ')
       : 'Document lu — vérifiez les champs avant d\'enregistrer.',
       messages.length ? 'var(--accent-2)' : 'var(--success, #1E6B37)');
-
-    renderTab();
 
     /* Client incertain : on propose les plus proches plutôt que de laisser
        l'utilisateur chercher dans toute la liste. */
@@ -13131,11 +13609,38 @@ async function lireBonCommande(fichier, input){
       }
     }
 
-    showToast('Bon de commande lu — relisez avant d\'enregistrer.', 'success', 4000);
+    /* Un seul toast, qui porte les deux nouvelles : le document est lu, et le
+       nombre d'interventions que ses chapitres impliquent au planning. */
+    showToast(
+      metiersLus.length > 1
+        ? `Bon lu — ${metiersLus.length} métiers sur ses chapitres, donc ${metiersLus.length} interventions à planifier. Relisez avant d'enregistrer.`
+        : 'Bon de commande lu — relisez avant d\'enregistrer.',
+      'success', metiersLus.length > 1 ? 7000 : 4000);
   }catch(err){
     console.error('OCR', err);
-    dire(err.message || 'Lecture impossible.', 'var(--danger)');
+    const ecoule = state.ocr ? Date.now() - state.ocr.debut : 0;
+    const abandonne = err && (err.name === 'AbortError' || err.name === 'TimeoutError');
+
+    /* Trois issues, trois messages. Les confondre, c'est ce qui faisait croire
+       à une panne quand l'utilisateur venait simplement de renoncer — et
+       inversement, laisser un silence passer pour une lecture en cours. */
+    let etat;
+    if(state.ocr && state.ocr.annuleParUtilisateur) etat = window.etatAnnule(ecoule);
+    else if(abandonne) etat = window.etatDelaiDepasse(ecoule);
+    else etat = window.etatEchec(err && err.message ? err.message : 'Lecture impossible.');
+
+    if(state.ocr){ state.ocr.etat = etat; state.ocr.enCours = false; }
+    renderTab();
+
+    /* Le message vit désormais à deux endroits : l'écran, qui le garde, et un
+       toast, qui le porte à l'attention même si la page a défilé. Il n'y avait
+       jusqu'ici ni l'un ni l'autre en cas d'échec. */
+    if(etat.ton === 'erreur'){
+      showToast(etat.libelle + (etat.alerte ? ' — ' + etat.alerte : ''), 'error', 9000);
+    }
   }finally{
+    arreterChronoOCR();
+    if(state.ocr) state.ocr.enCours = false;
     if(input) input.value = '';
   }
 }
@@ -13168,7 +13673,12 @@ function refreshBCMontantFields(){
       const chapterTotals = devisChapterTotals(devis);
       checked.forEach(metier=>{
         if(existingAmounts[metier] == null || existingAmounts[metier] === ''){
-          const chapKey = Object.keys(chapterTotals).find(ch => ch.toLowerCase().includes(metier.toLowerCase()) || metier.toLowerCase().includes(ch.toLowerCase()));
+          /* Même règle que partout ailleurs : le métier se lit sur le titre du
+             chapitre, en mots entiers. L'appariement par sous-chaîne qui vivait
+             ici trouvait « SOL » dans « ISOLATION » et ne connaissait ni les
+             accents ni les fautes de frappe. */
+          const chapKey = Object.keys(chapterTotals).find(ch =>
+            !!window.metierDuChapitre(ch, [metier]));
           if(chapKey) existingAmounts[metier] = chapterTotals[chapKey];
           else sansChapitre.push(metier);
         }
@@ -13178,19 +13688,87 @@ function refreshBCMontantFields(){
   const zone = document.getElementById('bcMontantFieldsZone');
   if(zone) zone.innerHTML = bcMontantFieldsHTML(checked, existingAmounts, previousSimple, sansChapitre);
 }
-function metierCheckboxesHTML(idPrefix, currentMetiers, onChangeAttr){
-  const seen = new Set();
-  const list = state.metiersPerso
+/**
+ * Les métiers proposés à la saisie, pour la société courante.
+ *
+ * La table `metiers` ne suffit pas : KTA n'y déclare que CARRELAGE, PEINTURE et
+ * SOL, alors que ses bons portent aussi PLOMBERIE (49 bons) et ETANCHEITE (47).
+ * Ces deux-là avaient disparu de la liste à cocher, donc impossibles à recocher
+ * — et un chapitre « PLOMBERIE » serait resté lettre morte.
+ */
+function metiersDisponibles(){
+  const declares = state.metiersPerso
     .filter(m=>m.societeId===state.societeId)
-    .filter(m=>{ const key=(m.nom||'').trim().toLowerCase(); if(seen.has(key)) return false; seen.add(key); return true; })
-    .sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+    .map(m=>m.nom);
+  const employes = [];
+  state.bonsCommande.forEach(b=>{
+    if(b.societeId!==state.societeId) return;
+    bcMetiersDuBC(b).forEach(m=>{ if(m) employes.push(m); });
+  });
+  return window.referentielMetiers ? window.referentielMetiers(declares, employes) : declares;
+}
+
+/**
+ * Les chapitres du brouillon, seulement pour dire d'où vient un métier.
+ *
+ * N'ajoute aucun métier : ouvrir un bon ancien qui porte des chapitres ne doit
+ * rien changer à ce qu'il déclare, sinon son planning se scinderait sans que
+ * personne l'ait demandé. Les métiers ne s'ajoutent qu'à la saisie, par
+ * `appliquerMetiersDesChapitres`.
+ */
+/**
+ * Les métiers du bon en cours de saisie : ceux qu'il déclare, plus ceux que
+ * ses chapitres livrent.
+ *
+ * Ouvrir un bon dans le formulaire **est** une saisie : les métiers lus y sont
+ * cochés, et ils sont enregistrés si l'on enregistre. La garde qui compte n'est
+ * pas là — elle est dans le fait que cette fonction ne tourne que depuis le
+ * formulaire. Ni le chargement des collections ni le rendu du planning ne
+ * l'appellent, donc aucun des 830 bons ne change tout seul.
+ *
+ * La déduction ajoute et ne retire jamais : ce que l'on a coché à la main reste.
+ */
+function metiersDuBrouillon(e){
+  const declares = (e && e.metiers && e.metiers.length) ? [...e.metiers] : (e && e.metier ? [e.metier] : []);
+  if(!window.metiersDesChapitres) return { retenus: declares, origines: null, ajoutes: 0 };
+
+  const lu = window.metiersDesChapitres(e && e.lignes, metiersDisponibles());
+  const retenus = [...declares];
+  for(const m of lu.metiers){
+    if(!retenus.some(c=>window.memeMetier(c, m))) retenus.push(m);
+  }
+  return { retenus, origines: lu.origines, ajoutes: retenus.length - declares.length };
+}
+
+/** Le contenu du champ « Métier(s) », rendu à l'identique par les deux chemins. */
+function bcMetiersZoneHTML(retenus, origines, ajoutes){
+  const cases = metierCheckboxesHTML('bc', retenus, 'onchange="refreshBCMontantFields()"', origines);
+  if(!ajoutes) return cases;
+  /* Dit en place, et pas seulement en toast : un toast s'efface au bout de
+     quelques secondes, et scinder un planning en deux mérite une trace que
+     l'on retrouve au moment d'enregistrer. */
+  const suite = retenus.length > 1
+    ? ` Ce bon se planifiera en ${retenus.length} interventions, une par métier.`
+    : '';
+  return cases + `<div class="metier-lu">✓ ${ajoutes} métier${ajoutes>1?'s':''} lu${ajoutes>1?'s':''} sur les chapitres du bon.${suite}</div>`;
+}
+
+function metierCheckboxesHTML(idPrefix, currentMetiers, onChangeAttr, origines){
+  const list = metiersDisponibles();
   const current = [...new Set(currentMetiers || [])];
   if(!list.length) return '<div class="empty">Aucun métier créé pour l\'instant (Réglages → Métiers).</div>';
-  return `<div class="metier-checkbox-list">${list.map(m=>`
-    <label class="metier-checkbox-item">
-      <input type="checkbox" name="${idPrefix}_metiers" value="${esc(m.nom)}" ${current.includes(m.nom)?'checked':''} ${onChangeAttr||''}>
-      <span>${esc(m.nom)}</span>
-    </label>`).join('')}</div>`;
+  const meme = (a,b)=> window.memeMetier ? window.memeMetier(a,b) : a===b;
+  return `<div class="metier-checkbox-list">${list.map(nom=>{
+    const coche = current.some(c=>meme(c, nom));
+    // Le chapitre qui a produit ce métier, s'il vient d'une lecture du bon.
+    const cle = origines ? Object.keys(origines).find(k=>meme(k, nom)) : null;
+    return `
+    <label class="metier-checkbox-item${cle?' est-deduit':''}"${cle?` title="Lu sur le chapitre « ${esc(origines[cle])} »"`:''}>
+      <input type="checkbox" name="${idPrefix}_metiers" value="${esc(nom)}" ${coche?'checked':''} ${onChangeAttr||''}>
+      <span>${esc(nom)}</span>
+      ${cle?`<small class="metier-origine">← ${esc(origines[cle])}</small>`:''}
+    </label>`;
+  }).join('')}</div>`;
 }
 function getCheckedMetiers(idPrefix){
   const values = Array.from(document.querySelectorAll(`input[name="${idPrefix}_metiers"]:checked`)).map(el=>el.value);

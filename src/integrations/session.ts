@@ -12,8 +12,10 @@ import { signOut } from "@/api/client";
 import * as queries from "@/api/queries";
 import {
   actionsTache as reglesActionsTache,
+  motifLectureSeule as reglesMotifLectureSeule,
   prochainActeur as reglesProchainActeur,
   type ActionsTache,
+  type AppartenanceTache,
 } from "@/api/regles-taches";
 import type { PlanningTache, Uuid } from "@/api/types";
 import type { RoleMembre, Societe } from "@/api/types";
@@ -44,6 +46,14 @@ import {
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
 import { extraireBonCommande, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import {
+  attenteAnnoncee,
+  etatAnnule,
+  etatDelaiDepasse,
+  etatEchec,
+  etatLecture,
+  formaterDuree,
+} from "@/api/regles-ocr";
+import {
   correspond,
   dansLaPeriode,
   dateDocument,
@@ -61,10 +71,18 @@ import {
   UNITES_DEFAUT,
 } from "./reglages";
 import {
+  attenteAvantChiffrage,
   blocagesChiffrage,
   blocagesValidationConducteur,
+  etapeValidation,
   messageBlocages,
 } from "@/api/regles-bc";
+import {
+  memeMetier,
+  metierDuChapitre,
+  metiersDesChapitres,
+  referentielMetiers,
+} from "@/api/regles-metiers";
 import {
   badgeOrigine,
   comptesRendusTerrain,
@@ -198,12 +216,26 @@ export function affichePrix(): boolean {
 /** Identité affichée dans l'en-tête. */
 let identite = "";
 
-export function setIdentite(v: string) {
+/** Identifiant du compte connecté : c'est par lui qu'on retrouve son équipe. */
+let compteId: Uuid | null = null;
+
+export function setIdentite(v: string, id?: string | null) {
   identite = v;
+  compteId = (id as Uuid) ?? null;
 }
 
 export function utilisateurCourant(): string {
   return identite;
+}
+
+/**
+ * Le compte connecté, tel que `planning_taches.realisee_par` l'enregistre.
+ *
+ * L'écran ne le connaissait pas : il ne pouvait donc pas savoir si une tâche
+ * était celle de l'utilisateur, et proposait « Travaux terminés » sur toutes.
+ */
+export function monCompteId(): Uuid | null {
+  return compteId;
 }
 
 /** Déconnexion : la redirection est faite par `watchAuthState`. */
@@ -231,7 +263,15 @@ export async function tacheDuBonCommande(
   bcId: Uuid,
   date: string,
   libelle: string,
-  metier?: string | null
+  metier?: string | null,
+  /**
+   * L'équipe du métier, telle que le planning l'a choisie.
+   *
+   * Sans elle, une tâche matérialisée à l'ouverture d'une carte naissait
+   * orpheline — et rien ne lui donnait d'équipe ensuite. `est_de_l_equipe()`
+   * répondait alors faux, et le terrain se voyait refuser sa propre tâche.
+   */
+  equipeId?: Uuid | null
 ): Promise<PlanningTache> {
   const societe = societeActive();
   if (!societe) throw new Error("Aucune société active.");
@@ -248,6 +288,7 @@ export async function tacheDuBonCommande(
     libelle,
     date_tache: date,
     metier: metier || null,
+    technicien_id: equipeId ?? null,
   });
 }
 
@@ -263,9 +304,18 @@ export type { ActionsTache };
  */
 export function actionsTache(
   statut: string | null,
-  role: RoleMembre | null = roleEffectif()
+  role: RoleMembre | null = roleEffectif(),
+  appartenance?: AppartenanceTache
 ): ActionsTache {
-  return reglesActionsTache(statut, role);
+  return reglesActionsTache(statut, role, appartenance);
+}
+
+/** Pourquoi le rôle courant ne peut rien faire sur cette tâche, en clair. */
+export function motifLectureSeule(
+  appartenance?: AppartenanceTache,
+  role: RoleMembre | null = roleEffectif()
+): string | null {
+  return reglesMotifLectureSeule(role, appartenance);
 }
 
 /**
@@ -356,7 +406,16 @@ export function injecterSession() {
   // Circuit de validation des tâches
   w.tacheDuBonCommande = tacheDuBonCommande;
   w.actionsTache = actionsTache;
+  w.motifLectureSeule = motifLectureSeule;
+  w.monCompteId = monCompteId;
   w.actionsFacturation = actionsFacturation;
+  /* Le métier, lu sur les chapitres du bon plutôt que coché. `memeMetier` est
+     la comparaison partagée : l'écran, l'adaptateur et la session doivent en
+     employer une seule, faute de quoi une tâche devient inatteignable. */
+  w.memeMetier = memeMetier;
+  w.metierDuChapitre = metierDuChapitre;
+  w.metiersDesChapitres = metiersDesChapitres;
+  w.referentielMetiers = referentielMetiers;
   // Recherche et filtrage : une seule définition pour tous les écrans
   w.sansAccents = sansAccents;
   w.multiWordMatch = multiWordMatch;
@@ -393,8 +452,12 @@ export function injecterSession() {
   w.ajouterTravailSupplementaire = queries.ajouterTravailSupplementaire;
   w.supprimerTravailSupplementaire = queries.supprimerTravailSupplementaire;
   w.chiffrerTravailSupplementaire = queries.chiffrerTravailSupplementaire;
+  w.integrerTravailSupplementaire = queries.integrerTravailSupplementaire;
 
   // Validation directeur : ce qui bloque, et le document qui le montre
+  /* La file de validation : quels bons y entrent, et ce qu'on y attend. */
+  w.etapeValidation = etapeValidation;
+  w.attenteAvantChiffrage = attenteAvantChiffrage;
   w.blocagesChiffrage = blocagesChiffrage;
   w.blocagesValidationConducteur = blocagesValidationConducteur;
   w.messageBlocages = messageBlocages;
@@ -428,6 +491,14 @@ export function injecterSession() {
 
   // Lecture automatique des bons de commande
   w.extraireBonCommande = extraireBonCommande;
+  /* Le suivi de lecture : seuils et formulations vivent dans `regles-ocr`,
+     pas dans `index.html` qui n'a aucun test. */
+  w.etatLecture = etatLecture;
+  w.etatAnnule = etatAnnule;
+  w.etatDelaiDepasse = etatDelaiDepasse;
+  w.etatEchec = etatEchec;
+  w.formaterDuree = formaterDuree;
+  w.attenteAnnoncee = attenteAnnoncee;
   w.versSaisieBonCommande = versSaisieBonCommande;
   w.rapprocherClient = rapprocherClient;
 

@@ -16,6 +16,7 @@
 import { REGLAGES_DEFAUT } from "./reglages";
 import type { LigneChiffrable } from "../api/regles-bc";
 
+/** Ce qu'un travail vaut quand il n'a pas été mesuré : un forfait. */
 const QUANTITE_DEFAUT = 1;
 const UNITE_DEFAUT = "u";
 
@@ -44,6 +45,8 @@ export interface TravailAffichable {
   libelle?: string | null;
   origine?: string | null;
   statut?: string | null;
+  quantite?: number | null;
+  unite?: string | null;
   prix_vente_ht?: number | null;
   tva?: number | null;
 }
@@ -84,8 +87,12 @@ function travailEnLigne(t: TravailAffichable, tvaDefaut: number): LigneAffichee 
   return {
     type: "ligne",
     designation: t.libelle ?? "",
-    qte: QUANTITE_DEFAUT,
-    unite: UNITE_DEFAUT,
+    /* La quantité était figée à 1 : un travail mesuré — « reprise de plinthes
+       sur 4 ml » — comptait pour une unité, et le total affiché pendant le
+       chiffrage ne valait pas celui de la facture, que `bc_generer_facture`
+       calcule bien sur `quantite`. */
+    qte: t.quantite != null ? Number(t.quantite) : QUANTITE_DEFAUT,
+    unite: t.unite || UNITE_DEFAUT,
     prixUnitaire: Number(t.prix_vente_ht) || 0,
     tva: Number(t.tva) || tvaDefaut,
     classe: CLASSE_AJOUT,

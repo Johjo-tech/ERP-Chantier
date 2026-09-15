@@ -42,7 +42,7 @@ async function init() {
     injecterCatalogue();
 
     const session = await getCurrentSession();
-    setIdentite(session?.user.email ?? "");
+    setIdentite(session?.user.email ?? "", session?.user.id ?? null);
     console.log("📝 Connecté :", session?.user.email);
 
     const societes = await chargerSession();

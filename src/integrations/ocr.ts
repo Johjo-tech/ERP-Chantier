@@ -1,15 +1,20 @@
 /**
  * Lecture automatique d'un bon de commande (PDF ou image).
  *
- * L'edge function `extraire-bc`, déjà déployée sur le projet, interroge Gemini
- * avec un schéma JSON strict ; la clé API reste dans les secrets Supabase et le
- * navigateur n'envoie que le fichier.
+ * L'edge function `extraire-bc` transcrit le document avec l'OCR de Mistral,
+ * puis structure le Markdown obtenu sous schéma JSON strict ; la clé API reste
+ * dans les secrets Supabase et le navigateur n'envoie que le fichier.
  *
  * Le résultat **préremplit** le formulaire : rien n'est enregistré
  * automatiquement, l'utilisateur relit et corrige avant de valider.
  */
 
 import { supabase, todayISO } from "@/api/client";
+import {
+  DELAI_BASCULE_ANALYSE_MS,
+  DELAI_LECTURE_MS,
+  type EtapeLecture,
+} from "@/api/regles-ocr";
 
 export interface LigneExtraite {
   type: "ligne" | "chapitre" | "commentaire";
@@ -20,15 +25,25 @@ export interface LigneExtraite {
   tva?: number | null;
 }
 
+/**
+ * Le contrat de sortie, miroir de `supabase/functions/_shared/contrat-bc.ts`.
+ *
+ * `adresse` / `codePostal` / `ville` désignent le **lieu d'intervention** —
+ * c'est ce que porte le formulaire du bon de commande, et le seul jeu de champs
+ * que `saveBonCommande` enregistre. L'ancien `adresseIntervention`, lui,
+ * atterrissait dans un champ que la sauvegarde ne lisait jamais.
+ */
 export interface ExtractionBC {
   client?: string | null;
   numeroBC?: string | null;
   dateBC?: string | null;
+  referenceChantier?: string | null;
+  natureTravaux?: string | null;
+  dateFinTravaux?: string | null;
   interlocuteur?: string | null;
   adresse?: string | null;
   codePostal?: string | null;
   ville?: string | null;
-  adresseIntervention?: string | null;
   numeroLogement?: string | null;
   logementStatut?: string | null;
   occupant?: string | null;
@@ -39,8 +54,8 @@ export interface ExtractionBC {
   avertissements: string[];
 }
 
-/** Formats que Gemini accepte tels quels. */
-const MIMES_GEMINI = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+/** Formats que l'OCR accepte tels quels. */
+const MIMES_ACCEPTES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 
 /** Au-delà, l'edge function refuse la charge utile. */
 const TAILLE_MAX = 14_000_000;
@@ -55,7 +70,7 @@ const COTE_MAX = 2200;
  * Ramène une image à un format et un poids acceptables.
  *
  * Deux cas courants sur le terrain : une photo HEIC prise à l'iPhone, que
- * Gemini ne lit pas, et un scan de plusieurs dizaines de méga-octets. Le
+ * l'OCR ne lit pas, et un scan de plusieurs dizaines de méga-octets. Le
  * navigateur sait décoder les deux et les réencoder en JPEG — inutile de
  * renvoyer l'utilisateur à ses réglages.
  */
@@ -93,7 +108,7 @@ async function normaliserImage(fichier: File): Promise<File> {
 async function preparer(fichier: File): Promise<File> {
   const estImage = fichier.type.startsWith("image/") || !fichier.type;
 
-  if (estImage && (!MIMES_GEMINI.includes(fichier.type) || fichier.size > TAILLE_RECOMPRESSION)) {
+  if (estImage && (!MIMES_ACCEPTES.includes(fichier.type) || fichier.size > TAILLE_RECOMPRESSION)) {
     return normaliserImage(fichier);
   }
 
@@ -103,7 +118,7 @@ async function preparer(fichier: File): Promise<File> {
     );
   }
 
-  if (!MIMES_GEMINI.includes(fichier.type)) {
+  if (!MIMES_ACCEPTES.includes(fichier.type)) {
     throw new Error(
       `Format non pris en charge (${fichier.type || "inconnu"}). Utilisez un PDF ou une photo.`
     );
@@ -112,33 +127,132 @@ async function preparer(fichier: File): Promise<File> {
   return fichier;
 }
 
-/** Encode par blocs : `String.fromCharCode(...)` explose la pile sur un gros PDF. */
-async function fichierEnBase64(fichier: File): Promise<string> {
-  const octets = new Uint8Array(await fichier.arrayBuffer());
-  let binaire = "";
-  const BLOC = 0x8000;
-  for (let i = 0; i < octets.length; i += BLOC) {
-    binaire += String.fromCharCode(...octets.subarray(i, i + BLOC));
-  }
-  return btoa(binaire);
+/**
+ * Encode le fichier en base64, hors du fil principal.
+ *
+ * La boucle `btoa` qui vivait ici fabriquait une chaîne binaire de deux octets
+ * par caractère — 28 Mo pour un PDF de 14 — et figeait l'interface **avant** que
+ * le premier indicateur de progression ne s'affiche. Sur un téléphone de
+ * chantier, l'écran ne peignait même pas « Préparation… ».
+ *
+ * `readAsDataURL` fait le même travail nativement, sans bloquer, et sans la
+ * chaîne intermédiaire. Il reste à couper l'en-tête `data:<mime>;base64,`.
+ */
+function fichierEnBase64(fichier: File): Promise<string> {
+  return new Promise((resoudre, rejeter) => {
+    const lecteur = new FileReader();
+    lecteur.onerror = () =>
+      rejeter(new Error("Le fichier n'a pas pu être lu depuis cet appareil."));
+    lecteur.onload = () => {
+      const url = String(lecteur.result ?? "");
+      const virgule = url.indexOf(",");
+      if (virgule < 0) {
+        rejeter(new Error("Le fichier n'a pas pu être encodé."));
+        return;
+      }
+      resoudre(url.slice(virgule + 1));
+    };
+    lecteur.readAsDataURL(fichier);
+  });
 }
 
-export async function extraireBonCommande(brut: File): Promise<ExtractionBC> {
+/**
+ * Le motif que la fonction a pris soin d'écrire.
+ *
+ * `functions.invoke` remplace le corps de la réponse par un message générique —
+ * « Edge Function returned a non-2xx status code » — et range la réponse brute,
+ * non lue, dans `context`. Toute la peine que prend la fonction à expliquer
+ * (clé refusée, budget épuisé, modèles saturés, et pendant combien de temps)
+ * était donc perdue avant d'arriver à l'écran.
+ */
+async function motifDuServeur(erreur: unknown): Promise<string | null> {
+  const reponse = (erreur as { context?: Response } | null)?.context;
+  if (!reponse || typeof reponse.json !== "function") return null;
+  try {
+    const corps = (await reponse.json()) as { erreur?: unknown };
+    return typeof corps?.erreur === "string" && corps.erreur ? corps.erreur : null;
+  } catch {
+    // Réponse vide ou illisible : on retombera sur le message générique.
+    return null;
+  }
+}
+
+/** Une erreur que l'écran saura nommer autrement qu'« échec ». */
+function erreurNommee(nom: string, message: string): Error {
+  const e = new Error(message);
+  e.name = nom;
+  return e;
+}
+
+export interface OptionsLecture {
+  /** Permet à l'utilisateur d'abandonner une lecture qui s'éternise. */
+  signal?: AbortSignal;
+  /** Appelé à chaque étape : c'est ce qui rend le travail visible. */
+  surEtape?: (etape: EtapeLecture) => void;
+}
+
+export async function extraireBonCommande(
+  brut: File,
+  options: OptionsLecture = {}
+): Promise<ExtractionBC> {
+  const dire = options.surEtape ?? (() => {});
+
+  dire("preparation");
   const fichier = await preparer(brut);
 
-  const { data, error } = await supabase.functions.invoke<{ extraction: ExtractionBC }>(
-    "extraire-bc",
-    { body: { fichierBase64: await fichierEnBase64(fichier), mimeType: fichier.type } }
-  );
+  dire("encodage");
+  const fichierBase64 = await fichierEnBase64(fichier);
 
-  if (error) throw new Error(`Lecture du bon impossible : ${error.message}`);
-  if (!data?.extraction) throw new Error("Lecture du bon impossible : réponse vide.");
+  /* `fetch` ne donne aucune progression d'envoi : le navigateur ne peut pas
+     distinguer « en train de téléverser » de « en train d'attendre le modèle ».
+     Plutôt que d'afficher « Envoi » pendant deux minutes — ce qui serait faux —
+     on bascule sur « lecture » une fois le téléversement certainement terminé :
+     `preparer` a ramené le document sous 14 Mo, et il en fait moins d'un dans
+     l'immense majorité des cas. Au-delà de ce délai, ce qu'on attend, c'est le
+     modèle. */
+  dire("envoi");
+  const depart = Date.now();
+  const bascule = setTimeout(() => dire("analyse"), DELAI_BASCULE_ANALYSE_MS);
 
-  return {
-    ...data.extraction,
-    lignes: data.extraction.lignes ?? [],
-    avertissements: data.extraction.avertissements ?? [],
-  };
+  try {
+    const { data, error } = await supabase.functions.invoke<{ extraction: ExtractionBC }>(
+      "extraire-bc",
+      {
+        body: { fichierBase64, mimeType: fichier.type },
+        signal: options.signal,
+        /* Le garde-fou de dernier ressort. Volontairement plus long que le
+           budget de la fonction (110 s) : en marche normale c'est son message
+           précis qui doit gagner, celui-ci ne sert que si le serveur meurt sans
+           rien dire — ce qui est arrivé le 14/09. */
+        timeout: DELAI_LECTURE_MS,
+      }
+    );
+
+    if (error) {
+      /* Trois causes que l'écran doit distinguer, et que `invoke` confond
+         toutes dans un même « Failed to send a request ». */
+      if (options.signal?.aborted) {
+        throw erreurNommee("AbortError", "Lecture interrompue.");
+      }
+      if (Date.now() - depart >= DELAI_LECTURE_MS) {
+        throw erreurNommee(
+          "TimeoutError",
+          "Le service de lecture n'a pas répondu dans le délai imparti."
+        );
+      }
+      const motif = await motifDuServeur(error);
+      throw new Error(motif ?? `Lecture du bon impossible : ${error.message}`);
+    }
+    if (!data?.extraction) throw new Error("Lecture du bon impossible : réponse vide.");
+
+    return {
+      ...data.extraction,
+      lignes: data.extraction.lignes ?? [],
+      avertissements: data.extraction.avertissements ?? [],
+    };
+  } finally {
+    clearTimeout(bascule);
+  }
 }
 
 /** Convertit l'extraction en brouillon pour le formulaire de bon de commande. */
@@ -154,8 +268,10 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     numeroBC: e.numeroBC ?? "",
     sansBC: !e.numeroBC,
     dateReception: e.dateBC ?? todayISO(),
+    referenceChantier: e.referenceChantier ?? "",
+    natureTravaux: e.natureTravaux ?? "",
+    dateFinTravaux: e.dateFinTravaux ?? "",
     adresse: e.adresse ?? "",
-    adresseLocataire: e.adresseIntervention ?? "",
     codePostal: e.codePostal ?? "",
     ville: e.ville ?? "",
     logementStatut,
