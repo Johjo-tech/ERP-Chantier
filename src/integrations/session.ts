@@ -82,6 +82,8 @@ import {
   metierDuChapitre,
   metiersDesChapitres,
   referentielMetiers,
+  travauxDeLaCarte,
+  travauxParMetier,
 } from "@/api/regles-metiers";
 import {
   badgeOrigine,
@@ -416,6 +418,10 @@ export function injecterSession() {
   w.metierDuChapitre = metierDuChapitre;
   w.metiersDesChapitres = metiersDesChapitres;
   w.referentielMetiers = referentielMetiers;
+  /* Les lignes du bon sont la seule description des travaux : elles descendent
+     sur la tâche du terrain et remontent dans la pré-facture. */
+  w.travauxParMetier = travauxParMetier;
+  w.travauxDeLaCarte = travauxDeLaCarte;
   // Recherche et filtrage : une seule définition pour tous les écrans
   w.sansAccents = sansAccents;
   w.multiWordMatch = multiWordMatch;

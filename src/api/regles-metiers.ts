@@ -24,6 +24,13 @@ export interface LigneChapitrable {
   designation?: string | null;
 }
 
+/** Une ligne de travaux, avec ce qu'il faut pour l'annoncer et la chiffrer. */
+export interface LigneTravail extends LigneChapitrable {
+  qte?: number | string | null;
+  unite?: string | null;
+  prixUnitaire?: number | string | null;
+}
+
 /** Comment le métier a été reconnu — l'écran le montre, l'utilisateur juge. */
 export type CertitudeMetier = "exact" | "contenu" | "approchant";
 
@@ -288,4 +295,114 @@ export function metiersDesChapitres(
   }
 
   return { metiers, origines, ignores };
+}
+
+/** Les travaux d'un chapitre, tels qu'ils s'affichent sous son titre. */
+export interface TravauxDunChapitre {
+  /** Le titre lu sur le bon — « PEINTURE CHAMBRE 1 » — ou null hors chapitre. */
+  chapitre: string | null;
+  lignes: LigneTravail[];
+}
+
+export interface TravauxDunMetier {
+  /** `null` : des travaux que ni chapitre ni titre ne rattachent à un métier. */
+  metier: string | null;
+  chapitres: TravauxDunChapitre[];
+  /** Toutes lignes confondues, dans l'ordre du bon. */
+  lignes: LigneTravail[];
+}
+
+/**
+ * Répartit les lignes d'un bon entre les métiers, par leur chapitre.
+ *
+ * Une tâche vaut bon × métier × jour, jamais bon × chapitre : cinq chapitres
+ * « PEINTURE CHAMBRE 1 », « PEINTURE LOGEMENT COMPLET »… désignent un seul
+ * métier, donc une seule venue de l'équipe. Leurs travaux se retrouvent donc
+ * sur la même tâche — mais **groupés par chapitre**, sans quoi le technicien
+ * perdrait la seule indication de pièce que porte le bon.
+ *
+ * Les lignes placées avant tout chapitre — 210 sur 230 bons lignés en
+ * production, le cas courant et non l'exception — ne se rattachent à aucun
+ * métier par elles-mêmes : les deviner sur leur désignation reviendrait à faire
+ * ce que `metiersDesChapitres` refuse déjà de faire. Elles ressortent sous
+ * `metier: null`, à charge de l'appelant de les montrer là où elles ne seront
+ * pas perdues.
+ *
+ * Les commentaires suivent leur chapitre : ils qualifient les travaux voisins.
+ */
+export function travauxParMetier(
+  lignes: LigneTravail[] | null | undefined,
+  connus: (string | null | undefined)[]
+): TravauxDunMetier[] {
+  const parMetier: TravauxDunMetier[] = [];
+
+  /* Deux clés distinctes : `null` (hors chapitre) n'est pas un métier et ne
+     doit jamais fusionner avec un métier non reconnu d'un chapitre nommé. */
+  const groupe = (metier: string | null): TravauxDunMetier => {
+    const existant = metier
+      ? parMetier.find((g) => g.metier !== null && memeMetier(g.metier, metier))
+      : parMetier.find((g) => g.metier === null);
+    if (existant) return existant;
+    const neuf: TravauxDunMetier = { metier, chapitres: [], lignes: [] };
+    parMetier.push(neuf);
+    return neuf;
+  };
+
+  let metierCourant: string | null = null;
+  let chapitreCourant: string | null = null;
+
+  for (const ligne of lignes ?? []) {
+    const type = (ligne.type ?? "ligne").trim() || "ligne";
+
+    if (type === "chapitre") {
+      const titre = (ligne.designation ?? "").trim();
+      chapitreCourant = titre || null;
+      // Un chapitre qu'aucun métier ne réclame structure quand même le bon.
+      metierCourant = titre ? (metierDuChapitre(titre, connus)?.metier ?? null) : null;
+      continue;
+    }
+
+    if (!(ligne.designation ?? "").trim()) continue;
+
+    const cible = groupe(metierCourant);
+    let bloc = cible.chapitres[cible.chapitres.length - 1];
+    if (!bloc || bloc.chapitre !== chapitreCourant) {
+      bloc = { chapitre: chapitreCourant, lignes: [] };
+      cible.chapitres.push(bloc);
+    }
+    bloc.lignes.push(ligne);
+    cible.lignes.push(ligne);
+  }
+
+  return parMetier;
+}
+
+/**
+ * Les travaux à montrer sur la carte d'un métier.
+ *
+ * Les lignes hors chapitre appartiennent au bon entier, pas à un métier : les
+ * répéter sur chaque carte les ferait compter plusieurs fois à l'œil, les
+ * omettre les rendrait invisibles. Elles ne paraissent donc que sur la carte du
+ * **premier** métier — même règle que les tâches orphelines, et pour la même
+ * raison : un travail que personne ne voit ne se fait pas.
+ */
+export function travauxDeLaCarte(
+  lignes: LigneTravail[] | null | undefined,
+  connus: (string | null | undefined)[],
+  metier: string | null | undefined,
+  premierMetier: string | null | undefined
+): TravauxDunChapitre[] {
+  const groupes = travauxParMetier(lignes, connus);
+  const sien = groupes.find((g) =>
+    metier ? g.metier !== null && memeMetier(g.metier, metier) : g.metier === null
+  );
+  const blocs = sien ? [...sien.chapitres] : [];
+
+  const surLaPremiere = premierMetier == null || memeMetier(metier, premierMetier);
+  if (metier && surLaPremiere) {
+    const orphelins = groupes.find((g) => g.metier === null);
+    if (orphelins) blocs.push(...orphelins.chapitres);
+  }
+
+  return blocs;
 }
