@@ -51,6 +51,7 @@ import {
 } from "@/api/regles-efacture";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
 import { apercuDe, verifierPieceJointe } from "@/api/regles-piece-jointe";
+import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
   formaterTaux,
   montantLigneHt,
@@ -506,6 +507,11 @@ export function injecterSession() {
   w.sousTotauxChapitres = sousTotauxChapitres;
   w.formaterTaux = formaterTaux;
   w.soldeAPayer = soldeAPayer;
+
+  /* La couleur de la société, déclinée. Le réglage existait depuis longtemps
+     et n'avait aucun lecteur : KTA portait un violet, l'écran restait orange. */
+  w.paletteAccent = paletteAccent;
+  w.ACCENT_DEFAUT = ACCENT_DEFAUT;
 
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;
