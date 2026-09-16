@@ -209,3 +209,98 @@ suite("Lignes d'une facture émise", () => {
     expect(Number(apres[0].prix_unitaire)).toBe(5000);
   });
 });
+
+/*
+ * L'en-tête aussi.
+ *
+ * Les lignes étaient gelées et le numéro définitif, mais on pouvait encore
+ * changer le client, la date ou l'adresse d'une facture portant un numéro. Le
+ * cadenas de l'écran n'était qu'un garde-fou d'affichage, levé par un bouton.
+ * Art. L441-9 : la facture est définitive, la correction passe par un avoir.
+ */
+suite("En-tête d'une facture émise", () => {
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  let societeId: Uuid;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    if (!societe) throw new Error(`Société « ${TEST_SOCIETE_CODE} » introuvable`);
+    societeId = societe.id;
+  });
+
+  async function emise() {
+    return queries.createFacture(
+      societeId,
+      { client_nom: "CLIENT DE TEST", date: aujourdhui, statut: "impayée", adresse: "1 rue d'Avant" },
+      [{ type: "ligne", designation: "Prestation", quantite: 1, unite: "forfait", prix_unitaire: 100, tva: 20 }]
+    );
+  }
+
+  it.each([
+    ["le client", { client_nom: "CLIENT SUBSTITUÉ" }],
+    ["la date", { date: "2020-01-01" }],
+    ["l'adresse", { adresse: "9 rue d'Après" }],
+    ["l'échéance", { echeance: "2099-12-31" }],
+    ["le lieu d'intervention", { adresse_locataire: "ailleurs" }],
+    ["la remise", { remise_pourcentage: 50 }],
+  ])("refuse qu'on en change %s", async (_quoi, correction) => {
+    const f = await emise();
+    const { error } = await supabase.from("factures").update(correction).eq("id", f.id);
+    expect(error).toBeTruthy();
+    expect(error?.message).toMatch(/émise|avoir/i);
+  });
+
+  /* Le suivi du règlement est toute la vie de la facture après son émission :
+     le geler rendrait l'encaissement impossible. */
+  it("laisse le statut suivre l'encaissement", async () => {
+    const f = await emise();
+    const { error } = await supabase.from("factures").update({ statut: "payée" }).eq("id", f.id);
+    expect(error).toBeNull();
+  });
+
+  it("laisse le suivi de la plateforme et l'affectation interne", async () => {
+    const f = await emise();
+    const { error } = await supabase
+      .from("factures")
+      .update({ statut_cycle: "deposee", conducteur: "Paul", verrouillee: true })
+      .eq("id", f.id);
+    expect(error).toBeNull();
+  });
+
+  /* Le service comptable du client déménage sans que la créance change. */
+  it("laisse corriger l'adresse de facturation", async () => {
+    const f = await emise();
+    const { error } = await supabase
+      .from("factures")
+      .update({ facturation_adresse: "12 rue du Service Comptable" })
+      .eq("id", f.id);
+    expect(error).toBeNull();
+  });
+
+  /* L'écran réécrit la ligne entière à chaque enregistrement : réécrire une
+     valeur à l'identique ne doit pas passer pour une modification, sinon plus
+     rien ne s'enregistrerait du tout. */
+  it("laisse réécrire les mêmes valeurs", async () => {
+    const f = await emise();
+    const { error } = await supabase
+      .from("factures")
+      .update({ client_nom: f.client_nom, date: f.date, adresse: f.adresse })
+      .eq("id", f.id);
+    expect(error).toBeNull();
+  });
+
+  /* Un brouillon se compose librement — c'est justement à quoi il sert. */
+  it("laisse un brouillon libre", async () => {
+    const brouillon = await queries.createFacture(
+      societeId,
+      { client_nom: "CLIENT DE TEST", date: aujourdhui, statut: "brouillon" },
+      [{ type: "ligne", designation: "X", quantite: 1, unite: "forfait", prix_unitaire: 10, tva: 20 }]
+    );
+    expect(brouillon.numero ?? "").toBe("");
+    const { error } = await supabase
+      .from("factures")
+      .update({ client_nom: "AUTRE", date: "2026-01-01" })
+      .eq("id", brouillon.id);
+    expect(error).toBeNull();
+  });
+});

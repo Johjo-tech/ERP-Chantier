@@ -5592,15 +5592,25 @@ function renderFacturesListHTML(list){
 }
 function factureForm(){
   const e = state.editing;
-  const verrouillee = e.id && e.verrouillee;
+  /* Deux verrous, et un seul se lève. Le cadenas d'écran protège d'une fausse
+     manœuvre sur un document déjà envoyé ; l'ÉMISSION, elle, est définitive —
+     la base refuse désormais toute retouche de l'en-tête d'une facture
+     numérotée. Promettre « déverrouiller pour modifier » sur une facture émise
+     serait promettre ce que la base refuse. */
+  const emise = !!(e.id && e.numero);
+  const verrouillee = e.id && e.verrouillee && !emise;
+  const fige = emise || verrouillee;
   return `
   <div class="form-panel">
-    <h3>${e.id? 'Modifier la facture':'Nouvelle facture'}</h3>
-    ${verrouillee? `<div class="facture-verrou-banner">
+    <h3>${e.id? (emise? 'Facture '+esc(e.numero) : 'Modifier la facture') :'Nouvelle facture'}</h3>
+    ${emise? `<div class="facture-verrou-banner">
+      <span>🔒 Facture émise sous le n° ${esc(e.numero)} — son contenu est définitif (art. L441-9). Une correction passe par un avoir.</span>
+      <span style="font-weight:400;">L'encaissement s'enregistre dans l'onglet <b>Règlements</b>.</span>
+    </div>` : verrouillee? `<div class="facture-verrou-banner">
       <span>🔒 Cette facture a déjà été téléchargée ou envoyée — elle est verrouillée pour éviter une modification accidentelle.</span>
       <button type="button" class="btn small danger" onclick="deverrouillerFacture('${e.id}')">🔓 Déverrouiller pour modifier</button>
     </div>` : ''}
-    <div style="${verrouillee? 'pointer-events:none; opacity:.55;' : ''}">
+    <div style="${fige? 'pointer-events:none; opacity:.55;' : ''}">
     ${e.devisId? `<div class="numref" style="margin-bottom:10px;">Générée à partir d'un devis</div>`:''}
     ${e.interventionId? `<div class="numref" style="margin-bottom:10px;">Issue d'un rapport d'intervention</div>`:''}
     <div class="form-section">
