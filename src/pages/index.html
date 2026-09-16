@@ -9782,10 +9782,9 @@ function renderReglagesOnglet(){
      posée, pas pendant qu'on assemble sa chaîne. */
   if((state.reglagesTab || 'organisation') === 'organisation'){
     setTimeout(majCompletudeSociete, 0);
-  }
-  if(state.reglagesTab === 'documents'){
     setTimeout(()=>apercuCouleur(reglagesCourants().documents.couleurAccent), 0);
   }
+
   switch(state.reglagesTab || 'organisation'){
     case 'organisation':  return renderInfosEntrepriseSection();
     case 'legaux':        return renderDocumentsLegauxSection();
@@ -9824,6 +9823,12 @@ function renderInfosEntrepriseSection(){
       <label>Logo (utilisé sur les documents générés)</label>
       <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
       ${s.logo? `<div style="margin-top:8px;"><img src="${s.logo}" style="max-height:70px; max-width:220px;"></div>` : ''}
+    </div>
+    <div class="field" style="max-width:320px;">
+      <label>Couleur de la société</label>
+      <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur(this.value)" style="width:64px; height:38px; padding:2px;">
+      <div id="rg_couleurApercu" style="margin-top:8px;"></div>
+      <small class="card-sub">Reprise par l'application et par tous vos documents.</small>
     </div>
 
     ${sectionsEfactureSocieteHTML(s)}
@@ -10092,9 +10097,6 @@ function renderReglagesDocumentsSection(){
       <div class="field"><label>Délai de paiement (jours)</label><input type="number" min="0" id="rg_delaiPaiement" value="${d.delaiPaiementJours}"></div>
       <div class="field"><label>TVA par défaut (%)</label><input type="number" min="0" step="0.1" id="rg_tva" value="${d.tvaDefaut}"></div>
       <div class="field"><label>Taux de TVA proposés (%)</label><input type="text" id="rg_tauxTva" value="${esc(tauxTvaProposes().join(', '))}" placeholder="0, 5.5, 10, 20"><small style="color:var(--text-dim); font-size:11px;">Séparés par des virgules. 0 sert à l'autoliquidation et aux exonérations.</small></div>
-      <div class="field"><label>Couleur de la société</label>
-        <input type="color" id="rg_couleur" value="${esc(d.couleurAccent)}" oninput="apercuCouleur(this.value)">
-        <div id="rg_couleurApercu" style="margin-top:6px;"></div></div>
       <div class="field full"><label>Mention d'acceptation (devis)</label><input type="text" id="rg_mentionAcceptation" value="${esc(d.mentionAcceptation)}"></div>
       <div class="field full"><label>Conditions affichées sur les devis</label><textarea id="rg_conditionsDevis" style="min-height:60px;">${esc(d.conditionsDevis)}</textarea></div>
       <div class="field full"><label>Mentions complémentaires (factures)</label><textarea id="rg_mentionsComplementaires" style="min-height:60px;">${esc(d.mentionsComplementaires)}</textarea></div>
@@ -10250,7 +10252,7 @@ async function saveReglages(){
   Object.entries(champsNum).forEach(([id, cle])=>{
     if(el(id)){ const n = parseFloat(el(id).value); if(Number.isFinite(n)) documents[cle] = n; }
   });
-  const champsTxt = { rg_couleur:'couleurAccent', rg_mentionAcceptation:'mentionAcceptation', rg_conditionsDevis:'conditionsDevis', rg_mentionsComplementaires:'mentionsComplementaires', rg_piedDePage:'piedDePage' };
+  const champsTxt = { rg_mentionAcceptation:'mentionAcceptation', rg_conditionsDevis:'conditionsDevis', rg_mentionsComplementaires:'mentionsComplementaires', rg_piedDePage:'piedDePage' };
   Object.entries(champsTxt).forEach(([id, cle])=>{ if(el(id)) documents[cle] = el(id).value; });
   if(el('rg_afficherIban')) documents.afficherIban = el('rg_afficherIban').checked;
 
@@ -10404,6 +10406,15 @@ async function saveInfosEntreprise(){
   /* Un champ absent de l'écran vaut « inchangé », pas « effacé » : les onglets
      de réglages ne rendent pas tous les mêmes champs. */
   for (const [k, val] of Object.entries(obj)) if (val === undefined) delete obj[k];
+
+  /* La couleur vit dans les réglages de documents, pas dans une colonne de
+     `societes` : elle voyage donc à part, et on ne recopie que la clé touchée —
+     écraser `documents` en entier effacerait le délai de paiement et le reste. */
+  const couleur = v('ie_couleur');
+  if(couleur){
+    obj.reglages = { ...(s.reglages||{}),
+      documents: { ...((s.reglages||{}).documents||{}), couleurAccent: couleur } };
+  }
 
   const anomalies = window.verifierEntite(obj);
   if(anomalies.length){ alert(window.messageAnomalies(anomalies)); return; }
