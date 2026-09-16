@@ -125,6 +125,8 @@ export interface FactureEN16931 {
   /** BT-22 / code AAB — l'escompte, ou son absence. Obligatoire en France. */
   mentionEscompte?: string | null;
   escomptePourcentage?: number | null;
+  /** BT-92 — la remise globale, en pourcentage du HT des lignes. */
+  remisePourcentage?: number | null;
   indemniteRecouvrement?: number | null;
   acomptesDeduits?: number | null;
   montantRegle?: number | null;
@@ -260,30 +262,125 @@ function adresseElectronique(entite: EntiteEN16931) {
  * rejetée : on la recalcule plutôt que de recopier un champ qui aurait pu
  * dériver.
  */
-export function ventilationTva(lignes: LigneEN16931[]) {
-  const parTaux = new Map<number, { base: number; taxe: number; categorie: string; motif?: string }>();
+/**
+ * BT-98 — le code du motif, dans la liste UNTDID 5189. « 95 » est la remise.
+ * BT-97 — le motif en clair, qu'un lecteur humain doit pouvoir lire.
+ */
+export const CODE_MOTIF_REMISE = "95";
+export const MOTIF_REMISE = "Remise commerciale";
+
+/** Une déduction au niveau du document — BG-20. */
+export interface DeductionEN16931 {
+  /** BT-92 — le montant déduit. */
+  montant: number;
+  /** BT-93 — l'assiette sur laquelle il se calcule. */
+  base: number;
+  /** BT-94 — le pourcentage appliqué à cette assiette. */
+  pourcentage: number;
+  /** BT-95 — la catégorie de TVA de la déduction. */
+  tvaCategorie: string;
+  /** BT-96 — son taux. */
+  tvaTaux: number;
+  /** BT-97 */ motif: string;
+  /** BT-98 */ motifCode: string;
+}
+
+/** Arrondi au centime, une seule fois, pour que les sommes se recomposent. */
+function centimes(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * La remise globale, traduite en déductions au sens de la norme.
+ *
+ * L'application applique un pourcentage unique au pied du document. La norme
+ * ne connaît pas cette forme : elle attend des déductions (BG-20), et **chacune
+ * ne porte qu'un seul taux de TVA** (BT-96). Une remise sur un document qui
+ * mêle 10 % et 20 % se scinde donc en deux déductions, chacune sur son
+ * assiette — sans quoi on ne saurait pas de quelle TVA la remise se retranche.
+ *
+ * C'est ce qui rétablit BR-CO-10 : la somme des lignes reste l'avant-remise, et
+ * l'écart au total HT s'explique par une déduction déclarée au lieu de
+ * disparaître.
+ */
+export function deductionsDocument(
+  lignes: LigneEN16931[],
+  remisePourcentage: number | null | undefined
+): DeductionEN16931[] {
+  const pct = Number(remisePourcentage ?? 0) || 0;
+  if (pct <= 0) return [];
+
+  const parTaux = new Map<number, { base: number; categorie: string }>();
+  for (const l of lignes) {
+    const taux = Number(l.tva ?? 0) || 0;
+    const base = Number(l.montantHt ?? 0) || 0;
+    if (base === 0) continue;
+    const acc = parTaux.get(taux) ?? {
+      base: 0,
+      categorie: l.tvaCategorie || (taux > 0 ? "S" : "Z"),
+    };
+    acc.base += base;
+    parTaux.set(taux, acc);
+  }
+
+  return [...parTaux.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([taux, acc]) => ({
+      montant: centimes((acc.base * pct) / 100),
+      base: centimes(acc.base),
+      pourcentage: pct,
+      tvaCategorie: acc.categorie,
+      tvaTaux: taux,
+      motif: MOTIF_REMISE,
+      motifCode: CODE_MOTIF_REMISE,
+    }));
+}
+
+/** BT-107 — le total des déductions. */
+export function totalDeductions(deductions: DeductionEN16931[]): number {
+  return centimes(deductions.reduce((s, d) => s + d.montant, 0));
+}
+
+export function ventilationTva(
+  lignes: LigneEN16931[],
+  deductions: DeductionEN16931[] = []
+) {
+  const parTaux = new Map<number, { base: number; categorie: string; motif?: string }>();
 
   for (const l of lignes) {
     const taux = Number(l.tva ?? 0) || 0;
     const base = Number(l.montantHt ?? 0) || 0;
     const acc = parTaux.get(taux) ?? {
       base: 0,
-      taxe: 0,
       categorie: l.tvaCategorie || (taux > 0 ? "S" : "Z"),
       motif: l.tvaMotifExoneration ?? undefined,
     };
     acc.base += base;
-    acc.taxe += (base * taux) / 100;
     parTaux.set(taux, acc);
   }
 
-  return [...parTaux.entries()].map(([taux, acc]) => ({
-    vat_category_code: acc.categorie,
-    vat_category_rate: String(taux),
-    vat_category_taxable_amount: montant(acc.base),
-    vat_category_tax_amount: montant(acc.taxe),
-    ...(acc.motif ? { vat_exemption_reason_text: acc.motif } : {}),
-  }));
+  /* L'assiette de chaque taux est celle des lignes MOINS la déduction du même
+     taux : BR-CO-14 veut que la somme des taxes fasse le total de TVA, et ce
+     total est calculé après remise. Retrancher le montant déjà arrondi, plutôt
+     que de réappliquer le pourcentage, évite qu'un centime sépare la déduction
+     déclarée de celle réellement prise en compte. */
+  const deduitParTaux = new Map<number, number>();
+  for (const d of deductions) {
+    deduitParTaux.set(d.tvaTaux, (deduitParTaux.get(d.tvaTaux) ?? 0) + d.montant);
+  }
+
+  return [...parTaux.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([taux, acc]) => {
+      const assiette = centimes(acc.base - (deduitParTaux.get(taux) ?? 0));
+      return {
+        vat_category_code: acc.categorie,
+        vat_category_rate: String(taux),
+        vat_category_taxable_amount: montant(assiette),
+        vat_category_tax_amount: montant(centimes((assiette * taux) / 100)),
+        ...(acc.motif ? { vat_exemption_reason_text: acc.motif } : {}),
+      };
+    });
 }
 
 /**
@@ -351,6 +448,30 @@ export function chargeEN16931(
   const dateLivraison = facture.dateLivraison || facture.date;
   const regle = (facture.montantRegle ?? 0) + (facture.acomptesDeduits ?? 0);
 
+  /* La remise cessait d'être déclarée : les lignes portaient l'avant-remise et
+     les totaux l'après, sans rien pour expliquer l'écart. BR-CO-10 exige que
+     BT-106 soit la somme des lignes ; une facture remisée était donc refusée.
+     Déclarée en déduction, la remise se lit — et les totaux se recomposent.
+
+     Sans remise, rien ne change : les totaux restent ceux de la base, qui fait
+     autorité sur ce qui engage. */
+  const deductions = deductionsDocument(lignes, facture.remisePourcentage);
+  const ventilation = ventilationTva(lignes, deductions);
+  const sommeLignes = centimes(
+    lignes.reduce((s, l) => s + (Number(l.montantHt ?? 0) || 0), 0)
+  );
+  const deduit = totalDeductions(deductions);
+  const htApres = centimes(sommeLignes - deduit);
+  const tvaApres = centimes(
+    ventilation.reduce((s, v) => s + Number(v.vat_category_tax_amount), 0)
+  );
+
+  const totalHt = deductions.length ? htApres : Number(facture.totalHt ?? 0);
+  const totalTva = deductions.length ? tvaApres : Number(facture.totalTva ?? 0);
+  const totalTtc = deductions.length
+    ? centimes(htApres + tvaApres)
+    : Number(facture.totalTtc ?? 0);
+
   return {
     en_invoice: {
       number: facture.numero,
@@ -417,23 +538,46 @@ export function chargeEN16931(
             : {}),
         },
       })),
-      vat_break_down: ventilationTva(lignes).map((v) => ({
+      ...(deductions.length
+        ? {
+            allowances: deductions.map((d) => ({
+              allowance_amount: montant(d.montant * signe),
+              allowance_base_amount: montant(d.base * signe),
+              allowance_percentage: String(d.pourcentage),
+              allowance_reason: d.motif,
+              allowance_reason_code: d.motifCode,
+              allowance_vat_category_code: d.tvaCategorie,
+              allowance_vat_rate: String(d.tvaTaux),
+            })),
+          }
+        : {}),
+      vat_break_down: ventilation.map((v) => ({
         ...v,
         vat_category_taxable_amount: montant(Number(v.vat_category_taxable_amount) * signe),
         vat_category_tax_amount: montant(Number(v.vat_category_tax_amount) * signe),
       })),
       totals: {
-        sum_invoice_lines_amount: montant(Number(facture.totalHt ?? 0) * signe),
-        total_without_vat: montant(Number(facture.totalHt ?? 0) * signe),
+        /* BT-106 — la somme des lignes, TELLE QUELLE. C'est elle qui était
+           remplacée par le total après remise : BR-CO-10 ne pouvait pas
+           tomber juste. */
+        sum_invoice_lines_amount: montant(
+          (deductions.length ? sommeLignes : Number(facture.totalHt ?? 0)) * signe
+        ),
+        // BT-107 — ce qui a été déduit, sans quoi l'écart reste inexpliqué.
+        ...(deductions.length
+          ? { allowance_total_amount: montant(deduit * signe) }
+          : {}),
+        // BT-109 = BT-106 − BT-107
+        total_without_vat: montant(totalHt * signe),
         total_vat_amount: {
-          value: montant(Number(facture.totalTva ?? 0) * signe),
+          value: montant(totalTva * signe),
           currency_code: devise,
         },
-        total_with_vat: montant(Number(facture.totalTtc ?? 0) * signe),
+        total_with_vat: montant(totalTtc * signe),
         // BT-113 — déjà réglé : encaissements et acomptes déjà facturés.
         paid_amount: montant(regle * signe),
         // BT-115 — ce qui reste dû, qui en découle.
-        amount_due_for_payment: montant((Number(facture.totalTtc ?? 0) - regle) * signe),
+        amount_due_for_payment: montant((totalTtc - regle) * signe),
       },
     },
   };
