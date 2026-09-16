@@ -862,6 +862,11 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .field{display:flex; flex-direction:column; gap:3px; margin-bottom:13px;}
 .field.full{grid-column:1/-1;}
 .field label{font-size:12px; color:#8A91A0; text-transform:none; letter-spacing:.01em; font-weight:600;}
+/* Titre d'un réglage qui n'est pas une saisie de texte : le libellé flottant
+   des `.field` se pose EN SURIMPRESSION de l'input, ce qui rendait la pastille
+   de couleur illisible sous son propre libellé. */
+.reglage-titre{font-size:12px; color:#8A91A0; font-weight:600; margin-bottom:6px;}
+.reglage-duo{display:flex; flex-wrap:wrap; gap:30px; align-items:flex-start; margin:6px 0 16px;}
 .row-mic{display:flex; gap:6px;}
 input[type=text],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=email],textarea,select{background:#EEF1F7; border:2px solid transparent; color:var(--text); border-radius:16px; padding:11px 15px; font-size:14.5px; font-family:inherit; width:100%; transition:background .15s ease, border-color .15s ease, box-shadow .15s ease; box-sizing:border-box;}
 input:hover, textarea:hover, select:hover{ background:#E8ECF4; }
@@ -9851,16 +9856,21 @@ function renderInfosEntrepriseSection(){
       <div class="field"><label>Nom du gérant / représentant</label><input type="text" id="ie_gerant" value="${esc(s.gerant)}"></div>
       <div class="field"><label>Téléphone du gérant</label><input type="text" id="ie_gerantTelephone" value="${esc(s.gerantTelephone)}"></div>
     </div>
-    <div class="field" style="max-width:320px;">
-      <label>Logo (utilisé sur les documents générés)</label>
-      <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
-      ${s.logo? `<div style="margin-top:8px;"><img src="${s.logo}" style="max-height:70px; max-width:220px;"></div>` : ''}
-    </div>
-    <div class="field" style="max-width:320px;">
-      <label>Couleur de la société</label>
-      <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur(this.value)" style="width:64px; height:38px; padding:2px;">
-      <div id="rg_couleurApercu" style="margin-top:8px;"></div>
-      <small class="card-sub">Reprise par l'application et par tous vos documents.</small>
+    <div class="reglage-duo">
+      <div>
+        <div class="reglage-titre">Logo (utilisé sur les documents générés)</div>
+        <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
+        ${s.logo? `<div style="margin-top:8px;"><img src="${s.logo}" style="max-height:70px; max-width:220px;"></div>` : ''}
+      </div>
+      <div>
+        <div class="reglage-titre">Couleur de la société</div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur(this.value)"
+                 style="width:56px; height:40px; padding:2px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface);">
+          <div id="rg_couleurApercu"></div>
+        </div>
+        <small class="card-sub" style="display:block; margin-top:8px;">Reprise par l'application et par tous vos documents.</small>
+      </div>
     </div>
 
     ${sectionsEfactureSocieteHTML(s)}
