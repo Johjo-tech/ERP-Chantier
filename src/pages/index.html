@@ -1952,6 +1952,12 @@ async function loadAll(){
   state.materiels = materiels.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
   state.settings = {};
   await Promise.all(SOCIETES.map(async s => { const v = await stGet('settings:' + s.id); if(v) state.settings[s.id] = v; }));
+  /* La couleur se pose ici parce que c'est la ligne au-dessus qui l'apporte :
+     tout chemin qui recharge les réglages la repose, démarrage compris. La
+     rattacher à `init()` ne suffisait pas — cette fonction ne va pas toujours
+     jusqu'au bout. Le changement de société, lui, ne passe pas par ici et
+     garde son propre appel. */
+  appliquerCouleurSociete();
   refreshNotifBadge();
 }
 
@@ -10086,27 +10092,41 @@ function apercuCouleur(couleur){
       + `</div>`;
   }
   /* Appliquée tout de suite : l'écran entier sert d'aperçu grandeur nature. */
+  appliquerPalette(p);
+}
+
+/**
+ * Pose une palette sur l'élément racine.
+ *
+ * Écrite une seule fois : l'aperçu du réglage et le démarrage doivent produire
+ * exactement le même écran, sinon on choisit une couleur et on en obtient une
+ * autre au rechargement.
+ */
+function appliquerPalette(p){
   const r = document.documentElement.style;
   r.setProperty('--accent', p.accent);
   r.setProperty('--accent-2', p.accentFonce);
   r.setProperty('--accent-soft', p.accentClair);
   r.setProperty('--sur-accent', p.surAccent);
+  /* Les halos et anneaux de focus étaient sept opacités d'un orange figé : ils
+     seraient restés orange pendant que le reste virait. Les composantes
+     suffisent, chaque opacité s'en déduit. */
   const [rr, vv, bb] = [1, 3, 5].map(i => parseInt(p.accent.slice(i, i + 2), 16));
   r.setProperty('--accent-rgb', `${rr}, ${vv}, ${bb}`);
 }
 
+/**
+ * Applique la couleur de la société active.
+ *
+ * À n'appeler qu'une fois les réglages chargés. Elle l'était AVANT `loadAll()` :
+ * `state.settings` étant vide, `reglagesCourants()` rendait le défaut, l'orange
+ * se posait — et rien ne repassait quand la vraie couleur arrivait. KTA avait
+ * choisi un violet, l'écran restait orange, et le réglage passait pour mort.
+ */
 function appliquerCouleurSociete(){
-  const p = window.paletteAccent(reglagesCourants().documents.couleurAccent);
-  const r = document.documentElement.style;
-  r.setProperty('--accent', p.accent);
-  r.setProperty('--accent-2', p.accentFonce);
-  r.setProperty('--accent-soft', p.accentClair);
-  r.setProperty('--sur-accent', p.surAccent);
-  /* Les halos et anneaux de focus étaient écrits `rgba(var(--accent-rgb), .15)` — cinq
-     opacités d'un orange figé, qui seraient restées orange pendant que le reste
-     virait. Les composantes suffisent : chaque opacité s'en déduit. */
-  const [rr, vv, bb] = [1, 3, 5].map(i => parseInt(p.accent.slice(i, i + 2), 16));
-  r.setProperty('--accent-rgb', `${rr}, ${vv}, ${bb}`);
+  const reglages = reglagesCourants();
+  const couleur = reglages && reglages.documents ? reglages.documents.couleurAccent : null;
+  appliquerPalette(window.paletteAccent(couleur));
 }
 
 function reglagesCourants(){
@@ -14860,7 +14880,6 @@ async function saveDocument(){
     }
     state.currentRole = window.roleEffectif();
     document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
-    appliquerCouleurSociete();
     const autorises = navPourRole().map(n=>n.id);
     if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
     /* Dans le try : le pont refuse de servir une collection tronquée, et cette
