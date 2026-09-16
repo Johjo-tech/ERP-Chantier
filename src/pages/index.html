@@ -51,6 +51,10 @@ body.sidebar-collapsed #sidebar{display:none;}
 .brand{font-size:20px; color:var(--accent); margin:4px 6px 22px; display:flex; align-items:center; gap:8px;}
 .user-menu-wrap{position:relative;}
 .user-menu-btn{background:none; border:none; padding:0; width:100%; text-align:left;}
+/* Dire quelle version tourne : une page gardée en cache se comporte comme
+   une régression, et on cherche alors le défaut dans le code. */
+.user-menu-version{font-size:10.5px; color:var(--text-dim); padding:6px 12px 2px; cursor:pointer; font-family:ui-monospace,monospace;}
+.user-menu-version:hover{color:var(--accent);}
 .user-menu-name{font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .user-menu-chevron{margin-left:auto; font-size:11px; opacity:.7;}
 .user-menu{display:none; position:absolute; top:100%; left:6px; right:6px; z-index:50; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); overflow:hidden; margin-top:4px;}
@@ -1169,6 +1173,7 @@ img.pf-reference-fichier{ height:auto; max-height:66vh; object-fit:contain; }
         <div id="userMenuRoles"></div>
         <div class="user-menu-sep"></div>
         <button onclick="logOut()">Se déconnecter</button>
+        <div class="user-menu-version" onclick="copierVersion()" title="Cliquer pour copier — à donner en cas d'anomalie"></div>
       </div>
     </div>
     <div class="nav-items" id="navDesktop"></div>
@@ -1205,6 +1210,7 @@ img.pf-reference-fichier{ height:auto; max-height:66vh; object-fit:contain; }
           <div id="userMenuRolesMobile"></div>
           <div class="user-menu-sep"></div>
           <button onclick="logOut()">Se déconnecter</button>
+          <div class="user-menu-version" onclick="copierVersion()" title="Cliquer pour copier — à donner en cas d'anomalie"></div>
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:8px;">
@@ -2166,6 +2172,19 @@ function nomSocieteActive(){
   return active ? active.nom : (societeName(state.societeId) || '—');
 }
 
+function versionConstruite(){
+  const m = document.querySelector('meta[name="version-construite"]');
+  return m ? m.content : 'inconnue';
+}
+
+/* Copiable d'un clic : une version qu'on doit recopier à la main arrive
+   toujours tronquée. */
+function copierVersion(){
+  const v = versionConstruite();
+  if(navigator.clipboard) navigator.clipboard.writeText(v);
+  showToast('Version copiée : ' + v, 'success', 4000);
+}
+
 function renderUserMenu(){
   const estAdmin = window.roleReel && window.roleReel() === 'admin';
   const htmlRoles = estAdmin
@@ -2178,6 +2197,13 @@ function renderUserMenu(){
   ['userMenuRoles','userMenuRolesMobile'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.innerHTML = htmlRoles;
+  });
+
+  /* La version construite, posée dans la page par Vite. Sans elle, impossible
+     de distinguer « le correctif n'est pas livré » de « le navigateur garde
+     une vieille copie » — les deux se ressemblent exactement. */
+  document.querySelectorAll('.user-menu-version').forEach(el=>{
+    el.textContent = 'version ' + versionConstruite();
   });
 
   /* Les deux barres — large et étroite — portent le même sélecteur : ne
