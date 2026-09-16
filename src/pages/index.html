@@ -2687,8 +2687,8 @@ function computeStatusBreakdown(factures){
   const counts = {payée:0, partiel:0, impayée:0};
   factures.forEach(f=>{
     const st = reglementStatutFacture(f);
-    if(st.label==='Payée') counts.payée++;
-    else if(st.label==='Partiel') counts.partiel++;
+    if(st.cle==='reglee') counts.payée++;
+    else if(st.cle==='partiellement_reglee') counts.partiel++;
     else counts.impayée++;
   });
   return counts;
@@ -2779,7 +2779,9 @@ function computeMonthSummary(soc){
   const maxMois = Math.max(1, ...yearly.data.map(m=>Math.max(m.current, m.previous)));
   const devisAcceptes = devisDuMois.filter(d=>d.statut==='accepté').length;
   const tauxConversion = devisDuMois.length? Math.round(devisAcceptes/devisDuMois.length*100) : 0;
-  const impayeesMontant = factures.filter(f=>f.statut==='impayée').reduce((s,f)=>{ const st=reglementStatutFacture(f); return s+st.reste; },0);
+  /* Sur le statut stocké, une facture réglée à moitié échappait au total dû.
+     Le reste à payer le dit sans intermédiaire. */
+  const impayeesMontant = factures.reduce((s,f)=>{ const st=reglementStatutFacture(f); return s + (st.cle==='reglee' ? 0 : st.reste); },0);
   const totalFacture = factures.reduce((s,f)=>s+computeDocTotals(f).ttc,0) || 1;
   const tauxEncaisse = Math.max(0, Math.round((1 - impayeesMontant/totalFacture)*100));
   return { caMois, caMoisPct: Math.min(100, Math.round(caMois/maxMois*100)), tauxConversion, devisCount: devisDuMois.length, tauxEncaisse, impayeesMontant };
@@ -5245,7 +5247,7 @@ function bonsDeLaVue(vue){
    dépendent de la remise, le statut de règlement des règlements enregistrés. */
 function contexteFacture(f){
   const st = reglementStatutFacture(f);
-  const etiquettes = [st.label==='Payée'? 'payee' : st.label==='Partiel'? 'partiel' : 'impayee'];
+  const etiquettes = [st.cle==='reglee'? 'payee' : st.cle==='partiellement_reglee'? 'partiel' : 'impayee'];
   // Une facture en retard reste impayée : les deux filtres doivent la trouver
   if(st.reste > 0.01 && (joursDepuisEcheance(f)||0) > 0) etiquettes.push('retard');
   return { extras: montantsCherchables(f), reglements: etiquettes };
@@ -5523,6 +5525,10 @@ function renderFacturesListHTML(list){
   const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
   return filtered.map(f=>{
     const t = computeDocTotals(f);
+    /* L'état de règlement se déduit des règlements enregistrés ; le `statut`
+       stocké ne distingue pas le partiel du non-réglé, et une facture réglée à
+       moitié se lisait « impayée » sans qu'on sache qu'un acompte était tombé. */
+    const reg = reglementStatutFacture(f);
     const devisOrigine = f.devisId ? state.devis.find(d=>d.id===f.devisId) : null;
     const rapportOrigine = f.interventionId ? state.interventions.find(i=>i.id===f.interventionId) : null;
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
@@ -5532,7 +5538,7 @@ function renderFacturesListHTML(list){
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="event.stopPropagation(); ouvrirBonCommandeOrigine('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;" title="${bonCommandeOrigine.pieceJointeChemin? 'Voir le bon reçu du client' : 'Aller au bon de commande'}">${esc(bonCommandeOrigine.numeroBC)}${bonCommandeOrigine.pieceJointeChemin? ' 📎':''}</a></div>`:''}
       </div>
-      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}<span class="badge ${badgeClass(f.statut)}">${esc(f.statut)}</span></div></div>
+      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}${reg.paye > 0.004 ? `<div class="card-sub" style="margin-top:2px;">réglé ${moneyDisplay(reg.paye)}${reg.reste > 0.004? ' · reste '+moneyDisplay(reg.reste):''}</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
@@ -5679,12 +5685,11 @@ function reglementsForFacture(factureId){
   return state.reglements.filter(r=>r.factureId===factureId);
 }
 function reglementStatutFacture(f){
-  const t = computeDocTotals(f);
-  const paye = reglementsForFacture(f.id).reduce((s,r)=>s+(parseFloat(r.montant)||0), 0);
-  const reste = Math.max(0, t.ttc - paye);
-  if(paye <= 0.004) return {label:'Impayée', cls:'danger', paye, reste, ttc:t.ttc};
-  if(reste <= 0.01) return {label:'Payée', cls:'success', paye, reste, ttc:t.ttc};
-  return {label:'Partiel', cls:'warn', paye, reste, ttc:t.ttc};
+  const st = window.statutReglement(computeDocTotals(f).ttc, reglementsForFacture(f.id));
+  /* `cls` reste le nom historique de la classe de badge ; `cle` est ce sur quoi
+     le code compare désormais — comparer des libellés casse au premier
+     renommage, et ils viennent d'être renommés. */
+  return { cle: st.cle, label: st.label, cls: st.classe, paye: st.paye, reste: st.reste, ttc: st.ttc };
 }
 function joursDepuisEcheance(f){
   const ref = f.echeance || f.date;
@@ -8958,11 +8963,16 @@ function renderReglementsClientDetail(nom, allFactures){
           </div>
           <div style="text-align:right;"><div class="amount">${moneyDisplay(st.ttc)}</div><span class="badge ${st.cls}" style="margin-top:5px;display:inline-block;">${st.label}</span></div>
         </div>
-        <div class="card-sub" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">Réglé : ${moneyDisplay(st.paye)} · Reste : ${moneyDisplay(st.reste)} ${delaiBadgeHTML(f, st.reste)}</div>
+        <div class="card-sub" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">Réglé : ${moneyDisplay(st.paye)} · Reste : ${moneyDisplay(st.reste)} ${delaiBadgeHTML(f, st.reste)}
+          ${payable? `<button class="btn small primary" style="margin-left:auto;" onclick="event.stopPropagation(); ouvrirReglementFacture('${f.id}')">+ Règlement</button>`:''}
+        </div>
+        ${regs.length? `<div class="card-sub" style="margin-top:10px; font-weight:600;">Historique des règlements</div>`:''}
         ${regs.map(r=>`
-          <div class="card-sub" style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
-            <span>${fmtDate(r.date)} · ${esc(r.mode)}${r.reference? ' ('+esc(r.reference)+')':''}</span>
-            <span class="mono">${moneyDisplay(r.montant)} <button class="btn small danger" style="padding:2px 7px; margin-left:6px;" onclick="deleteItem('reglement','${r.id}')">✕</button></span>
+          <div class="card-sub" style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <span>${fmtDate(r.date)} · ${esc(libelleModeReglement(r.mode))}${r.reference? ' ('+esc(r.reference)+')':''}</span>
+            <span class="mono" style="white-space:nowrap;">${moneyDisplay(r.montant)}
+              <button class="btn small ghost" style="padding:2px 7px; margin-left:6px;" title="Modifier ce règlement" onclick="event.stopPropagation(); editItem('reglement','${r.id}')">✎</button>
+              <button class="btn small danger" style="padding:2px 7px;" title="Supprimer ce règlement" onclick="event.stopPropagation(); deleteItem('reglement','${r.id}')">✕</button></span>
           </div>`).join('')}
       </div>`;
     }).join('') || '<div class="empty">Aucune facture pour ce client.</div>'}
@@ -8974,6 +8984,17 @@ function renderReglementsClientDetail(nom, allFactures){
     ${state.formOpen.reglementBulk? renderBulkReglementModal(selection, list) : ''}
   `;
 }
+/**
+ * Ouvre la saisie d'un règlement pour CETTE facture.
+ *
+ * Seul le règlement groupé existait, et il solde chaque facture de la sélection
+ * en entier : un acompte, ou un virement qui ne couvre pas tout, n'avait aucun
+ * chemin. Le formulaire unitaire était écrit mais rien ne l'ouvrait jamais.
+ */
+function ouvrirReglementFacture(factureId){
+  openForm('reglement', { factureId });
+}
+
 function toggleReglementSelection(factureId){
   if(!state.reglementSelection) state.reglementSelection = [];
   const idx = state.reglementSelection.indexOf(factureId);
@@ -8996,14 +9017,13 @@ function closeBulkReglementForm(){
 function renderBulkReglementModal(selection, list){
   const factures = list.filter(f=>selection.includes(f.id));
   const total = factures.reduce((s,f)=> s + reglementStatutFacture(f).reste, 0);
-  const modes = ['Virement','Chèque','Espèces','CB','Prélèvement','Autre'];
   return `
   <div class="form-panel" style="margin-top:14px;">
     <h3>Règlement groupé — ${factures.length} facture${factures.length>1?'s':''}</h3>
     <div class="card-sub" style="margin-bottom:12px;">${factures.map(f=>`${esc(f.numero)} (${moneyDisplay(reglementStatutFacture(f).reste)})`).join(', ')}</div>
     <div class="field-grid">
       <div class="field"><label>Date</label><input type="date" id="rb_date" value="${todayISO()}"></div>
-      <div class="field"><label>Mode de règlement</label><select id="rb_mode">${modes.map(m=>`<option value="${m}">${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Mode de règlement</label><select id="rb_mode">${optionsModeReglementHTML(factures[0] && factures[0].modePaiement)}</select></div>
       <div class="field full"><label>Référence</label><input type="text" id="rb_reference" placeholder="N° chèque, réf. virement…"></div>
     </div>
     <div class="summary-row" style="margin-bottom:12px;"><span>Total à régler</span><b>${moneyDisplay(total)}</b></div>
@@ -9035,19 +9055,87 @@ async function saveBulkReglement(){
   showToast('Règlement enregistré pour les factures sélectionnées.', 'success');
   renderTab();
 }
+/**
+ * Le moyen de règlement, en clair.
+ *
+ * Les règlements d'avant stockent le libellé français — « Virement », « CB » —
+ * ceux d'aujourd'hui le code de l'énumération. Les deux doivent se lire, et
+ * aucun ne doit être réécrit : une reprise en masse sur des écritures
+ * comptables ne se justifie pas pour un affichage.
+ */
+function libelleModeReglement(mode){
+  const brut = String(mode || '').trim();
+  if(!brut) return '—';
+  const connu = (window.MODES_REGLEMENT || []).find(m => m.code === brut);
+  return connu ? connu.libelle : brut;
+}
+
+/** La facture visée par le formulaire de règlement, telle qu'il l'affiche. */
+function factureDuReglement(){
+  const sel = document.getElementById('r_factureId');
+  const id = sel ? sel.value : state.editing.factureId;
+  return state.factures.find(f=>f.id===id) || null;
+}
+
+/**
+ * Ce que la facture doit encore encaisser, en excluant le règlement en cours
+ * de modification : sans cela son ancien montant se compte deux fois et le
+ * plafond de saisie est amputé de ce qu'on corrige.
+ */
+function resteDeLaFacture(facture, idModifie){
+  if(!facture) return 0;
+  return window.resteAPayer(computeDocTotals(facture).ttc, reglementsForFacture(facture.id), idModifie || null);
+}
+
+/** Le rappel sous le champ montant : réglé, reste, et ce qui est proposé. */
+function majAideReglement(){
+  const aide = document.getElementById('r_aide');
+  if(!aide) return;
+  const f = factureDuReglement();
+  if(!f){ aide.textContent = ''; return; }
+  const ttc = computeDocTotals(f).ttc;
+  const regs = reglementsForFacture(f.id);
+  const paye = window.totalRegle(regs, state.editing.id || null);
+  const reste = resteDeLaFacture(f, state.editing.id);
+  aide.textContent = `Total ${money(ttc)} · déjà réglé ${money(paye)} · reste ${money(reste)}`;
+}
+
+/** Changement de facture : le montant proposé et le mode suivent. */
+function changerFactureDuReglement(){
+  const f = factureDuReglement();
+  const montant = document.getElementById('r_montant');
+  const mode = document.getElementById('r_mode');
+  if(montant) montant.value = f ? String(resteDeLaFacture(f, state.editing.id)) : '';
+  if(mode && f && f.modePaiement) mode.value = window.modeReglementRetenu(f.modePaiement);
+  majAideReglement();
+}
+
 function reglementForm(){
   const e = state.editing;
   const factures = state.factures.filter(f=>f.societeId===state.societeId);
-  const modes = ['Virement','Chèque','Espèces','CB','Prélèvement','Autre'];
+  const facture = state.factures.find(f=>f.id===e.factureId) || factures[0] || null;
+  /* Le montant part sur le reste à payer : c'est le cas courant — on encaisse
+     ce qui est dû — et il reste modifiable pour un acompte ou un versement
+     partiel. Sur une modification, on garde le montant saisi. */
+  const montantPropose = e.id ? e.montant : (facture ? resteDeLaFacture(facture, null) : '');
+  /* Le mode vient de la facture, qui le tient du client : c'est presque
+     toujours celui-là, et le retaper à chaque encaissement est une corvée. */
+  const modeCourant = e.mode || (facture && facture.modePaiement ? window.modeReglementRetenu(facture.modePaiement) : window.MODE_REGLEMENT_DEFAUT || 'virement');
+  setTimeout(majAideReglement, 0);
   return `
   <div class="form-panel">
     <h3>${e.id?'Modifier le règlement':'Nouveau règlement'}</h3>
     <div class="field-grid">
-      <div class="field full"><label>Facture</label><select id="r_factureId">${factures.map(f=>`<option value="${f.id}" ${f.id===e.factureId?'selected':''}>${esc(f.numero)} — ${esc(f.client)} (${money(computeDocTotals(f).ttc)})</option>`).join('')}</select></div>
+      <div class="field full"><label>Facture</label><select id="r_factureId" onchange="changerFactureDuReglement()">${factures.map(f=>{
+        const st = reglementStatutFacture(f);
+        return `<option value="${f.id}" ${f.id===e.factureId?'selected':''}>${esc(f.numero)} — ${esc(f.client)} (${money(st.ttc)}${st.reste>0.004? ' · reste '+money(st.reste):' · soldée'})</option>`;
+      }).join('')}</select></div>
       <div class="field"><label>Date</label><input type="date" id="r_date" value="${e.date||todayISO()}"></div>
-      <div class="field"><label>Montant</label><input type="number" step="0.01" id="r_montant" value="${e.montant||''}"></div>
-      <div class="field"><label>Mode de règlement</label><select id="r_mode">${modes.map(m=>`<option value="${m}" ${m===e.mode?'selected':''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Montant</label>
+        <input type="number" step="0.01" min="0" id="r_montant" value="${montantPropose===''?'':esc(montantPropose)}" oninput="majAideReglement()"></div>
+      <div class="field"><label>Mode de règlement</label><select id="r_mode">${optionsModeReglementHTML(modeCourant)}</select></div>
       <div class="field"><label>Référence</label><input type="text" id="r_reference" value="${esc(e.reference)}" placeholder="N° chèque, réf. virement…"></div>
+      <div class="field full"><small id="r_aide" class="card-sub"></small></div>
     </div>
     <div style="display:flex; gap:10px;">
       <button class="btn primary" onclick="saveReglement()">Enregistrer</button>
@@ -9058,9 +9146,23 @@ function reglementForm(){
 async function saveReglement(){
   const e = state.editing;
   const factureId = document.getElementById('r_factureId').value;
-  const montant = parseFloat(document.getElementById('r_montant').value)||0;
   if(!factureId){ alert('Sélectionnez une facture.'); return; }
-  if(montant <= 0){ alert('Le montant doit être supérieur à 0.'); return; }
+  const facture = state.factures.find(f=>f.id===factureId);
+  if(!facture){ alert('Facture introuvable.'); return; }
+
+  /* Le refus et son explication viennent de la règle : un message écrit ici
+     finirait par dire autre chose que ce que la règle décide. En modification,
+     le règlement en cours est écarté du calcul du reste — sinon corriger 500
+     en 700 se heurterait à un plafond qui compte encore les 500. */
+  const montant = window.arrondiCentime(document.getElementById('r_montant').value);
+  const refus = window.refusReglement({
+    montant,
+    ttc: computeDocTotals(facture).ttc,
+    reglements: reglementsForFacture(factureId),
+    idModifie: e.id || null,
+  });
+  if(refus){ alert(refus); return; }
+
   const id = e.id || uid();
   const obj = { id, societeId: state.societeId, factureId, createdAt: e.createdAt || new Date().toISOString(),
     date: document.getElementById('r_date').value || todayISO(),
@@ -9079,10 +9181,10 @@ async function syncFactureStatut(factureId){
   const facture = state.factures.find(f=>f.id===factureId);
   if(!facture) return;
   const st = reglementStatutFacture(facture);
-  let newStatut;
-  if(st.reste <= 0.01) newStatut = 'payée';
-  else if(st.paye > 0.01) newStatut = 'envoyée';
-  else newStatut = 'impayée';
+  /* Le partiel était rangé en « envoyée » : la facture disparaissait des
+     compteurs d'impayés et du montant dû du tableau de bord. Une facture
+     réglée à moitié est due. */
+  const newStatut = window.statutEnBase(st.cle);
   if(facture.statut !== newStatut){
     facture.statut = newStatut;
     await stSet('facture:'+factureId, facture);
