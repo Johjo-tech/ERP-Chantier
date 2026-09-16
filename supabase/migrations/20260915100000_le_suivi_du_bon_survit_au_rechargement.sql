@@ -30,8 +30,24 @@ comment on column public.bons_commande.rappel_date is
 comment on column public.bons_commande.date_planification_initiale is
   'Première date planifiée, conservée quand l''intervention est reportée pour attente de pièce.';
 
--- La vue du terrain énumère ses colonnes une à une : sans cette recréation,
--- l'écriture fonctionnerait et la lecture ne rendrait toujours rien.
+/* La vue du terrain énumère ses colonnes une à une : sans cette recréation,
+   l'écriture fonctionnerait et la lecture ne rendrait toujours rien.
+
+   Le corps ci-dessous est la définition RÉELLE de la production, relevée par
+   `pg_get_viewdef`, à laquelle les six colonnes de suivi sont ajoutées EN FIN.
+   C'est la seule forme que `CREATE OR REPLACE VIEW` accepte : il exige que les
+   colonnes existantes forment un préfixe identique — mêmes noms, mêmes types,
+   même ordre — et refuse tout retrait.
+
+   La version précédente de ce fichier échouait sur deux motifs, vérifiés par
+   exécution : elle omettait `piece_jointe_chemin/nom/mime`, ajoutées après son
+   écriture par 20260915180000, et elle plaçait les colonnes de facturation au
+   milieu alors que la production les porte en fin. Postgres répondait
+   « cannot drop columns from view » et la migration s'interrompait.
+
+   Les expressions sont reprises telles quelles, `voit_les_prix` compris : un
+   montant reste masqué pour qui n'a pas le droit de le voir. Une adresse et le
+   nom d'une pièce jointe n'en relèvent pas. */
 create or replace view public.v_bons_commande_terrain
 with (security_barrier = true) as
 SELECT id,
@@ -84,19 +100,18 @@ SELECT id,
     statut_workflow,
     numero_interne,
     adresse_locataire,
-    -- Ajoutées par 20260915170000, déjà appliquée en production. Sans elles,
-    -- cette vue — recréée ici avec une liste explicite — les retirerait en
-    -- silence au moment où quelqu'un appliquerait enfin cette migration.
-    -- Une adresse n'est pas un prix : pas de masquage par `voit_les_prix`.
-    facturation_adresse,
-    facturation_code_postal,
-    facturation_ville,
     gratuite,
     gratuite_motif,
         CASE
             WHEN voit_les_prix(societe_id) THEN montant_sous_traitant
             ELSE NULL::numeric
         END AS montant_sous_traitant,
+    facturation_adresse,
+    facturation_code_postal,
+    facturation_ville,
+    piece_jointe_chemin,
+    piece_jointe_nom,
+    piece_jointe_mime,
     tentatives_contact,
     rappel_date,
     reference_chantier,
