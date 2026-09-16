@@ -304,3 +304,65 @@ suite("En-tête d'une facture émise", () => {
     expect(error).toBeNull();
   });
 });
+
+/*
+ * Compléter n'est pas modifier.
+ *
+ * 1 399 factures émises sur 1 792 n'avaient aucun lien vers la fiche de leur
+ * client : le pont n'écrivait que son nom. Sans identifiant, la plateforme les
+ * refuse — « le client doit être joignable ». Le gel doit laisser combler ce
+ * vide, mais pas laisser désigner un autre acheteur.
+ */
+suite("Désigner l'acheteur d'une facture émise", () => {
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  let societeId: Uuid;
+
+  beforeAll(async () => {
+    const societe = await queries.getSocieteByCode(TEST_SOCIETE_CODE);
+    if (!societe) throw new Error(`Société « ${TEST_SOCIETE_CODE} » introuvable`);
+    societeId = societe.id;
+  });
+
+  async function emiseSansLien() {
+    const f = await queries.createFacture(
+      societeId,
+      { client_nom: "CLIENT DE TEST", date: aujourdhui, statut: "impayée" },
+      [{ type: "ligne", designation: "P", quantite: 1, unite: "forfait", prix_unitaire: 10, tva: 20 }]
+    );
+    await supabase.from("factures").update({ client_id: null, client_siret: null }).eq("id", f.id);
+    return f;
+  }
+
+  it("laisse combler un lien client absent", async () => {
+    const f = await emiseSansLien();
+    const client = await queries.listClients(societeId);
+    const cible = client.find((c: any) => c.nom === "CLIENT DE TEST");
+    if (!cible) return;
+    const { error } = await supabase
+      .from("factures")
+      .update({ client_id: cible.id, client_siret: "12345678901234" })
+      .eq("id", f.id);
+    expect(error).toBeNull();
+  });
+
+  /* Une fois l'acheteur désigné, il ne change plus : ce serait adresser la
+     facture à quelqu'un d'autre après coup. */
+  it("refuse qu'on désigne ensuite un autre acheteur", async () => {
+    const f = await emiseSansLien();
+    await supabase.from("factures").update({ client_siret: "11111111111111" }).eq("id", f.id);
+    const { error } = await supabase
+      .from("factures")
+      .update({ client_siret: "99999999999999" })
+      .eq("id", f.id);
+    expect(error).toBeTruthy();
+    expect(error?.message).toMatch(/émise|avoir/i);
+  });
+
+  /* Et vider un identifiant déjà porté n'est pas « compléter ». */
+  it("refuse qu'on efface un identifiant déjà porté", async () => {
+    const f = await emiseSansLien();
+    await supabase.from("factures").update({ client_siret: "11111111111111" }).eq("id", f.id);
+    const { error } = await supabase.from("factures").update({ client_siret: null }).eq("id", f.id);
+    expect(error).toBeTruthy();
+  });
+});

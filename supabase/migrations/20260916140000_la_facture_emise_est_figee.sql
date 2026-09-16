@@ -34,6 +34,15 @@ declare
     -- Le numéro a son propre garde, avec un meilleur message.
     'numero'
   ];
+  -- Ce qui peut être COMPLÉTÉ si c'était vide, mais jamais changé.
+  -- Désigner l'acheteur qu'on avait oublié de désigner n'altère pas le
+  -- document : la facture disait déjà à qui elle s'adressait, par son nom.
+  -- 1 399 factures émises n'avaient aucun lien vers la fiche du client, et
+  -- sans lui la plateforme les refuse.
+  v_completables text[] := array[
+    'client_id', 'client_siret', 'client_siren', 'client_tva_intracom',
+    'client_pays_code', 'client_code_service', 'client_code_routage'
+  ];
   v_col   text;
   v_avant jsonb := to_jsonb(old);
   v_apres jsonb := to_jsonb(new);
@@ -49,9 +58,14 @@ begin
     -- `is distinct from` et non `<>` : l'écran réécrit la ligne entière à
     -- chaque enregistrement, y compris les NULL, et réécrire une valeur à
     -- l'identique n'est pas une modification.
-    if v_apres -> v_col is distinct from v_avant -> v_col then
-      v_touches := v_touches || v_col;
+    if v_apres -> v_col is not distinct from v_avant -> v_col then continue; end if;
+    -- Un vide qui se remplit : on complète, on ne réécrit pas.
+    if v_col = any(v_completables)
+       and coalesce(v_avant ->> v_col, '') = ''
+       and coalesce(v_apres ->> v_col, '') <> '' then
+      continue;
     end if;
+    v_touches := v_touches || v_col;
   end loop;
 
   if array_length(v_touches, 1) > 0 then

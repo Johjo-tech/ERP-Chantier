@@ -340,6 +340,55 @@ function normaliser(table: string, colonne: string, v: unknown): unknown {
 }
 
 /** Objet HTML (camelCase) → ligne Postgres (snake_case). */
+/**
+ * Rattache le document à la FICHE du client, pas seulement à son nom.
+ *
+ * L'app ne connaît ses clients que par leur nom ; la base, elle, a une fiche
+ * avec un SIRET. Sans le lien, la facture électronique n'a pas de quoi désigner
+ * l'acheteur : `manquesPourEmettre` répond « le client doit être joignable »,
+ * et la plateforme refuserait. 1 399 factures numérotées sur 1 792 étaient dans
+ * ce cas — toutes celles nées de l'écran, `bc_generer_facture` étant le seul
+ * chemin qui posait le lien.
+ *
+ * Les identifiants sont RECOPIÉS sur le document, pas seulement liés : une
+ * facture dit ce que l'acheteur était au moment de l'émission. Si sa fiche
+ * change ensuite, la facture déjà émise ne bouge pas — et le gel de l'en-tête
+ * l'en empêche de toute façon.
+ *
+ * Silencieux quand le client n'a pas de fiche : un nom libre reste accepté,
+ * c'est le manque déclaré à l'émission qui le signalera.
+ */
+async function rattacherClient(
+  row: Record<string, unknown>,
+  collection: Collection,
+  colonnes: ReadonlySet<string> | null
+): Promise<void> {
+  const nom = String(row.client_nom ?? "").trim();
+  const societeId = row.societe_id as Uuid | undefined;
+  if (!nom || !societeId || !colonnes?.has("client_id")) return;
+
+  const { data, error } = await dyn()
+    .from("clients")
+    .select("id, siret, siren, tva_intracom, pays_code, code_service, code_routage, reference_acheteur")
+    .eq("societe_id", societeId)
+    .eq("nom", nom)
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return;
+
+  const c = data as Record<string, unknown>;
+  const poser = (colonne: string, v: unknown) => {
+    if (colonnes.has(colonne) && v !== null && v !== undefined && v !== "") row[colonne] = v;
+  };
+  poser("client_id", c.id);
+  poser("client_siret", c.siret);
+  poser("client_siren", c.siren);
+  poser("client_tva_intracom", c.tva_intracom);
+  poser("client_pays_code", c.pays_code);
+  poser("client_code_service", c.code_service);
+  poser("client_code_routage", c.code_routage);
+}
+
 async function versDb(
   prefixe: string,
   valeur: Record<string, unknown>
@@ -375,7 +424,10 @@ async function versDb(
     row.societe_id = await resolveSocieteId(code);
   }
 
-  if (collection.client) row.client_nom = (valeur.client as string) ?? "";
+  if (collection.client) {
+    row.client_nom = (valeur.client as string) ?? "";
+    await rattacherClient(row, collection, colonnes);
+  }
 
   // Rapport d'intervention : objet imbriqué → deux colonnes
   const rapport = valeur.rapport as
