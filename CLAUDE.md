@@ -91,9 +91,16 @@ que si `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` sont dans `.env.local` — sans
 préfixe `VITE_`.
 
 Les faire tourner sur la base locale (`supabase start`, puis un
-`.env.test.local` qui pointe dessus) : voir `docs/TESTING.md`. Sinon elles
-écrivent dans la **vraie base**, y créent des données et consomment des
-numéros de document qui ne sont jamais réattribués.
+`.env.test.local` qui pointe dessus) : voir `docs/TESTING.md`. Elles écrivent
+vraiment — clients, devis, bons — et consomment des numéros de document que
+rien ne réattribue.
+
+`setup.ts` **refuse** désormais de les lancer contre une base non locale, avec
+un message qui nomme la cible. Faute de cette garde, les suites ont tourné
+contre la production du 7 au 16 septembre 2026 : 1 017 bons de commande, 642
+factures et 131 devis « CLIENT DE TEST » y ont été créés sans que personne le
+voie. Un worktree neuf n'a pas de `.env.test.local` — le copier avant de
+tester. L'échappatoire se nomme `TEST_BASE_DISTANTE_ASSUMEE=oui`.
 
 Un bug corrigé se double d'un test qui le reproduit.
 
