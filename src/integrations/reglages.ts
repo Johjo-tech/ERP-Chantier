@@ -14,6 +14,8 @@ import { SEUILS, type Seuils } from "./alertes";
 export interface ReglagesDocuments {
   validiteDevisJours: number;
   delaiPaiementJours: number;
+  /** Comment ces jours se comptent : « net » ou « fin_de_mois ». */
+  modeDelaiPaiement: string;
   tvaDefaut: number;
   modeReglementDefaut: string;
   conditionsDevis: string;
@@ -55,6 +57,7 @@ export const REGLAGES_DEFAUT: ReglagesSociete = {
   documents: {
     validiteDevisJours: 30,
     delaiPaiementJours: 30,
+    modeDelaiPaiement: "net",
     tvaDefaut: 10,
     modeReglementDefaut: "virement",
     conditionsDevis: "",
@@ -126,6 +129,7 @@ export function fusionnerReglages(brut: unknown): ReglagesSociete {
     documents: {
       validiteDevisJours: nombre(doc.validiteDevisJours, d.validiteDevisJours),
       delaiPaiementJours: nombre(doc.delaiPaiementJours, d.delaiPaiementJours),
+    modeDelaiPaiement: texte(doc.modeDelaiPaiement, d.modeDelaiPaiement),
       tvaDefaut: nombre(doc.tvaDefaut, d.tvaDefaut),
       modeReglementDefaut: texte(doc.modeReglementDefaut, d.modeReglementDefaut),
       conditionsDevis: texte(doc.conditionsDevis, d.conditionsDevis),

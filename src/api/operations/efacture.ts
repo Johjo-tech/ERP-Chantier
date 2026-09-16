@@ -142,7 +142,7 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     const { data } = await supabase
       .from("clients")
       .select(
-        "nom, siren, siret, tva_intracom, adresse, code_postal, ville, pays_code, adresse_electronique_schema, adresse_electronique_valeur, reference_acheteur"
+        "nom, siren, siret, tva_intracom, adresse, code_postal, ville, pays_code, adresse_electronique_schema, adresse_electronique_valeur, reference_acheteur, delai_paiement_jours, delai_paiement_mode"
       )
       .eq("id", facture.client_id)
       .maybeSingle();

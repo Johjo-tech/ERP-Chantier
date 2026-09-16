@@ -26,6 +26,7 @@ import {
   todayISO,
 } from "@/api/client";
 import { colonnesDe, valeursEnum } from "@/api/columns";
+import { montantLigneHt } from "@/api/regles-totaux";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
 import { fusionnerReglages } from "./reglages";
 import { supprimerPieceJointe, televerserPieceJointeBC } from "./pieces-jointes";
@@ -170,7 +171,12 @@ interface Collection {
    * L'écriture, elle, vise toujours la table.
    */
   vueLecture?: string;
-  lignes?: { table: TableName; fk: string; vueLecture?: string };
+  /**
+   * `avecMontantHt` : seule `facture_lignes` porte cette colonne. Les lignes
+   * filles ne passent pas par le filtre de `colonnesDe()` — l'envoyer aux
+   * devis et aux bons ferait rejeter leur enregistrement entier.
+   */
+  lignes?: { table: TableName; fk: string; vueLecture?: string; avecMontantHt?: boolean };
   photos?: { table: TableName; fk: string };
   /** Le document porte le nom du client en clair (colonne `client_nom`). */
   client?: boolean;
@@ -196,7 +202,7 @@ const COLLECTIONS: Record<string, Collection> = {
   },
   facture: {
     table: "factures",
-    lignes: { table: "facture_lignes", fk: "facture_id" },
+    lignes: { table: "facture_lignes", fk: "facture_id", avecMontantHt: true },
     client: true,
   },
   bonCommande: {
@@ -1280,6 +1286,11 @@ export async function stSet(
         parentId,
         lignes.map((l, i) => ({
           ...ligneVersDb(l, i),
+          /* `bc_generer_facture` remplit déjà cette colonne quand elle reprend
+             un bon ; le pont, lui, la laissait vide — 320 lignes sur 453 sans
+             montant, et la facture électronique les lisait. Même convention
+             qu'en base : avant remise, zéro hors type « ligne ». */
+          ...(collection.lignes!.avecMontantHt ? { montant_ht: montantLigneHt(l) } : {}),
           [collection.lignes!.fk]: parentId,
         }))
       );
@@ -1415,6 +1426,13 @@ async function enfantsIdentiques(
     if (!existante) return false;
     return Object.entries(envoyee).every(([champ, valeur]) => {
       if (champ === enfant.fk) return true;
+      /* `montant_ht` est le produit de `quantite` et `prix_unitaire`, comparés
+         juste à côté : s'ils n'ont pas bougé, lui non plus. Le comparer ferait
+         paraître modifiée chaque ligne d'avant l'écriture de cette colonne —
+         320 en production, toutes à `NULL` — et déclencherait une réécriture
+         que le verrou des factures émises refuse. Encaisser un règlement
+         deviendrait impossible sur ces factures-là. */
+      if (champ === "montant_ht") return true;
       const actuelle = existante[champ];
       if (actuelle == null && valeur == null) return true;
       // Postgres rend les numériques en chaîne : comparer sur le texte.

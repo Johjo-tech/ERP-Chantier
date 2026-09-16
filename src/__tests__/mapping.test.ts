@@ -151,6 +151,17 @@ describe("Robustesse de la traduction vers la base", () => {
     }
   });
 
+  /* `montant_ht` n'existe que sur `facture_lignes`. Les lignes filles ne
+     passent pas par le filtre de `colonnesDe()` : l'envoyer aux devis et aux
+     bons ferait rejeter leur enregistrement entier. La colonne est donc
+     déclarée dans le registre des collections, pas dans le traducteur. */
+  it("ne réserve le montant HT qu'aux lignes de facture", () => {
+    const factures = colonnesDe("facture_lignes");
+    expect(factures?.has("montant_ht")).toBe(true);
+    expect(colonnesDe("devis_lignes")?.has("montant_ht")).toBe(false);
+    expect(colonnesDe("bon_commande_lignes")?.has("montant_ht")).toBe(false);
+  });
+
   it("expose les valeurs admises des colonnes énumérées", () => {
     expect(valeursEnum("devis", "logement_statut")).toEqual([
       "occupé",

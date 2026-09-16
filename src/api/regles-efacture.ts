@@ -482,6 +482,141 @@ export function completudeSociete(societe: EntiteFacturable): Anomalie[] {
   return manques(societe, CHAMPS_SOCIETE_ATTENDUS);
 }
 
+// ============ DÉLAI DE PAIEMENT ============
+
+/*
+ * L'échéance d'une facture, et le délai qui la produit.
+ *
+ * Ces règles vivent ici parce que l'art. L441-10 du code de commerce est le
+ * même paragraphe que celui qui porte déjà `INDEMNITE_RECOUVREMENT_EUR` et les
+ * pénalités de `mentionsLegales()` — et parce que les trois s'impriment côte à
+ * côte au pied de la facture.
+ *
+ * Elles ont un jumeau en base, `public.date_echeance` et
+ * `public.libelle_delai_paiement` : une facture peut naître à l'écran ou par
+ * `bc_generer_facture`, et les deux doivent tomber sur la même date. Un test
+ * d'intégration les compare sur les mêmes jeux de dates.
+ */
+
+export type ModeDelaiPaiement = "net" | "fin_de_mois";
+export const MODE_DELAI_DEFAUT: ModeDelaiPaiement = "net";
+export const DELAI_PAIEMENT_DEFAUT_JOURS = 30;
+
+/** Plafonds de l'art. L441-10 : 60 jours nets, ou 45 jours fin de mois. */
+export const PLAFOND_NET_JOURS = 60;
+export const PLAFOND_FIN_DE_MOIS_JOURS = 45;
+
+export interface DelaiPaiement {
+  jours: number;
+  mode: ModeDelaiPaiement;
+}
+
+function modeConnu(v: unknown): ModeDelaiPaiement {
+  return v === "fin_de_mois" ? "fin_de_mois" : MODE_DELAI_DEFAUT;
+}
+
+/**
+ * Le délai qui s'applique : celui du client s'il est paramétré, sinon celui de
+ * la société, sinon trente jours.
+ *
+ * `??` et non `||` : un client qui paie **à réception** porte `0`, et `0` doit
+ * gagner contre le défaut. C'est toute la raison pour laquelle la colonne est
+ * nullable — `null` veut dire « pas paramétré », pas « zéro jour ».
+ */
+export function delaiPaiementRetenu(
+  client?: { delaiPaiementJours?: number | null; delaiPaiementMode?: string | null } | null,
+  societe?: { delaiPaiementJours?: number | null; modeDelaiPaiement?: string | null } | null
+): DelaiPaiement {
+  const duClient = client?.delaiPaiementJours;
+  if (duClient !== null && duClient !== undefined && Number.isFinite(Number(duClient))) {
+    return { jours: Number(duClient), mode: modeConnu(client?.delaiPaiementMode) };
+  }
+  const deLaSociete = societe?.delaiPaiementJours;
+  if (deLaSociete !== null && deLaSociete !== undefined && Number.isFinite(Number(deLaSociete))) {
+    return { jours: Number(deLaSociete), mode: modeConnu(societe?.modeDelaiPaiement) };
+  }
+  return { jours: DELAI_PAIEMENT_DEFAUT_JOURS, mode: MODE_DELAI_DEFAUT };
+}
+
+/*
+ * Tout le calendrier se fait en UTC, de bout en bout.
+ *
+ * `toISOString()` bascule de fuseau et rend la veille avant 1 h à Paris — le
+ * piège que `CLAUDE.md` documente. Mais `dateISO()` et `dateLocaleISO()`, eux,
+ * lisent des composantes **locales** : construire en UTC pour relire en local
+ * redonne le même décalage par l'autre bout. On ne mélange donc jamais les
+ * deux. Ce module étant une feuille, il ne peut de toute façon rien importer —
+ * la contrainte tombe bien.
+ */
+function jourUTC(iso?: string | null): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((iso ?? "").trim());
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function enISO(d: Date): string {
+  const mois = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const jour = String(d.getUTCDate()).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${mois}-${jour}`;
+}
+
+/**
+ * La date d'échéance, en `AAAA-MM-JJ`. Chaîne en entrée, chaîne en sortie.
+ *
+ * « Fin de mois » compte à partir du dernier jour du mois de la facture, pas du
+ * jour même : une facture du 15 janvier à 45 jours fin de mois est due le
+ * 17 mars, pas le 1er mars. `Date.UTC(a, mois + 1, 0)` donne le dernier jour du
+ * mois, et le report de mois se fait tout seul.
+ *
+ * Une date absente ou malformée rend la chaîne vide : mieux vaut pas
+ * d'échéance qu'une échéance inventée.
+ */
+export function dateEcheance(dateFacture: string | null | undefined, delai: DelaiPaiement): string {
+  const base = jourUTC(dateFacture);
+  if (!base) return "";
+
+  const jours = Number.isFinite(delai?.jours) ? Number(delai.jours) : 0;
+  const a = base.getUTCFullYear();
+  const mois = base.getUTCMonth();
+
+  return enISO(
+    delai?.mode === "fin_de_mois"
+      ? new Date(Date.UTC(a, mois + 1, jours))
+      : new Date(Date.UTC(a, mois, base.getUTCDate() + jours))
+  );
+}
+
+/**
+ * Ce que la facture annonce : « 45 jours fin de mois ».
+ *
+ * Zéro jour se dit « paiement à réception » — c'est la formule d'usage, et
+ * « 0 jours net » se lit comme une erreur de saisie. Sert de BT-20.
+ */
+export function libelleDelaiPaiement(delai: DelaiPaiement): string {
+  const jours = Number.isFinite(delai?.jours) ? Number(delai.jours) : 0;
+  if (jours === 0) return "Paiement à réception";
+  return `${jours} jours${delai?.mode === "fin_de_mois" ? " fin de mois" : " net"}`;
+}
+
+/**
+ * Le dépassement des plafonds légaux, dit et jamais bloqué.
+ *
+ * Refuser l'enregistrement d'un client parce que son délai dépasse ferait
+ * perdre la saisie pour une règle qui admet des dérogations sectorielles. On
+ * signale, comme le reste de ce module signale ce qui manquera.
+ */
+export function delaiHorsPlafond(delai: DelaiPaiement): string | null {
+  const jours = Number.isFinite(delai?.jours) ? Number(delai.jours) : 0;
+  if (delai?.mode === "fin_de_mois" && jours > PLAFOND_FIN_DE_MOIS_JOURS) {
+    return `Au-delà des ${PLAFOND_FIN_DE_MOIS_JOURS} jours fin de mois de l'art. L441-10.`;
+  }
+  if (delai?.mode !== "fin_de_mois" && jours > PLAFOND_NET_JOURS) {
+    return `Au-delà des ${PLAFOND_NET_JOURS} jours nets de l'art. L441-10.`;
+  }
+  return null;
+}
+
 // ============ MENTIONS DU DOCUMENT ============
 
 const PENALITES_PAR_DEFAUT =

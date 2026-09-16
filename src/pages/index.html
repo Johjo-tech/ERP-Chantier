@@ -2103,24 +2103,16 @@ function dateLocaleISO(d){
 function fmtDate(d){ if(!d) return '—'; const p = d.split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function societeName(id){ const s = SOCIETES.find(x=>x.id===id); return s? s.nom : id; }
-function computeTotals(lignes){
-  let ht=0, tva=0;
-  (lignes||[]).forEach(l=>{
-    if((l.type||'ligne') !== 'ligne') return;
-    const lht = (parseFloat(l.qte)||0) * (parseFloat(l.prixUnitaire)||0); ht += lht; tva += lht * ((parseFloat(l.tva)||0)/100);
-  });
-  return {ht, tva, ttc: ht+tva};
-}
+/* L'arithmétique des documents vit dans `regles-totaux.ts`, où elle est testée.
+   Ce qui reste ici n'est qu'un raccourci de nom : ce fichier n'a aucun test, et
+   ce qui décide de ce qui est facturé n'a rien à y faire. L'objet rendu porte
+   en plus `ventilation`, le détail de TVA par taux. */
 function computeTotalsAvecRemise(lignes, remisePct){
-  const base = computeTotals(lignes);
-  const pct = Math.max(0, Math.min(100, parseFloat(remisePct)||0));
-  const facteur = 1 - pct/100;
-  return {
-    htAvant: base.ht, tvaAvant: base.tva, ttcAvant: base.ttc,
-    remisePct: pct,
-    remiseMontantHT: base.ht * pct/100,
-    ht: base.ht * facteur, tva: base.tva * facteur, ttc: base.ttc * facteur
-  };
+  return window.totauxDocument(lignes, remisePct);
+}
+function computeTotals(lignes){
+  const t = window.totauxDocument(lignes, 0);
+  return {ht: t.ht, tva: t.tva, ttc: t.ttc};
 }
 function computeDocTotals(doc){
   return computeTotalsAvecRemise(doc.lignes, doc.remisePourcentage||0);
@@ -3020,6 +3012,11 @@ function openForm(type, prefill){
   /* Le cadre de facturation décide des blocs visibles : sans ce premier
      passage, la fiche s'ouvrirait avec tous les blocs affichés. */
   if(type === 'client') majSectionsEfacture();
+  /* Les sept chemins de création posent `echeance:''` et aucun ne la remplissait :
+     la fonction ne se déclenchait qu'au changement de client. Ici, une facture
+     neuve repart toujours avec son échéance ; une facture déjà enregistrée porte
+     une date sans `data-auto`, et reste intouchée. */
+  if(type === 'facture') appliquerDelaiPaiement();
 }
 function closeForm(type){
   state.formOpen[type] = false;
@@ -3068,12 +3065,13 @@ function ligneRow(l,i){
     <td><select onchange="updateLigne(${i},'unite',this.value)">${uniteOptions(l.unite)}</select></td>
     <td><input type="number" min="0" step="0.01" value="${l.prixUnitaire}" style="width:90px;" oninput="updateLigne(${i},'prixUnitaire',this.value)"></td>
     <td><select onchange="updateLigne(${i},'tva',this.value)">${optionsTvaHTML(l.tva)}</select></td>
+    <td class="num mono" id="ligneHT-${i}" style="white-space:nowrap; font-weight:600;">${money(window.montantLigneHt(l))}</td>
     <td style="white-space:nowrap;">
       <button class="btn small ${hasComment?'primary':'ghost'}" onclick="toggleLigneComment(${i})" title="${hasComment?'Modifier le commentaire':'Ajouter un commentaire'}">💬</button>
       <button class="btn small danger" onclick="removeLigne(${i})">✕</button>
     </td>
   </tr>
-  ${isOpen? `<tr class="row-ligne-comment"><td colspan="5">
+  ${isOpen? `<tr class="row-ligne-comment"><td colspan="6">
       <textarea rows="2" placeholder="Commentaire (optionnel, plusieurs lignes possibles)…" oninput="updateLigne(${i},'commentaire',this.value)">${esc(l.commentaire)}</textarea>
     </td><td>${hasComment? `<button class="btn small ghost" onclick="updateLigne(${i},'commentaire',''); state.ligneCommentOuvert=null; refreshLignesUI();" title="Retirer le commentaire">✕</button>`:''}</td></tr>` : ''}`;
 }
@@ -3414,15 +3412,64 @@ function refreshBCLieSelectInter(clientNom){
     setEditing('bonCommandeId', null);
   }
 }
-function applyDelaiPaiement(clientNom){
-  const echEl = document.getElementById('f_echeance');
-  if(!echEl || echEl.value) return;
-  const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===clientNom);
-  const delai = client && client.delaiPaiement ? parseInt(client.delaiPaiement) : 30;
-  const dateEl = document.getElementById('f_date');
-  const base = dateEl && dateEl.value ? new Date(dateEl.value+'T00:00:00') : new Date();
-  base.setDate(base.getDate() + delai);
-  echEl.value = dateLocaleISO(base);
+/** Le délai qui s'applique à ce client : le sien, sinon celui de la société. */
+function delaiPaiementDuClient(nom){
+  const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===nom);
+  return window.delaiPaiementRetenu(c, reglagesCourants().documents);
+}
+
+/**
+ * Renseigne l'échéance d'après le délai du client.
+ *
+ * L'ancienne version lisait `client.delaiPaiement`, un champ qui n'a jamais
+ * existé : le repli `30` en dur était toujours pris, et elle ne se déclenchait
+ * qu'au changement de client — d'où 0 échéance sur 428 factures.
+ *
+ * `data-auto` distingue une échéance **calculée** d'une échéance **saisie**.
+ * Sans lui, on ne peut que choisir entre ne jamais recalculer — le défaut
+ * d'avant — et écraser une date tapée à la main.
+ */
+function appliquerDelaiPaiement(){
+  const ech = document.getElementById('f_echeance');
+  if(!ech || (ech.value && ech.dataset.auto !== '1')) return;
+  const cl = document.getElementById('f_client');
+  const dt = document.getElementById('f_date');
+  const delai = delaiPaiementDuClient(cl ? cl.value : '');
+  ech.value = window.dateEcheance((dt && dt.value) || todayISO(), delai);
+  ech.dataset.auto = '1';
+  const aide = document.getElementById('f_echeanceAide');
+  if(aide){
+    const hors = window.delaiHorsPlafond(delai);
+    aide.textContent = window.libelleDelaiPaiement(delai) + (hors ? ' — ' + hors : '');
+    aide.style.color = hors ? 'var(--danger)' : '';
+  }
+}
+
+/* L'utilisateur reprend la main dès la première frappe, et la garde. */
+function echeanceSaisieAlaMain(input){ input.dataset.auto = ''; }
+
+/* …et peut revenir au calcul sans avoir à deviner la date. */
+function recalculerEcheance(){
+  const ech = document.getElementById('f_echeance');
+  if(ech) ech.dataset.auto = '1';
+  appliquerDelaiPaiement();
+}
+
+/** Dans la fiche client : ce que le délai saisi donnerait concrètement. */
+function majDelaiPaiementAide(){
+  const aide = document.getElementById('c_delaiPaiementAide');
+  if(!aide) return;
+  const brut = (document.getElementById('c_delaiPaiementJours')||{}).value;
+  const mode = (document.getElementById('c_delaiPaiementMode')||{}).value || 'net';
+  const delai = window.delaiPaiementRetenu(
+    { delaiPaiementJours: String(brut||'').trim()==='' ? null : Number(brut), delaiPaiementMode: mode },
+    reglagesCourants().documents
+  );
+  const exemple = window.dateEcheance(todayISO(), delai);
+  const hors = window.delaiHorsPlafond(delai);
+  aide.textContent = `${window.libelleDelaiPaiement(delai)} — une facture d'aujourd'hui serait due le ${fmtDate(exemple)}.`
+    + (hors ? ' ' + hors : '');
+  aide.style.color = hors ? 'var(--danger)' : '';
 }
 function bcNumeroDepuisId(bonCommandeId){
   const b = state.bonsCommande.find(x=>x.id===bonCommandeId);
@@ -3467,14 +3514,14 @@ function locataireCardLine(item){
 }
 function chapitreRow(l,i,total){
   return `<tr class="row-chapitre dnd-row" ondragover="dragOverLigne(event)" ondrop="dropLigne(event, ${i})">
-    <td colspan="3"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><input type="text" class="chapitre-input" value="${esc(l.designation)}" placeholder="Titre du chapitre (ex. Plomberie, Main d'œuvre…)" oninput="updateLigne(${i},'designation',this.value)"></div></td>
-    <td class="mono" style="text-align:right; font-weight:700; white-space:nowrap;">${total!=null? money(total)+' HT' : ''}</td>
+    <td colspan="5"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><input type="text" class="chapitre-input" value="${esc(l.designation)}" placeholder="Titre du chapitre (ex. Plomberie, Main d'œuvre…)" oninput="updateLigne(${i},'designation',this.value)"></div></td>
+    <td class="mono" id="chapTotal-${i}" style="text-align:right; font-weight:700; white-space:nowrap;">${total!=null? money(total)+' HT' : ''}</td>
     <td><button class="btn small danger" onclick="removeLigne(${i})">✕</button></td>
   </tr>`;
 }
 function commentaireRow(l,i){
   return `<tr class="row-commentaire dnd-row" ondragover="dragOverLigne(event)" ondrop="dropLigne(event, ${i})">
-    <td colspan="4"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><textarea class="commentaire-input" rows="2" oninput="updateLigne(${i},'designation',this.value)" placeholder="Commentaire / remarque (non chiffré)">${esc(l.designation)}</textarea></div></td>
+    <td colspan="6"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><textarea class="commentaire-input" rows="2" oninput="updateLigne(${i},'designation',this.value)" placeholder="Commentaire / remarque (non chiffré)">${esc(l.designation)}</textarea></div></td>
     <td><button class="btn small danger" onclick="removeLigne(${i})">✕</button></td>
   </tr>`;
 }
@@ -3495,22 +3542,29 @@ function ligneRowsHTML(lignes){
   return html;
 }
 function computeChapterSubtotals(lignes){
-  const hasChap = (lignes||[]).some(l=>(l.type||'ligne')==='chapitre');
-  if(!hasChap) return [];
-  let sums = [], running = 0, saw = false;
-  (lignes||[]).forEach(l=>{
-    const t = l.type || 'ligne';
-    if(t === 'chapitre'){ if(saw) sums.push(running); running = 0; saw = true; }
-    else if(t !== 'commentaire'){ running += (parseFloat(l.qte)||0) * (parseFloat(l.prixUnitaire)||0); }
-  });
-  if(saw) sums.push(running);
-  return sums;
+  return window.sousTotauxChapitres(lignes);
+}
+/* La TVA se détaille par taux dès qu'il y en a plus d'un — l'art. 242 nonies A
+   ann. II du CGI demande, par taux, le total hors taxe et la taxe
+   correspondante. À un seul taux, on ne déroule rien : on le met dans le
+   libellé, ce qui porte la même information sans alourdir une facture simple.
+   Un taux à 0 % apparaît s'il porte une base : c'est l'autoliquidation. */
+function tvaLignesHTML(t, rendu){
+  const v = t.ventilation || [];
+  if(v.length > 1){
+    return v.map(p => rendu(`TVA ${window.formaterTaux(p.taux)} sur ${money(p.base)}`, p.montant)).join('')
+         + rendu('Total TVA', t.tva);
+  }
+  return rendu(v.length ? `TVA ${window.formaterTaux(v[0].taux)}` : 'TVA', t.tva);
 }
 function totalsBoxInnerHTML(t){
-  if(t.remisePct > 0){
-    return `<div>Total HT <b>${money(t.htAvant)}</b></div><div>Remise (${t.remisePct}%) <b>-${money(t.remiseMontantHT)}</b></div><div>Total HT net <b>${money(t.ht)}</b></div><div>TVA <b>${money(t.tva)}</b></div><div>Total TTC <b>${money(t.ttc)}</b></div>`;
-  }
-  return `<div>Total HT <b>${money(t.htAvant)}</b></div><div>TVA <b>${money(t.tva)}</b></div><div>Total TTC <b>${money(t.ttc)}</b></div>`;
+  const rendu = (libelle, montant) => `<div>${libelle} <b>${money(montant)}</b></div>`;
+  const remise = t.remisePct > 0
+    ? `<div>Remise (${t.remisePct}%) <b>-${money(t.remiseMontantHT)}</b></div><div>Total HT net <b>${money(t.ht)}</b></div>`
+    : '';
+  return `<div>Total HT <b>${money(t.htAvant)}</b></div>${remise}`
+       + tvaLignesHTML(t, rendu)
+       + `<div>Total TTC <b>${money(t.ttc)}</b></div>`;
 }
 function remiseAndTotalsHTML(lignes, remisePct){
   const t = computeTotalsAvecRemise(lignes, remisePct);
@@ -3553,11 +3607,26 @@ function onRemiseMontantInput(val, kind){
   state.editing.remisePourcentage = Math.max(0, Math.min(100, Math.round(pct*100)/100));
   refreshRemiseUI();
 }
+/* On n'écrit que du texte : reconstruire les <tr> ferait perdre le focus et
+   sauter le curseur à chaque caractère.
+
+   L'ancienne version interrogeait `.row-subtotal`, une classe que `ligneRowsHTML`
+   n'émet nulle part — seul le CSS la connaît. Les sous-totaux de chapitre
+   restaient donc figés dès qu'on touchait une quantité. */
 function refreshTotalsOnly(){
   refreshRemiseUI();
   const sums = computeChapterSubtotals(state.editing.lignes);
-  const rows = document.querySelectorAll('#lignesBody .row-subtotal td:last-child');
-  rows.forEach((td, idx)=>{ if(sums[idx] !== undefined) td.textContent = money(sums[idx]); });
+  let chapIdx = -1;
+  (state.editing.lignes||[]).forEach((l, i)=>{
+    if((l.type||'ligne') === 'chapitre'){
+      chapIdx++;
+      const c = document.querySelector('#lignesBody #chapTotal-'+i);
+      if(c) c.textContent = sums[chapIdx] != null ? money(sums[chapIdx])+' HT' : '';
+      return;
+    }
+    const td = document.querySelector('#lignesBody #ligneHT-'+i);
+    if(td) td.textContent = money(window.montantLigneHt(l));
+  });
 }
 function refreshLignesUI(){
   const body = document.getElementById('lignesBody');
@@ -4028,7 +4097,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
-        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>':''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
+        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>'+(doc.conditionsReglement? ' <span style="font-weight:400;">('+esc(doc.conditionsReglement)+')</span>':''):''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
       </td>
     </tr></table>
     <div class="p-rule"></div>
@@ -4055,7 +4124,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     <table class="p-totals">
       <tr><td class="label">Total HT</td><td class="val">${fmt(t.htAvant)}</td></tr>
       ${t.remisePct>0? `<tr><td class="label">Remise (${t.remisePct}%)</td><td class="val">-${fmt(t.remiseMontantHT)}</td></tr>` : ''}
-      <tr><td class="label">TVA</td><td class="val">${fmt(t.tva)}</td></tr>
+      ${tvaLignesHTML(t, (libelle, montant)=>`<tr><td class="label">${libelle}</td><td class="val">${fmt(montant)}</td></tr>`)}
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
     </table>
     ${/* Une facture ne se signe pas : elle constate une créance, elle ne
@@ -4308,7 +4377,7 @@ function devisForm(){
     </div>
     <div class="form-section">
       <div class="form-section-head">Lignes</div>
-      <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
+      <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th class="num">Total HT</th><th></th></tr></thead>
       <tbody id="lignesBody">${ligneRowsHTML(e.lignes)}</tbody></table>
       <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
         <button class="btn small" onclick="addLigne()">+ Ligne</button>
@@ -5239,10 +5308,12 @@ function factureForm(){
     <div class="form-section">
       <div class="form-section-head">Client & contact</div>
       <div class="field-grid">
-        <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur'); applyDelaiPaiement(this.value);">${clientSelectOptions(e.client)}</select></div>
+        <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur'); appliquerDelaiPaiement();">${clientSelectOptions(e.client)}</select></div>
         <div class="field"><label>Interlocuteur</label><select id="f_interlocuteur">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
-        <div class="field"><label>Date</label><input type="date" id="f_date" value="${e.date||todayISO()}"></div>
-        <div class="field"><label>Échéance</label><input type="date" id="f_echeance" value="${e.echeance||''}"></div>
+        <div class="field"><label>Date</label><input type="date" id="f_date" value="${e.date||todayISO()}" onchange="appliquerDelaiPaiement()"></div>
+        <div class="field"><label>Échéance <button type="button" class="btn small ghost" style="padding:0 6px;" onclick="recalculerEcheance()" title="Recalculer d'après le délai du client">↻</button></label>
+          <input type="date" id="f_echeance" value="${esc(e.echeance||'')}" oninput="echeanceSaisieAlaMain(this)">
+          <small id="f_echeanceAide" class="card-sub"></small></div>
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
         <div class="field"><label>Chantier lié (optionnel)</label><select id="f_chantierId">${chantierSelectOptions(e.chantierId)}</select></div>
       </div>
@@ -5268,7 +5339,7 @@ function factureForm(){
     </div>
     <div class="form-section">
       <div class="form-section-head">Lignes</div>
-      <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
+      <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th class="num">Total HT</th><th></th></tr></thead>
       <tbody id="lignesBody">${ligneRowsHTML(e.lignes)}</tbody></table>
       <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
         <button class="btn small" onclick="addLigne()">+ Ligne</button>
@@ -5312,6 +5383,12 @@ async function saveFacture(){
     }),
     date: document.getElementById('f_date').value || todayISO(),
     echeance: document.getElementById('f_echeance').value || '',
+    /* BT-20 de l'EN 16931, jamais écrit jusqu'ici : 428 factures partaient sans
+       leurs conditions de règlement. C'est un texte FIGÉ, pas un renvoi vers la
+       fiche client — une facture dit les conditions convenues le jour où elle a
+       été établie, et n'en change pas si le client renégocie six mois plus tard. */
+    conditionsReglement: e.conditionsReglement || window.libelleDelaiPaiement(delaiPaiementDuClient(client)),
+    modePaiement: e.modePaiement || reglagesCourants().documents.modeReglementDefaut,
     lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', conducteur: document.getElementById('f_conducteur').value, verrouillee: e.verrouillee || false };
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
@@ -6639,7 +6716,7 @@ function bonCommandeForm(){
       </div>
       <p class="card-sub">Au moins une ligne est obligatoire : décrivez en gros ce qu'il y a à faire. Le prix peut rester à zéro, il se saisit au chiffrage — la description, elle, part sur la facture. Si vous chiffrez ici, le montant ci-dessus sera recalculé automatiquement.</p>
       <div id="bcLignesZone" style="display:block;">
-        <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th></th></tr></thead>
+        <table class="lignes-table"><thead><tr><th style="width:36%;">Désignation</th><th>Qté</th><th>Unité</th><th>Prix U. HT</th><th>TVA</th><th class="num">Total HT</th><th></th></tr></thead>
         <tbody id="lignesBody">${ligneRowsHTML(e.lignes&&e.lignes.length? e.lignes : [{type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}])}</tbody></table>
         <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
           <button type="button" class="btn small" onclick="addLigne()">+ Ligne</button>
@@ -13014,6 +13091,20 @@ function clientForm(){
       <div class="field"><label>N° de marché</label><input type="text" id="c_numeroMarche" value="${esc(e.numeroMarche)}"></div>
     </div>
 
+    <div class="field-grid">
+      <div class="field full section-title" style="margin:12px 0 0;">💶 Règlement</div>
+      <div class="field"><label>Délai de paiement (jours)</label>
+        <input type="number" min="0" id="c_delaiPaiementJours" value="${e.delaiPaiementJours ?? ''}"
+               placeholder="Défaut société : ${reglagesCourants().documents.delaiPaiementJours}"
+               oninput="majDelaiPaiementAide()"></div>
+      <div class="field"><label>Mode de calcul</label>
+        <select id="c_delaiPaiementMode" onchange="majDelaiPaiementAide()">
+          <option value="net"${(e.delaiPaiementMode||'net')==='net'?' selected':''}>Net — date de facture + N jours</option>
+          <option value="fin_de_mois"${e.delaiPaiementMode==='fin_de_mois'?' selected':''}>Fin de mois — fin du mois + N jours</option>
+        </select></div>
+      <div class="field full"><small id="c_delaiPaiementAide" class="card-sub"></small></div>
+    </div>
+
     <details style="margin-top:12px;">
       <summary style="cursor:pointer; font-weight:600; font-size:13px;">Adresses de facturation et de livraison différentes</summary>
       <div class="field-grid" style="margin-top:8px;">
@@ -13081,6 +13172,12 @@ function clientDepuisFormulaire(){
     siret: v('c_siret'), siren: v('c_siren'), tvaIntracom: v('c_tvaIntracom'),
     adresse: v('c_adresse'), codePostal: v('c_codePostal'), ville: v('c_ville'),
     paysCode: v('c_paysCode') || paysDefaut(),
+    /* `v()` rend '' : il faut un lecteur qui distingue « vide » de « zéro ».
+       `parseInt(x) || null` confondrait « pas paramétré » et « à réception ».
+       Et tout champ absent d'ici est perdu à chaque enregistrement. */
+    delaiPaiementJours: (() => { const el = document.getElementById('c_delaiPaiementJours');
+      const s = el ? el.value.trim() : ''; return s === '' ? null : Number(s); })(),
+    delaiPaiementMode: v('c_delaiPaiementMode') || null,
     cadreFacturation: v('c_cadreFacturation'),
     adresseElectroniqueSchema: v('c_adresseElectroniqueSchema'),
     adresseElectroniqueValeur: v('c_adresseElectroniqueValeur'),

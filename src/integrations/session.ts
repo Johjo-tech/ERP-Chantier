@@ -29,7 +29,11 @@ import {
   mentionsLegales,
   completudeClient,
   completudeSociete,
+  dateEcheance,
+  delaiHorsPlafond,
+  delaiPaiementRetenu,
   INDEMNITE_RECOUVREMENT_EUR,
+  libelleDelaiPaiement,
   messageAnomalies,
   MENTION_FRANCHISE_EN_BASE,
   PAYS_DEFAUT,
@@ -45,6 +49,13 @@ import {
 } from "@/api/regles-efacture";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
 import { apercuDe, verifierPieceJointe } from "@/api/regles-piece-jointe";
+import {
+  formaterTaux,
+  montantLigneHt,
+  sousTotauxChapitres,
+  totauxDocument,
+  ventilationTvaAffichage,
+} from "@/api/regles-totaux";
 import { extraireBonCommande, preparer, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import { urlPieceJointe, urlTelechargementPieceJointe } from "./pieces-jointes";
 import {
@@ -476,6 +487,22 @@ export function injecterSession() {
   w.rechercherEntreprise = rechercherEntreprise;
 
   // Facturation électronique : ce qui est mal formé, et ce qui manquera à l'émission
+  /* Le délai de paiement et l'échéance qu'il produit. Jumeaux de
+     `public.date_echeance` et `public.libelle_delai_paiement` : une facture
+     naît à l'écran ou par `bc_generer_facture`, jamais avec deux dates. */
+  w.delaiPaiementRetenu = delaiPaiementRetenu;
+  w.dateEcheance = dateEcheance;
+  w.libelleDelaiPaiement = libelleDelaiPaiement;
+  w.delaiHorsPlafond = delaiHorsPlafond;
+
+  /* Les montants d'un document. L'arithmétique qui décide de ce qui est
+     facturé sort d'`index.html`, qui n'a aucun test. */
+  w.totauxDocument = totauxDocument;
+  w.montantLigneHt = montantLigneHt;
+  w.ventilationTvaAffichage = ventilationTvaAffichage;
+  w.sousTotauxChapitres = sousTotauxChapitres;
+  w.formaterTaux = formaterTaux;
+
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;
   w.completudeSociete = completudeSociete;
