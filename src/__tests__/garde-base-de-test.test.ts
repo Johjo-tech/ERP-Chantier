@@ -41,14 +41,14 @@ describe("Reconnaître une base locale", () => {
   });
 });
 
-describe("Le refus d'écrire dans la vraie base", () => {
+describe("L'écart des suites qui écrivent", () => {
   it("laisse passer la pile locale", () => {
     expect(refusBaseDistante("http://127.0.0.1:54321", undefined)).toBeNull();
   });
 
   /* Le message doit dire CE QUI est visé et COMMENT en sortir : un refus sans
      l'un ni l'autre se contourne en supprimant la garde. */
-  it("refuse le distant, en nommant la base et le remède", () => {
+  it("écarte le distant, en nommant la base et le remède", () => {
     const refus = refusBaseDistante("https://tjhljjuvfosmnpmzgbnl.supabase.co", undefined);
     expect(refus).toBeTruthy();
     expect(refus).toContain("tjhljjuvfosmnpmzgbnl");

@@ -20,8 +20,17 @@ export const TEST_EMAIL = process.env.TEST_USER_EMAIL;
 export const TEST_PASSWORD = process.env.TEST_USER_PASSWORD;
 export const TEST_SOCIETE_CODE = process.env.TEST_SOCIETE_CODE ?? "kta";
 
-/** Les suites d'intégration s'appuient dessus pour se désactiver proprement. */
-export const AUTH_DISPONIBLE = Boolean(TEST_EMAIL && TEST_PASSWORD);
+/**
+ * Les suites d'intégration s'appuient dessus pour se désactiver proprement.
+ *
+ * Deux conditions, pas une : des identifiants, **et** une base locale. Viser le
+ * distant ne les fait pas échouer, il les écarte — les suites unitaires, qui ne
+ * touchent aucune base, doivent continuer de tourner. Une première version
+ * levait dans `beforeAll` : elle bloquait les 780 tests, y compris ceux qui
+ * n'ont jamais parlé à Postgres.
+ */
+export const AUTH_DISPONIBLE =
+  Boolean(TEST_EMAIL && TEST_PASSWORD) && baseLocale(process.env.VITE_SUPABASE_URL);
 
 /**
  * Cette URL désigne-t-elle une pile Supabase locale ?
@@ -47,8 +56,10 @@ export function baseLocale(url: string | undefined | null): boolean {
  * et il a fallu compter 1 017 bons de commande « CLIENT DE TEST » pour s'en
  * apercevoir, neuf jours après le premier.
  *
- * Le refus est volontairement brutal : la version précédente se contentait de
- * ne rien dire, et c'est précisément ce silence qui a laissé faire.
+ * Les suites d'intégration sont donc écartées, bruyamment : la version
+ * précédente se contentait de ne rien dire, et c'est ce silence qui a laissé
+ * faire. Écartées et non mises en échec — les suites unitaires, qui ne touchent
+ * aucune base, n'ont rien à voir dans cette affaire et doivent tourner.
  *
  * L'échappatoire existe et se nomme, plutôt que d'inviter à supprimer la garde :
  * `TEST_BASE_DISTANTE_ASSUMEE=oui`.
@@ -61,7 +72,7 @@ export function refusBaseDistante(
   if (String(assume ?? "").toLowerCase() === "oui") return null;
   return [
     "",
-    "⛔ Tests d'intégration refusés : la base visée n'est pas locale.",
+    "⛔ Tests d'intégration IGNORÉS : la base visée n'est pas locale.",
     `   VITE_SUPABASE_URL = ${url || "(absente)"}`,
     "",
     "   Ces suites ÉCRIVENT : clients, devis, bons de commande, et des numéros",
@@ -78,17 +89,20 @@ export function refusBaseDistante(
 
 beforeAll(async () => {
   if (!AUTH_DISPONIBLE) {
+    /* Deux raisons de se taire, et elles ne se disent pas pareil : pas
+       d'identifiants — le cas de la CI, normal — ou une base distante, qui est
+       une configuration à corriger. */
+    const refus = refusBaseDistante(
+      process.env.VITE_SUPABASE_URL,
+      process.env.TEST_BASE_DISTANTE_ASSUMEE
+    );
     console.warn(
-      "⏭  Tests d'intégration ignorés : TEST_USER_EMAIL / TEST_USER_PASSWORD absents de .env.local"
+      TEST_EMAIL && TEST_PASSWORD && refus
+        ? refus
+        : "⏭  Tests d'intégration ignorés : TEST_USER_EMAIL / TEST_USER_PASSWORD absents de .env.local"
     );
     return;
   }
-
-  const refus = refusBaseDistante(
-    process.env.VITE_SUPABASE_URL,
-    process.env.TEST_BASE_DISTANTE_ASSUMEE
-  );
-  if (refus) throw new Error(refus);
 
   await signIn(TEST_EMAIL!, TEST_PASSWORD!);
   const {
