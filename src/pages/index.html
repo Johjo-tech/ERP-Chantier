@@ -3853,7 +3853,12 @@ function dropLigne(ev, targetIndex, zone){
   zoneDef.apres();
 }
 function updateLigne(i,field,val){
-  const texteFields = field==='designation' || field==='commentaire' || field==='unite';
+  /* `articleReference` manquait à cette liste : son code partait donc dans le
+     `parseFloat` de la branche numérique, et « PLB-001 » devenait 0 à la
+     frappe. Le champ se ressaisissait, s'affichait, et se vidait au premier
+     caractère. */
+  const texteFields = field==='designation' || field==='commentaire' || field==='unite'
+    || field==='articleReference';
   state.editing.lignes[i][field] = texteFields ? val : (parseFloat(val)||0);
   if(texteFields){
     /* Le titre d'un chapitre porte le métier : le relire à la frappe évite de
