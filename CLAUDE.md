@@ -15,7 +15,7 @@ src/api/regles-*.ts         ← règles métier pures, sans accès base
 src/api/queries/*.ts        ← une table (et ses filles) par fichier
 src/api/operations/         ← enchaînements métier
 src/integrations/*.ts       ← pont vers le HTML, session, droits, annuaires
-src/pages/index.html        ← l'application (monolithe hérité, ~11 000 lignes)
+src/pages/index.html        ← l'application (monolithe hérité, ~15 000 lignes)
 ```
 
 Les dépendances vont dans un seul sens : `pages` → `integrations` → `queries`
@@ -32,6 +32,20 @@ Le schéma **n'est jamais décrit à la main**. Après tout changement en base :
 ```bash
 npm run db:types    # régénère database.types.ts puis columns.ts
 ```
+
+`supabase db push` **ne fonctionne pas** sur ce projet et ne fonctionnera pas :
+88 migrations ont été appliquées depuis le tableau de bord et n'ont aucun
+fichier local, si bien que la CLI exige de les marquer « annulées » — ce qui
+effacerait l'historique. Le canal qui marche :
+
+```bash
+supabase db query --linked -f supabase/migrations/<fichier>.sql
+supabase db query --linked "insert into supabase_migrations.schema_migrations(version) values ('<version>');"
+```
+
+Avant d'appliquer, faire un **essai à blanc sur la production** : le même
+fichier encadré de `begin;` … `rollback;`, avec un `select` de contrôle juste
+avant l'annulation. C'est le seul test qui porte — la base locale a divergé.
 
 Trois règles que le schéma impose :
 
@@ -97,6 +111,17 @@ Un bug corrigé se double d'un test qui le reproduit.
   (23502). Donner une valeur, pas compter sur le `default`.
 - La racine Vite est `src/pages` : un `src="../x.ts"` dans le HTML sort de la
   racine et n'est pas servi. Passer par `src/pages/entry.ts`.
+- Trois collections se **lisent par une vue**, pas par leur table (`vueLecture`
+  dans le registre de `html-adapter.ts`) : bons de commande, lignes de bon,
+  salariés. Ajouter une colonne à la table ne la rend pas lisible — il faut
+  refaire la vue. Et `CREATE OR REPLACE VIEW` n'accepte que des ajouts **en
+  fin** : mêmes noms, mêmes types, même ordre pour les colonnes déjà là, sinon
+  « cannot drop columns from view ». Une migration qui refait une vue part donc
+  de sa définition **vivante** (`pg_get_viewdef`), jamais d'une liste écrite
+  plus tôt — deux migrations s'y sont cassées.
+- Une colonne dérivée envoyée à l'écriture fait voir toutes les lignes comme
+  modifiées par `enfantsIdentiques`, d'où un delete+insert que le déclencheur
+  de facture figée refuse. `montant_ht` est exclu de la comparaison pour cela.
 
 ## Git
 
