@@ -32,6 +32,11 @@ import {
   estSociete,
   dateEcheance,
   delaiHorsPlafond,
+  DELAIS_PREREGLES,
+  delaiPreregle,
+  delaiDeLaCle,
+  MODES_REGLEMENT,
+  modeReglementRetenu,
   delaiPaiementRetenu,
   INDEMNITE_RECOUVREMENT_EUR,
   libelleDelaiPaiement,
@@ -55,11 +60,21 @@ import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
   formaterTaux,
   montantLigneHt,
+  montantLigneTtc,
   soldeAPayer,
   sousTotauxChapitres,
   totauxDocument,
   ventilationTvaAffichage,
 } from "@/api/regles-totaux";
+import {
+  arrondiCentime,
+  montantPropose,
+  refusReglement,
+  resteAPayer,
+  statutEnBase,
+  statutReglement,
+  totalRegle,
+} from "@/api/regles-reglements";
 import { extraireBonCommande, preparer, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import { urlPieceJointe, urlTelechargementPieceJointe } from "./pieces-jointes";
 import {
@@ -498,15 +513,34 @@ export function injecterSession() {
   w.dateEcheance = dateEcheance;
   w.libelleDelaiPaiement = libelleDelaiPaiement;
   w.delaiHorsPlafond = delaiHorsPlafond;
+  /* Les conditions de paiement se choisissent dans une liste nommée ;
+     le couple (jours, mode) reste ce qui s'enregistre. */
+  w.DELAIS_PREREGLES = DELAIS_PREREGLES;
+  w.delaiPreregle = delaiPreregle;
+  w.delaiDeLaCle = delaiDeLaCle;
+  w.MODES_REGLEMENT = MODES_REGLEMENT;
+  w.modeReglementRetenu = modeReglementRetenu;
 
   /* Les montants d'un document. L'arithmétique qui décide de ce qui est
      facturé sort d'`index.html`, qui n'a aucun test. */
   w.totauxDocument = totauxDocument;
   w.montantLigneHt = montantLigneHt;
+  w.montantLigneTtc = montantLigneTtc;
   w.ventilationTvaAffichage = ventilationTvaAffichage;
   w.sousTotauxChapitres = sousTotauxChapitres;
   w.formaterTaux = formaterTaux;
   w.soldeAPayer = soldeAPayer;
+
+  /* Les règlements d'une facture. L'état de la facture se DÉDUIT d'eux : un
+     statut saisi à côté finit par mentir sur une facture dont un règlement a
+     été corrigé. */
+  w.totalRegle = totalRegle;
+  w.resteAPayer = resteAPayer;
+  w.statutReglement = statutReglement;
+  w.statutEnBase = statutEnBase;
+  w.refusReglement = refusReglement;
+  w.montantPropose = montantPropose;
+  w.arrondiCentime = arrondiCentime;
 
   /* La couleur de la société, déclinée. Le réglage existait depuis longtemps
      et n'avait aucun lecteur : KTA portait un violet, l'écran restait orange. */

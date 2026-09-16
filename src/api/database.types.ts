@@ -115,6 +115,7 @@ export type Database = {
           cree_le: string
           designation: string
           id: string
+          montant_ht: number | null
           position: number
           prix_unitaire: number
           quantite: number
@@ -131,6 +132,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -147,6 +149,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1092,6 +1095,7 @@ export type Database = {
           livraison_pays_code: string | null
           livraison_ville: string | null
           maj_le: string
+          mode_paiement: Database["public"]["Enums"]["mode_paiement"] | null
           nom: string
           notes: string | null
           numero_marche: string | null
@@ -1138,6 +1142,7 @@ export type Database = {
           livraison_pays_code?: string | null
           livraison_ville?: string | null
           maj_le?: string
+          mode_paiement?: Database["public"]["Enums"]["mode_paiement"] | null
           nom: string
           notes?: string | null
           numero_marche?: string | null
@@ -1184,6 +1189,7 @@ export type Database = {
           livraison_pays_code?: string | null
           livraison_ville?: string | null
           maj_le?: string
+          mode_paiement?: Database["public"]["Enums"]["mode_paiement"] | null
           nom?: string
           notes?: string | null
           numero_marche?: string | null
@@ -1415,6 +1421,7 @@ export type Database = {
           designation: string
           devis_id: string
           id: string
+          montant_ht: number | null
           position: number
           prix_unitaire: number
           quantite: number
@@ -1431,6 +1438,7 @@ export type Database = {
           designation?: string
           devis_id: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1447,6 +1455,7 @@ export type Database = {
           designation?: string
           devis_id?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1809,6 +1818,8 @@ export type Database = {
           date: string
           date_fin_execution: string | null
           date_livraison: string | null
+          delai_paiement_jours: number | null
+          delai_paiement_mode: Database["public"]["Enums"]["delai_paiement_mode"] | null
           depose_le: string | null
           devis_id: string | null
           devise: string
@@ -1895,6 +1906,8 @@ export type Database = {
           date?: string
           date_fin_execution?: string | null
           date_livraison?: string | null
+          delai_paiement_jours?: number | null
+          delai_paiement_mode?: Database["public"]["Enums"]["delai_paiement_mode"] | null
           depose_le?: string | null
           devis_id?: string | null
           devise?: string
@@ -1983,6 +1996,8 @@ export type Database = {
           date?: string
           date_fin_execution?: string | null
           date_livraison?: string | null
+          delai_paiement_jours?: number | null
+          delai_paiement_mode?: Database["public"]["Enums"]["delai_paiement_mode"] | null
           depose_le?: string | null
           devis_id?: string | null
           devise?: string

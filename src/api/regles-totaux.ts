@@ -65,6 +65,22 @@ export function montantLigneHt(l: LigneMontant): number {
   return nombre(l.qte) * nombre(l.prixUnitaire);
 }
 
+/**
+ * Le montant TTC d'une ligne, à son propre taux de TVA.
+ *
+ * Le taux se porte ligne par ligne — un même document mêle couramment 10 % sur
+ * la rénovation et 20 % sur le neuf. Le TTC d'une ligne n'est donc pas une
+ * proportion du TTC du document, et c'est justement ce que le lecteur vient
+ * vérifier en face de chaque poste.
+ *
+ * Avant remise, comme le HT : la remise est globale, elle ne descend pas à la
+ * ligne. La somme des TTC de lignes vaut donc `ttcAvant`, pas `ttc`.
+ */
+export function montantLigneTtc(l: LigneMontant): number {
+  const ht = montantLigneHt(l);
+  return ht + ht * (nombre(l?.tva) / 100);
+}
+
 /** Le pourcentage de remise, borné — l'écran laisse saisir n'importe quoi. */
 function pourcentageRemise(remisePct: unknown): number {
   return Math.max(0, Math.min(100, nombre(remisePct)));
