@@ -172,9 +172,10 @@ interface Collection {
    */
   vueLecture?: string;
   /**
-   * `avecMontantHt` : seule `facture_lignes` porte cette colonne. Les lignes
-   * filles ne passent pas par le filtre de `colonnesDe()` — l'envoyer aux
-   * devis et aux bons ferait rejeter leur enregistrement entier.
+   * `avecMontantHt` : les trois tables de lignes portent cette colonne depuis
+   * `20260916120000`. Le drapeau reste, car les lignes filles ne passent pas
+   * par le filtre de `colonnesDe()` : l'envoyer à une table qui ne l'a pas
+   * ferait rejeter l'enregistrement entier, pas seulement le champ.
    */
   lignes?: { table: TableName; fk: string; vueLecture?: string; avecMontantHt?: boolean };
   photos?: { table: TableName; fk: string };
@@ -197,7 +198,7 @@ interface Collection {
 const COLLECTIONS: Record<string, Collection> = {
   devis: {
     table: "devis",
-    lignes: { table: "devis_lignes", fk: "devis_id" },
+    lignes: { table: "devis_lignes", fk: "devis_id", avecMontantHt: true },
     client: true,
   },
   facture: {
@@ -214,6 +215,7 @@ const COLLECTIONS: Record<string, Collection> = {
       table: "bon_commande_lignes",
       fk: "bon_commande_id",
       vueLecture: "v_bon_commande_lignes_terrain",
+      avecMontantHt: true,
     },
     photos: { table: "bon_commande_photos", fk: "bon_commande_id" },
     client: true,

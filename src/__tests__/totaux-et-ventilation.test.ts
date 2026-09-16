@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   formaterTaux,
   montantLigneHt,
+  montantLigneTtc,
   sousTotauxChapitres,
   RETENUE_GARANTIE_USUELLE,
   soldeAPayer,
@@ -59,6 +60,74 @@ describe("Le montant d'une ligne", () => {
   it("tolère les chaînes et les champs absents", () => {
     expect(montantLigneHt({ qte: "2", prixUnitaire: "40,5" as never })).toBe(80);
     expect(montantLigneHt({ type: "ligne" })).toBe(0);
+  });
+});
+
+describe("Le montant TTC d'une ligne", () => {
+  /* Le taux se porte ligne par ligne : un document mêle couramment 10 % sur la
+     rénovation et 20 % sur le neuf. Le TTC d'une ligne ne peut donc pas se
+     déduire du TTC du document. */
+  it("applique le taux de la ligne, pas celui du document", () => {
+    expect(montantLigneTtc({ type: "ligne", qte: 2, prixUnitaire: 100, tva: 10 })).toBe(220);
+    expect(montantLigneTtc({ type: "ligne", qte: 2, prixUnitaire: 100, tva: 20 })).toBe(240);
+  });
+
+  it("vaut le HT quand le taux est nul — autoliquidation, exonération", () => {
+    expect(montantLigneTtc({ type: "ligne", qte: 3, prixUnitaire: 50, tva: 0 })).toBe(150);
+    expect(montantLigneTtc({ type: "ligne", qte: 3, prixUnitaire: 50 })).toBe(150);
+  });
+
+  it("ne compte ni les chapitres ni les commentaires", () => {
+    expect(montantLigneTtc({ type: "chapitre", qte: 5, prixUnitaire: 100, tva: 20 })).toBe(0);
+    expect(montantLigneTtc({ type: "commentaire", qte: 5, prixUnitaire: 100, tva: 20 })).toBe(0);
+  });
+
+  it("suit le taux réduit de 5,5 %", () => {
+    expect(montantLigneTtc({ type: "ligne", qte: 1, prixUnitaire: 200, tva: 5.5 })).toBeCloseTo(211, 10);
+  });
+});
+
+/*
+ * Le contrôle qui compte pour l'utilisateur : la colonne « Total » en face de
+ * chaque ligne doit se sommer au pied du document. Un écart, et c'est le
+ * document entier qu'on soupçonne.
+ */
+describe("Les totaux de lignes se somment au total du document", () => {
+  const lignes = [
+    { type: "chapitre", designation: "Plomberie" },
+    { type: "ligne", qte: 3, prixUnitaire: 120.5, tva: 10 },
+    { type: "ligne", qte: 1, prixUnitaire: 89.9, tva: 20 },
+    { type: "commentaire", designation: "Fourniture comprise" },
+    { type: "ligne", qte: 2.5, prixUnitaire: 33.33, tva: 5.5 },
+    { type: "ligne", qte: 4, prixUnitaire: 0, tva: 10 },
+  ];
+
+  it("somme des totaux HT de lignes = total HT avant remise", () => {
+    const somme = lignes.reduce((s, l) => s + montantLigneHt(l), 0);
+    expect(somme).toBeCloseTo(totauxDocument(lignes).htAvant, 10);
+  });
+
+  it("somme des totaux TTC de lignes = total TTC avant remise", () => {
+    const somme = lignes.reduce((s, l) => s + montantLigneTtc(l), 0);
+    expect(somme).toBeCloseTo(totauxDocument(lignes).ttcAvant, 10);
+  });
+
+  /* La remise est globale : elle ne descend pas à la ligne. La colonne affiche
+     donc l'avant-remise, et c'est `ttcAvant` — non `ttc` — qui doit s'accorder.
+     Le dire ici évite qu'on « corrige » un jour la colonne au prorata. */
+  it("reste l'avant-remise quand le document porte une remise", () => {
+    const avecRemise = totauxDocument(lignes, 10);
+    const somme = lignes.reduce((s, l) => s + montantLigneHt(l), 0);
+    expect(somme).toBeCloseTo(avecRemise.htAvant, 10);
+    expect(avecRemise.ht).toBeCloseTo(somme * 0.9, 10);
+  });
+
+  it("la ventilation par taux se somme elle aussi au total", () => {
+    const t = totauxDocument(lignes);
+    const base = t.ventilation.reduce((s, v) => s + v.base, 0);
+    const taxe = t.ventilation.reduce((s, v) => s + v.montant, 0);
+    expect(base).toBeCloseTo(t.ht, 10);
+    expect(taxe).toBeCloseTo(t.tva, 10);
   });
 });
 

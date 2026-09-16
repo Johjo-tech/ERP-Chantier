@@ -115,6 +115,7 @@ export type Database = {
           cree_le: string
           designation: string
           id: string
+          montant_ht: number | null
           position: number
           prix_unitaire: number
           quantite: number
@@ -131,6 +132,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -147,6 +149,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1415,6 +1418,7 @@ export type Database = {
           designation: string
           devis_id: string
           id: string
+          montant_ht: number | null
           position: number
           prix_unitaire: number
           quantite: number
@@ -1431,6 +1435,7 @@ export type Database = {
           designation?: string
           devis_id: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1447,6 +1452,7 @@ export type Database = {
           designation?: string
           devis_id?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number

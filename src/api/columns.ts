@@ -8,7 +8,7 @@
 
 const COLONNES: Record<string, readonly string[]> = {
   articles: ["actif", "code", "cree_le", "description", "designation", "famille", "gere_en_stock", "id", "legacy_id", "maj_le", "metier", "prix_achat", "prix_unitaire", "societe_id", "tva", "type_article", "unite"],
-  bon_commande_lignes: ["article_reference", "bon_commande_id", "commentaire", "cree_le", "designation", "id", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "type", "unite", "unite_code"],
+  bon_commande_lignes: ["article_reference", "bon_commande_id", "commentaire", "cree_le", "designation", "id", "montant_ht", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "type", "unite", "unite_code"],
   bon_commande_photos: ["bon_commande_id", "chemin", "cree_le", "id", "legende", "position"],
   bons_commande: ["adresse", "adresse_locataire", "ancien_locataire", "bon_commande_parent_id", "client_id", "client_nom", "code_postal", "conducteur", "cree_le", "date", "date_fin_travaux", "date_planifiee", "date_planifiee_fin", "date_reception", "devis_id", "duree_dernier_jour", "duree_heures", "en_attente_bc", "etage", "facturation_adresse", "facturation_code_postal", "facturation_ville", "gratuite", "gratuite_motif", "heure_dernier_jour", "heure_planifiee", "id", "interlocuteur", "legacy_id", "logement_statut", "maj_le", "metier", "metiers", "montant", "montant_par_metier", "montant_sous_traitant", "notes", "numero_bc", "numero_interne", "numero_logement", "occupant", "piece_jointe_chemin", "piece_jointe_mime", "piece_jointe_nom", "precision_commune", "probleme_description", "sans_bc", "schedule_par_metier", "societe_id", "statut", "statut_workflow", "technicien", "ville"],
   chantier_achats: ["chantier_id", "cree_le", "date_achat", "designation", "fichier_chemin", "fichier_nom", "fournisseur", "id", "legacy_id", "maj_le", "montant"],
@@ -25,7 +25,7 @@ const COLONNES: Record<string, readonly string[]> = {
   compteurs: ["annee", "maj_le", "prefixe", "societe_id", "type", "valeur"],
   conducteurs: ["cree_le", "email", "id", "legacy_id", "maj_le", "nom", "societe_id", "telephone"],
   devis: ["adresse", "adresse_locataire", "ancien_locataire", "chantier_id", "client_id", "client_nom", "code_postal", "conducteur", "cree_le", "date", "etage", "id", "interlocuteur", "intervention_id", "legacy_id", "logement_statut", "maj_le", "numero", "numero_logement", "occupant", "precision_commune", "remise_pourcentage", "societe_id", "statut", "ville"],
-  devis_lignes: ["article_reference", "commentaire", "cree_le", "designation", "devis_id", "id", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "type", "unite", "unite_code"],
+  devis_lignes: ["article_reference", "commentaire", "cree_le", "designation", "devis_id", "id", "montant_ht", "position", "prix_unitaire", "quantite", "tva", "tva_categorie", "type", "unite", "unite_code"],
   documents_legaux: ["cree_le", "date_validite", "fichier_chemin", "fichier_nom", "id", "legacy_id", "maj_le", "nom", "societe_id", "type"],
   ereporting_depots: ["cree_le", "donnees", "echeance", "flux", "id", "maj_le", "message", "nb_factures", "pdp_depot_id", "periode", "regime", "societe_id", "statut", "total_ht", "total_ttc", "total_tva", "transmis_le"],
   facture_cycle_vie: ["auteur_id", "code_plateforme", "cree_le", "date_statut", "donnees", "facture_id", "id", "message", "pdp_evenement_id", "statut"],

@@ -55,6 +55,7 @@ import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
   formaterTaux,
   montantLigneHt,
+  montantLigneTtc,
   soldeAPayer,
   sousTotauxChapitres,
   totauxDocument,
@@ -503,6 +504,7 @@ export function injecterSession() {
      facturé sort d'`index.html`, qui n'a aucun test. */
   w.totauxDocument = totauxDocument;
   w.montantLigneHt = montantLigneHt;
+  w.montantLigneTtc = montantLigneTtc;
   w.ventilationTvaAffichage = ventilationTvaAffichage;
   w.sousTotauxChapitres = sousTotauxChapitres;
   w.formaterTaux = formaterTaux;
