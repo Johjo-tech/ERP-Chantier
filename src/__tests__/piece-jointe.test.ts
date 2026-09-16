@@ -15,6 +15,11 @@ import {
   TAILLE_MAX_PIECE_JOINTE,
   verifierPieceJointe,
 } from "@/api/regles-piece-jointe";
+import {
+  completudeSociete,
+  estSociete,
+  recommandationsSociete,
+} from "@/api/regles-efacture";
 
 const URL_SIGNEE =
   "https://tjhljjuvfosmnpmzgbnl.supabase.co/storage/v1/object/sign/terrain/x.pdf?token=abc";
@@ -98,5 +103,66 @@ describe("Comment afficher le document", () => {
     expect(apercuDe(URL_SIGNEE)).toBe("aucun");
     expect(apercuDe("")).toBe("aucun");
     expect(apercuDe(null)).toBe("aucun");
+  });
+});
+
+/**
+ * Ce qu'une fiche société doit porter pour qu'une facture soit régulière.
+ *
+ * La distinction compte : le comptable qui a relu la facture a rangé le
+ * téléphone et l'e-mail parmi les « mentions obligatoires », et oublié le RCS
+ * qui, lui, l'est. Confondre les deux, c'est ne plus savoir par quoi commencer.
+ */
+describe("La complétude de la fiche société", () => {
+  const SASU = {
+    raisonSocialeLegale: "KTA PLOMBERIE",
+    formeJuridique: "SASU",
+    siret: "88898282400011",
+    tvaIntracom: "FR26888982824",
+    adresse: "12 rue des Lilas",
+    codePostal: "38000",
+    ville: "Grenoble",
+    adresseElectroniqueValeur: "888982824",
+    capitalSocial: 10000,
+    rcsNumero: "888982824",
+    rcsVille: "Grenoble",
+  };
+
+  it("ne reproche rien à une société complète", () => {
+    expect(completudeSociete(SASU)).toEqual([]);
+  });
+
+  /* Art. R123-238 : capital et RCS sur tout document commercial — d'une
+     société. Le comptable ne les avait pas cités. */
+  it("réclame le capital et le RCS d'une société", () => {
+    const champs = completudeSociete({ ...SASU, capitalSocial: null, rcsNumero: "" })
+      .map((a) => a.champ);
+    expect(champs).toContain("capitalSocial");
+    expect(champs).toContain("rcsNumero");
+  });
+
+  /* Une entreprise individuelle n'a ni capital ni immatriculation au RCS : les
+     réclamer afficherait un reproche impossible à satisfaire. */
+  it("ne les réclame pas à une entreprise individuelle", () => {
+    const ei = { ...SASU, formeJuridique: "EI", capitalSocial: null, rcsNumero: null, rcsVille: null };
+    expect(completudeSociete(ei)).toEqual([]);
+  });
+
+  it("reconnaît les formes sans capital, quelle qu'en soit la casse", () => {
+    expect(estSociete("SASU")).toBe(true);
+    expect(estSociete("SARL")).toBe(true);
+    expect(estSociete("ei")).toBe(false);
+    expect(estSociete("Entreprise individuelle")).toBe(false);
+    expect(estSociete("auto-entrepreneur")).toBe(false);
+    // Tant que la forme n'est pas connue, on ne présume rien.
+    expect(estSociete("")).toBe(false);
+  });
+
+  /* Le téléphone et l'e-mail rendent la facture utilisable, ils ne la rendent
+     pas régulière : ils ne doivent jamais apparaître parmi les manques. */
+  it("range le téléphone et l'e-mail parmi les recommandations", () => {
+    expect(completudeSociete(SASU)).toEqual([]);
+    const conseils = recommandationsSociete(SASU).map((a) => a.champ);
+    expect(conseils).toEqual(["telephone", "email", "iban", "bic"]);
   });
 });

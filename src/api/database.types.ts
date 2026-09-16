@@ -115,6 +115,7 @@ export type Database = {
           cree_le: string
           designation: string
           id: string
+          montant_ht: number | null
           position: number
           prix_unitaire: number
           quantite: number
@@ -131,6 +132,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -147,6 +149,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1073,6 +1076,10 @@ export type Database = {
           contact_nom: string | null
           contact_telephone: string | null
           cree_le: string
+          delai_paiement_jours: number | null
+          delai_paiement_mode:
+            | Database["public"]["Enums"]["delai_paiement_mode"]
+            | null
           eligibilite_message: string | null
           eligibilite_statut: string | null
           eligibilite_verifie_le: string | null
@@ -1088,6 +1095,7 @@ export type Database = {
           livraison_pays_code: string | null
           livraison_ville: string | null
           maj_le: string
+          mode_paiement: Database["public"]["Enums"]["mode_paiement"] | null
           nom: string
           notes: string | null
           numero_marche: string | null
@@ -1115,6 +1123,10 @@ export type Database = {
           contact_nom?: string | null
           contact_telephone?: string | null
           cree_le?: string
+          delai_paiement_jours?: number | null
+          delai_paiement_mode?:
+            | Database["public"]["Enums"]["delai_paiement_mode"]
+            | null
           eligibilite_message?: string | null
           eligibilite_statut?: string | null
           eligibilite_verifie_le?: string | null
@@ -1130,6 +1142,7 @@ export type Database = {
           livraison_pays_code?: string | null
           livraison_ville?: string | null
           maj_le?: string
+          mode_paiement?: Database["public"]["Enums"]["mode_paiement"] | null
           nom: string
           notes?: string | null
           numero_marche?: string | null
@@ -1157,6 +1170,10 @@ export type Database = {
           contact_nom?: string | null
           contact_telephone?: string | null
           cree_le?: string
+          delai_paiement_jours?: number | null
+          delai_paiement_mode?:
+            | Database["public"]["Enums"]["delai_paiement_mode"]
+            | null
           eligibilite_message?: string | null
           eligibilite_statut?: string | null
           eligibilite_verifie_le?: string | null
@@ -1172,6 +1189,7 @@ export type Database = {
           livraison_pays_code?: string | null
           livraison_ville?: string | null
           maj_le?: string
+          mode_paiement?: Database["public"]["Enums"]["mode_paiement"] | null
           nom?: string
           notes?: string | null
           numero_marche?: string | null
@@ -1403,6 +1421,7 @@ export type Database = {
           designation: string
           devis_id: string
           id: string
+          montant_ht: number | null
           position: number
           prix_unitaire: number
           quantite: number
@@ -1419,6 +1438,7 @@ export type Database = {
           designation?: string
           devis_id: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1435,6 +1455,7 @@ export type Database = {
           designation?: string
           devis_id?: string
           id?: string
+          montant_ht?: number | null
           position?: number
           prix_unitaire?: number
           quantite?: number
@@ -1797,6 +1818,8 @@ export type Database = {
           date: string
           date_fin_execution: string | null
           date_livraison: string | null
+          delai_paiement_jours: number | null
+          delai_paiement_mode: Database["public"]["Enums"]["delai_paiement_mode"] | null
           depose_le: string | null
           devis_id: string | null
           devise: string
@@ -1843,6 +1866,7 @@ export type Database = {
           ref_contrat: string | null
           ref_marche: string | null
           remise_pourcentage: number
+          retenue_garantie_pourcentage: number | null
           societe_id: string
           statut: Database["public"]["Enums"]["facture_statut"]
           statut_cycle: Database["public"]["Enums"]["facture_statut_cycle"]
@@ -1882,6 +1906,8 @@ export type Database = {
           date?: string
           date_fin_execution?: string | null
           date_livraison?: string | null
+          delai_paiement_jours?: number | null
+          delai_paiement_mode?: Database["public"]["Enums"]["delai_paiement_mode"] | null
           depose_le?: string | null
           devis_id?: string | null
           devise?: string
@@ -1930,6 +1956,7 @@ export type Database = {
           ref_contrat?: string | null
           ref_marche?: string | null
           remise_pourcentage?: number
+          retenue_garantie_pourcentage?: number | null
           societe_id: string
           statut?: Database["public"]["Enums"]["facture_statut"]
           statut_cycle?: Database["public"]["Enums"]["facture_statut_cycle"]
@@ -1969,6 +1996,8 @@ export type Database = {
           date?: string
           date_fin_execution?: string | null
           date_livraison?: string | null
+          delai_paiement_jours?: number | null
+          delai_paiement_mode?: Database["public"]["Enums"]["delai_paiement_mode"] | null
           depose_le?: string | null
           devis_id?: string | null
           devise?: string
@@ -2017,6 +2046,7 @@ export type Database = {
           ref_contrat?: string | null
           ref_marche?: string | null
           remise_pourcentage?: number
+          retenue_garantie_pourcentage?: number | null
           societe_id?: string
           statut?: Database["public"]["Enums"]["facture_statut"]
           statut_cycle?: Database["public"]["Enums"]["facture_statut_cycle"]
@@ -5869,6 +5899,14 @@ export type Database = {
         Returns: undefined
       }
       code_unite: { Args: { p_unite: string }; Returns: string }
+      date_echeance: {
+        Args: {
+          p_date: string
+          p_jours: number
+          p_mode: Database["public"]["Enums"]["delai_paiement_mode"]
+        }
+        Returns: string
+      }
       decouper_adresse: {
         Args: { p_adresse: string }
         Returns: {
@@ -5884,6 +5922,13 @@ export type Database = {
       }
       est_de_l_equipe: { Args: { p_tache_id: string }; Returns: boolean }
       est_membre: { Args: { p_societe: string }; Returns: boolean }
+      libelle_delai_paiement: {
+        Args: {
+          p_jours: number
+          p_mode: Database["public"]["Enums"]["delai_paiement_mode"]
+        }
+        Returns: string
+      }
       mes_societes: { Args: never; Returns: string[] }
       mon_role: {
         Args: { p_societe: string }
@@ -5950,6 +5995,7 @@ export type Database = {
     }
     Enums: {
       cadre_facturation: "B2B_national" | "B2B_international" | "B2G" | "B2C"
+      delai_paiement_mode: "net" | "fin_de_mois"
       devis_statut: "brouillon" | "envoyé" | "accepté" | "refusé"
       document_famille:
         | "dpgf"
@@ -6121,6 +6167,7 @@ export const Constants = {
   public: {
     Enums: {
       cadre_facturation: ["B2B_national", "B2B_international", "B2G", "B2C"],
+      delai_paiement_mode: ["net", "fin_de_mois"],
       devis_statut: ["brouillon", "envoyé", "accepté", "refusé"],
       document_famille: [
         "dpgf",

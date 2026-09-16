@@ -478,8 +478,278 @@ const CHAMPS_SOCIETE_ATTENDUS: ChampEfacture[] = [
   },
 ];
 
+/*
+ * Le capital social et le RCS sont obligatoires sur tout document commercial
+ * (art. R123-238) — mais d'une SOCIÉTÉ. Une entreprise individuelle n'a ni
+ * capital ni immatriculation au registre du commerce : les réclamer lui ferait
+ * afficher un reproche impossible à satisfaire.
+ */
+const FORMES_SANS_CAPITAL = [
+  "EI",
+  "ENTREPRISE INDIVIDUELLE",
+  "EIRL",
+  "AUTO-ENTREPRENEUR",
+  "AUTOENTREPRENEUR",
+  "MICRO-ENTREPRISE",
+  "MICROENTREPRISE",
+];
+
+/** Vrai si cette forme juridique désigne une société, donc avec capital et RCS. */
+export function estSociete(formeJuridique?: string | null): boolean {
+  const forme = (formeJuridique ?? "").trim().toUpperCase().replace(/[.\s]+/g, " ").trim();
+  if (!forme) return false;
+  return !FORMES_SANS_CAPITAL.includes(forme);
+}
+
+const CHAMPS_SOCIETE_COMMERCIALE: ChampEfacture[] = [
+  { champ: "capitalSocial", libelle: "le capital social" },
+  { champ: "rcsNumero", libelle: "le n° RCS" },
+  { champ: "rcsVille", libelle: "la ville du greffe" },
+];
+
+/**
+ * Ce qui manque à la fiche société pour émettre une facture régulière.
+ *
+ * Les mentions de l'art. R123-238 s'ajoutent dès que la forme juridique dit une
+ * société. Tant qu'elle n'est pas renseignée, on ne les réclame pas : on ne sait
+ * pas encore si elles s'appliquent, et c'est la forme juridique elle-même qui
+ * figure déjà parmi les manques.
+ */
 export function completudeSociete(societe: EntiteFacturable): Anomalie[] {
-  return manques(societe, CHAMPS_SOCIETE_ATTENDUS);
+  const attendus = estSociete(societe?.formeJuridique as string | null)
+    ? [...CHAMPS_SOCIETE_ATTENDUS, ...CHAMPS_SOCIETE_COMMERCIALE]
+    : CHAMPS_SOCIETE_ATTENDUS;
+  return manques(societe, attendus);
+}
+
+const CHAMPS_SOCIETE_RECOMMANDES: ChampEfacture[] = [
+  { champ: "telephone", libelle: "le téléphone" },
+  { champ: "email", libelle: "l'e-mail" },
+  { champ: "iban", libelle: "l'IBAN" },
+  { champ: "bic", libelle: "le BIC" },
+];
+
+/**
+ * Ce qui n'est pas exigé mais qu'un client cherchera sur la facture.
+ *
+ * Séparé des manques, parce que confondre les deux est précisément ce qui fait
+ * qu'on ne sait plus lesquels traiter d'abord. Le téléphone et l'e-mail ne sont
+ * pas des mentions obligatoires — ils rendent seulement la facture utilisable.
+ */
+export function recommandationsSociete(societe: EntiteFacturable): Anomalie[] {
+  return manques(societe, CHAMPS_SOCIETE_RECOMMANDES);
+}
+
+// ============ DÉLAI DE PAIEMENT ============
+
+/*
+ * L'échéance d'une facture, et le délai qui la produit.
+ *
+ * Ces règles vivent ici parce que l'art. L441-10 du code de commerce est le
+ * même paragraphe que celui qui porte déjà `INDEMNITE_RECOUVREMENT_EUR` et les
+ * pénalités de `mentionsLegales()` — et parce que les trois s'impriment côte à
+ * côte au pied de la facture.
+ *
+ * Elles ont un jumeau en base, `public.date_echeance` et
+ * `public.libelle_delai_paiement` : une facture peut naître à l'écran ou par
+ * `bc_generer_facture`, et les deux doivent tomber sur la même date. Un test
+ * d'intégration les compare sur les mêmes jeux de dates.
+ */
+
+export type ModeDelaiPaiement = "net" | "fin_de_mois";
+export const MODE_DELAI_DEFAUT: ModeDelaiPaiement = "net";
+export const DELAI_PAIEMENT_DEFAUT_JOURS = 30;
+
+/** Plafonds de l'art. L441-10 : 60 jours nets, ou 45 jours fin de mois. */
+export const PLAFOND_NET_JOURS = 60;
+export const PLAFOND_FIN_DE_MOIS_JOURS = 45;
+
+export interface DelaiPaiement {
+  jours: number;
+  mode: ModeDelaiPaiement;
+}
+
+/**
+ * Les délais proposés à la saisie, dans l'ordre où on veut les lire.
+ *
+ * Une liste, pas une énumération en base : le couple (jours, mode) reste la
+ * vérité — il suffit au calcul et il supporte n'importe quelle valeur — et
+ * cette table ne fait que nommer les combinaisons courantes. En ajouter une
+ * revient à ajouter une ligne ici ; aucune migration, aucun déploiement de
+ * schéma, et les délais déjà enregistrés hors liste continuent de fonctionner.
+ *
+ * `cle` sert de valeur au `<select>` ; elle n'est jamais stockée.
+ */
+export interface DelaiPreregle {
+  cle: string;
+  libelle: string;
+  jours: number;
+  mode: ModeDelaiPaiement;
+}
+
+export const DELAIS_PREREGLES: readonly DelaiPreregle[] = [
+  { cle: "reception", libelle: "À réception", jours: 0, mode: "net" },
+  { cle: "net30", libelle: "Net 30 jours", jours: 30, mode: "net" },
+  { cle: "net45", libelle: "Net 45 jours", jours: 45, mode: "net" },
+  { cle: "net60", libelle: "Net 60 jours", jours: 60, mode: "net" },
+  { cle: "fdm30", libelle: "30 jours fin de mois", jours: 30, mode: "fin_de_mois" },
+  { cle: "fdm45", libelle: "45 jours fin de mois", jours: 45, mode: "fin_de_mois" },
+  { cle: "fdm60", libelle: "60 jours fin de mois", jours: 60, mode: "fin_de_mois" },
+];
+
+/**
+ * Le préréglage qui correspond à ce délai, s'il y en a un.
+ *
+ * Rend `null` pour un délai saisi hors liste — 21 jours, par exemple. Le
+ * `<select>` doit alors afficher « autre » plutôt que de mentir en se calant
+ * sur l'entrée la plus proche.
+ */
+export function delaiPreregle(delai?: DelaiPaiement | null): DelaiPreregle | null {
+  if (!delai) return null;
+  return (
+    DELAIS_PREREGLES.find((d) => d.jours === Number(delai.jours) && d.mode === delai.mode) ?? null
+  );
+}
+
+/** Le délai d'une clé de préréglage. Clé inconnue : rien, pas un défaut deviné. */
+export function delaiDeLaCle(cle?: string | null): DelaiPaiement | null {
+  const p = DELAIS_PREREGLES.find((d) => d.cle === cle);
+  return p ? { jours: p.jours, mode: p.mode } : null;
+}
+
+/**
+ * Les moyens de paiement proposés.
+ *
+ * Les codes sont ceux de l'énumération `mode_paiement` déjà en base — la
+ * facture en portait une avant que le client n'en porte une. `traite` et
+ * `autre` y existent aussi mais ne sont pas proposés à la saisie : ils servent
+ * à relire des factures anciennes sans les réécrire.
+ */
+export interface ModeReglement {
+  code: string;
+  libelle: string;
+}
+
+export const MODES_REGLEMENT: readonly ModeReglement[] = [
+  { code: "virement", libelle: "Virement" },
+  { code: "cheque", libelle: "Chèque" },
+  { code: "prelevement", libelle: "Prélèvement" },
+  { code: "carte", libelle: "Carte bancaire" },
+  { code: "especes", libelle: "Espèces" },
+];
+
+export const MODE_REGLEMENT_DEFAUT = "virement";
+
+/** Le code retenu : celui du client, sinon le virement. */
+export function modeReglementRetenu(code?: string | null): string {
+  const propre = String(code ?? "").trim();
+  return propre === "" ? MODE_REGLEMENT_DEFAUT : propre;
+}
+
+function modeConnu(v: unknown): ModeDelaiPaiement {
+  return v === "fin_de_mois" ? "fin_de_mois" : MODE_DELAI_DEFAUT;
+}
+
+/**
+ * Le délai qui s'applique : celui du client s'il est paramétré, sinon celui de
+ * la société, sinon trente jours.
+ *
+ * `??` et non `||` : un client qui paie **à réception** porte `0`, et `0` doit
+ * gagner contre le défaut. C'est toute la raison pour laquelle la colonne est
+ * nullable — `null` veut dire « pas paramétré », pas « zéro jour ».
+ */
+export function delaiPaiementRetenu(
+  client?: { delaiPaiementJours?: number | null; delaiPaiementMode?: string | null } | null,
+  societe?: { delaiPaiementJours?: number | null; modeDelaiPaiement?: string | null } | null
+): DelaiPaiement {
+  const duClient = client?.delaiPaiementJours;
+  if (duClient !== null && duClient !== undefined && Number.isFinite(Number(duClient))) {
+    return { jours: Number(duClient), mode: modeConnu(client?.delaiPaiementMode) };
+  }
+  const deLaSociete = societe?.delaiPaiementJours;
+  if (deLaSociete !== null && deLaSociete !== undefined && Number.isFinite(Number(deLaSociete))) {
+    return { jours: Number(deLaSociete), mode: modeConnu(societe?.modeDelaiPaiement) };
+  }
+  return { jours: DELAI_PAIEMENT_DEFAUT_JOURS, mode: MODE_DELAI_DEFAUT };
+}
+
+/*
+ * Tout le calendrier se fait en UTC, de bout en bout.
+ *
+ * `toISOString()` bascule de fuseau et rend la veille avant 1 h à Paris — le
+ * piège que `CLAUDE.md` documente. Mais `dateISO()` et `dateLocaleISO()`, eux,
+ * lisent des composantes **locales** : construire en UTC pour relire en local
+ * redonne le même décalage par l'autre bout. On ne mélange donc jamais les
+ * deux. Ce module étant une feuille, il ne peut de toute façon rien importer —
+ * la contrainte tombe bien.
+ */
+function jourUTC(iso?: string | null): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((iso ?? "").trim());
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function enISO(d: Date): string {
+  const mois = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const jour = String(d.getUTCDate()).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${mois}-${jour}`;
+}
+
+/**
+ * La date d'échéance, en `AAAA-MM-JJ`. Chaîne en entrée, chaîne en sortie.
+ *
+ * « Fin de mois » compte à partir du dernier jour du mois de la facture, pas du
+ * jour même : une facture du 15 janvier à 45 jours fin de mois est due le
+ * 17 mars, pas le 1er mars. `Date.UTC(a, mois + 1, 0)` donne le dernier jour du
+ * mois, et le report de mois se fait tout seul.
+ *
+ * Une date absente ou malformée rend la chaîne vide : mieux vaut pas
+ * d'échéance qu'une échéance inventée.
+ */
+export function dateEcheance(dateFacture: string | null | undefined, delai: DelaiPaiement): string {
+  const base = jourUTC(dateFacture);
+  if (!base) return "";
+
+  const jours = Number.isFinite(delai?.jours) ? Number(delai.jours) : 0;
+  const a = base.getUTCFullYear();
+  const mois = base.getUTCMonth();
+
+  return enISO(
+    delai?.mode === "fin_de_mois"
+      ? new Date(Date.UTC(a, mois + 1, jours))
+      : new Date(Date.UTC(a, mois, base.getUTCDate() + jours))
+  );
+}
+
+/**
+ * Ce que la facture annonce : « 45 jours fin de mois ».
+ *
+ * Zéro jour se dit « paiement à réception » — c'est la formule d'usage, et
+ * « 0 jours net » se lit comme une erreur de saisie. Sert de BT-20.
+ */
+export function libelleDelaiPaiement(delai: DelaiPaiement): string {
+  const jours = Number.isFinite(delai?.jours) ? Number(delai.jours) : 0;
+  if (jours === 0) return "Paiement à réception";
+  return `${jours} jours${delai?.mode === "fin_de_mois" ? " fin de mois" : " net"}`;
+}
+
+/**
+ * Le dépassement des plafonds légaux, dit et jamais bloqué.
+ *
+ * Refuser l'enregistrement d'un client parce que son délai dépasse ferait
+ * perdre la saisie pour une règle qui admet des dérogations sectorielles. On
+ * signale, comme le reste de ce module signale ce qui manquera.
+ */
+export function delaiHorsPlafond(delai: DelaiPaiement): string | null {
+  const jours = Number.isFinite(delai?.jours) ? Number(delai.jours) : 0;
+  if (delai?.mode === "fin_de_mois" && jours > PLAFOND_FIN_DE_MOIS_JOURS) {
+    return `Au-delà des ${PLAFOND_FIN_DE_MOIS_JOURS} jours fin de mois de l'art. L441-10.`;
+  }
+  if (delai?.mode !== "fin_de_mois" && jours > PLAFOND_NET_JOURS) {
+    return `Au-delà des ${PLAFOND_NET_JOURS} jours nets de l'art. L441-10.`;
+  }
+  return null;
 }
 
 // ============ MENTIONS DU DOCUMENT ============
