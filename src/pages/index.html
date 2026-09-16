@@ -9787,6 +9787,7 @@ function renderParametres(){
 const REGLAGES_GROUPES = [
   { titre:'Société', items:[
     {id:'organisation', label:'Organisation', icone:'🏢', desc:"Identité légale et coordonnées"},
+    {id:'identite', label:'Identité visuelle', icone:'🎨', desc:'Logo et couleur dominante'},
     {id:'legaux', label:'Documents légaux', icone:'📄', desc:'Kbis, assurances, URSSAF'},
   ]},
   { titre:'Documents', items:[
@@ -9817,13 +9818,13 @@ function renderReglagesNav(){
 function renderReglagesOnglet(){
   /* Le bandeau de complétude lit le DOM : il se remplit une fois la section
      posée, pas pendant qu'on assemble sa chaîne. */
-  if((state.reglagesTab || 'organisation') === 'organisation'){
-    setTimeout(majCompletudeSociete, 0);
-    setTimeout(()=>apercuCouleur(reglagesCourants().documents.couleurAccent), 0);
-  }
+  const onglet = state.reglagesTab || 'organisation';
+  if(onglet === 'organisation') setTimeout(majCompletudeSociete, 0);
+  if(onglet === 'identite') setTimeout(()=>apercuCouleur(reglagesCourants().documents.couleurAccent), 0);
 
-  switch(state.reglagesTab || 'organisation'){
+  switch(onglet){
     case 'organisation':  return renderInfosEntrepriseSection();
+    case 'identite':      return renderIdentiteVisuelleSection();
     case 'legaux':        return renderDocumentsLegauxSection();
     case 'documents':     return renderReglagesDocumentsSection();
     case 'numerotation':  return renderNumerotationSection();
@@ -9856,23 +9857,6 @@ function renderInfosEntrepriseSection(){
       <div class="field"><label>Nom du gérant / représentant</label><input type="text" id="ie_gerant" value="${esc(s.gerant)}"></div>
       <div class="field"><label>Téléphone du gérant</label><input type="text" id="ie_gerantTelephone" value="${esc(s.gerantTelephone)}"></div>
     </div>
-    <div class="reglage-duo">
-      <div>
-        <div class="reglage-titre">Logo (utilisé sur les documents générés)</div>
-        <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
-        ${s.logo? `<div style="margin-top:8px;"><img src="${s.logo}" style="max-height:70px; max-width:220px;"></div>` : ''}
-      </div>
-      <div>
-        <div class="reglage-titre">Couleur de la société</div>
-        <div style="display:flex; align-items:center; gap:12px;">
-          <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur(this.value)"
-                 style="width:56px; height:40px; padding:2px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface);">
-          <div id="rg_couleurApercu"></div>
-        </div>
-        <small class="card-sub" style="display:block; margin-top:8px;">Reprise par l'application et par tous vos documents.</small>
-      </div>
-    </div>
-
     ${sectionsEfactureSocieteHTML(s)}
 
     <div id="ie_completude" style="margin-top:12px;"></div>
@@ -10343,6 +10327,43 @@ async function saveReglages(){
   if(relu) state.settings[state.societeId] = relu;
   renderTab();
   showToast('Préférences enregistrées.', 'success');
+}
+
+/**
+ * Logo et couleur dominante, réunis.
+ *
+ * Ces deux réglages vivaient chacun dans un onglet différent — le logo dans
+ * « Organisation », la couleur dans « Devis & factures » — et personne ne
+ * trouvait le second. Ils font une seule chose : l'apparence de la société,
+ * à l'écran comme sur les documents.
+ */
+function renderIdentiteVisuelleSection(){
+  const s = state.settings[state.societeId] || {};
+  return `<div class="card">
+    <div class="card-title" style="margin-bottom:4px;">🎨 Identité visuelle</div>
+    <div class="card-sub" style="margin-bottom:16px;">Reprise par l'application et par tous les documents générés — devis, factures, bons de commande.</div>
+
+    <div class="reglage-duo">
+      <div style="display:flex; flex-direction:column; align-items:flex-start; gap:10px;">
+        <div class="reglage-titre" style="margin:0;">Logo</div>
+        ${s.logo
+          ? `<div style="padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--surface);"><img src="${s.logo}" style="max-height:70px; max-width:220px; display:block;"></div>`
+          : `<div class="card-sub">Aucun logo : les documents porteront le nom de la société.</div>`}
+        <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
+      </div>
+      <div>
+        <div class="reglage-titre">Couleur dominante</div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur(this.value)"
+                 style="width:56px; height:40px; padding:2px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface);">
+          <div id="rg_couleurApercu"></div>
+        </div>
+        <small class="card-sub" style="display:block; margin-top:8px;">Les tons clair et foncé s'en déduisent. L'écran change tout de suite ; enregistrez pour le garder.</small>
+      </div>
+    </div>
+
+    <button class="btn primary" style="margin-top:6px;" onclick="saveInfosEntreprise()">Enregistrer</button>
+  </div>`;
 }
 
 function renderDocumentsLegauxSection(){
