@@ -569,6 +569,83 @@ export interface DelaiPaiement {
   mode: ModeDelaiPaiement;
 }
 
+/**
+ * Les délais proposés à la saisie, dans l'ordre où on veut les lire.
+ *
+ * Une liste, pas une énumération en base : le couple (jours, mode) reste la
+ * vérité — il suffit au calcul et il supporte n'importe quelle valeur — et
+ * cette table ne fait que nommer les combinaisons courantes. En ajouter une
+ * revient à ajouter une ligne ici ; aucune migration, aucun déploiement de
+ * schéma, et les délais déjà enregistrés hors liste continuent de fonctionner.
+ *
+ * `cle` sert de valeur au `<select>` ; elle n'est jamais stockée.
+ */
+export interface DelaiPreregle {
+  cle: string;
+  libelle: string;
+  jours: number;
+  mode: ModeDelaiPaiement;
+}
+
+export const DELAIS_PREREGLES: readonly DelaiPreregle[] = [
+  { cle: "reception", libelle: "À réception", jours: 0, mode: "net" },
+  { cle: "net30", libelle: "Net 30 jours", jours: 30, mode: "net" },
+  { cle: "net45", libelle: "Net 45 jours", jours: 45, mode: "net" },
+  { cle: "net60", libelle: "Net 60 jours", jours: 60, mode: "net" },
+  { cle: "fdm30", libelle: "30 jours fin de mois", jours: 30, mode: "fin_de_mois" },
+  { cle: "fdm45", libelle: "45 jours fin de mois", jours: 45, mode: "fin_de_mois" },
+  { cle: "fdm60", libelle: "60 jours fin de mois", jours: 60, mode: "fin_de_mois" },
+];
+
+/**
+ * Le préréglage qui correspond à ce délai, s'il y en a un.
+ *
+ * Rend `null` pour un délai saisi hors liste — 21 jours, par exemple. Le
+ * `<select>` doit alors afficher « autre » plutôt que de mentir en se calant
+ * sur l'entrée la plus proche.
+ */
+export function delaiPreregle(delai?: DelaiPaiement | null): DelaiPreregle | null {
+  if (!delai) return null;
+  return (
+    DELAIS_PREREGLES.find((d) => d.jours === Number(delai.jours) && d.mode === delai.mode) ?? null
+  );
+}
+
+/** Le délai d'une clé de préréglage. Clé inconnue : rien, pas un défaut deviné. */
+export function delaiDeLaCle(cle?: string | null): DelaiPaiement | null {
+  const p = DELAIS_PREREGLES.find((d) => d.cle === cle);
+  return p ? { jours: p.jours, mode: p.mode } : null;
+}
+
+/**
+ * Les moyens de paiement proposés.
+ *
+ * Les codes sont ceux de l'énumération `mode_paiement` déjà en base — la
+ * facture en portait une avant que le client n'en porte une. `traite` et
+ * `autre` y existent aussi mais ne sont pas proposés à la saisie : ils servent
+ * à relire des factures anciennes sans les réécrire.
+ */
+export interface ModeReglement {
+  code: string;
+  libelle: string;
+}
+
+export const MODES_REGLEMENT: readonly ModeReglement[] = [
+  { code: "virement", libelle: "Virement" },
+  { code: "cheque", libelle: "Chèque" },
+  { code: "prelevement", libelle: "Prélèvement" },
+  { code: "carte", libelle: "Carte bancaire" },
+  { code: "especes", libelle: "Espèces" },
+];
+
+export const MODE_REGLEMENT_DEFAUT = "virement";
+
+/** Le code retenu : celui du client, sinon le virement. */
+export function modeReglementRetenu(code?: string | null): string {
+  const propre = String(code ?? "").trim();
+  return propre === "" ? MODE_REGLEMENT_DEFAUT : propre;
+}
+
 function modeConnu(v: unknown): ModeDelaiPaiement {
   return v === "fin_de_mois" ? "fin_de_mois" : MODE_DELAI_DEFAUT;
 }

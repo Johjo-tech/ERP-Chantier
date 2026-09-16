@@ -32,6 +32,11 @@ import {
   estSociete,
   dateEcheance,
   delaiHorsPlafond,
+  DELAIS_PREREGLES,
+  delaiPreregle,
+  delaiDeLaCle,
+  MODES_REGLEMENT,
+  modeReglementRetenu,
   delaiPaiementRetenu,
   INDEMNITE_RECOUVREMENT_EUR,
   libelleDelaiPaiement,
@@ -499,6 +504,13 @@ export function injecterSession() {
   w.dateEcheance = dateEcheance;
   w.libelleDelaiPaiement = libelleDelaiPaiement;
   w.delaiHorsPlafond = delaiHorsPlafond;
+  /* Les conditions de paiement se choisissent dans une liste nommée ;
+     le couple (jours, mode) reste ce qui s'enregistre. */
+  w.DELAIS_PREREGLES = DELAIS_PREREGLES;
+  w.delaiPreregle = delaiPreregle;
+  w.delaiDeLaCle = delaiDeLaCle;
+  w.MODES_REGLEMENT = MODES_REGLEMENT;
+  w.modeReglementRetenu = modeReglementRetenu;
 
   /* Les montants d'un document. L'arithmétique qui décide de ce qui est
      facturé sort d'`index.html`, qui n'a aucun test. */

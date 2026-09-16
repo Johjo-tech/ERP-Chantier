@@ -860,6 +860,9 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .metier-checkbox-item input{width:auto; margin:0;}
 .address-trio{grid-column:1/-1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px;}
 .field{display:flex; flex-direction:column; gap:3px; margin-bottom:13px;}
+/* `display:flex` ci-dessus bat le `display:none` par défaut de l'attribut :
+   sans ce rappel, un champ marqué `hidden` reste visible. */
+[hidden]{display:none !important;}
 .field.full{grid-column:1/-1;}
 .field label{font-size:12px; color:#8A91A0; text-transform:none; letter-spacing:.01em; font-weight:600;}
 /* Titre d'un réglage qui n'est pas une saisie de texte : le libellé flottant
@@ -3471,12 +3474,72 @@ function delaiPaiementDuClient(nom){
  * Sans lui, on ne peut que choisir entre ne jamais recalculer — le défaut
  * d'avant — et écraser une date tapée à la main.
  */
+/** Le mode de règlement convenu avec ce client, pour amorcer la facture. */
+function delaiModeDuClient(nom){
+  const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===nom);
+  return window.modeReglementRetenu(c && c.modePaiement);
+}
+
+/**
+ * Le délai que porte le formulaire de facture.
+ *
+ * La liste est la saisie ; le couple (jours, mode) est la donnée. « Conditions
+ * du client » ne fige rien de plus que ce que le client dit aujourd'hui — c'est
+ * le sens de la reprise à la création.
+ */
+function delaiFactureSaisi(){
+  const sel = document.getElementById('f_delaiPreset');
+  const cle = sel ? sel.value : '';
+  if(cle && cle !== 'client'){
+    const d = window.delaiDeLaCle(cle);
+    if(d) return d;
+  }
+  const cl = document.getElementById('f_client');
+  return delaiPaiementDuClient(cl ? cl.value : '');
+}
+
+function optionsDelaiFactureHTML(e){
+  const courant = (e.delaiPaiementJours === null || e.delaiPaiementJours === undefined)
+    ? null
+    : { jours: Number(e.delaiPaiementJours), mode: e.delaiPaiementMode==='fin_de_mois'?'fin_de_mois':'net' };
+  const p = courant ? window.delaiPreregle(courant) : null;
+  const cle = p ? p.cle : (courant ? 'autre' : 'client');
+  const sel = (c) => c===cle ? ' selected' : '';
+  let html = `<option value="client"${sel('client')}>Conditions du client</option>`
+    + window.DELAIS_PREREGLES.map(d=>`<option value="${d.cle}"${sel(d.cle)}>${esc(d.libelle)}</option>`).join('');
+  /* Un délai hors liste — repris d'un client qui en portait un — doit rester
+     lisible et se réenregistrer tel quel, pas se faire ramener à 30 jours. */
+  if(cle === 'autre') html += `<option value="autre" selected>${esc(window.libelleDelaiPaiement(courant))}</option>`;
+  return html;
+}
+
+/**
+ * Changement de client : la facture reprend SES conditions.
+ *
+ * Seulement tant qu'elle n'est pas enregistrée — au-delà, les conditions sont
+ * celles sous lesquelles elle a été émise et ne se réalignent plus sur un
+ * client qui a changé d'avis. Le mode choisi à la main sur la facture est
+ * respecté : on ne l'écrase que s'il n'a pas été touché.
+ */
+function reprendreConditionsDuClient(nom){
+  const mode = document.getElementById('f_modePaiement');
+  const preset = document.getElementById('f_delaiPreset');
+  if(mode && (!preset || preset.value === 'client')) mode.value = window.modeReglementRetenu(delaiModeDuClient(nom));
+  appliquerDelaiPaiement();
+}
+
+/** Choix du délai sur la facture : l'échéance suit aussitôt. */
+function choisirDelaiFacture(){
+  const ech = document.getElementById('f_echeance');
+  if(ech) ech.dataset.auto = '1';
+  appliquerDelaiPaiement();
+}
+
 function appliquerDelaiPaiement(){
   const ech = document.getElementById('f_echeance');
   if(!ech || (ech.value && ech.dataset.auto !== '1')) return;
-  const cl = document.getElementById('f_client');
   const dt = document.getElementById('f_date');
-  const delai = delaiPaiementDuClient(cl ? cl.value : '');
+  const delai = delaiFactureSaisi();
   ech.value = window.dateEcheance((dt && dt.value) || todayISO(), delai);
   ech.dataset.auto = '1';
   const aide = document.getElementById('f_echeanceAide');
@@ -3495,6 +3558,61 @@ function recalculerEcheance(){
   const ech = document.getElementById('f_echeance');
   if(ech) ech.dataset.auto = '1';
   appliquerDelaiPaiement();
+}
+
+/* ---------- Conditions de paiement : la liste et la saisie libre ----------
+   Le couple (jours, mode) reste seul enregistré. La liste ci-dessous nomme les
+   combinaisons courantes ; en ajouter une se fait dans `DELAIS_PREREGLES`, pas
+   ici, et un délai hors liste continue de s'afficher et de se saisir. */
+
+/** Le délai du client correspond-il à une entrée de la liste ? */
+function delaiEstPreregle(client){
+  if(client.delaiPaiementJours === null || client.delaiPaiementJours === undefined) return true;
+  return !!window.delaiPreregle({ jours: Number(client.delaiPaiementJours), mode: client.delaiPaiementMode==='fin_de_mois'?'fin_de_mois':'net' });
+}
+
+/** La clé de liste que porte ce client : un préréglage, la société, ou « autre ». */
+function cleDelaiDuClient(client){
+  if(client.delaiPaiementJours === null || client.delaiPaiementJours === undefined) return 'societe';
+  const p = window.delaiPreregle({ jours: Number(client.delaiPaiementJours), mode: client.delaiPaiementMode==='fin_de_mois'?'fin_de_mois':'net' });
+  return p ? p.cle : 'autre';
+}
+
+function optionsDelaiHTML(client){
+  const courante = cleDelaiDuClient(client);
+  const sel = (c) => c===courante ? ' selected' : '';
+  const defaut = reglagesCourants().documents.delaiPaiementJours;
+  return `<option value="societe"${sel('societe')}>Réglage de la société (${defaut} jours)</option>`
+    + window.DELAIS_PREREGLES.map(d=>`<option value="${d.cle}"${sel(d.cle)}>${esc(d.libelle)}</option>`).join('')
+    + `<option value="autre"${sel('autre')}>Autre — saisie libre…</option>`;
+}
+
+function optionsModeReglementHTML(courant){
+  const retenu = window.modeReglementRetenu(courant);
+  return window.MODES_REGLEMENT.map(m=>`<option value="${m.code}"${m.code===retenu?' selected':''}>${esc(m.libelle)}</option>`).join('');
+}
+
+/**
+ * Choix dans la liste : les deux champs bruts suivent, et ne se montrent que
+ * pour un délai hors liste. Ce sont eux que `saveClient` lit — la clé de liste
+ * ne s'enregistre jamais, elle n'est qu'une façon de saisir.
+ */
+function choisirDelaiPreregle(){
+  const cle = (document.getElementById('c_delaiPreset')||{}).value || 'societe';
+  const jours = document.getElementById('c_delaiPaiementJours');
+  const mode = document.getElementById('c_delaiPaiementMode');
+  const libre = cle === 'autre';
+  const zoneJours = document.getElementById('c_delaiLibreJours');
+  const zoneMode = document.getElementById('c_delaiLibreMode');
+  if(zoneJours) zoneJours.hidden = !libre;
+  if(zoneMode) zoneMode.hidden = !libre;
+
+  if(cle === 'societe'){ if(jours) jours.value = ''; if(mode) mode.value = 'net'; }
+  else if(!libre){
+    const d = window.delaiDeLaCle(cle);
+    if(d){ if(jours) jours.value = String(d.jours); if(mode) mode.value = d.mode; }
+  }
+  majDelaiPaiementAide();
 }
 
 /** Dans la fiche client : ce que le délai saisi donnerait concrètement. */
@@ -4292,14 +4410,23 @@ function blocConditionsHTML(type, doc, s, hidePrices){
      facture d'il y a deux ans. Le BIC, lui, n'est pas figé — faute de colonne. */
   const iban = doc.emetteurIban || s.iban;
   const avecIban = (r.afficherIban !== false) && !hidePrices && (iban || s.bic);
-  if(!conditions && !avecIban) return '';
+  const aUneEcheance = type === 'facture' && !!doc.echeance;
+  if(!conditions && !avecIban && !aUneEcheance) return '';
 
   /* Le titre annonçait « Règlement par virement » quel que soit le mode : la
      colonne `mode_paiement` était écrite et lue par personne. */
   const mode = libelleModePaiement(type==='devis' ? null : doc.modePaiement);
 
+  /* La date d'échéance en toutes lettres à côté des conditions : art. L441-9,
+     qui exige la date à laquelle le règlement doit intervenir — pas seulement
+     le délai dont elle découle. Le mode l'accompagne, c'est ce que le payeur
+     cherche en même temps. */
+  const echeance = (type === 'facture' && doc.echeance)
+    ? `<div>Échéance : <span style="font-weight:700;">${fmtDate(doc.echeance)}</span> — Règlement par ${esc(mode)}</div>`
+    : '';
+
   return `<table class="p-conditions"><tr>
-    <td>${conditions? `<b>Conditions</b><div>${esc(conditions)}</div>` : ''}</td>
+    <td>${(conditions || echeance)? `<b>Conditions de paiement</b>${conditions? `<div>${esc(conditions)}</div>`:''}${echeance}` : ''}</td>
     <td>${avecIban? `<b>Règlement par ${esc(mode)}</b><div>${iban? 'IBAN '+esc(iban):''}${iban&&s.bic? ' — ':''}${s.bic? 'BIC '+esc(s.bic):''}</div>` : ''}</td>
   </tr></table>`;
 }
@@ -5400,7 +5527,7 @@ function renderFacturesListHTML(list){
     const rapportOrigine = f.interventionId ? state.interventions.find(i=>i.id===f.interventionId) : null;
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
     return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${f.id}')"><div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${esc(f.numero)}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
+      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${esc(f.numero)}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
       ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${devisOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="event.stopPropagation(); ouvrirBonCommandeOrigine('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;" title="${bonCommandeOrigine.pieceJointeChemin? 'Voir le bon reçu du client' : 'Aller au bon de commande'}">${esc(bonCommandeOrigine.numeroBC)}${bonCommandeOrigine.pieceJointeChemin? ' 📎':''}</a></div>`:''}
@@ -5432,10 +5559,17 @@ function factureForm(){
     <div class="form-section">
       <div class="form-section-head">Client & contact</div>
       <div class="field-grid">
-        <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur'); appliquerDelaiPaiement();">${clientSelectOptions(e.client)}</select></div>
+        <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur'); reprendreConditionsDuClient(this.value);">${clientSelectOptions(e.client)}</select></div>
         <div class="field"><label>Interlocuteur</label><select id="f_interlocuteur">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
         <div class="field"><label>Date</label><input type="date" id="f_date" value="${e.date||todayISO()}" onchange="appliquerDelaiPaiement()"></div>
-        <div class="field"><label>Échéance <button type="button" class="btn small ghost" style="padding:0 6px;" onclick="recalculerEcheance()" title="Recalculer d'après le délai du client">↻</button></label>
+        ${/* Le délai est recopié du client À LA CRÉATION puis figé : le client
+             peut changer de conditions, une facture déjà émise ne bouge plus.
+             Il reste modifiable tant que la facture n'est pas verrouillée. */''}
+        <div class="field"><label>Délai de paiement</label>
+          <select id="f_delaiPreset" onchange="choisirDelaiFacture()">${optionsDelaiFactureHTML(e)}</select></div>
+        <div class="field"><label>Mode de règlement</label>
+          <select id="f_modePaiement">${optionsModeReglementHTML(e.modePaiement || delaiModeDuClient(e.client))}</select></div>
+        <div class="field"><label>Échéance <button type="button" class="btn small ghost" style="padding:0 6px;" onclick="recalculerEcheance()" title="Recalculer d'après le délai">↻</button></label>
           <input type="date" id="f_echeance" value="${esc(e.echeance||'')}" oninput="echeanceSaisieAlaMain(this)">
           <small id="f_echeanceAide" class="card-sub"></small></div>
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
@@ -5525,8 +5659,14 @@ async function saveFacture(){
        cas. */
     retenueGarantiePourcentage: document.getElementById('f_retenueGarantie').value === ''
       ? null : (parseFloat(document.getElementById('f_retenueGarantie').value) || 0),
-    conditionsReglement: e.conditionsReglement || window.libelleDelaiPaiement(delaiPaiementDuClient(client)),
-    modePaiement: e.modePaiement || reglagesCourants().documents.modeReglementDefaut,
+    /* Les conditions vivent SUR la facture, pas seulement chez le client :
+       sans elles, changer le délai d'un client rendait impossible de savoir
+       sous quelle condition une facture ancienne avait été émise, et de
+       recalculer son échéance si sa date bougeait. */
+    delaiPaiementJours: delaiFactureSaisi().jours,
+    delaiPaiementMode: delaiFactureSaisi().mode,
+    conditionsReglement: window.libelleDelaiPaiement(delaiFactureSaisi()),
+    modePaiement: v('f_modePaiement') || e.modePaiement || window.modeReglementRetenu(delaiModeDuClient(client)),
     lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', conducteur: document.getElementById('f_conducteur').value, verrouillee: e.verrouillee || false };
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
@@ -13406,11 +13546,20 @@ function clientForm(){
 
     <div class="field-grid">
       <div class="field full section-title" style="margin:12px 0 0;">💶 Règlement</div>
-      <div class="field"><label>Délai de paiement (jours)</label>
+      <div class="field"><label>Délai de paiement</label>
+        <select id="c_delaiPreset" onchange="choisirDelaiPreregle()">${optionsDelaiHTML(e)}</select></div>
+      <div class="field"><label>Mode de règlement</label>
+        <select id="c_modePaiement">${optionsModeReglementHTML(e.modePaiement)}</select></div>
+      ${/* Les deux champs bruts ne servent plus qu'au délai hors liste — 21 jours,
+           par exemple. Ils restent les seuls à s'enregistrer : la liste nomme des
+           combinaisons, elle ne devient pas la donnée. */''}
+      <div class="field" id="c_delaiLibreJours"${delaiEstPreregle(e)?' hidden':''}>
+        <label>Nombre de jours</label>
         <input type="number" min="0" id="c_delaiPaiementJours" value="${e.delaiPaiementJours ?? ''}"
                placeholder="Défaut société : ${reglagesCourants().documents.delaiPaiementJours}"
                oninput="majDelaiPaiementAide()"></div>
-      <div class="field"><label>Mode de calcul</label>
+      <div class="field" id="c_delaiLibreMode"${delaiEstPreregle(e)?' hidden':''}>
+        <label>Mode de calcul</label>
         <select id="c_delaiPaiementMode" onchange="majDelaiPaiementAide()">
           <option value="net"${(e.delaiPaiementMode||'net')==='net'?' selected':''}>Net — date de facture + N jours</option>
           <option value="fin_de_mois"${e.delaiPaiementMode==='fin_de_mois'?' selected':''}>Fin de mois — fin du mois + N jours</option>
@@ -13491,6 +13640,7 @@ function clientDepuisFormulaire(){
     delaiPaiementJours: (() => { const el = document.getElementById('c_delaiPaiementJours');
       const s = el ? el.value.trim() : ''; return s === '' ? null : Number(s); })(),
     delaiPaiementMode: v('c_delaiPaiementMode') || null,
+    modePaiement: v('c_modePaiement') || null,
     cadreFacturation: v('c_cadreFacturation'),
     adresseElectroniqueSchema: v('c_adresseElectroniqueSchema'),
     adresseElectroniqueValeur: v('c_adresseElectroniqueValeur'),
