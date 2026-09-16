@@ -110,3 +110,23 @@ export function apercuDe(source?: string | null, mime?: string | null, nom?: str
   if (type === "application/pdf") return "pdf";
   return "aucun";
 }
+
+/**
+ * L'URL d'un PDF ouvert pour être lu, et non pour tenir dans un coin.
+ *
+ * Le lecteur intégré du navigateur ajuste à la PAGE : dans un cadre large, une
+ * A4 portrait reste bornée par sa hauteur, et toute la largeur gagnée est
+ * perdue. Agrandir un cadre de 465 px à 1 392 px ne fait donc passer l'échelle
+ * que de 55 % à 68 % — alors que lui demander la largeur de page la porte à
+ * environ 175 %. C'est le fragment qui rend l'agrandissement utile, pas la
+ * taille du cadre.
+ *
+ * Un fragment n'est jamais envoyé au serveur : la signature de l'URL reste
+ * intacte. Et on ne touche pas à une URL qui en porte déjà un — ce serait
+ * écraser une intention plus précise que la nôtre.
+ */
+export function urlApercuPdf(source?: string | null): string {
+  const url = (source ?? "").trim();
+  if (!url || url.includes("#")) return url;
+  return `${url}#zoom=page-width`;
+}

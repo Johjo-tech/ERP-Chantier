@@ -1164,6 +1164,21 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    l'iframe se replie à zéro dans un conteneur dimensionné par son contenu. */
 .pf-reference-fichier{ width:100%; height:66vh; border:0; display:block; }
 img.pf-reference-fichier{ height:auto; max-height:66vh; object-fit:contain; }
+/* Une A4 dans 44 % de la largeur se lit à 55 % de sa taille : le panneau sert à
+   situer le document, pas à le lire. Le calque lui rend sa taille.
+   Il vit au niveau du corps, hors de `.view-modal` : celle-ci est un contexte
+   d'empilement (position:fixed + z-index), un enfant à 700 y resterait peint
+   dans la couche 200, donc sous le visualiseur flottant et sous le pied collant. */
+.pf-plein{ position:fixed; inset:0; z-index:700; background:rgba(16,20,30,.78); display:none; flex-direction:column; padding:14px; }
+.pf-plein-panneau{ flex:1; min-height:0; display:flex; flex-direction:column; gap:8px; background:#fff; border-radius:10px; padding:10px; }
+.pf-plein-barre{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; font-weight:700; color:var(--text); border-bottom:1px dashed var(--border); padding-bottom:6px; }
+.pf-plein-barre span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pf-plein-corps{ flex:1; min-height:0; overflow:auto; }
+/* Un de nos rendus garde sa largeur de page ; un fichier prend le cadre entier. */
+.pf-plein-corps > .print-preview{ max-width:210mm; margin:0 auto; font-size:10.5pt; }
+.pf-plein-fichier{ width:100%; height:100%; border:0; display:block; }
+img.pf-plein-fichier{ height:auto; max-height:100%; object-fit:contain; margin:0 auto; display:block; }
+@media(max-width:900px){ .pf-plein{ padding:0; } .pf-plein-panneau{ border-radius:0; } }
 .pf-travail{ flex:1; min-width:0; }
 @media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; } }
 .print-preview table{ width:100%; border-collapse:collapse; }
@@ -1269,6 +1284,24 @@ img.pf-reference-fichier{ height:auto; max-height:66vh; object-fit:contain; }
   </div>
   <div id="attachmentPreviewBody" class="attachment-float-body"></div>
   <div class="attachment-float-resize" onmousedown="startResizeAttachmentFloat(event)" title="Glisser pour redimensionner"></div>
+</div>
+
+<!-- Le document de référence de la pré-facture, rendu lisible.
+     Frère du visualiseur flottant, et non enfant de la modale : `.view-modal`
+     ouvre un contexte d'empilement dont aucun enfant ne peut sortir. -->
+<div id="pfPleinEcran" class="pf-plein" style="display:none;"
+     role="dialog" aria-modal="true" aria-label="Document de référence en plein écran"
+     onclick="fermerReferencePleinEcranSiFond(event)">
+  <div class="pf-plein-panneau">
+    <div class="pf-plein-barre">
+      <span id="pfPleinTitre"></span>
+      <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+        <a class="attachment-float-dl" id="pfPleinDl" href="#" download title="Télécharger" style="display:none;">⬇</a>
+        <button class="attachment-float-close" id="pfPleinFermer" onclick="fermerReferencePleinEcran()" title="Fermer (Échap)">✕</button>
+      </div>
+    </div>
+    <div id="pfPleinCorps" class="pf-plein-corps"></div>
+  </div>
 </div>
 <div id="dpgfMappingModal" class="view-modal">
   <div class="view-modal-panel" style="max-width:920px;">
@@ -6382,6 +6415,10 @@ async function openValidationDirecteurModal(bcId){
 }
 
 function closeValidationDirecteurModal(){
+  /* Le calque vit au niveau du corps : fermer la modale ne l'emporte pas, et
+     « Annuler » laisserait un document plein écran au-dessus d'une application
+     vide. La fonction est idempotente, l'appel est donc inconditionnel. */
+  fermerReferencePleinEcran();
   document.getElementById('validationDirecteurModal').style.display = 'none';
   validationDirecteurCtx = null;
 }
@@ -6672,23 +6709,55 @@ function referencesPrefactureHTML(ctx, b){
     ${aLeDocument? bouton('bonClient', '📎 Bon du client') : ''}
     ${bouton('bonCommande', aLeDocument? '🧾 Fiche interne' : '📄 Bon de commande')}
     ${devis? bouton('devis', `📄 Devis ${esc(devis.numero||'')}`) : ''}
+    ${/* Vaut pour les trois : le devis et la fiche interne sont eux aussi des
+         A4 écrasés dans 44 % de la largeur. Rien à agrandir tant que rien
+         n'est ouvert. */''}
+    ${ctx.reference? `<button class="btn small ghost" onclick="ouvrirReferencePleinEcran()" title="Lire le document en grand (Échap pour revenir)">🔎 Agrandir</button>` : ''}
   </div>`;
 }
 
-function referenceDocumentHTML(ctx, b){
+/**
+ * La pièce à consulter, et sous quelle forme.
+ *
+ * `mode` vaut `fichier` quand c'est le document que le client a envoyé — il
+ * porte sa propre mise en page — et `document` quand c'est l'un de nos rendus,
+ * qui a besoin du cadre de page. Le panneau et le plein écran habillent donc
+ * différemment, mais **choisissent la pièce au même endroit** : deux copies de
+ * cette décision finiraient par diverger, et le plein écran montrerait autre
+ * chose que le panneau. Or c'est ce document-là qui fait foi.
+ *
+ * `pourLire` demande au lecteur PDF la largeur de page au lieu de la page
+ * entière — voir `urlApercuPdf`. Faux pour le panneau, où la largeur n'est pas
+ * la contrainte.
+ */
+function referencePrefacture(ctx, b, classeFichier, pourLire){
+  const nom = b.pieceJointeNom || 'Bon du client';
+  const notreRendu = (type, id) => ({
+    mode: 'document', chemin: null,
+    titre: type === 'devis' ? 'Devis' : 'Fiche interne du bon de commande',
+    html: renderPrintDoc(type, id, !ctx.avecPrix),
+  });
+
   if(ctx.reference === 'bonClient'){
     /* L'URL a été obtenue par `basculerReferencePrefacture` : elle est signée,
        donc asynchrone, alors que ce rendu ne l'est pas. Si elle manque, c'est
        que la signature a échoué — on montre la fiche plutôt qu'un cadre vide. */
     if(ctx.urlBonClient){
       const mode = window.apercuDe(ctx.urlBonClient, b.pieceJointeMime, b.pieceJointeNom);
-      if(mode === 'pdf') return `<iframe class="pf-reference-fichier" src="${esc(ctx.urlBonClient)}"></iframe>`;
-      if(mode === 'image') return `<img class="pf-reference-fichier" src="${esc(ctx.urlBonClient)}" alt="${esc(b.pieceJointeNom||'Bon du client')}">`;
+      const source = (mode === 'pdf' && pourLire) ? window.urlApercuPdf(ctx.urlBonClient) : ctx.urlBonClient;
+      if(mode === 'pdf') return { mode:'fichier', chemin:b.pieceJointeChemin, titre:nom,
+        html:`<iframe class="${classeFichier}" src="${esc(source)}"></iframe>` };
+      if(mode === 'image') return { mode:'fichier', chemin:b.pieceJointeChemin, titre:nom,
+        html:`<img class="${classeFichier}" src="${esc(source)}" alt="${esc(nom)}">` };
     }
-    return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
+    return notreRendu('bonCommande', ctx.bcId);
   }
-  if(ctx.reference === 'devis' && b.devisId) return renderPrintDoc('devis', b.devisId, !ctx.avecPrix);
-  return renderPrintDoc('bonCommande', ctx.bcId, !ctx.avecPrix);
+  if(ctx.reference === 'devis' && b.devisId) return notreRendu('devis', b.devisId);
+  return notreRendu('bonCommande', ctx.bcId);
+}
+
+function referenceDocumentHTML(ctx, b){
+  return referencePrefacture(ctx, b, 'pf-reference-fichier', false).html;
 }
 
 /* Un second clic referme : la référence est une aide, pas un décor permanent —
@@ -6713,6 +6782,68 @@ async function basculerReferencePrefacture(cle){
     }
   }
   renderValidationDirecteur();
+}
+
+/* ---------- Le document de référence, en grand ----------
+   Le panneau latéral sert à situer le document ; il ne permet pas de le lire.
+   Ces quatre fonctions sont toute la surface du plein écran — c'est ce qui
+   permettrait, le jour venu, de passer à l'API plein écran du navigateur sans
+   toucher au reste. */
+
+function ouvrirReferencePleinEcran(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx || !ctx.reference) return;
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return;
+
+  const calque = document.getElementById('pfPleinEcran');
+  const corps = document.getElementById('pfPleinCorps');
+  const r = referencePrefacture(ctx, b, 'pf-plein-fichier', true);
+
+  document.getElementById('pfPleinTitre').textContent = r.titre;
+  corps.innerHTML = r.mode === 'document' ? `<div class="print-preview">${r.html}</div>` : r.html;
+
+  /* Le téléchargement se résout après l'affichage : sur une URL signée, un
+     attribut `download` est ignoré — il faut une URL signée pour cela — et
+     cette signature-là n'est pas mise en cache. Attendre l'aller-retour
+     retarderait l'ouverture pour un bouton secondaire. */
+  const dl = document.getElementById('pfPleinDl');
+  dl.style.display = r.chemin ? 'inline-block' : 'none';
+  if(r.chemin){
+    dl.removeAttribute('href');
+    window.urlTelechargementPieceJointe(r.chemin)
+      .then(url => { dl.href = url; dl.download = r.titre; })
+      .catch(err => { console.error('Téléchargement indisponible', r.chemin, err); dl.style.display = 'none'; });
+  }
+
+  calque.style.display = 'flex';
+  document.addEventListener('keydown', toucheReferencePleinEcran);
+  /* Le focus sur la croix, et pas ailleurs : une fois le curseur passé dans
+     l'iframe du PDF — autre domaine — les frappes n'atteignent plus cette page
+     et Échap cesse de répondre. La première pression, elle, marche toujours. */
+  document.getElementById('pfPleinFermer').focus();
+}
+
+/** Idempotente : appelable sans condition, y compris à la fermeture de la modale. */
+function fermerReferencePleinEcran(){
+  const calque = document.getElementById('pfPleinEcran');
+  if(!calque) return;
+  calque.style.display = 'none';
+  /* Vidé, et pas seulement masqué : une iframe laissée en place garde le PDF en
+     mémoire et continue d'interroger une URL qui expirera. */
+  document.getElementById('pfPleinCorps').innerHTML = '';
+  document.removeEventListener('keydown', toucheReferencePleinEcran);
+}
+
+/* Le fond, et lui seul — un clic dans le document ne doit pas refermer. */
+function fermerReferencePleinEcranSiFond(ev){
+  if(ev.target === ev.currentTarget) fermerReferencePleinEcran();
+}
+
+function toucheReferencePleinEcran(ev){
+  if(ev.key !== 'Escape') return;
+  ev.stopPropagation();
+  fermerReferencePleinEcran();
 }
 
 /* Redessine ce qui dépend des prix, et **seulement** cela : les champs de

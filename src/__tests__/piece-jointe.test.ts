@@ -13,6 +13,7 @@ import {
   mimeDePieceJointe,
   nomSurPourStockage,
   TAILLE_MAX_PIECE_JOINTE,
+  urlApercuPdf,
   verifierPieceJointe,
 } from "@/api/regles-piece-jointe";
 import {
@@ -164,5 +165,42 @@ describe("La complétude de la fiche société", () => {
     expect(completudeSociete(SASU)).toEqual([]);
     const conseils = recommandationsSociete(SASU).map((a) => a.champ);
     expect(conseils).toEqual(["telephone", "email", "iban", "bic"]);
+  });
+});
+
+/*
+ * Le fragment de zoom : ce qui rend l'agrandissement utile.
+ *
+ * Le lecteur PDF du navigateur ajuste à la page. Dans un cadre large, une A4
+ * portrait reste bornée par sa hauteur — passer le cadre de 465 à 1 392 px ne
+ * gagne que 55 % → 68 %. Demander la largeur de page porte l'échelle aux
+ * environs de 175 %. Sans ce fragment, le bouton « agrandir » déçoit.
+ */
+describe("L'URL d'un PDF ouvert pour être lu", () => {
+  it("demande la largeur de page", () => {
+    expect(urlApercuPdf("https://x.supabase.co/object/sign/terrain/a.pdf?token=abc")).toBe(
+      "https://x.supabase.co/object/sign/terrain/a.pdf?token=abc#zoom=page-width"
+    );
+  });
+
+  /* Le fragment se place APRÈS la chaîne de requête et n'est pas transmis au
+     serveur : le jeton de signature reste intact. */
+  it("laisse le jeton de signature intact", () => {
+    const signee = "https://x.supabase.co/object/sign/terrain/a.pdf?token=ey.J9&download=";
+    expect(urlApercuPdf(signee).startsWith(signee)).toBe(true);
+    expect(urlApercuPdf(signee).indexOf("#")).toBeGreaterThan(signee.indexOf("token="));
+  });
+
+  /* Une URL qui porte déjà un fragment exprime une intention plus précise que
+     la nôtre — page visée, zoom choisi. On ne l'écrase pas. */
+  it("respecte un fragment déjà présent", () => {
+    expect(urlApercuPdf("https://x/a.pdf#page=3")).toBe("https://x/a.pdf#page=3");
+    expect(urlApercuPdf("https://x/a.pdf#zoom=200")).toBe("https://x/a.pdf#zoom=200");
+  });
+
+  it("ne fabrique rien à partir de rien", () => {
+    expect(urlApercuPdf("")).toBe("");
+    expect(urlApercuPdf(null)).toBe("");
+    expect(urlApercuPdf(undefined)).toBe("");
   });
 });
