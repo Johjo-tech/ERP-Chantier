@@ -339,6 +339,30 @@ export function versCII(charge: ChargeEN16931): string {
         });
       }
 
+      /* BG-20 — les déductions. Leur place dans la séquence CII est imposée :
+         après `ApplicableTradeTax`, avant `SpecifiedTradePaymentTerms`. Un
+         schéma XSD refuse le document si l'ordre n'est pas tenu, même quand
+         tous les éléments sont présents. */
+      for (const d of f.allowances ?? []) {
+        s.bloc("ram:SpecifiedTradeAllowanceCharge", (a) => {
+          /* `false` = déduction, `true` = supplément. Le booléen est écrit en
+             toutes lettres : c'est un `udt:Indicator`, pas un 0/1. */
+          a.bloc("ram:ChargeIndicator", (i) => {
+            i.feuille("udt:Indicator", "false");
+          });
+          a.feuille("ram:CalculationPercent", d.allowance_percentage);
+          a.feuille("ram:BasisAmount", d.allowance_base_amount);
+          a.feuille("ram:ActualAmount", d.allowance_amount);
+          a.feuille("ram:ReasonCode", d.allowance_reason_code);
+          a.feuille("ram:Reason", d.allowance_reason);
+          a.bloc("ram:CategoryTradeTax", (c) => {
+            c.feuille("ram:TypeCode", "VAT");
+            c.feuille("ram:CategoryCode", d.allowance_vat_category_code);
+            c.feuille("ram:RateApplicablePercent", d.allowance_vat_rate);
+          });
+        });
+      }
+
       if (f.payment_terms || dateCII(f.payment_due_date)) {
         s.bloc("ram:SpecifiedTradePaymentTerms", (p) => {
           p.feuille("ram:Description", f.payment_terms);
@@ -349,6 +373,7 @@ export function versCII(charge: ChargeEN16931): string {
       const tot = f.totals ?? {};
       s.bloc("ram:SpecifiedTradeSettlementHeaderMonetarySummation", (m) => {
         m.feuille("ram:LineTotalAmount", tot.sum_invoice_lines_amount);
+        m.feuille("ram:AllowanceTotalAmount", tot.allowance_total_amount);
         m.feuille("ram:TaxBasisTotalAmount", tot.total_without_vat);
         m.feuille("ram:TaxTotalAmount", tot.total_vat_amount?.value, {
           currencyID: tot.total_vat_amount?.currency_code ?? devise,

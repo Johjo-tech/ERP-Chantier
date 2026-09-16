@@ -179,6 +179,9 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     penalitesRetard: facture.penalites_retard,
     indemniteRecouvrement: facture.indemnite_recouvrement ?? societe?.indemnite_recouvrement,
     escomptePourcentage: facture.escompte_pourcentage,
+    /* BT-92 — la remise se déclare ; elle ne se contente plus de creuser
+       l'écart entre la somme des lignes et le total. */
+    remisePourcentage: facture.remise_pourcentage,
     acomptesDeduits: facture.acomptes_deduits,
     // Le solde dit ce qui reste dû ; l'écart au total dit ce qui a été encaissé.
     montantRegle: solde == null ? 0 : Math.max(0, totalTtc - Number(solde)),
