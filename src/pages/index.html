@@ -4906,7 +4906,15 @@ function transformerBonCommandeEnFacture(bcId, ignorerValidationDirecteur){
   setTab('factures');
   state.facturesView = 'liste';
   openForm('facture', {
-    client:b.client, adresse:b.adresse, occupant:b.occupant||'', adresseLocataire:b.adresseLocataire||'',
+    /* L'adresse d'un BON est celle du CHANTIER ; sur une facture, `adresse`
+       désigne le CLIENT — `saveDocument` la résout d'ailleurs toute seule.
+       Recopier l'une dans l'autre laissait donc le lieu d'intervention vide
+       alors qu'il était sous les yeux dans la pré-facture. Même repli que
+       `bc_generer_facture` et que le chemin sous-traitant, qui le faisaient
+       déjà bien. Le code postal et la ville ne partaient pas du tout. */
+    client:b.client, occupant:b.occupant||'',
+    adresseLocataire: b.adresseLocataire || b.adresse || '',
+    codePostal: b.codePostal || '', ville: b.ville || '',
     logementStatut:b.logementStatut||'', etage:b.etage||'', numeroLogement:b.numeroLogement||'',
     precisionCommune:b.precisionCommune||'', ancienLocataire:b.ancienLocataire||'',
     interlocuteur:'', conducteur:b.conducteur||'',
@@ -5613,6 +5621,11 @@ function factureForm(){
           <small id="f_echeanceAide" class="card-sub"></small></div>
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
         <div class="field"><label>Travaux achevés le <small class="card-sub">(si différent de la date)</small></label><input type="date" id="f_dateFinExecution" value="${esc(e.dateFinExecution||'')}"></div>
+        ${/* BT-13 : la référence que l'acheteur rapproche. Elle s'enregistrait
+             déjà — reprise du bon — mais aucun champ ne la montrait : on ne
+             pouvait ni la vérifier, ni la corriger, ni la saisir sur une
+             facture créée sans bon. */''}
+        <div class="field"><label>N° de bon de commande du client</label><input type="text" id="f_refBonCommandeClient" value="${esc(e.refBonCommandeClient||'')}" placeholder="La référence que le client rapprochera"></div>
         <div class="field"><label>N° de marché</label><input type="text" id="f_refMarche" value="${esc(e.refMarche||'')}" placeholder="Lorsqu'il en existe un"></div>
         <div class="field"><label>Acompte déjà versé (€)</label><input type="number" min="0" step="0.01" id="f_acomptesDeduits" value="${esc(e.acomptesDeduits||'')}"></div>
         <div class="field"><label>Retenue de garantie (%)</label><input type="number" min="0" max="100" step="0.5" id="f_retenueGarantie" value="${esc(e.retenueGarantiePourcentage ?? '')}" placeholder="5 si le marché la prévoit"></div>
@@ -5669,7 +5682,7 @@ async function saveFacture(){
      référence même si la saisie est abandonnée — c'est ce qui creusait des
      trous dans une série que la loi veut continue. */
   const numero = e.numero || '';
-  const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, refBonCommandeClient: e.refBonCommandeClient || null, chantierId: document.getElementById('f_chantierId').value || null, client,
+  const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, refBonCommandeClient: champSaisi('f_refBonCommandeClient', e.refBonCommandeClient) || null, chantierId: document.getElementById('f_chantierId').value || null, client,
     adresse: resolveClientAdresse(client),
     interlocuteur: document.getElementById('f_interlocuteur').value,
     adresseLocataire: document.getElementById('f_adresseLocataire').value,
@@ -5705,7 +5718,12 @@ async function saveFacture(){
     delaiPaiementJours: delaiFactureSaisi().jours,
     delaiPaiementMode: delaiFactureSaisi().mode,
     conditionsReglement: window.libelleDelaiPaiement(delaiFactureSaisi()),
-    modePaiement: v('f_modePaiement') || e.modePaiement || window.modeReglementRetenu(delaiModeDuClient(client)),
+    /* `v()` n'existe pas ici — c'est le lecteur de `saveInfosEntreprise`. Écrit
+       tel quel, il faisait lever `saveFacture` tout entière : plus aucune
+       facture n'était enregistrable depuis le formulaire, silencieusement,
+       puisque l'exception partait dans la console et que l'écran ne disait
+       rien. Un test aurait tenu ; `index.html` n'en a pas. */
+    modePaiement: champSaisi('f_modePaiement', e.modePaiement) || window.modeReglementRetenu(delaiModeDuClient(client)),
     lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', conducteur: document.getElementById('f_conducteur').value, verrouillee: e.verrouillee || false };
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
@@ -15270,6 +15288,19 @@ function documentForm(){
     </div>
   </div>`;
 }
+/**
+ * La valeur d'un champ qui n'existe que sur certains formulaires.
+ *
+ * `saveDocument` sert le devis, la facture et le bon : lire en dur un champ
+ * absent lèverait, et se rabattre sur l'objet en cours perdrait la saisie là
+ * où le champ existe. On distingue donc « absent de cet écran » de « vidé par
+ * l'utilisateur » — sans quoi effacer une référence serait impossible.
+ */
+function champSaisi(id, defaut){
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : (defaut || '');
+}
+
 async function saveDocument(){
   const e = state.editing;
   const nom = document.getElementById('doc_nom').value.trim();
