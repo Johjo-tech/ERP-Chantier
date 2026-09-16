@@ -29,6 +29,7 @@ import {
   mentionsLegales,
   completudeClient,
   completudeSociete,
+  estSociete,
   dateEcheance,
   delaiHorsPlafond,
   delaiPaiementRetenu,
@@ -38,6 +39,7 @@ import {
   MENTION_FRANCHISE_EN_BASE,
   PAYS_DEFAUT,
   PERIODICITES_EREPORTING,
+  recommandationsSociete,
   REGIMES_TVA,
   sansTva,
   SCHEMAS_ADRESSE_ELECTRONIQUE,
@@ -52,6 +54,7 @@ import { apercuDe, verifierPieceJointe } from "@/api/regles-piece-jointe";
 import {
   formaterTaux,
   montantLigneHt,
+  soldeAPayer,
   sousTotauxChapitres,
   totauxDocument,
   ventilationTvaAffichage,
@@ -502,9 +505,12 @@ export function injecterSession() {
   w.ventilationTvaAffichage = ventilationTvaAffichage;
   w.sousTotauxChapitres = sousTotauxChapitres;
   w.formaterTaux = formaterTaux;
+  w.soldeAPayer = soldeAPayer;
 
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;
+  w.recommandationsSociete = recommandationsSociete;
+  w.estSociete = estSociete;
   w.completudeSociete = completudeSociete;
   w.messageAnomalies = messageAnomalies;
   w.tvaIntracomFr = tvaIntracomFr;

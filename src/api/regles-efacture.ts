@@ -478,8 +478,66 @@ const CHAMPS_SOCIETE_ATTENDUS: ChampEfacture[] = [
   },
 ];
 
+/*
+ * Le capital social et le RCS sont obligatoires sur tout document commercial
+ * (art. R123-238) — mais d'une SOCIÉTÉ. Une entreprise individuelle n'a ni
+ * capital ni immatriculation au registre du commerce : les réclamer lui ferait
+ * afficher un reproche impossible à satisfaire.
+ */
+const FORMES_SANS_CAPITAL = [
+  "EI",
+  "ENTREPRISE INDIVIDUELLE",
+  "EIRL",
+  "AUTO-ENTREPRENEUR",
+  "AUTOENTREPRENEUR",
+  "MICRO-ENTREPRISE",
+  "MICROENTREPRISE",
+];
+
+/** Vrai si cette forme juridique désigne une société, donc avec capital et RCS. */
+export function estSociete(formeJuridique?: string | null): boolean {
+  const forme = (formeJuridique ?? "").trim().toUpperCase().replace(/[.\s]+/g, " ").trim();
+  if (!forme) return false;
+  return !FORMES_SANS_CAPITAL.includes(forme);
+}
+
+const CHAMPS_SOCIETE_COMMERCIALE: ChampEfacture[] = [
+  { champ: "capitalSocial", libelle: "le capital social" },
+  { champ: "rcsNumero", libelle: "le n° RCS" },
+  { champ: "rcsVille", libelle: "la ville du greffe" },
+];
+
+/**
+ * Ce qui manque à la fiche société pour émettre une facture régulière.
+ *
+ * Les mentions de l'art. R123-238 s'ajoutent dès que la forme juridique dit une
+ * société. Tant qu'elle n'est pas renseignée, on ne les réclame pas : on ne sait
+ * pas encore si elles s'appliquent, et c'est la forme juridique elle-même qui
+ * figure déjà parmi les manques.
+ */
 export function completudeSociete(societe: EntiteFacturable): Anomalie[] {
-  return manques(societe, CHAMPS_SOCIETE_ATTENDUS);
+  const attendus = estSociete(societe?.formeJuridique as string | null)
+    ? [...CHAMPS_SOCIETE_ATTENDUS, ...CHAMPS_SOCIETE_COMMERCIALE]
+    : CHAMPS_SOCIETE_ATTENDUS;
+  return manques(societe, attendus);
+}
+
+const CHAMPS_SOCIETE_RECOMMANDES: ChampEfacture[] = [
+  { champ: "telephone", libelle: "le téléphone" },
+  { champ: "email", libelle: "l'e-mail" },
+  { champ: "iban", libelle: "l'IBAN" },
+  { champ: "bic", libelle: "le BIC" },
+];
+
+/**
+ * Ce qui n'est pas exigé mais qu'un client cherchera sur la facture.
+ *
+ * Séparé des manques, parce que confondre les deux est précisément ce qui fait
+ * qu'on ne sait plus lesquels traiter d'abord. Le téléphone et l'e-mail ne sont
+ * pas des mentions obligatoires — ils rendent seulement la facture utilisable.
+ */
+export function recommandationsSociete(societe: EntiteFacturable): Anomalie[] {
+  return manques(societe, CHAMPS_SOCIETE_RECOMMANDES);
 }
 
 // ============ DÉLAI DE PAIEMENT ============

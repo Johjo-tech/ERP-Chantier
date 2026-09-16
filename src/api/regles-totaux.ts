@@ -173,3 +173,54 @@ export function sousTotauxChapitres(lignes: LigneMontant[] | null | undefined): 
 export function formaterTaux(taux: number): string {
   return `${String(nombre(taux)).replace(".", ",")} %`;
 }
+
+/** Taux d'usage de la retenue de garantie — loi du 16 juillet 1971. */
+export const RETENUE_GARANTIE_USUELLE = 5;
+
+export interface Deductions {
+  /** Acomptes déjà versés par le client, en euros. */
+  acomptes?: number | string | null;
+  /** Part du TTC retenue au titre de la garantie, en pourcentage. */
+  retenuePourcentage?: number | string | null;
+}
+
+export interface SoldeFacture {
+  acomptes: number;
+  retenuePourcentage: number;
+  retenueMontant: number;
+  netAPayer: number;
+  /** Faux quand rien n'est déduit : le document n'a alors rien à ajouter. */
+  aDesDeductions: boolean;
+}
+
+/**
+ * Ce qu'il reste réellement à régler, une fois l'acompte et la retenue déduits.
+ *
+ * La retenue de garantie se calcule sur le **TTC** : elle porte sur le montant
+ * du marché, pas sur sa base taxable. Et ce n'est pas une remise — la créance
+ * reste entière, seul son versement est différé jusqu'à la levée. D'où un
+ * « net à payer » distinct du total, et non un total diminué.
+ *
+ * Le net ne descend jamais sous zéro : un acompte supérieur au dû est une
+ * situation réelle (avenant en moins-value), mais une facture qui réclamerait
+ * un montant négatif ne veut rien dire — c'est un avoir qu'il faut alors
+ * établir.
+ */
+export function soldeAPayer(
+  totaux: { ttc: number },
+  deductions: Deductions = {}
+): SoldeFacture {
+  const acomptes = Math.max(0, nombre(deductions.acomptes));
+  const retenuePourcentage = Math.max(0, Math.min(100, nombre(deductions.retenuePourcentage)));
+  const ttc = nombre(totaux?.ttc);
+
+  const retenueMontant = (ttc * retenuePourcentage) / 100;
+
+  return {
+    acomptes,
+    retenuePourcentage,
+    retenueMontant,
+    netAPayer: Math.max(0, ttc - acomptes - retenueMontant),
+    aDesDeductions: acomptes > 0 || retenueMontant > 0,
+  };
+}

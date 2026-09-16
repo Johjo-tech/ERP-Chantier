@@ -11,6 +11,8 @@ import {
   formaterTaux,
   montantLigneHt,
   sousTotauxChapitres,
+  RETENUE_GARANTIE_USUELLE,
+  soldeAPayer,
   totauxDocument,
   ventilationTvaAffichage,
 } from "@/api/regles-totaux";
@@ -130,5 +132,58 @@ describe("Le libellé d'un taux", () => {
     expect(formaterTaux(5.5)).toBe("5,5 %");
     expect(formaterTaux(20)).toBe("20 %");
     expect(formaterTaux(0)).toBe("0 %");
+  });
+});
+
+/**
+ * Ce qu'il reste à payer une fois l'acompte et la retenue déduits.
+ *
+ * La retenue de garantie n'est pas une remise : la créance reste entière, seul
+ * son versement est différé jusqu'à la levée. Le document doit donc montrer un
+ * total ET un net à payer, jamais un total raboté.
+ */
+describe("Le solde à payer", () => {
+  const TOTAUX = { ttc: 1200 };
+
+  it("ne déduit rien quand rien n'est prévu", () => {
+    const s = soldeAPayer(TOTAUX);
+    expect(s.netAPayer).toBe(1200);
+    expect(s.aDesDeductions).toBe(false);
+  });
+
+  it("déduit l'acompte versé", () => {
+    const s = soldeAPayer(TOTAUX, { acomptes: 400 });
+    expect(s.netAPayer).toBe(800);
+    expect(s.aDesDeductions).toBe(true);
+  });
+
+  /* Le taux porte sur le TTC — c'est le montant du marché qui est retenu, pas
+     sa base taxable. */
+  it("calcule la retenue sur le TTC", () => {
+    const s = soldeAPayer(TOTAUX, { retenuePourcentage: RETENUE_GARANTIE_USUELLE });
+    expect(s.retenueMontant).toBe(60);
+    expect(s.netAPayer).toBe(1140);
+  });
+
+  it("cumule l'acompte et la retenue", () => {
+    const s = soldeAPayer(TOTAUX, { acomptes: 400, retenuePourcentage: 5 });
+    expect(s.retenueMontant).toBe(60);
+    expect(s.netAPayer).toBe(740);
+  });
+
+  it("ne tient pas une retenue à 0 % pour une déduction", () => {
+    expect(soldeAPayer(TOTAUX, { retenuePourcentage: 0 }).aDesDeductions).toBe(false);
+  });
+
+  /* Un acompte supérieur au dû arrive — un avenant en moins-value. Mais une
+     facture qui réclamerait un montant négatif ne veut rien dire : c'est un
+     avoir qu'il faut établir. */
+  it("ne réclame jamais un montant négatif", () => {
+    expect(soldeAPayer(TOTAUX, { acomptes: 2000 }).netAPayer).toBe(0);
+  });
+
+  it("borne un taux aberrant", () => {
+    expect(soldeAPayer(TOTAUX, { retenuePourcentage: 150 }).retenuePourcentage).toBe(100);
+    expect(soldeAPayer(TOTAUX, { retenuePourcentage: -5 }).retenuePourcentage).toBe(0);
   });
 });

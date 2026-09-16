@@ -1855,6 +1855,7 @@ export type Database = {
           ref_contrat: string | null
           ref_marche: string | null
           remise_pourcentage: number
+          retenue_garantie_pourcentage: number | null
           societe_id: string
           statut: Database["public"]["Enums"]["facture_statut"]
           statut_cycle: Database["public"]["Enums"]["facture_statut_cycle"]
@@ -1942,6 +1943,7 @@ export type Database = {
           ref_contrat?: string | null
           ref_marche?: string | null
           remise_pourcentage?: number
+          retenue_garantie_pourcentage?: number | null
           societe_id: string
           statut?: Database["public"]["Enums"]["facture_statut"]
           statut_cycle?: Database["public"]["Enums"]["facture_statut_cycle"]
@@ -2029,6 +2031,7 @@ export type Database = {
           ref_contrat?: string | null
           ref_marche?: string | null
           remise_pourcentage?: number
+          retenue_garantie_pourcentage?: number | null
           societe_id?: string
           statut?: Database["public"]["Enums"]["facture_statut"]
           statut_cycle?: Database["public"]["Enums"]["facture_statut_cycle"]

@@ -4083,7 +4083,14 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     adresse: doc.emetteurAdresse || s.adresse,
     siret: doc.emetteurSiret || s.siret,
     tva: doc.emetteurTvaIntracom || s.tvaIntracom,
+    /* Ni le téléphone ni l'e-mail ne sont figés à l'émission : ce ne sont pas
+       des mentions obligatoires, et un client qui rappelle doit tomber sur le
+       numéro d'aujourd'hui, pas sur celui d'il y a deux ans. */
     telephone: s.telephone,
+    email: s.email,
+    /* L'IBAN, lui, EST figé — et n'était jamais relu. Une facture réimprimée
+       après un changement de banque annonçait le nouveau compte. */
+    iban: doc.emetteurIban || s.iban,
   };
   return `
     <div class="p-page">
@@ -4097,7 +4104,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </td>
       <td style="width:45%;">
         <div class="p-doctitle">${title}</div>
-        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>'+(doc.conditionsReglement? ' <span style="font-weight:400;">('+esc(doc.conditionsReglement)+')</span>':''):''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
+        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>'+(doc.conditionsReglement? ' <span style="font-weight:400;">('+esc(doc.conditionsReglement)+')</span>':''):''}${type==='facture'? factureDocMetaHTML(doc):''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
       </td>
     </tr></table>
     <div class="p-rule"></div>
@@ -4105,7 +4112,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <td>
         <div class="p-label">Émetteur</div>
         <div class="p-name">${esc(em.nom)}</div>
-        <div class="p-line">${em.adresse? esc(em.adresse)+'<br>':''}${em.siret? 'SIRET '+esc(em.siret)+'<br>':''}${em.tva? 'TVA '+esc(em.tva)+'<br>':''}${em.telephone? 'Tél. '+esc(em.telephone):''}</div>
+        <div class="p-line">${em.adresse? esc(em.adresse)+'<br>':''}${em.siret? 'SIRET '+esc(em.siret)+'<br>':''}${em.tva? 'TVA '+esc(em.tva)+'<br>':''}${em.telephone? 'Tél. '+esc(em.telephone)+'<br>':''}${em.email? esc(em.email):''}</div>
       </td>
       <td>
         <div class="p-label">Client</div>
@@ -4126,6 +4133,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       ${t.remisePct>0? `<tr><td class="label">Remise (${t.remisePct}%)</td><td class="val">-${fmt(t.remiseMontantHT)}</td></tr>` : ''}
       ${tvaLignesHTML(t, (libelle, montant)=>`<tr><td class="label">${libelle}</td><td class="val">${fmt(montant)}</td></tr>`)}
       <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
+      ${soldeLignesHTML(doc, t, fmt)}
     </table>
     ${/* Une facture ne se signe pas : elle constate une créance, elle ne
          recueille pas d'accord. Les lignes de signature n'y avaient donc rien
@@ -4166,17 +4174,78 @@ function logoHTML(s){
  * Il disparaît en mode sans prix : une facture sans montants n'a pas à porter
  * de quoi la payer.
  */
+/* L'énumération de la base est technique ; le document s'adresse à un humain. */
+const LIBELLES_MODE_PAIEMENT = {
+  virement:'virement', cheque:'chèque', especes:'espèces', carte:'carte bancaire',
+  prelevement:'prélèvement', traite:'traite', autre:'tout moyen convenu'
+};
+function libelleModePaiement(mode){
+  return LIBELLES_MODE_PAIEMENT[mode] || 'virement';
+}
+
+/**
+ * Ce qui rattache la facture à ce qui l'a précédée.
+ *
+ * Le n° de bon de commande du client est renseigné depuis peu et n'était pas
+ * imprimé ; le n° de marché était une colonne sans écrivain ni lecteur. Or un
+ * acheteur public rapproche par ces références, et les réclame.
+ *
+ * La date d'achèvement ne s'affiche que si elle DIFFÈRE de la date de facture :
+ * l'art. L441-9 exige la date de la prestation, mais la répéter à l'identique
+ * n'apprend rien et alourdit l'en-tête.
+ */
+/**
+ * Ce qu'il reste à payer, quand ce n'est pas le total.
+ *
+ * La retenue de garantie n'est pas une remise : la créance reste entière, seul
+ * son versement est différé jusqu'à la levée. D'où un « Net à payer » sous le
+ * Total TTC, et non un total raboté — c'est ce que le lecteur doit virer.
+ *
+ * Rien ne s'affiche quand rien n'est déduit : une facture ordinaire n'a pas à
+ * porter deux lignes à zéro.
+ */
+function soldeLignesHTML(doc, t, fmt){
+  const s = window.soldeAPayer(t, {
+    acomptes: doc.acomptesDeduits,
+    retenuePourcentage: doc.retenueGarantiePourcentage,
+  });
+  if(!s.aDesDeductions) return '';
+  return (s.acomptes>0 ? `<tr><td class="label">Acompte déjà versé</td><td class="val">-${fmt(s.acomptes)}</td></tr>` : '')
+       + (s.retenueMontant>0 ? `<tr><td class="label">Retenue de garantie (${window.formaterTaux(s.retenuePourcentage)})</td><td class="val">-${fmt(s.retenueMontant)}</td></tr>` : '')
+       + `<tr class="grand"><td class="label">Net à payer</td><td class="val">${fmt(s.netAPayer)}</td></tr>`;
+}
+
+function factureDocMetaHTML(doc){
+  const devis = doc.devisId ? state.devis.find(d=>d.id===doc.devisId) : null;
+  const lignes = [];
+  if(doc.dateFinExecution && doc.dateFinExecution !== doc.date){
+    lignes.push('Travaux achevés le : <b>'+fmtDate(doc.dateFinExecution)+'</b>');
+  }
+  if(doc.refBonCommandeClient) lignes.push('Votre bon de commande : <b>'+esc(doc.refBonCommandeClient)+'</b>');
+  if(devis && devis.numero) lignes.push('Devis : <b>'+esc(devis.numero)+'</b>');
+  if(doc.refMarche) lignes.push('Marché : <b>'+esc(doc.refMarche)+'</b>');
+  return lignes.length ? '<br>'+lignes.join('<br>') : '';
+}
+
 function blocConditionsHTML(type, doc, s, hidePrices){
   const r = (s.reglages && s.reglages.documents) || {};
   const conditions = type==='devis'
     ? (r.conditionsDevis||'').trim()
     : (doc.conditionsReglement||'').trim();
-  const avecIban = (r.afficherIban !== false) && !hidePrices && (s.iban || s.bic);
+  /* L'IBAN de la facture d'abord : il est figé à l'émission, et le lire dans
+     les réglages courants ferait annoncer le compte d'aujourd'hui sur une
+     facture d'il y a deux ans. Le BIC, lui, n'est pas figé — faute de colonne. */
+  const iban = doc.emetteurIban || s.iban;
+  const avecIban = (r.afficherIban !== false) && !hidePrices && (iban || s.bic);
   if(!conditions && !avecIban) return '';
+
+  /* Le titre annonçait « Règlement par virement » quel que soit le mode : la
+     colonne `mode_paiement` était écrite et lue par personne. */
+  const mode = libelleModePaiement(type==='devis' ? null : doc.modePaiement);
 
   return `<table class="p-conditions"><tr>
     <td>${conditions? `<b>Conditions</b><div>${esc(conditions)}</div>` : ''}</td>
-    <td>${avecIban? `<b>Règlement par virement</b><div>${s.iban? 'IBAN '+esc(s.iban):''}${s.iban&&s.bic? ' — ':''}${s.bic? 'BIC '+esc(s.bic):''}</div>` : ''}</td>
+    <td>${avecIban? `<b>Règlement par ${esc(mode)}</b><div>${iban? 'IBAN '+esc(iban):''}${iban&&s.bic? ' — ':''}${s.bic? 'BIC '+esc(s.bic):''}</div>` : ''}</td>
   </tr></table>`;
 }
 
@@ -5315,6 +5384,10 @@ function factureForm(){
           <input type="date" id="f_echeance" value="${esc(e.echeance||'')}" oninput="echeanceSaisieAlaMain(this)">
           <small id="f_echeanceAide" class="card-sub"></small></div>
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
+        <div class="field"><label>Travaux achevés le <small class="card-sub">(si différent de la date)</small></label><input type="date" id="f_dateFinExecution" value="${esc(e.dateFinExecution||'')}"></div>
+        <div class="field"><label>N° de marché</label><input type="text" id="f_refMarche" value="${esc(e.refMarche||'')}" placeholder="Lorsqu'il en existe un"></div>
+        <div class="field"><label>Acompte déjà versé (€)</label><input type="number" min="0" step="0.01" id="f_acomptesDeduits" value="${esc(e.acomptesDeduits||'')}"></div>
+        <div class="field"><label>Retenue de garantie (%)</label><input type="number" min="0" max="100" step="0.5" id="f_retenueGarantie" value="${esc(e.retenueGarantiePourcentage ?? '')}" placeholder="5 si le marché la prévoit"></div>
         <div class="field"><label>Chantier lié (optionnel)</label><select id="f_chantierId">${chantierSelectOptions(e.chantierId)}</select></div>
       </div>
     </div>
@@ -5387,6 +5460,16 @@ async function saveFacture(){
        leurs conditions de règlement. C'est un texte FIGÉ, pas un renvoi vers la
        fiche client — une facture dit les conditions convenues le jour où elle a
        été établie, et n'en change pas si le client renégocie six mois plus tard. */
+    /* La date de la prestation, exigée par l'art. L441-9 : elle ne s'imprime
+       que si elle diffère de la date de facture. */
+    dateFinExecution: document.getElementById('f_dateFinExecution').value || null,
+    refMarche: document.getElementById('f_refMarche').value || null,
+    acomptesDeduits: parseFloat(document.getElementById('f_acomptesDeduits').value) || 0,
+    /* `null` et non `0` : la colonne distingue « le marché n'en prévoit pas »
+       d'une retenue au taux nul, et le document n'affiche rien dans le premier
+       cas. */
+    retenueGarantiePourcentage: document.getElementById('f_retenueGarantie').value === ''
+      ? null : (parseFloat(document.getElementById('f_retenueGarantie').value) || 0),
     conditionsReglement: e.conditionsReglement || window.libelleDelaiPaiement(delaiPaiementDuClient(client)),
     modePaiement: e.modePaiement || reglagesCourants().documents.modeReglementDefaut,
     lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', conducteur: document.getElementById('f_conducteur').value, verrouillee: e.verrouillee || false };
@@ -9691,6 +9774,11 @@ function renderReglagesNav(){
 }
 
 function renderReglagesOnglet(){
+  /* Le bandeau de complétude lit le DOM : il se remplit une fois la section
+     posée, pas pendant qu'on assemble sa chaîne. */
+  if((state.reglagesTab || 'organisation') === 'organisation'){
+    setTimeout(majCompletudeSociete, 0);
+  }
   switch(state.reglagesTab || 'organisation'){
     case 'organisation':  return renderInfosEntrepriseSection();
     case 'legaux':        return renderDocumentsLegauxSection();
@@ -9719,8 +9807,8 @@ function renderInfosEntrepriseSection(){
       </div>
       <div class="field"><label>Code postal</label><input type="text" id="ie_codePostal" value="${esc(s.codePostal)}"></div>
       <div class="field"><label>Ville</label><input type="text" id="ie_ville" value="${esc(s.ville)}"></div>
-      <div class="field"><label>Téléphone</label><input type="text" id="ie_telephone" value="${esc(s.telephone)}"></div>
-      <div class="field"><label>Email</label><input type="email" id="ie_email" value="${esc(s.email)}"></div>
+      <div class="field"><label>Téléphone</label><input type="text" id="ie_telephone" oninput="majCompletudeSociete()" value="${esc(s.telephone)}"></div>
+      <div class="field"><label>Email</label><input type="email" id="ie_email" oninput="majCompletudeSociete()" value="${esc(s.email)}"></div>
       ${champSiretHTML('ie_siret', s.siret, CIBLES_ANNUAIRE_SOCIETE)}
       <div class="field"><label>Nom du gérant / représentant</label><input type="text" id="ie_gerant" value="${esc(s.gerant)}"></div>
       <div class="field"><label>Téléphone du gérant</label><input type="text" id="ie_gerantTelephone" value="${esc(s.gerantTelephone)}"></div>
@@ -9736,6 +9824,67 @@ function renderInfosEntrepriseSection(){
     <div id="ie_completude" style="margin-top:12px;"></div>
     <button class="btn primary" style="margin-top:12px;" onclick="saveInfosEntreprise()">Enregistrer</button>
   </div>`;
+}
+
+/**
+ * Ce qui manque à la fiche société, et ce qui serait bienvenu.
+ *
+ * `completudeSociete` existait, le bandeau était rendu, et la fonction n'était
+ * appelée nulle part : la fiche pouvait rester vide sans que rien ne le dise.
+ * C'est ce silence qui a fait découvrir les mentions manquantes par un
+ * comptable plutôt que par l'écran.
+ *
+ * Les deux listes restent séparées : ce qui est obligatoire se corrige toutes
+ * affaires cessantes, ce qui est recommandé attend. Les confondre, c'est ne
+ * plus savoir par quoi commencer.
+ */
+function societeDepuisFormulaire(){
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const s = state.settings[state.societeId] || {};
+  return { ...s,
+    raisonSocialeLegale: v('ie_raisonSocialeLegale') || s.raisonSocialeLegale,
+    formeJuridique: v('ie_formeJuridique') || s.formeJuridique,
+    siret: v('ie_siret') || s.siret,
+    tvaIntracom: v('ie_tvaIntracom') || s.tvaIntracom,
+    capitalSocial: v('ie_capitalSocial') || s.capitalSocial,
+    rcsNumero: v('ie_rcsNumero') || s.rcsNumero,
+    rcsVille: v('ie_rcsVille') || s.rcsVille,
+    adresse: v('ie_adresse') || s.adresse,
+    codePostal: v('ie_codePostal') || s.codePostal,
+    ville: v('ie_ville') || s.ville,
+    telephone: v('ie_telephone') || s.telephone,
+    email: v('ie_email') || s.email,
+    iban: v('ie_iban') || s.iban,
+    bic: v('ie_bic') || s.bic,
+    adresseElectroniqueValeur: v('ie_adresseElectroniqueValeur') || s.adresseElectroniqueValeur,
+  };
+}
+
+function majCompletudeSociete(){
+  const zone = document.getElementById('ie_completude');
+  if(!zone) return;
+  const societe = societeDepuisFormulaire();
+  const manques = window.completudeSociete(societe);
+  const conseils = window.recommandationsSociete(societe);
+
+  /* Un pied de page personnalisé remplace l'identité légale du document. Le
+     réglage est assumé, mais il doit se voir quand l'identité est incomplète —
+     sinon la mention obligatoire disparaît deux fois, et sans bruit. */
+  const piedPerso = ((reglagesCourants().documents||{}).piedDePage||'').trim();
+
+  let html = '';
+  if(manques.length){
+    html += `<div class="wf-banner alerte">${esc(window.messageAnomalies(manques))}</div>`;
+  } else {
+    html += `<div class="wf-banner ok">✓ Les mentions obligatoires de vos documents sont au complet.</div>`;
+  }
+  if(conseils.length){
+    html += `<div class="card-sub" style="margin-top:6px;">Recommandé, sans être obligatoire : ${esc(conseils.map(c=>c.libelle).join(', '))}.</div>`;
+  }
+  if(piedPerso && manques.length){
+    html += `<div class="card-sub" style="margin-top:6px; color:var(--danger);">Votre pied de page personnalisé remplace l'identité légale sur les documents : les mentions ci-dessus n'y figureront pas.</div>`;
+  }
+  zone.innerHTML = html;
 }
 
 /* Champs que l'annuaire sait remplir sur la fiche de votre société. */
@@ -9761,8 +9910,8 @@ function sectionsEfactureSocieteHTML(s){
   <details style="margin-top:14px;">
     <summary style="cursor:pointer; font-weight:700;">⚖️ Identité légale</summary>
     <div class="field-grid" style="margin-top:10px;">
-      <div class="field full"><label>Raison sociale</label><input type="text" id="ie_raisonSocialeLegale" value="${esc(s.raisonSocialeLegale)}" placeholder="${esc(s.nom||'')}"></div>
-      <div class="field"><label>Forme juridique</label><input type="text" id="ie_formeJuridique" value="${esc(s.formeJuridique)}" placeholder="SASU, EURL…"></div>
+      <div class="field full"><label>Raison sociale</label><input type="text" id="ie_raisonSocialeLegale" oninput="majCompletudeSociete()" value="${esc(s.raisonSocialeLegale)}" placeholder="${esc(s.nom||'')}"></div>
+      <div class="field"><label>Forme juridique</label><input type="text" id="ie_formeJuridique" oninput="majCompletudeSociete()" value="${esc(s.formeJuridique)}" placeholder="SASU, EURL…"></div>
       <div class="field"><label>SIREN</label><input type="text" id="ie_siren" value="${esc(s.siren)}" inputmode="numeric" placeholder="9 chiffres"></div>
       <div class="field">
         <label>N° de TVA intracommunautaire</label>
@@ -9772,9 +9921,9 @@ function sectionsEfactureSocieteHTML(s){
         </div>
       </div>
       <div class="field"><label>Code APE / NAF</label><input type="text" id="ie_codeNaf" value="${esc(s.codeNaf)}"></div>
-      <div class="field"><label>Capital social (€)</label><input type="number" step="0.01" min="0" id="ie_capitalSocial" value="${esc(s.capitalSocial)}"></div>
-      <div class="field"><label>N° RCS</label><input type="text" id="ie_rcsNumero" value="${esc(s.rcsNumero)}"></div>
-      <div class="field"><label>Ville du RCS</label><input type="text" id="ie_rcsVille" value="${esc(s.rcsVille)}"></div>
+      <div class="field"><label>Capital social (€)</label><input type="number" step="0.01" min="0" id="ie_capitalSocial" oninput="majCompletudeSociete()" value="${esc(s.capitalSocial)}"></div>
+      <div class="field"><label>N° RCS</label><input type="text" id="ie_rcsNumero" oninput="majCompletudeSociete()" value="${esc(s.rcsNumero)}"></div>
+      <div class="field"><label>Ville du RCS</label><input type="text" id="ie_rcsVille" oninput="majCompletudeSociete()" value="${esc(s.rcsVille)}"></div>
       <div class="field"><label>Pays</label><input type="text" id="ie_paysCode" value="${esc(s.paysCode||paysDefaut())}" maxlength="2"></div>
     </div>
   </details>
@@ -9819,8 +9968,8 @@ function sectionsEfactureSocieteHTML(s){
         </select>
       </div>
       <div class="field"><label>Adresse électronique</label><input type="text" id="ie_adresseElectroniqueValeur" value="${esc(s.adresseElectroniqueValeur)}" placeholder="déduite du SIRET"></div>
-      <div class="field"><label>IBAN</label><input type="text" id="ie_iban" value="${esc(s.iban)}" placeholder="FR76…"></div>
-      <div class="field"><label>BIC</label><input type="text" id="ie_bic" value="${esc(s.bic)}"></div>
+      <div class="field"><label>IBAN</label><input type="text" id="ie_iban" oninput="majCompletudeSociete()" value="${esc(s.iban)}" placeholder="FR76…"></div>
+      <div class="field"><label>BIC</label><input type="text" id="ie_bic" oninput="majCompletudeSociete()" value="${esc(s.bic)}"></div>
     </div>
   </details>`;
 }
