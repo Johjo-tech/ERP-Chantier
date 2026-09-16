@@ -55,7 +55,7 @@ import {
   verifierEntite,
 } from "@/api/regles-efacture";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
-import { apercuDe, verifierPieceJointe } from "@/api/regles-piece-jointe";
+import { apercuDe, urlApercuPdf, verifierPieceJointe } from "@/api/regles-piece-jointe";
 import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
   formaterTaux,
@@ -588,6 +588,7 @@ export function injecterSession() {
   w.verifierPieceJointe = verifierPieceJointe;
   w.preparerPieceJointe = preparer;
   w.apercuDe = apercuDe;
+  w.urlApercuPdf = urlApercuPdf;
   w.urlPieceJointe = urlPieceJointe;
   w.urlTelechargementPieceJointe = urlTelechargementPieceJointe;
 
