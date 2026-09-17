@@ -5178,7 +5178,7 @@ function devisForm(){
         <div class="field full" id="vacantFieldDevis" style="display:${e.logementStatut==='vacant'?'':'none'};"><label>Ancien locataire</label><input type="text" id="f_ancienLocataire" value="${esc(e.ancienLocataire)}" placeholder="Ex : M. Dupont"></div>
         <div class="field" id="occupantFieldDevis" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Locataire</label><input type="text" id="f_occupant" value="${esc(e.occupant)}"></div>
         <div class="address-trio">
-          <div class="field"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client"></div>
+          <div class="field" style="position:relative;"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client" data-suggest="fLieuSuggestions" oninput="searchAdresse(this, {adresse:'f_adresseLocataire', codePostal:'f_codePostal', ville:'f_ville'})" onblur="setTimeout(()=>{const b=document.getElementById('fLieuSuggestions'); if(b) b.style.display='none';},150)"><div id="fLieuSuggestions" class="suggest-box"></div></div>
           <div class="field"><label>Code postal</label><input type="text" id="f_codePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'f_ville')"></div>
           <div class="field"><label>Ville</label><input type="text" id="f_ville" autocomplete="off" value="${esc(e.ville)}"></div>
         </div>
@@ -6178,7 +6178,7 @@ function factureForm(){
         <div class="field full" id="vacantFieldFacture" style="display:${e.logementStatut==='vacant'?'':'none'};"><label>Ancien locataire</label><input type="text" id="f_ancienLocataire" value="${esc(e.ancienLocataire)}" placeholder="Ex : M. Dupont"></div>
         <div class="field" id="occupantFieldFacture" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Locataire</label><input type="text" id="f_occupant" value="${esc(e.occupant)}"></div>
         <div class="address-trio">
-          <div class="field"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client"></div>
+          <div class="field" style="position:relative;"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client" data-suggest="fLieuSuggestions" oninput="searchAdresse(this, {adresse:'f_adresseLocataire', codePostal:'f_codePostal', ville:'f_ville'})" onblur="setTimeout(()=>{const b=document.getElementById('fLieuSuggestions'); if(b) b.style.display='none';},150)"><div id="fLieuSuggestions" class="suggest-box"></div></div>
           <div class="field"><label>Code postal</label><input type="text" id="f_codePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'f_ville')"></div>
           <div class="field"><label>Ville</label><input type="text" id="f_ville" autocomplete="off" value="${esc(e.ville)}"></div>
         </div>
@@ -10159,7 +10159,7 @@ function stepInfosHTML(e){
         <div class="field full" id="vacantFieldInter" style="display:${e.logementStatut==='vacant'?'':'none'};"><label>Ancien locataire</label><input type="text" value="${esc(e.ancienLocataire)}" placeholder="Ex : M. Dupont" oninput="setEditing('ancienLocataire',this.value)"></div>
         <div class="field" id="occupantFieldInter" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Locataire</label><input type="text" id="f_occupant" value="${esc(e.occupant)}" oninput="setEditing('occupant',this.value)"></div>
         <div class="address-trio">
-          <div class="field"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client" oninput="setEditing('adresseLocataire',this.value)"></div>
+          <div class="field" style="position:relative;"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client" data-suggest="fLieuSuggestions" oninput="setEditing('adresseLocataire',this.value); searchAdresse(this, {adresse:'f_adresseLocataire', codePostal:'f_codePostal', ville:'f_ville'})" onblur="setTimeout(()=>{const b=document.getElementById('fLieuSuggestions'); if(b) b.style.display='none';},150)"><div id="fLieuSuggestions" class="suggest-box"></div></div>
           <div class="field"><label>Code postal</label><input type="text" id="f_codePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="setEditing('codePostal',this.value); lookupVilleParCodePostal(this.value,'f_ville')"></div>
           <div class="field"><label>Ville</label><input type="text" id="f_ville" autocomplete="off" value="${esc(e.ville)}" oninput="setEditing('ville',this.value)"></div>
         </div>
