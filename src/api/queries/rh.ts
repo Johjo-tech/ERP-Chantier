@@ -98,6 +98,60 @@ export function deleteDocumentSalarie(id: Uuid) {
   return remove("salarie_documents", id);
 }
 
+// ============ VISITES MÉDICALES ============
+
+/*
+ * `salarie_visites_medicales` tient l'historique du suivi en santé au travail.
+ * L'attestation vit dans le bucket `terrain`, au même endroit que le dossier
+ * documentaire ; la ligne n'en garde que le chemin.
+ *
+ * Écrire ici recalcule `salaries.visite_medicale_date` et
+ * `visite_medicale_prochaine` : un déclencheur les tient d'après la visite la
+ * plus récente. Ne pas les écrire à la main — elles seraient réécrites.
+ *
+ * Tri décroissant : l'écran montre la dernière visite en premier, et c'est
+ * elle qui fait l'échéance.
+ */
+export function listVisitesMedicales(salarieId: Uuid) {
+  return listByParent(
+    "salarie_visites_medicales",
+    "salarie_id",
+    salarieId,
+    "date_visite"
+  );
+}
+
+/** Les registres de plusieurs salariés en une requête, pas une par fiche. */
+export function listVisitesMedicalesSalaries(salarieIds: Uuid[]) {
+  return listByParents(
+    "salarie_visites_medicales",
+    "salarie_id",
+    salarieIds,
+    "date_visite"
+  );
+}
+
+export function getVisiteMedicale(id: Uuid) {
+  return getOne("salarie_visites_medicales", id);
+}
+
+export function addVisiteMedicale(
+  input: TablesInsert<"salarie_visites_medicales">
+) {
+  return insertOne("salarie_visites_medicales", input);
+}
+
+export function updateVisiteMedicale(
+  id: Uuid,
+  updates: TablesUpdate<"salarie_visites_medicales">
+) {
+  return updateOne("salarie_visites_medicales", id, updates);
+}
+
+export function deleteVisiteMedicale(id: Uuid) {
+  return remove("salarie_visites_medicales", id);
+}
+
 export async function getSalarieComplet(id: Uuid): Promise<SalarieComplet | null> {
   const salarie = await getSalarie(id);
   if (!salarie) return null;

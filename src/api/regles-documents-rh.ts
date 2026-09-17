@@ -21,10 +21,16 @@ export interface TypeDocumentRh {
    * Attendu dans tout dossier : son absence est un manque, pas un choix.
    *
    * Le socle du BTP : déclaration préalable à l'embauche (C. trav. L.1221-10),
-   * carte BTP (L.8291-1), suivi médical (R.4624-10), et de quoi prouver
-   * l'identité et payer. L'avenant, le titre de séjour ou le CACES ne
-   * concernent qu'une partie des salariés : les réclamer à tous ferait un
-   * écran rouge en permanence, donc un écran qu'on n'écoute plus.
+   * carte BTP (L.8291-1), et de quoi prouver l'identité et payer. L'avenant,
+   * le titre de séjour ou le CACES ne concernent qu'une partie des salariés :
+   * les réclamer à tous ferait un écran rouge en permanence, donc un écran
+   * qu'on n'écoute plus.
+   *
+   * Le **suivi médical** n'est pas dans cette liste alors qu'il est tout aussi
+   * obligatoire (R.4624-10) : il a son propre registre, qui porte le type de
+   * visite, l'avis d'aptitude et les réserves — voir `regles-visite-medicale`.
+   * L'y laisser aussi ferait deux sources, deux seuils et deux alertes pour le
+   * même manquement.
    */
   obligatoire: boolean;
   /** Plusieurs exemplaires ont un sens — un avenant par changement. */
@@ -38,7 +44,6 @@ export const TYPES_DOCUMENT_RH: readonly TypeDocumentRh[] = [
   { code: "pieceIdentite",  libelle: "Pièce d'identité",       icone: "🪪", perissable: true,  obligatoire: true,  multiple: false },
   { code: "titreSejour",    libelle: "Titre de séjour",        icone: "🛂", perissable: true,  obligatoire: false, multiple: false },
   { code: "carteBtp",       libelle: "Carte BTP",              icone: "🦺", perissable: true,  obligatoire: true,  multiple: false },
-  { code: "visiteMedicale", libelle: "Visite médicale",        icone: "🩺", perissable: true,  obligatoire: true,  multiple: true  },
   { code: "habilitation",   libelle: "Habilitation / CACES",   icone: "⚡", perissable: true,  obligatoire: false, multiple: true  },
   { code: "diplome",        libelle: "Diplôme / certification",icone: "🎓", perissable: false, obligatoire: false, multiple: true  },
   { code: "rib",            libelle: "RIB",                    icone: "🏦", perissable: false, obligatoire: true,  multiple: false },

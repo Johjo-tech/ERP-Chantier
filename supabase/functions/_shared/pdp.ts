@@ -18,7 +18,7 @@
  * `service_role`. L'écran lit l'état dans `pdp_connexions`, jamais le secret.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { adminClient, corsHeaders, json, userClient } from "./supabase.ts";
 import {
   ReconnectRequiredError,
   TransientRefreshError,
@@ -31,39 +31,12 @@ import {
 export { ReconnectRequiredError, TransientRefreshError };
 export { oauthStateExpired } from "./oauth-core.ts";
 
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
-export function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-/** Client agissant au nom de l'utilisateur : la RLS s'applique. */
-export function userClient(req: Request) {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    {
-      global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-      auth: { persistSession: false },
-    }
-  );
-}
-
-/** Client de service : contourne la RLS. Seul chemin vers les jetons. */
-export function adminClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { persistSession: false } }
-  );
-}
+/* Les deux clients et les en-têtes CORS vivent désormais dans `supabase.ts` :
+   ils ne doivent rien au PDP, et une fonction d'invitation n'a pas à importer
+   le connecteur de facturation pour y accéder. Réexportés ici pour les onze
+   appelants qui les nomment déjà par ce chemin — un réexport seul ne les
+   ramènerait pas dans la portée de ce fichier, qui s'en sert aussi. */
+export { adminClient, corsHeaders, json, userClient };
 
 export type Environnement = "sandbox" | "production";
 

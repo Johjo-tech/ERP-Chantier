@@ -13,4 +13,5 @@ export * from "./chantiers";
 export * from "./rh";
 export * from "./parametres";
 export * from "./acces";
+export * from "./invitations";
 export * from "./planning";

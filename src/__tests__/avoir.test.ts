@@ -11,9 +11,13 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  avoirDisponible,
   estAvoir,
   libelleDocument,
+  montantImputable,
   refusAvoir,
+  refusImputationAvoir,
+  resteAImputer,
   signeDocument,
   totauxSignes,
 } from "@/api/regles-avoir";
@@ -154,5 +158,95 @@ describe("Ce qui refuse un avoir", () => {
 
   it("refuse une facture qu'on n'a pas trouvée", () => {
     expect(refusAvoir({ facture: null, motif: "Métré erroné" })).toMatch(/introuvable/i);
+  });
+});
+
+describe("Ce qui reste d'un avoir à imputer", () => {
+  /* Le TTC arrive signé — c'est ce que rend `computeDocTotals` — et l'avoir se
+     consomme en valeur absolue : on ne retranche pas une dette négative. */
+  it("part du crédit en valeur absolue", () => {
+    expect(resteAImputer(-1710, [])).toBe(1710);
+    expect(resteAImputer(1710, [])).toBe(1710);
+  });
+
+  it("décompte les imputations déjà faites", () => {
+    expect(resteAImputer(-1710, [{ montant: 710 }])).toBe(1000);
+    expect(resteAImputer(-1710, [{ montant: 710 }, { montant: 1000 }])).toBe(0);
+  });
+
+  it("ne descend jamais sous zéro", () => {
+    expect(resteAImputer(-100, [{ montant: 250 }])).toBe(0);
+  });
+
+  it("dit si l'avoir a encore quelque chose à donner", () => {
+    expect(avoirDisponible(-100, [])).toBe(true);
+    expect(avoirDisponible(-100, [{ montant: 100 }])).toBe(false);
+  });
+});
+
+describe("Le montant proposé à l'imputation", () => {
+  it("est le plus petit des deux restes", () => {
+    expect(montantImputable(500, 1710)).toBe(500);
+    expect(montantImputable(1710, 500)).toBe(500);
+  });
+
+  it("ne propose rien sur une facture soldée", () => {
+    expect(montantImputable(0, 1710)).toBe(0);
+    expect(montantImputable(-50, 1710)).toBe(0);
+  });
+});
+
+describe("Ce qui refuse une imputation", () => {
+  const avoir = { numero: "AV-2026-0001", typeDocument: "avoir", clientNom: "SCI DES LILAS" };
+  const facture = { numero: "FAC-2026-0428", typeDocument: "facture", clientNom: "SCI DES LILAS" };
+  const bon = { avoir, facture, montant: 500, resteFacture: 1000, resteAvoir: 700 };
+
+  it("accepte une imputation qui tient dans les deux restes", () => {
+    expect(refusImputationAvoir(bon)).toBeNull();
+  });
+
+  it("refuse d'éteindre la créance d'un tiers", () => {
+    /* Le crédit consenti à un client ne solde pas la facture d'un autre : ce
+       serait un cadeau prélevé sur le compte de quelqu'un. */
+    const refus = refusImputationAvoir({
+      ...bon,
+      facture: { ...facture, clientNom: "MAIRIE DE VILLEURBANNE" },
+    });
+    expect(refus).toMatch(/SCI DES LILAS/);
+  });
+
+  it("refuse de dépasser ce que l'avoir porte encore", () => {
+    expect(refusImputationAvoir({ ...bon, montant: 900 })).toMatch(/ne dispose plus que de 700,00/);
+  });
+
+  it("refuse de dépasser ce que la facture doit", () => {
+    expect(refusImputationAvoir({ ...bon, montant: 650, resteFacture: 600 })).toMatch(
+      /ne doit plus que 600,00/
+    );
+  });
+
+  it("refuse un avoir déjà épuisé", () => {
+    expect(refusImputationAvoir({ ...bon, resteAvoir: 0 })).toMatch(/déjà entièrement imputé/i);
+  });
+
+  it("refuse une facture déjà réglée", () => {
+    expect(refusImputationAvoir({ ...bon, resteFacture: 0 })).toMatch(/déjà entièrement réglée/i);
+  });
+
+  it("refuse d'imputer autre chose qu'un avoir", () => {
+    expect(refusImputationAvoir({ ...bon, avoir: { ...avoir, typeDocument: "facture" } })).toMatch(
+      /n'est pas un avoir/i
+    );
+  });
+
+  it("refuse d'imputer sur un avoir", () => {
+    expect(refusImputationAvoir({ ...bon, facture: { ...facture, typeDocument: "avoir" } })).toMatch(
+      /sur un autre avoir/i
+    );
+  });
+
+  it("refuse un montant nul ou négatif", () => {
+    expect(refusImputationAvoir({ ...bon, montant: 0 })).toMatch(/supérieur à 0/);
+    expect(refusImputationAvoir({ ...bon, montant: -100 })).toMatch(/supérieur à 0/);
   });
 });

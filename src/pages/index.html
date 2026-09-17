@@ -1544,6 +1544,41 @@ img.pf-plein-fichier{ height:auto; max-height:100%; object-fit:contain; margin:0
     </div>
   </div>
 </div>
+<div id="imputationModal" class="view-modal">
+  <div class="view-modal-panel" style="max-width:460px;">
+    <button class="view-modal-close" onclick="closeImputationModal()">✕</button>
+    <h3 style="margin-top:0;">Régler par un avoir</h3>
+    <p class="card-sub" id="imputationResume"></p>
+    <div class="field"><label>Avoir à imputer</label>
+      <select id="imputationAvoir" onchange="majMontantImputation()"></select></div>
+    <div class="field"><label>Montant imputé</label>
+      <input type="number" step="0.01" min="0" id="imputationMontant" oninput="majAideImputation()"></div>
+    <div class="field full"><small id="imputationAide" class="card-sub"></small></div>
+    <p class="card-sub">L'avoir éteint la créance, il ne s'encaisse pas : deux règlements liés sont écrits — l'un solde la facture, l'autre consomme l'avoir.</p>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn primary" id="imputationConfirmerBtn" onclick="confirmerImputation()">✓ Imputer</button>
+      <button class="btn ghost" onclick="closeImputationModal()">Annuler</button>
+    </div>
+  </div>
+</div>
+<div id="avoirModal" class="view-modal">
+  <div class="view-modal-panel" style="max-width:460px;">
+    <button class="view-modal-close" onclick="closeAvoirModal()">✕</button>
+    <h3 style="margin-top:0;">Établir un avoir</h3>
+    <p class="card-sub" id="avoirModalResume"></p>
+    <div class="field"><label>Motif de la rectification</label>
+      <select id="avoirMotifPreset" onchange="choisirMotifAvoir()"></select></div>
+    <div class="field" id="avoirMotifLibreZone" style="display:none;">
+      <label>Préciser</label>
+      <input type="text" id="avoirMotifLibre" placeholder="Ex : métré erroné sur le lot 2" maxlength="180">
+    </div>
+    <p class="card-sub">Ce motif s'imprime sur l'avoir et part avec la facture électronique. L'avoir reprend toutes les lignes de la facture et reçoit un numéro de la série « AV ». La facture, elle, ne bouge pas.</p>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn primary" id="avoirConfirmerBtn" onclick="confirmerAvoir()">✓ Établir l'avoir</button>
+      <button class="btn ghost" onclick="closeAvoirModal()">Annuler</button>
+    </div>
+  </div>
+</div>
 <div id="rappelModal" class="view-modal">
   <div class="view-modal-panel" style="max-width:360px;">
     <button class="view-modal-close" onclick="closeRappelModal()">✕</button>
@@ -1872,6 +1907,10 @@ let state = {
      tableau posé sur la fiche est écarté à l'écriture. Il se charge et
      s'enregistre par `src/integrations/documents-rh.ts`. */
   documentsRh: [], documentsRhCharges: false, documentsRhSociete: null, rhDocFiltre: '', rhDocSalarieId: null, rhDocForm: null,
+  /* Le registre des visites médicales, et les invitations en attente : même
+     raison d'être à part du pont, même indexation par société. */
+  visitesRh: [], visitesRhCharges: false, visitesRhSociete: null, rhVisiteFiltre: '', rhVisiteSalarieId: null, rhVisiteForm: null,
+  invitations: [], invitationsCharges: false, invitationsSociete: null,
   /* Une entrée par listing, au lieu d'une propriété d'état par écran : c'est
      ce qui permet à `barreRecherche` et `filtrerListe` de rester génériques. */
   recherches: {}
@@ -4459,12 +4498,15 @@ async function rechargerType(type){
 }
 async function deleteItem(type, id){
   if(!confirm('Supprimer définitivement cet élément ?')) return;
-  /* `salarie_documents` part en cascade avec le salarié, mais pas les fichiers
-     du bucket : sans ce passage, le stockage garderait les contrats de gens
-     qui ne sont plus dans la base — précisément ce qu'on ne doit pas garder. */
+  /* Les tables filles partent en cascade avec le salarié, mais pas les
+     fichiers du bucket : sans ce passage, le stockage garderait les contrats
+     et les attestations médicales de gens qui ne sont plus dans la base —
+     précisément ce qu'on ne doit pas garder. */
   if(type === 'salarie'){
     try{ await window.purgerDocumentsRh(id); }
     catch(err){ console.error('Dossier documentaire non purgé', id, err); }
+    try{ await window.purgerVisitesMedicales(id); }
+    catch(err){ console.error('Attestations médicales non purgées', id, err); }
   }
   let factureIdToSync = null;
   if(type === 'reglement'){
@@ -4473,7 +4515,7 @@ async function deleteItem(type, id){
   }
   await stDelete(type+':'+id);
   await rechargerType(type);
-  if(type === 'salarie') await chargerDossiersRh(true);
+  if(type === 'salarie') await Promise.all([chargerDossiersRh(true), chargerVisitesRh(true)]);
   /* syncFactureStatut recharge les factures de son côté. */
   if(factureIdToSync) await syncFactureStatut(factureIdToSync);
   renderTab();
@@ -5776,17 +5818,27 @@ function renderFactures(){
      La règle vit dans `regles-bc.ts`, avec ses cas. */
   const enValidation = state.bonsCommande.filter(b=>b.societeId===soc && window.etapeValidation(b) !== 'hors_file');
   const aFacturer = state.bonsCommande.filter(b=>b.societeId===soc && b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
+  /* Les avoirs restent AUSSI dans la liste des factures : ce sont des pièces
+     comptables de la même suite, et les en retirer ici sans le faire dans
+     `filterFacturesList` les aurait fait réapparaître à la première frappe —
+     le défaut que ce fichier a déjà connu avec les factures de sous-traitants.
+     L'onglet ne les isole pas, il les rend trouvables. */
+  const avoirs = list.filter(f=>window.estAvoir(f.typeDocument));
   return `
     <div class="plus-subnav" style="justify-content:center;">
       <button class="plus-subnav-btn ${view==='liste'?'active':''}" onclick="setFacturesView('liste')">Factures</button>
+      <button class="plus-subnav-btn ${view==='avoirs'?'active':''}" onclick="setFacturesView('avoirs')">Avoirs ${avoirs.length? `(${avoirs.length})`:''}</button>
       <button class="plus-subnav-btn ${view==='validation'?'active':''}" onclick="setFacturesView('validation')">Validation ${enValidation.length? `(${enValidation.length})`:''}</button>
       <button class="plus-subnav-btn ${view==='afacturer'?'active':''}" onclick="setFacturesView('afacturer')">À facturer ${aFacturer.length? `(${aFacturer.length})`:''}</button>
       <button class="plus-subnav-btn ${view==='reglements'?'active':''}" onclick="setFacturesView('reglements')">Règlements</button>
     </div>
-    <div class="page-head"><h1>${view==='reglements'?'Règlements':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : '<button class="btn primary" onclick="openForm(\'facture\')">+ Nouvelle facture</button>'}</div>
+    <div class="page-head"><h1>${view==='reglements'?'Règlements': view==='avoirs'?'Avoirs':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : '<button class="btn primary" onclick="openForm(\'facture\')">+ Nouvelle facture</button>'}</div>
     ${(state.formOpen.facture || view==='reglements') ? '' : barreFiltresFactures(view)}
     ${view==='liste'? `<div id="formZoneFacture">${state.formOpen.facture? factureForm() : ''}</div>
     ${state.formOpen.facture ? '' : `<div id="factureListZone">${renderFacturesListHTML(list)}</div>`}` : ''}
+    ${view==='avoirs'? `<div class="card-sub" style="margin-bottom:14px;">Les avoirs rectifient une facture émise. Ils portent leur propre série « AV » et comptent en négatif ; leurs montants s'enregistrent positifs, le type dit le sens.</div>
+    <div id="formZoneFacture">${state.formOpen.facture? factureForm() : ''}</div>
+    ${state.formOpen.facture ? '' : `<div id="factureListZone">${avoirs.length? renderFacturesListHTML(avoirs, 'avoirs') : "<div class=\"empty\">Aucun avoir pour cette société. Un avoir s'établit depuis une facture émise, par le bouton « ↩ Établir un avoir ».</div>"}</div>`}` : ''}
     ${view==='validation'? `<div class="card-sub" style="margin-bottom:14px;">Bons de commande validés par le conducteur de travaux, en attente de validation par le directeur.</div>
     <div id="facturesWorkflowZone">${renderDossiersClients(enValidation, 'validation')}</div>` : ''}
     ${view==='afacturer'? `<div class="card-sub" style="margin-bottom:14px;">Bons de commande validés par le directeur — à facturer et envoyer au client.</div>
@@ -5801,6 +5853,7 @@ function renderFactures(){
    conditions éparpillées dans le gabarit. */
 const FILTRES_FACTURES = {
   liste:      ['recherche','client','interlocuteur','conducteur','logement','reglement','periode'],
+  avoirs:     ['recherche','client','conducteur','periode'],
   validation: ['recherche','client','interlocuteur','conducteur','metier','periode'],
   afacturer:  ['recherche','client','interlocuteur','conducteur','metier','periode'],
 };
@@ -6169,8 +6222,8 @@ function filterFactureInterlocuteur(value){
   const zone = document.getElementById('factureListZone');
   if(zone) zone.innerHTML = renderFacturesListHTML(state.factures.filter(f=>f.societeId===state.societeId));
 }
-function renderFacturesListHTML(list){
-  const criteres = criteresFactures('liste');
+function renderFacturesListHTML(list, vue){
+  const criteres = criteresFactures(vue || 'liste');
   const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
   return filtered.map(f=>{
     const t = computeDocTotals(f);
@@ -6184,20 +6237,33 @@ function renderFacturesListHTML(list){
     const rapportOrigine = f.interventionId ? state.interventions.find(i=>i.id===f.interventionId) : null;
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
     return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${f.id}')"><div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${esc(f.numero)}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
+      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${f.numero? esc(f.numero) : 'Brouillon — non émise'}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
       ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${devisOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
       ${rectifiee? `<div class="card-sub">Rectifie la facture : <a href="javascript:void(0)" onclick="event.stopPropagation(); goToFacture('${rectifiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rectifiee.numero)}</a>${f.motifRectification? ' · '+esc(f.motifRectification):''}</div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="event.stopPropagation(); ouvrirBonCommandeOrigine('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;" title="${bonCommandeOrigine.pieceJointeChemin? 'Voir le bon reçu du client' : 'Aller au bon de commande'}">${esc(bonCommandeOrigine.numeroBC)}${bonCommandeOrigine.pieceJointeChemin? ' 📎':''}</a></div>`:''}
       </div>
-      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}${reg.paye > 0.004 ? `<div class="card-sub" style="margin-top:2px;">réglé ${moneyDisplay(reg.paye)}${reg.reste > 0.004? ' · reste '+moneyDisplay(reg.reste):''}</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}</div></div>
+      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}${reg.paye > 0.004 ? `<div class="card-sub" style="margin-top:2px;">réglé ${moneyDisplay(reg.paye)}${reg.reste > 0.004? ' · reste '+moneyDisplay(reg.reste):''}</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}${estUnAvoir
+        ? /* Un total négatif donne un reste à payer nul : le calcul de règlement
+             concluait « Réglée », en vert, sur un avoir que personne n'a encore
+             imputé. Ni ce badge ni l'échéance n'ont de sens ici — l'avoir
+             s'impute sur une facture, il ne s'encaisse pas. */
+          badgeAvoirHTML(f)
+        : `<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}`}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
-      ${f.numero && !estUnAvoir? `<button class="btn small" onclick="etablirAvoirPour('${f.id}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>` : ''}
+      ${/* Le bouton absent ne s'expliquait pas : sur un brouillon — et les
+            brouillons sont en TÊTE de liste, la plus récente d'abord — on
+            cherchait un avoir qui n'était nulle part. Il reste donc visible,
+            désactivé, et dit pourquoi. */''}
+      ${estUnAvoir? '' : (f.numero
+        ? `<button class="btn small" onclick="etablirAvoirPour('${f.id}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
+        : `<button class="btn small" disabled title="Cette facture n'est pas émise : elle n'a pas de numéro, et se corrige directement par « Modifier ». Un avoir n'aurait rien à rectifier.">↩ Établir un avoir</button>`)}
+      ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${f.id}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
       <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
     </div></div>`;
   }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';
@@ -6370,34 +6436,191 @@ async function saveFacture(){
  * qu'appliquera la couche d'accès : demander deux fois évite d'ouvrir une
  * saisie qui finirait rejetée, sans que les deux messages puissent diverger.
  */
-async function etablirAvoirPour(factureId){
+const MOTIF_AVOIR_LIBRE = '__libre__';
+
+function etablirAvoirPour(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.etablirAvoir){ showToast("L'établissement d'un avoir n'est pas disponible."); return; }
 
-  const motif = (prompt(`Avoir sur la facture ${f.numero}\n\nMotif de la rectification (il s'imprime sur l'avoir) :`, '') || '').trim();
-  if(!motif) return;
-
-  const refus = window.refusAvoir({ facture:{ numero:f.numero, typeDocument:f.typeDocument }, motif });
-  if(refus){ alert(refus); return; }
-
+  state.avoirCible = factureId;
   const ttc = Math.abs(computeDocTotals(f).ttc);
-  if(!confirm(`Établir un avoir de ${moneyDisplay(ttc)} TTC sur la facture ${f.numero} ?\n\nIl en reprend toutes les lignes et reçoit un numéro de la série « AV ». La facture, elle, ne bouge pas.`)) return;
+  document.getElementById('avoirModalResume').textContent =
+    `Facture ${f.numero} — ${f.client} — ${moneyDisplay(ttc)} TTC`;
 
+  const motifs = window.MOTIFS_AVOIR || [];
+  document.getElementById('avoirMotifPreset').innerHTML =
+    motifs.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')
+    + `<option value="${MOTIF_AVOIR_LIBRE}">Autre motif (préciser)…</option>`;
+  document.getElementById('avoirMotifLibre').value = '';
+  document.getElementById('avoirMotifLibreZone').style.display = 'none';
+  document.getElementById('avoirModal').classList.add('open');
+}
+function choisirMotifAvoir(){
+  const libre = document.getElementById('avoirMotifPreset').value === MOTIF_AVOIR_LIBRE;
+  document.getElementById('avoirMotifLibreZone').style.display = libre ? '' : 'none';
+  if(libre) document.getElementById('avoirMotifLibre').focus();
+}
+function closeAvoirModal(){
+  document.getElementById('avoirModal').classList.remove('open');
+  state.avoirCible = null;
+}
+/** Le motif retenu : celui de la liste, ou celui qu'on a écrit à la place. */
+function motifAvoirSaisi(){
+  const choisi = document.getElementById('avoirMotifPreset').value;
+  return (choisi === MOTIF_AVOIR_LIBRE
+    ? document.getElementById('avoirMotifLibre').value
+    : choisi || '').trim();
+}
+async function confirmerAvoir(){
+  const factureId = state.avoirCible;
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+
+  const motif = motifAvoirSaisi();
+  /* Le même refus que celui qu'appliquera la couche d'accès : les deux messages
+     viennent de `refusAvoir`, ils ne peuvent pas diverger. */
+  const refus = window.refusAvoir({ facture:{ numero:f.numero, typeDocument:f.typeDocument }, motif });
+  if(refus){ showToast(refus); return; }
+
+  const btn = document.getElementById('avoirConfirmerBtn');
+  btn.disabled = true;
+  btn.textContent = 'Établissement…';
   try{
     const avoir = await window.etablirAvoir(factureId, motif);
+    closeAvoirModal();
     await recharger('facture');
-    showToast(`Avoir ${avoir && avoir.numero ? avoir.numero : ''} établi.`);
-    if(avoir && avoir.id) goToFacture(avoir.id);
+    showToast(`Avoir ${avoir && avoir.numero ? avoir.numero : ''} établi.`, 'success');
+    setFacturesView('avoirs');
   }catch(err){
     console.error('Avoir non établi', err);
-    alert((err && err.message) || "L'avoir n'a pas pu être établi.");
+    showToast((err && err.message) || "L'avoir n'a pas pu être établi.", 'danger', 6000);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "✓ Établir l'avoir";
   }
 }
 
 /* ---------- Règlements ---------- */
 function reglementsForFacture(factureId){
   return state.reglements.filter(r=>r.factureId===factureId);
+}
+
+/* ---------- Imputation d'un avoir ----------
+   Un avoir éteint une créance ; il ne s'encaisse pas. L'imputer écrit deux
+   règlements liés — l'un solde la facture, l'autre consomme l'avoir — et c'est
+   la couche d'accès qui les pose ensemble, en une seule insertion. */
+
+/**
+ * L'état d'un avoir, qui n'est pas celui d'une facture.
+ *
+ * Le calcul de règlement conclut « Réglée » sur tout total négatif — le reste à
+ * payer y tombe à zéro. Un avoir affichait donc un badge vert alors que
+ * personne ne l'avait encore imputé. Son état, c'est ce qu'il lui reste à
+ * donner.
+ */
+function badgeAvoirHTML(avoir){
+  const reste = resteDeLAvoir(avoir);
+  const credit = Math.abs(computeDocTotals(avoir).ttc);
+  if(reste <= 0.004) return `<span class="badge success" title="Cet avoir a été entièrement imputé">Imputé</span>`;
+  if(reste < credit - 0.004) return `<span class="badge warn" title="Imputé en partie : ${moneyDisplay(reste)} restent à imputer">Partiellement imputé</span>`;
+  return `<span class="badge warn" title="À imputer sur une facture du même client">À imputer</span>`;
+}
+
+/** Ce qu'il reste d'un avoir à donner, d'après les imputations déjà faites. */
+function resteDeLAvoir(avoir){
+  if(!avoir) return 0;
+  return window.resteAImputer(computeDocTotals(avoir).ttc, reglementsForFacture(avoir.id));
+}
+/** Les avoirs du même client qui ont encore quelque chose à imputer. */
+function avoirsDisponiblesPour(facture){
+  if(!facture) return [];
+  return state.factures.filter(a =>
+    a.societeId === facture.societeId
+    && window.estAvoir(a.typeDocument)
+    && a.numero
+    && (a.client || '') === (facture.client || '')
+    && resteDeLAvoir(a) > 0
+  );
+}
+/** L'avoir peut-il solder cette facture ? Ce qui commande l'affichage du bouton. */
+function peutReglerParAvoir(facture){
+  return !!facture
+    && !window.estAvoir(facture.typeDocument)
+    && !!facture.numero
+    && resteDeLaFacture(facture, null) > 0
+    && avoirsDisponiblesPour(facture).length > 0;
+}
+
+function reglerParAvoir(factureId){
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+  if(!window.imputerAvoir){ showToast("L'imputation n'est pas disponible."); return; }
+
+  const dispos = avoirsDisponiblesPour(f);
+  if(!dispos.length){ showToast("Aucun avoir disponible pour ce client."); return; }
+
+  state.imputationCible = factureId;
+  document.getElementById('imputationResume').textContent =
+    `Facture ${f.numero} — ${f.client} — reste ${moneyDisplay(resteDeLaFacture(f, null))}`;
+  document.getElementById('imputationAvoir').innerHTML = dispos.map(a =>
+    `<option value="${a.id}">${esc(a.numero)} — ${moneyDisplay(resteDeLAvoir(a))} disponible${a.motifRectification? ' · '+esc(a.motifRectification):''}</option>`
+  ).join('');
+  majMontantImputation();
+  document.getElementById('imputationModal').classList.add('open');
+}
+/** Le montant proposé : le plus petit des deux restes, jamais davantage. */
+function majMontantImputation(){
+  const f = state.factures.find(x=>x.id===state.imputationCible);
+  const a = state.factures.find(x=>x.id===document.getElementById('imputationAvoir').value);
+  document.getElementById('imputationMontant').value =
+    window.montantImputable(resteDeLaFacture(f, null), resteDeLAvoir(a)).toFixed(2);
+  majAideImputation();
+}
+function majAideImputation(){
+  const f = state.factures.find(x=>x.id===state.imputationCible);
+  const a = state.factures.find(x=>x.id===document.getElementById('imputationAvoir').value);
+  if(!f || !a) return;
+  const montant = window.arrondiCentime(document.getElementById('imputationMontant').value);
+  const resteF = resteDeLaFacture(f, null);
+  const resteA = resteDeLAvoir(a);
+  const refus = window.refusImputationAvoir({
+    avoir:   { numero:a.numero, typeDocument:a.typeDocument, clientNom:a.client },
+    facture: { numero:f.numero, typeDocument:f.typeDocument, clientNom:f.client },
+    montant, resteFacture:resteF, resteAvoir:resteA,
+  });
+  const aide = document.getElementById('imputationAide');
+  aide.textContent = refus
+    || `Après imputation : facture ${moneyDisplay(resteF - montant)} restant dû, avoir ${moneyDisplay(resteA - montant)} disponible.`;
+  aide.style.color = refus ? 'var(--danger)' : '';
+  document.getElementById('imputationConfirmerBtn').disabled = !!refus;
+}
+function closeImputationModal(){
+  document.getElementById('imputationModal').classList.remove('open');
+  state.imputationCible = null;
+}
+async function confirmerImputation(){
+  const factureId = state.imputationCible;
+  const avoirId = document.getElementById('imputationAvoir').value;
+  const montant = window.arrondiCentime(document.getElementById('imputationMontant').value);
+  const btn = document.getElementById('imputationConfirmerBtn');
+  btn.disabled = true;
+  btn.textContent = 'Imputation…';
+  try{
+    await window.imputerAvoir(avoirId, factureId, montant);
+    closeImputationModal();
+    await recharger('reglement', 'facture');
+    /* Le statut stocké suit les règlements : sans cette remise à jour, une
+       facture soldée par un avoir resterait « impayée » dans les compteurs. */
+    await syncFactureStatut(factureId);
+    showToast('Avoir imputé.', 'success');
+  }catch(err){
+    console.error('Imputation refusée', err);
+    showToast((err && err.message) || "L'avoir n'a pas pu être imputé.", 'danger', 6000);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = '✓ Imputer';
+  }
 }
 function reglementStatutFacture(f){
   const st = window.statutReglement(computeDocTotals(f).ttc, reglementsForFacture(f.id));
@@ -10060,7 +10283,11 @@ function changerFactureDuReglement(){
 
 function reglementForm(){
   const e = state.editing;
-  const factures = state.factures.filter(f=>f.societeId===state.societeId);
+  /* Les avoirs sont écartés de ce sélecteur : leur total est négatif, le reste
+     à payer y tombe donc à zéro et ils s'affichaient « soldée » — on pouvait
+     enregistrer un encaissement SUR un avoir. Un avoir ne s'encaisse pas, il
+     s'impute : c'est « Régler par un avoir », depuis la facture. */
+  const factures = state.factures.filter(f=>f.societeId===state.societeId && !window.estAvoir(f.typeDocument));
   const facture = state.factures.find(f=>f.id===e.factureId) || factures[0] || null;
   /* Le montant part sur le reste à payer : c'est le cas courant — on encaisse
      ce qui est dû — et il reste modifiable pour un acompte ou un versement
@@ -14001,17 +14228,20 @@ function renderRH(){
   if(state.viewingRegistre) return renderRegistreUniquePersonnel();
   const vue = state.rhView || 'salaries';
   const equipes = state.techniciens.filter(t=>t.societeId===state.societeId);
-  /* Les dossiers ne viennent pas du pont : on les demande dès qu'un écran RH
-     s'affiche, y compris la liste des salariés — c'est elle qui porte le
-     badge « dossier incomplet ». */
+  /* Ni les dossiers ni le registre médical ne viennent du pont : on les
+     demande dès qu'un écran RH s'affiche, y compris la liste des salariés —
+     c'est elle qui porte le badge « dossier incomplet ». */
   chargerDossiersRh();
+  chargerVisitesRh();
   const sousNav = `
     <div class="plus-subnav" style="justify-content:center;">
       <button class="plus-subnav-btn ${vue==='salaries'?'active':''}" onclick="setRhView('salaries')">Salariés</button>
       <button class="plus-subnav-btn ${vue==='documents'?'active':''}" onclick="setRhView('documents')">Documents</button>
+      <button class="plus-subnav-btn ${vue==='visites'?'active':''}" onclick="setRhView('visites')">Visites médicales</button>
       <button class="plus-subnav-btn ${vue==='equipes'?'active':''}" onclick="setRhView('equipes')">Équipes ${equipes.length? `(${equipes.length})`:''}</button>
     </div>`;
   if(vue==='documents') return sousNav + renderRHDocuments();
+  if(vue==='visites') return sousNav + renderRHVisites();
   if(vue==='equipes') return sousNav + renderEquipesRH();
   return sousNav + renderRHSalaries();
 }
@@ -14217,11 +14447,11 @@ function renderSalarieListHTML(list){
     /* Tant que les dossiers ne sont pas revenus, pas de badge : afficher
        « incomplet » sur un dossier qu'on n'a pas encore lu serait un mensonge
        le temps d'un aller-retour réseau. */
-    const dossier = dossiersRhPrets() ? dossierDuSalarie(s.id) : null;
+    const dossier = (dossiersRhPrets() && visitesRhPretes()) ? conformiteRhDuSalarie(s.id) : null;
     return `<div class="card">
       <div class="card-row">
         <div style="flex:1; min-width:0;">
-          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte||visiteAlerte? '<span class="badge warn" style="margin-left:6px;">⚠ à vérifier</span>':''}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc(dossier.manquants.map(t=>t.libelle).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}</div>
+          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte||visiteAlerte? '<span class="badge warn" style="margin-left:6px;">⚠ à vérifier</span>':''}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc([...dossier.manquants.map(t=>t.libelle), dossier.manqueMedical? 'Suivi médical' : ''].filter(Boolean).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}${s.profileId? '' : '<span class="badge warn" style="margin-left:6px;" title="Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}</div>
           <div class="card-sub">${esc(s.poste||'')}${s.typeContrat? ' · '+esc(s.typeContrat):''}${s.technicienId? ' · 🔧 équipe liée':''}</div>
           <div class="card-sub">${s.telephone? '📞 '+esc(s.telephone):''}${s.email? ' · ✉ '+esc(s.email):''}</div>
         </div>
@@ -14497,19 +14727,22 @@ function pastilleDocumentRh(docs, type){
 }
 function renderRHDocuments(){
   const salaries = state.salaries.filter(s=>s.societeId===state.societeId);
-  if(!dossiersRhPrets()){
+  /* Le tableau montre aussi la colonne médicale : il lui faut donc les deux
+     sources, et il attend les deux. */
+  if(!dossiersRhPrets() || !visitesRhPretes()){
     chargerDossiersRh();
+    chargerVisitesRh();
     return '<div class="empty">Chargement des dossiers documentaires…</div>';
   }
   const obligatoires = window.TYPES_DOCUMENT_RH.filter(t=>t.obligatoire);
-  const bilans = salaries.map(s=>({ s, docs: documentsDuSalarie(s.id), bilan: dossierDuSalarie(s.id) }));
-  const nbIncomplets = bilans.filter(b=>b.bilan.manquants.length).length;
+  const bilans = salaries.map(s=>({ s, docs: documentsDuSalarie(s.id), bilan: conformiteRhDuSalarie(s.id) }));
+  const nbIncomplets = bilans.filter(b=>!b.bilan.complet).length;
   const nbExpires = bilans.reduce((n,b)=>n+b.bilan.expires.length, 0);
   const nbBientot = bilans.reduce((n,b)=>n+b.bilan.bientot.length, 0);
 
   const filtre = state.rhDocFiltre||'';
   let liste = bilans;
-  if(filtre==='incomplets') liste = bilans.filter(b=>b.bilan.manquants.length);
+  if(filtre==='incomplets') liste = bilans.filter(b=>!b.bilan.complet);
   else if(filtre==='expires') liste = bilans.filter(b=>b.bilan.expires.length);
   else if(filtre==='bientot') liste = bilans.filter(b=>b.bilan.bientot.length);
 
@@ -14517,7 +14750,7 @@ function renderRHDocuments(){
 
   return `
     <div class="page-head"><h1>Dossiers documentaires</h1></div>
-    <div class="card-sub" style="margin-bottom:14px;">Contrat, DPAE, carte BTP, suivi médical, identité, RIB : les pièces que l'inspection du travail peut demander. Les fichiers sont rangés dans un espace privé, cloisonné par société.</div>
+    <div class="card-sub" style="margin-bottom:14px;">Contrat, DPAE, carte BTP, identité, RIB : les pièces que l'inspection du travail peut demander. Les fichiers sont rangés dans un espace privé, cloisonné par société. La colonne 🩺 vient du registre des visites médicales.</div>
     <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
       <button class="btn small ${!filtre?'primary':''}" onclick="filtrerDossiersRh('')">Tous (${bilans.length})</button>
       <button class="btn small ${filtre==='incomplets'?'primary':''}" onclick="filtrerDossiersRh('incomplets')">Dossiers incomplets (${nbIncomplets})</button>
@@ -14529,23 +14762,28 @@ function renderRHDocuments(){
         <thead><tr>
           <th style="text-align:left;">Salarié</th>
           ${obligatoires.map(t=>`<th class="doc-rh-colonne" title="${esc(t.libelle)}"><span>${t.icone}</span>${esc(t.libelle)}</th>`).join('')}
+          <th class="doc-rh-colonne" title="Visite médicale — vient du registre, pas du dossier"><span>🩺</span>Visite médicale</th>
           <th>Autres</th><th>Dossier</th><th></th>
         </tr></thead>
         <tbody>
           ${liste.length? liste.map(({s, docs, bilan})=>{
             const autres = docs.filter(d=>!obligatoires.some(t=>t.code===d.type)).length;
+            /* Le manquement médical se compte à part : il ne se répare pas au
+               même endroit, on renvoie donc vers son registre. */
+            const manques = bilan.manquants.length + (bilan.manqueMedical ? 1 : 0);
             return `<tr>
               <td style="text-align:left;"><strong>${esc(s.prenom)} ${esc(s.nom)}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
               ${obligatoires.map(t=>`<td style="text-align:center;">${pastilleDocumentRh(docs, t)}</td>`).join('')}
+              <td style="text-align:center;">${pastilleVisiteRh(s.id)}</td>
               <td>${autres||'—'}</td>
-              <td>${bilan.complet? '<span class="badge">Complet</span>' : `<span class="badge danger">${bilan.manquants.length? bilan.manquants.length+' manquant'+(bilan.manquants.length>1?'s':'') : bilan.expires.length+' expiré'+(bilan.expires.length>1?'s':'')}</span>`}</td>
+              <td>${bilan.complet? '<span class="badge">Complet</span>' : `<span class="badge danger">${manques? manques+' manquant'+(manques>1?'s':'') : bilan.expires.length+' expiré'+(bilan.expires.length>1?'s':'')}</span>`}</td>
               <td><button class="btn small" onclick="ouvrirDossierRh('${s.id}')">${state.rhDocSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
             </tr>`;
-          }).join('') : `<tr><td colspan="${obligatoires.length+4}" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>`}
+          }).join('') : `<tr><td colspan="${obligatoires.length+5}" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>`}
         </tbody>
       </table>
     </div>` : '<div class="empty">Aucun salarié pour cette société.</div>'}
-    <div class="card-sub" style="margin-top:8px;">Légende : ✓ au dossier · ~ expire bientôt · ! expiré · ? sans date de fin · ✕ manquant</div>
+    <div class="card-sub" style="margin-top:8px;">Légende : ✓ au dossier · ~ expire bientôt · ! expiré · ? sans date de fin · ✕ manquant. La colonne 🩺 se corrige depuis l'onglet Visites médicales.</div>
     ${ouvert? `<div class="card" style="margin-top:20px;">
       <div class="card-row">
         <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — dossier documentaire</div>
@@ -14575,7 +14813,384 @@ function ouvrirDossierRh(salarieId){
   if(state.rhDocForm && state.rhDocForm.salarieId!==state.rhDocSalarieId) state.rhDocForm = null;
   renderTab();
 }
-const TYPES_ABSENCE = ['Congé payé','Arrêt maladie','Congé sans solde','Absence injustifiée','Accident du travail'];
+
+/* ---------- Registre des visites médicales ----------
+
+   Le suivi en santé au travail a quitté le dossier documentaire : une visite
+   n'est pas un document, elle porte un type, un avis d'aptitude, des réserves
+   et une échéance. Les deux dates de la fiche salarié restent, mais tenues par
+   la base d'après la visite la plus récente — un déclencheur les réécrit à
+   chaque enregistrement, d'où les champs grisés dans le formulaire.
+
+   Le seuil est celui du médical (`visiteMedicale`, 45 j par défaut), pas celui
+   des documents (30 j) : c'est le réglage de Paramètres › RH qui le dit. */
+
+function seuilVisiteMedicale(){
+  const seuils = reglagesCourants().seuils || {};
+  return seuils.visiteMedicale != null ? seuils.visiteMedicale : 45;
+}
+function visitesDuSalarie(salarieId){
+  return window.trierVisites(state.visitesRh.filter(v=>v.salarieId===salarieId));
+}
+/* L'échéance qui fait foi est la COLONNE de la fiche, pas le registre.
+   Les deux disent la même chose dès qu'une visite est enregistrée — un
+   déclencheur s'en charge. Mais avant cela, la colonne porte encore ce qui
+   avait été saisi à la main, et c'est la seule échéance que l'entreprise
+   possède : la recalculer depuis un registre vide la ferait disparaître.
+   En production, le seul salarié était précisément dans ce cas. */
+function echeanceVisite(salarieId){
+  const s = state.salaries.find(x=>x.id===salarieId);
+  return (s && s.visiteMedicaleProchaine) || null;
+}
+function etatVisiteDuSalarie(salarieId){
+  return window.etatVisite(echeanceVisite(salarieId), todayISO(), seuilVisiteMedicale());
+}
+let chargementVisitesRh = null;
+function visitesRhPretes(){
+  return !chargementVisitesRh
+    && state.visitesRhCharges
+    && state.visitesRhSociete === state.societeId;
+}
+function chargerVisitesRh(force){
+  if(chargementVisitesRh) return chargementVisitesRh;
+  if(!force && visitesRhPretes()) return Promise.resolve();
+  const societe = state.societeId;
+  const ids = state.salaries.filter(s=>s.societeId===societe).map(s=>s.id);
+  chargementVisitesRh = (async ()=>{
+    try{
+      state.visitesRh = await window.chargerVisitesMedicales(ids);
+    }catch(err){
+      console.error('Registre des visites illisible', err);
+      state.visitesRh = [];
+      showToast("Les visites médicales n'ont pas pu être chargées.");
+    }finally{
+      state.visitesRhCharges = true;
+      state.visitesRhSociete = societe;
+      chargementVisitesRh = null;
+    }
+    renderTab();
+  })();
+  return chargementVisitesRh;
+}
+
+/* La conformité RH d'un salarié : son dossier ET son suivi médical.
+   Les deux se composent ici, et non dans une règle feuille — celles-ci
+   n'importent que des types, et ne peuvent donc pas se connaître. */
+function conformiteRhDuSalarie(salarieId){
+  const bilan = dossierDuSalarie(salarieId);
+  const visite = etatVisiteDuSalarie(salarieId);
+  /* « Pas d'échéance connue » vaut manquement : on ne sait pas si la personne
+     est suivie, et c'est ce que l'inspection du travail viendra demander. */
+  const manqueMedical = visite.etat === 'inconnue' || visite.etat === 'depassee';
+  return { ...bilan, visite, manqueMedical, complet: bilan.complet && !manqueMedical };
+}
+
+function etatVisiteBadge(salarieId){
+  const info = etatVisiteDuSalarie(salarieId);
+  const echeance = echeanceVisite(salarieId);
+  if(info.etat === 'depassee') return `<span class="badge danger">Dépassée depuis le ${fmtDate(echeance)}</span>`;
+  if(info.etat === 'bientot') return `<span class="badge warn">À prévoir dans ${info.jours} j</span>`;
+  if(info.etat === 'aJour') return `<span class="card-sub">Prochaine le ${fmtDate(echeance)}</span>`;
+  return `<span class="badge danger" title="Aucune échéance connue : rien ne préviendra">Aucun suivi</span>`;
+}
+function pastilleVisiteRh(salarieId){
+  const info = etatVisiteDuSalarie(salarieId);
+  if(info.etat === 'inconnue') return `<span class="doc-rh-pastille manquant" title="Aucune visite enregistrée">✕</span>`;
+  if(info.etat === 'depassee') return `<span class="doc-rh-pastille expire" title="Échéance dépassée">!</span>`;
+  if(info.etat === 'bientot') return `<span class="doc-rh-pastille bientot" title="Échéance proche">~</span>`;
+  return `<span class="doc-rh-pastille ok" title="Suivi à jour">✓</span>`;
+}
+function visiteRhRowHTML(v){
+  const t = window.typeVisite(v.type);
+  const avis = window.avisAptitude(v.avis);
+  const regime = window.regimeSuivi(v.suivi);
+  const details = [regime.libelle, v.organisme, v.medecin]
+    .filter(Boolean).map(esc).join(' · ');
+  const couleurAvis = avis ? (avis.gravite==='danger'?'#a30f22':avis.gravite==='warn'?'#a56200':'#15803d') : 'inherit';
+  return `<div class="chantier-file-row">
+    <span style="flex:1; min-width:0;">
+      ${t.icone} <strong>${esc(t.libelle)}</strong> <span class="card-sub">du ${fmtDate(v.dateVisite)}</span>
+      ${avis? `<span style="color:${couleurAvis}; font-weight:700;"> · ${esc(avis.libelle)}</span>`:''}
+      ${details? `<span class="card-sub">${details}</span>`:''}
+      ${v.reserves? `<span class="card-sub">⚠ ${esc(v.reserves)}</span>`:''}
+      ${v.notes? `<span class="card-sub">📝 ${esc(v.notes)}</span>`:''}
+    </span>
+    ${v.prochaineVisite? `<span class="card-sub">→ ${fmtDate(v.prochaineVisite)}</span>` : '<span class="card-sub">sans échéance</span>'}
+    ${v.fichierChemin
+      ? `<button class="btn small ghost" onclick="ouvrirAttestationVisiteEcran('${v.id}')">📎 Attestation</button>`
+      : '<span class="card-sub">sans attestation</span>'}
+    <button class="btn small" onclick="ouvrirFormVisiteRh('${v.salarieId}','${v.id}')">Modifier</button>
+    <button class="btn small danger" onclick="supprimerVisiteRhEcran('${v.id}')">✕</button>
+  </div>`;
+}
+/* Le registre d'un salarié : son état, son historique, et de quoi compléter.
+   Servi tel quel dans l'onglet Visites médicales et dans la fiche. */
+function visitesMedicalesHTML(salarie){
+  if(!visitesRhPretes()){
+    chargerVisitesRh();
+    return '<div class="empty">Chargement du registre…</div>';
+  }
+  const visites = visitesDuSalarie(salarie.id);
+  const formIci = state.rhVisiteForm && state.rhVisiteForm.salarieId === salarie.id;
+  /* Une échéance sans registre : la date saisie à la main avant que le
+     registre n'existe. Elle vaut, mais elle ne dit ni le type de visite ni
+     l'avis rendu — le dire, plutôt que d'afficher un vide qui se lirait comme
+     une absence de suivi. */
+  const heritee = !visites.length && echeanceVisite(salarie.id);
+  return `
+    <div class="card-sub">${etatVisiteBadge(salarie.id)}</div>
+    <div style="margin-top:10px;">${visites.length
+      ? visites.map(visiteRhRowHTML).join('')
+      : (heritee
+        ? `<div class="empty">Échéance reprise de l'ancienne saisie, sans visite au registre : ni type, ni avis, ni attestation. Enregistrez la prochaine visite pour repartir sur du solide.</div>`
+        : '<div class="empty">Aucune visite enregistrée. Ce salarié n\'a pas de suivi médical traçable.</div>')}</div>
+    ${formIci? formVisiteRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormVisiteRh('${salarie.id}')">+ Enregistrer une visite</button>`}
+  `;
+}
+function ouvrirFormVisiteRh(salarieId, visiteId){
+  const v = visiteId ? state.visitesRh.find(x=>x.id===visiteId) : null;
+  /* Le régime par défaut est celui de la visite précédente : il change
+     rarement, et le resaisir à chaque fois inviterait à le laisser faux. */
+  const precedente = v ? null : window.derniereVisite(visitesDuSalarie(salarieId));
+  state.rhVisiteForm = {
+    salarieId, id: v? v.id : null,
+    dateVisite: v? v.dateVisite : todayISO(),
+    type: v? v.type : (precedente? 'periodique' : 'embauche'),
+    suivi: v? v.suivi : (precedente? precedente.suivi : 'simple'),
+    organisme: v? (v.organisme||'') : (precedente? (precedente.organisme||'') : ''),
+    medecin: v? (v.medecin||'') : '',
+    avis: v? (v.avis||'') : '',
+    reserves: v? (v.reserves||'') : '',
+    prochaineVisite: v? (v.prochaineVisite||'') : '',
+    notes: v? (v.notes||'') : '',
+    fichierNom: v? (v.fichierNom||'') : '',
+    /* Une échéance déjà enregistrée a été décidée par quelqu'un : la
+       proposition automatique ne doit pas la reprendre sous prétexte qu'on
+       corrige le régime. */
+    echeanceSaisieMain: !!(v && v.prochaineVisite)
+  };
+  renderTab();
+}
+function fermerFormVisiteRh(){
+  state.rhVisiteForm = null;
+  renderTab();
+}
+function formVisiteRhHTML(){
+  const f = state.rhVisiteForm;
+  return `<div class="form-panel" style="margin-top:12px;">
+    <h3>${f.id? 'Modifier la visite' : 'Enregistrer une visite médicale'}</h3>
+    <div class="field-grid">
+      <div class="field"><label>Date de la visite</label><input type="date" id="visRh_dateVisite" value="${f.dateVisite||''}" onchange="onVisiteRhEcheanceChange()"></div>
+      <div class="field"><label>Type de visite</label><select id="visRh_type" onchange="onVisiteRhEcheanceChange()">
+        ${window.TYPES_VISITE.map(t=>`<option value="${t.code}" ${f.type===t.code?'selected':''}>${t.icone} ${esc(t.libelle)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Régime de suivi</label><select id="visRh_suivi" onchange="onVisiteRhEcheanceChange()">
+        ${window.REGIMES_SUIVI.map(r=>`<option value="${r.code}" ${f.suivi===r.code?'selected':''}>${esc(r.libelle)}</option>`).join('')}
+      </select><div class="card-sub" id="visRh_reference" style="margin-top:4px;"></div></div>
+      <div class="field"><label>Avis d'aptitude</label><select id="visRh_avis">
+        <option value="">— Non rendu —</option>
+        ${window.AVIS_APTITUDE.map(a=>`<option value="${a.code}" ${f.avis===a.code?'selected':''}>${esc(a.libelle)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Service de santé au travail</label><input type="text" id="visRh_organisme" value="${esc(f.organisme)}" placeholder="Ex : AIST, APST BTP…"></div>
+      <div class="field"><label>Médecin</label><input type="text" id="visRh_medecin" value="${esc(f.medecin)}"></div>
+      <div class="field"><label>Prochaine visite</label><input type="date" id="visRh_prochaineVisite" value="${f.prochaineVisite||''}" onchange="onVisiteRhEcheanceMain()">
+        <div class="card-sub" id="visRh_avertissement" style="margin-top:4px;"></div></div>
+      <div class="field full"><label>Réserves et aménagements</label><input type="text" id="visRh_reserves" value="${esc(f.reserves)}" placeholder="Ex : pas de port de charge supérieure à 15 kg"></div>
+      <div class="field full"><label>Notes</label><input type="text" id="visRh_notes" value="${esc(f.notes)}"></div>
+    </div>
+    <div class="achat-salarie-zone">
+      <label class="btn small" style="cursor:pointer;">📎 ${f.id && f.fichierNom? "Remplacer l'attestation" : "Joindre l'attestation"}<input type="file" id="visRh_fichier" accept=".pdf,image/*" style="display:none;" onchange="onFichierVisiteRhChange()"></label>
+      <span class="card-sub" id="visRh_fichierNom">${f.fichierNom? esc(f.fichierNom) : 'PDF, JPEG, PNG ou WebP'}</span>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn primary" onclick="enregistrerVisiteRh()">Enregistrer</button>
+      <button class="btn ghost" onclick="fermerFormVisiteRh()">Annuler</button>
+    </div>
+  </div>`;
+}
+/* Le panneau ne se redessine pas : le fichier déjà choisi vit dans l'élément
+   `input`, et un redessin le perdrait sans le dire. On ne touche qu'aux deux
+   textes d'aide et à l'échéance proposée. */
+function onVisiteRhEcheanceChange(){
+  const date = document.getElementById('visRh_dateVisite').value;
+  const type = document.getElementById('visRh_type').value;
+  const suivi = document.getElementById('visRh_suivi').value;
+  document.getElementById('visRh_reference').textContent = window.regimeSuivi(suivi).reference;
+  const champ = document.getElementById('visRh_prochaineVisite');
+  /* La date proposée ne s'impose pas : le médecin a pu en écrire une autre sur
+     l'avis, et c'est la sienne qui fait foi.
+
+     Mais tant que personne n'a touché ce champ, la proposition suit le type et
+     le régime — sinon, choisir la date PUIS passer en suivi renforcé laisserait
+     les cinq ans du suivi simple, et l'écran proposerait un délai que la loi
+     n'accorde pas à ce salarié. */
+  if(date && !state.rhVisiteForm.echeanceSaisieMain){
+    const suggeree = window.prochaineVisiteSuggeree(date, suivi, type);
+    champ.value = suggeree || '';
+  }
+  onVisiteRhEcheanceSaisie();
+}
+/* L'utilisateur a posé lui-même l'échéance : la proposition ne la reprendra
+   plus, quoi qu'il change ensuite. C'est la date de l'avis qui fait foi. */
+function onVisiteRhEcheanceMain(){
+  state.rhVisiteForm.echeanceSaisieMain = true;
+  onVisiteRhEcheanceSaisie();
+}
+function onVisiteRhEcheanceSaisie(){
+  const date = document.getElementById('visRh_dateVisite').value;
+  const suivi = document.getElementById('visRh_suivi').value;
+  const prochaine = document.getElementById('visRh_prochaineVisite').value;
+  const zone = document.getElementById('visRh_avertissement');
+  if(!date || !prochaine){ zone.textContent = ''; zone.style.color = ''; return; }
+  const verdict = window.depasseLePlafondLegal(date, prochaine, suivi);
+  if(verdict.depasse){
+    zone.textContent = `Au-delà du délai maximal (${fmtDate(verdict.plafond)}, ${verdict.regime.reference}).`;
+    zone.style.color = '#a30f22';
+  } else {
+    zone.textContent = '';
+    zone.style.color = '';
+  }
+}
+function onFichierVisiteRhChange(){
+  const fichier = (document.getElementById('visRh_fichier').files||[])[0];
+  const zone = document.getElementById('visRh_fichierNom');
+  if(!fichier){ zone.textContent = 'PDF, JPEG, PNG ou WebP'; return; }
+  const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
+  zone.textContent = verdict.ok ? fichier.name : verdict.motif;
+}
+async function enregistrerVisiteRh(){
+  const f = state.rhVisiteForm;
+  if(!f) return;
+  const saisie = {
+    dateVisite: document.getElementById('visRh_dateVisite').value,
+    type: document.getElementById('visRh_type').value,
+    suivi: document.getElementById('visRh_suivi').value,
+    organisme: document.getElementById('visRh_organisme').value,
+    medecin: document.getElementById('visRh_medecin').value,
+    avis: document.getElementById('visRh_avis').value,
+    reserves: document.getElementById('visRh_reserves').value,
+    prochaineVisite: document.getElementById('visRh_prochaineVisite').value,
+    notes: document.getElementById('visRh_notes').value
+  };
+  if(!saisie.dateVisite){ showToast('Indiquez la date de la visite.'); return; }
+  if(saisie.prochaineVisite && saisie.prochaineVisite < saisie.dateVisite){
+    /* La base le refuse aussi — mais lui laisser dire non produirait un
+       message de contrainte, pas une phrase. */
+    showToast('La prochaine visite ne peut pas précéder celle-ci.');
+    return;
+  }
+  const fichier = (document.getElementById('visRh_fichier').files||[])[0] || null;
+  if(fichier){
+    const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
+    if(!verdict.ok){ showToast(verdict.motif); return; }
+  }
+  try{
+    if(f.id) await window.majVisiteMedicale(f.id, saisie, fichier);
+    else await window.ajouterVisiteMedicale(f.salarieId, saisie, fichier);
+  }catch(err){
+    console.error('Visite médicale refusée', err);
+    showToast(refusDocumentRh(err));
+    return;
+  }
+  state.rhVisiteForm = null;
+  /* Les deux dates de la fiche salarié viennent d'être recalculées en base par
+     le déclencheur : recharger les salariés, sinon l'écran garde les anciennes. */
+  await Promise.all([chargerVisitesRh(true), recharger('salarie')]);
+  showToast('Visite enregistrée.', 'success');
+}
+async function supprimerVisiteRhEcran(visiteId){
+  const v = state.visitesRh.find(x=>x.id===visiteId);
+  if(!v) return;
+  if(!confirm('Retirer cette visite du registre ? L\'attestation sera supprimée.')) return;
+  try{
+    await window.supprimerVisiteMedicale(v);
+  }catch(err){
+    console.error('Visite non supprimée', err);
+    showToast(refusDocumentRh(err));
+    return;
+  }
+  await Promise.all([chargerVisitesRh(true), recharger('salarie')]);
+  showToast('Visite retirée du registre.', 'success');
+}
+async function ouvrirAttestationVisiteEcran(visiteId){
+  const v = state.visitesRh.find(x=>x.id===visiteId);
+  if(!v) return;
+  try{
+    const ouvert = await window.ouvrirAttestationVisite(v);
+    if(!ouvert){ showToast("Cette visite n'a pas d'attestation jointe."); return; }
+    openAttachmentPreview(ouvert.url, ouvert.nom, ouvert.mime, ouvert.urlTelechargement);
+  }catch(err){
+    console.error('Attestation illisible', v.fichierChemin, err);
+    showToast("L'attestation n'a pas pu être ouverte.");
+  }
+}
+function renderRHVisites(){
+  const salaries = state.salaries.filter(s=>s.societeId===state.societeId);
+  if(!visitesRhPretes()){
+    chargerVisitesRh();
+    return '<div class="empty">Chargement du registre des visites…</div>';
+  }
+  const lignes = salaries.map(s=>({ s, visites: visitesDuSalarie(s.id), etat: etatVisiteDuSalarie(s.id) }));
+  const compte = (etat) => lignes.filter(l=>l.etat.etat===etat).length;
+
+  const filtre = state.rhVisiteFiltre||'';
+  const liste = filtre ? lignes.filter(l=>l.etat.etat===filtre) : lignes;
+  const ouvert = state.rhVisiteSalarieId ? lignes.find(l=>l.s.id===state.rhVisiteSalarieId) : null;
+
+  return `
+    <div class="page-head"><h1>Visites médicales</h1></div>
+    <div class="card-sub" style="margin-bottom:14px;">Suivi en santé au travail : embauche, périodique, reprise. L'échéance de la dernière visite pilote l'alerte, et remplace les deux dates autrefois saisies sur la fiche.</div>
+    <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
+      <button class="btn small ${!filtre?'primary':''}" onclick="filtrerVisitesRh('')">Tous (${lignes.length})</button>
+      <button class="btn small ${filtre==='depassee'?'primary':''}" onclick="filtrerVisitesRh('depassee')">Échéance dépassée (${compte('depassee')})</button>
+      <button class="btn small ${filtre==='bientot'?'primary':''}" onclick="filtrerVisitesRh('bientot')">À prévoir (${compte('bientot')})</button>
+      <button class="btn small ${filtre==='inconnue'?'primary':''}" onclick="filtrerVisitesRh('inconnue')">Jamais vus (${compte('inconnue')})</button>
+      <button class="btn small ${filtre==='aJour'?'primary':''}" onclick="filtrerVisitesRh('aJour')">À jour (${compte('aJour')})</button>
+    </div>
+    ${salaries.length? `<div class="vehicule-liste-wrap">
+      <table class="stats-table">
+        <thead><tr>
+          <th style="text-align:left;">Salarié</th><th></th><th>Dernière visite</th><th>Type</th>
+          <th>Avis</th><th>Prochaine</th><th>Historique</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${liste.length? liste.map(({s, visites, etat})=>{
+            const derniere = visites[0] || null;
+            const avis = derniere ? window.avisAptitude(derniere.avis) : null;
+            const couleur = avis ? (avis.gravite==='danger'?'#a30f22':avis.gravite==='warn'?'#a56200':'#15803d') : 'inherit';
+            return `<tr>
+              <td style="text-align:left;"><strong>${esc(s.prenom)} ${esc(s.nom)}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
+              <td style="text-align:center;">${pastilleVisiteRh(s.id)}</td>
+              <td>${derniere? fmtDate(derniere.dateVisite) : '—'}</td>
+              <td>${derniere? esc(window.typeVisite(derniere.type).libelle) : '—'}</td>
+              <td${avis? ` style="color:${couleur}; font-weight:700;"`:''}>${avis? esc(avis.libelle) : '—'}</td>
+              <td>${etatVisiteBadge(s.id)}</td>
+              <td>${visites.length || '—'}</td>
+              <td><button class="btn small" onclick="ouvrirRegistreVisites('${s.id}')">${state.rhVisiteSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="8" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>'}
+        </tbody>
+      </table>
+    </div>` : '<div class="empty">Aucun salarié pour cette société.</div>'}
+    ${ouvert? `<div class="card" style="margin-top:20px;">
+      <div class="card-row">
+        <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — suivi médical</div>
+        <button class="btn small ghost" onclick="ouvrirRegistreVisites('${ouvert.s.id}')">Fermer</button>
+      </div>
+      <div style="margin-top:10px;">${visitesMedicalesHTML(ouvert.s)}</div>
+    </div>` : ''}
+  `;
+}
+function filtrerVisitesRh(valeur){
+  state.rhVisiteFiltre = valeur;
+  renderTab();
+}
+function ouvrirRegistreVisites(salarieId){
+  state.rhVisiteSalarieId = state.rhVisiteSalarieId===salarieId ? null : salarieId;
+  if(state.rhVisiteForm && state.rhVisiteForm.salarieId!==state.rhVisiteSalarieId) state.rhVisiteForm = null;
+  renderTab();
+}
+const TYPES_ABSENCE =['Congé payé','Arrêt maladie','Congé sans solde','Absence injustifiée','Accident du travail'];
 function soldeCPRestant(e){
   const initial = parseFloat(e.soldeCPInitial) || 0;
   const pris = (e.absences||[]).filter(a=>a.type==='Congé payé').reduce((s,a)=>s+(parseFloat(a.nbJours)||0),0);
@@ -14667,7 +15282,7 @@ function salarieForm(){
         <option value="M" ${e.sexe==='M'?'selected':''}>Homme</option>
       </select></div>
       <div class="field"><label>Équipe</label><select id="sal_technicienId">${technicienLinkOptions(e.technicienId)}</select></div>
-      <div class="field"><label>Compte utilisateur</label><select id="sal_profileId">${comptesLinkOptions(e.profileId)}</select><div class="card-sub" style="margin-top:4px;">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div></div>
+      <div class="field"><label>Compte utilisateur</label><select id="sal_profileId">${comptesLinkOptions(e.profileId)}</select><div class="card-sub" style="margin-top:4px;">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div>${zoneInvitationHTML(e)}</div>
       <div class="field"><label>Type de contrat</label><select id="sal_typeContrat">${TYPES_CONTRAT.map(t=>`<option value="${t}" ${e.typeContrat===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Coût horaire chargé (HT, salaire + charges)</label><input type="number" step="0.01" id="sal_coutHoraireCharge" value="${e.coutHoraireCharge!=null?e.coutHoraireCharge:''}" placeholder="Ex : 32.50"></div>
       <div class="field"><label>Salaire mensuel net</label><input type="number" step="0.01" id="sal_salaireMensuelNet" value="${e.salaireMensuelNet!=null?e.salaireMensuelNet:''}" placeholder="Ex : 1850"></div>
@@ -14677,8 +15292,8 @@ function salarieForm(){
       <div class="field"><label>Email</label><input type="email" id="sal_email" value="${esc(e.email)}"></div>
       <div class="field"><label>N° Carte BTP</label><input type="text" id="sal_carteBtpNumero" value="${esc(e.carteBtpNumero)}"></div>
       <div class="field"><label>Validité carte BTP</label><input type="date" id="sal_carteBtpValidite" value="${e.carteBtpValidite||''}"></div>
-      <div class="field"><label>Dernière visite médicale</label><input type="date" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate||''}"></div>
-      <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}"></div>
+      <div class="field"><label>Dernière visite médicale</label><input type="date" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate||''}" disabled style="background:var(--surface-2);"></div>
+      <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}" disabled style="background:var(--surface-2);"><div class="card-sub" style="margin-top:4px;">Tenues par le registre des visites, plus bas — la base les réécrit à chaque enregistrement.</div></div>
     </div>
     <div class="section-title" style="margin-top:14px;">Habilitations & certifications</div>
     <div id="habilitationsBody">${habilitationRowsHTML(e.habilitations)}</div>
@@ -14686,6 +15301,8 @@ function salarieForm(){
     ${e.id? `
     <div class="section-title" style="margin-top:18px;">📁 Dossier documentaire</div>
     ${dossierRhHTML(e)}
+    <div class="section-title" style="margin-top:18px;">🩺 Suivi médical</div>
+    ${visitesMedicalesHTML(e)}
     <div class="chantier-subsection-title" style="display:flex; justify-content:space-between; align-items:center;">
       <span>🏖️ Congés & Absences</span>
     </div>
@@ -14742,6 +15359,131 @@ function comptesLinkOptions(current){
     : '';
   return `<option value="" ${current?'':'selected'}>— Aucun —</option>` + conserve + options;
 }
+
+/* ---------- Inviter un salarié à se créer un compte ----------
+
+   La liste ci-dessus ne sait que RATTACHER un compte existant. Créer l'identité
+   demande la clé de service, qui ne peut pas approcher le navigateur : le
+   bouton appelle la fonction de bord `inviter-salarie`.
+
+   Le reste se fait tout seul en base. Deux déclencheurs sur `auth.users`
+   inscrivent le membre et renseignent `salaries.profile_id` dès que l'adresse
+   est confirmée — l'écran n'a rien à écrire dans le champ « Compte », il n'a
+   qu'à recharger. Le rôle n'est accordé qu'à une adresse prouvée : c'est la
+   seule garde du circuit, et elle tient. */
+
+/* `sous_traitant` est absent : ce rôle vise la fiche sous-traitant, pas le
+   salarié. Le proposer ici rattacherait la personne à la mauvaise table. */
+const ROLES_INVITATION = [
+  { code:'technicien', libelle:'Technicien — déclare ses travaux' },
+  { code:'conducteur', libelle:'Conducteur de travaux' },
+  { code:'secretaire', libelle:'Secrétaire — devis, factures, RH' },
+  { code:'lecture',    libelle:'Lecture seule' },
+  { code:'admin',      libelle:'Administrateur — tous les droits' },
+];
+let chargementInvitations = null;
+function invitationsPretes(){
+  return !chargementInvitations
+    && state.invitationsCharges
+    && state.invitationsSociete === state.societeId;
+}
+function chargerInvitationsRh(force){
+  if(chargementInvitations) return chargementInvitations;
+  if(!force && invitationsPretes()) return Promise.resolve();
+  const societe = state.societeId;
+  chargementInvitations = (async ()=>{
+    try{
+      state.invitations = await window.chargerInvitations();
+    }catch(err){
+      /* Un compte non administrateur n'a rien à y voir : la RLS le dira, et ce
+         n'est pas une panne. On se tait, et le bloc reste muet. */
+      console.error('Invitations illisibles', err);
+      state.invitations = [];
+    }finally{
+      state.invitationsCharges = true;
+      state.invitationsSociete = societe;
+      chargementInvitations = null;
+    }
+    renderTab();
+  })();
+  return chargementInvitations;
+}
+function invitationDuSalarie(salarieId){
+  return state.invitations.find(i=>i.salarie_id===salarieId && i.statut==='en_attente') || null;
+}
+function zoneInvitationHTML(e){
+  if(!e.id) return '';
+  if(!window.autorise || !window.autorise('utilisateurs','creer')) return '';
+  if(e.profileId) return '<div class="card-sub" style="margin-top:6px; color:#15803d;">✓ Compte rattaché.</div>';
+  if(!invitationsPretes()){ chargerInvitationsRh(); return ''; }
+
+  const invitation = invitationDuSalarie(e.id);
+  if(invitation){
+    const envoyee = invitation.invitee_le ? fmtDate(invitation.invitee_le.slice(0,10)) : null;
+    return `<div class="card-sub" style="margin-top:8px;">
+      ✉ Invitation en attente pour <strong>${esc(invitation.email)}</strong>${envoyee? ` — envoyée le ${envoyee}`:''}.
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <button class="btn small" onclick="renvoyerInvitationSalarie('${e.id}','${jsAttr(invitation.email)}','${esc(invitation.role)}')">Renvoyer</button>
+        <button class="btn small danger" onclick="annulerInvitationSalarie('${invitation.id}')">Annuler</button>
+      </div>
+    </div>`;
+  }
+
+  const email = (e.email||'').trim();
+  return `<div style="margin-top:8px; padding:10px; border:1px dashed var(--border); border-radius:10px;">
+    <div class="card-sub" style="margin-bottom:6px;">Pas de compte ? Invitez-le : il recevra un courriel et choisira son mot de passe.</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <input type="email" id="inv_email_${e.id}" value="${esc(email)}" placeholder="adresse e-mail" style="flex:1; min-width:180px;">
+      <select id="inv_role_${e.id}" style="width:auto;">
+        ${ROLES_INVITATION.map(r=>`<option value="${r.code}">${esc(r.libelle)}</option>`).join('')}
+      </select>
+      <button class="btn small primary" onclick="inviterSalarieEcran('${e.id}')">✉ Inviter</button>
+    </div>
+    ${email? '' : '<div class="card-sub" style="margin-top:6px;">Renseignez d\'abord son e-mail ci-dessous, ou saisissez-le ici.</div>'}
+  </div>`;
+}
+async function inviterSalarieEcran(salarieId){
+  const email = (document.getElementById('inv_email_'+salarieId).value||'').trim();
+  const role = document.getElementById('inv_role_'+salarieId).value;
+  if(!email || !email.includes('@')){ showToast("Indiquez une adresse e-mail valide."); return; }
+  if(role === 'admin' && !confirm("Donner TOUS les droits à ce compte, y compris la gestion des utilisateurs ?")) return;
+  await envoyerInvitation(salarieId, email, role);
+}
+async function renvoyerInvitationSalarie(salarieId, email, role){
+  await envoyerInvitation(salarieId, email, role);
+}
+async function envoyerInvitation(salarieId, email, role){
+  try{
+    const r = await window.inviterSalarie(salarieId, email, role);
+    /* Trois issues, trois phrases : un compte déjà confirmé se rattache
+       sur-le-champ, sans qu'aucun courriel ne parte — le dire, sinon on
+       attendrait un mail qui ne viendra jamais. */
+    const message = r.etat === 'rattachee'
+      ? 'Ce compte existait déjà : il vient d\'être rattaché, sans courriel.'
+      : r.etat === 'confirmation_renvoyee'
+        ? 'Courriel de confirmation renvoyé à ' + r.email + '.'
+        : 'Invitation envoyée à ' + r.email + '.';
+    showToast(message, 'success');
+  }catch(err){
+    console.error('Invitation refusée', err);
+    showToast(err.message || "L'invitation n'a pas pu être envoyée.");
+    return;
+  }
+  await Promise.all([chargerInvitationsRh(true), recharger('salarie')]);
+}
+async function annulerInvitationSalarie(invitationId){
+  if(!confirm("Annuler cette invitation ? Le lien déjà envoyé ne donnera plus aucun droit.")) return;
+  try{
+    await window.annulerInvitation(invitationId);
+  }catch(err){
+    console.error('Annulation refusée', err);
+    showToast("L'invitation n'a pas pu être annulée.");
+    return;
+  }
+  await chargerInvitationsRh(true);
+  showToast('Invitation annulée.', 'success');
+}
+
 function habilitationRowsHTML(habilitations){
   if(!habilitations.length) return '<div class="empty">Aucune habilitation renseignée.</div>';
   return habilitations.map((h,i)=>`

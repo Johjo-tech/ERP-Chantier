@@ -80,6 +80,140 @@ export function totauxSignes(
   };
 }
 
+/**
+ * Les motifs usuels d'un avoir dans le bâtiment.
+ *
+ * Proposés, jamais imposés : le dernier cas ouvre la saisie libre. Une liste
+ * fermée obligerait à ranger sous un intitulé faux la rectification qui ne
+ * rentre nulle part — et c'est ce texte qui s'imprime sur le document.
+ */
+export const MOTIFS_AVOIR = [
+  "Erreur de facturation (quantité ou montant)",
+  "Prestation non réalisée",
+  "Travaux non conformes",
+  "Remise commerciale accordée après facturation",
+  "Erreur de destinataire",
+  "Double facturation",
+  "Annulation de la commande",
+] as const;
+
+/**
+ * Les deux modes qui nomment une imputation dans le livre des règlements.
+ *
+ * `reglements.mode` est un texte libre : aucune migration n'est nécessaire. Mais
+ * ces deux valeurs sont lues pour reconnaître une imputation — les écrire à la
+ * main ailleurs ferait diverger ce que l'écran compte de ce qu'il affiche.
+ */
+export const MODE_REGLEMENT_AVOIR = "avoir";
+export const MODE_REGLEMENT_IMPUTATION = "imputation";
+
+/** Un règlement, vu d'ici : seul son montant compte. */
+export interface ReglementMontantAvoir {
+  montant?: number | string | null;
+}
+
+function centimes(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function nombre(v: unknown): number {
+  const n = parseFloat(String(v ?? ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** En deçà, un écart d'arrondi ; au-delà, une dette. */
+const EPSILON = 0.005;
+
+/**
+ * Ce qui reste d'un avoir à imputer.
+ *
+ * Le TTC arrive **signé** — c'est ce que rend `computeDocTotals` — et l'avoir
+ * s'impute en valeur absolue : on ne retranche pas une dette négative, on
+ * consomme un crédit. Les règlements posés sur l'avoir, eux, sont positifs
+ * (`reglements.montant` porte un `CHECK (montant > 0)`), et chacun d'eux dit
+ * une part déjà imputée.
+ */
+export function resteAImputer(
+  ttcAvoir: unknown,
+  reglements: ReglementMontantAvoir[] | null | undefined
+): number {
+  const credit = Math.abs(centimes(nombre(ttcAvoir)));
+  const impute = centimes((reglements ?? []).reduce((s, r) => s + nombre(r?.montant), 0));
+  const reste = centimes(credit - impute);
+  return reste < EPSILON ? 0 : reste;
+}
+
+/** L'avoir a-t-il encore quelque chose à donner ? */
+export function avoirDisponible(
+  ttcAvoir: unknown,
+  reglements: ReglementMontantAvoir[] | null | undefined
+): boolean {
+  return resteAImputer(ttcAvoir, reglements) > 0;
+}
+
+/**
+ * Le montant proposé : ce qui peut passer d'un avoir à une facture.
+ *
+ * Le plus petit des deux restes. Un avoir plus gros que la facture ne la
+ * sur-solde pas — le surplus reste sur l'avoir, imputable ailleurs ; un avoir
+ * plus petit la laisse partiellement réglée.
+ */
+export function montantImputable(resteFacture: unknown, resteAvoir: unknown): number {
+  const f = Math.max(0, centimes(nombre(resteFacture)));
+  const a = Math.max(0, centimes(nombre(resteAvoir)));
+  return centimes(Math.min(f, a));
+}
+
+/** Ce qui interdit cette imputation, ou `null` si rien. */
+export function refusImputationAvoir(saisie: {
+  avoir?: { numero?: string | null; typeDocument?: TypeDocument; clientNom?: string | null } | null;
+  facture?: { numero?: string | null; typeDocument?: TypeDocument; clientNom?: string | null } | null;
+  montant?: number | string | null;
+  resteFacture?: unknown;
+  resteAvoir?: unknown;
+}): string | null {
+  const avoir = saisie?.avoir;
+  const facture = saisie?.facture;
+
+  if (!avoir) return "Avoir introuvable.";
+  if (!facture) return "Facture introuvable.";
+  if (!estAvoir(avoir.typeDocument)) return "Ce document n'est pas un avoir.";
+  if (estAvoir(facture.typeDocument)) return "Un avoir ne s'impute pas sur un autre avoir.";
+  if (!String(facture.numero ?? "").trim()) {
+    return "Cette facture n'est pas émise : il n'y a rien à solder.";
+  }
+
+  /* Un avoir appartient au client à qui il a été consenti. L'imputer ailleurs
+     éteindrait la créance d'un tiers avec le crédit d'un autre. */
+  const clientAvoir = String(avoir.clientNom ?? "").trim();
+  const clientFacture = String(facture.clientNom ?? "").trim();
+  if (clientAvoir && clientFacture && clientAvoir !== clientFacture) {
+    return `Cet avoir a été établi pour ${clientAvoir} : il ne peut pas solder une facture de ${clientFacture}.`;
+  }
+
+  const montant = centimes(nombre(saisie?.montant));
+  if (montant <= 0) return "Le montant imputé doit être supérieur à 0.";
+
+  const resteAvoir = centimes(nombre(saisie?.resteAvoir));
+  if (resteAvoir <= 0) return "Cet avoir est déjà entièrement imputé.";
+  if (montant - resteAvoir > EPSILON) {
+    return `Cet avoir ne dispose plus que de ${euros(resteAvoir)}.`;
+  }
+
+  const resteFacture = centimes(nombre(saisie?.resteFacture));
+  if (resteFacture <= 0) return "Cette facture est déjà entièrement réglée.";
+  if (montant - resteFacture > EPSILON) {
+    return `La facture ne doit plus que ${euros(resteFacture)}.`;
+  }
+
+  return null;
+}
+
+/** Mise en forme minimale, pour que le refus dise un montant lisible. */
+function euros(n: number): string {
+  return `${n.toFixed(2).replace(".", ",")} €`;
+}
+
 /** Ce que l'avoir doit porter pour être établi. */
 export interface SaisieAvoir {
   facture?: {

@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -2721,6 +2716,7 @@ export type Database = {
           cree_par: string | null
           email: string
           id: string
+          invitee_le: string | null
           maj_le: string
           role: Database["public"]["Enums"]["role_membre"]
           salarie_id: string | null
@@ -2733,6 +2729,7 @@ export type Database = {
           cree_par?: string | null
           email: string
           id?: string
+          invitee_le?: string | null
           maj_le?: string
           role?: Database["public"]["Enums"]["role_membre"]
           salarie_id?: string | null
@@ -2745,6 +2742,7 @@ export type Database = {
           cree_par?: string | null
           email?: string
           id?: string
+          invitee_le?: string | null
           maj_le?: string
           role?: Database["public"]["Enums"]["role_membre"]
           salarie_id?: string | null
@@ -3856,6 +3854,75 @@ export type Database = {
           },
           {
             foreignKeyName: "salarie_rdv_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      salarie_visites_medicales: {
+        Row: {
+          avis: string | null
+          cree_le: string
+          date_visite: string
+          fichier_chemin: string | null
+          fichier_nom: string | null
+          id: string
+          maj_le: string
+          medecin: string | null
+          notes: string | null
+          organisme: string | null
+          prochaine_visite: string | null
+          reserves: string | null
+          salarie_id: string
+          suivi: string
+          type: string
+        }
+        Insert: {
+          avis?: string | null
+          cree_le?: string
+          date_visite: string
+          fichier_chemin?: string | null
+          fichier_nom?: string | null
+          id?: string
+          maj_le?: string
+          medecin?: string | null
+          notes?: string | null
+          organisme?: string | null
+          prochaine_visite?: string | null
+          reserves?: string | null
+          salarie_id: string
+          suivi?: string
+          type?: string
+        }
+        Update: {
+          avis?: string | null
+          cree_le?: string
+          date_visite?: string
+          fichier_chemin?: string | null
+          fichier_nom?: string | null
+          id?: string
+          maj_le?: string
+          medecin?: string | null
+          notes?: string | null
+          organisme?: string | null
+          prochaine_visite?: string | null
+          reserves?: string | null
+          salarie_id?: string
+          suivi?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salarie_visites_medicales_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salarie_visites_medicales_salarie_id_fkey"
             columns: ["salarie_id"]
             isOneToOne: false
             referencedRelation: "v_salaries_annuaire"
@@ -6000,6 +6067,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      appliquer_invitations: { Args: { p_profile_id: string }; Returns: number }
       bc_chiffrage_valide: { Args: { p_bc_id: string }; Returns: undefined }
       bc_cloturer_gratuit: {
         Args: { p_bc_id: string; p_motif?: string }
@@ -6081,6 +6149,13 @@ export type Database = {
       }
       rls_table_racine: { Args: { p_table: string }; Returns: undefined }
       role_dans_societe: { Args: { p_societe_id: string }; Returns: string }
+      salarie_visite_medicale_derivee: {
+        Args: { p_salarie: string }
+        Returns: {
+          derniere: string
+          prochaine: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       tache_a_une_equipe: { Args: { p_tache_id: string }; Returns: boolean }
@@ -6331,3 +6406,4 @@ export const Constants = {
     },
   },
 } as const
+

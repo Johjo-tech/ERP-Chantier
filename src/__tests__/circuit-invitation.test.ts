@@ -158,4 +158,93 @@ suite("Circuit d'invitation", () => {
       .maybeSingle();
     expect(profil, "le profil est créé, mais vide de droits").not.toBeNull();
   });
+
+  /* ---------- Le compte qui existait déjà ----------
+   *
+   * Les deux déclencheurs ne le verront jamais : l'insertion dans `auth.users`
+   * est passée depuis longtemps, et la transition « adresse confirmée » aussi.
+   * Son invitation resterait « en attente » pour toujours, sans que rien ne le
+   * dise — et c'est le cas ordinaire du salarié qui avait déjà un compte pour
+   * une autre société.
+   *
+   * D'où `appliquer_invitations()`, que la fonction de bord appelle après
+   * avoir constaté que le compte est confirmé.
+   */
+  it("rattache un compte déjà confirmé, qu'aucun déclencheur ne reverra", async () => {
+    const email = adresse("deja-confirme");
+
+    const { data: cree, error } = await service.auth.admin.createUser({
+      email,
+      password: MOT_DE_PASSE,
+      email_confirm: true,
+    });
+    if (error) throw new Error(`Création refusée : ${error.message}`);
+    comptesCrees.push(cree.user!.id);
+
+    /* L'invitation arrive APRÈS le compte : c'est tout le problème. */
+    await inviter(email, "secretaire");
+    expect(
+      await rattachement(cree.user!.id),
+      "aucun déclencheur ne se redéclenche pour ce compte"
+    ).toBeNull();
+
+    const { data: appliquees, error: refus } = await service.rpc(
+      "appliquer_invitations",
+      { p_profile_id: cree.user!.id }
+    );
+    if (refus) throw new Error(`Application refusée : ${refus.message}`);
+    expect(appliquees).toBe(1);
+
+    expect(await rattachement(cree.user!.id)).toMatchObject({
+      role: "secretaire",
+      actif: true,
+    });
+
+    const { data: invitation } = await service
+      .from("invitations")
+      .select("statut")
+      .eq("email", email)
+      .single();
+    expect(invitation?.statut).toBe("acceptee");
+  });
+
+  /* Le durcissement, et il compte autant que la fonction. Accordée à
+     `authenticated`, elle laisserait un compte NON confirmé s'appliquer ses
+     propres invitations — c'est-à-dire contourner la preuve de possession de
+     l'adresse, seule garde du circuit. Sans ce test, le `revoke` s'effacerait
+     au premier refactor sans que rien ne proteste. */
+  it("refuse d'être appelée autrement qu'à la clé de service", async () => {
+    const { error } = await supabase.rpc("appliquer_invitations", {
+      p_profile_id: "00000000-0000-0000-0000-000000000000",
+    });
+    expect(error, "un compte ordinaire ne doit pas pouvoir l'appeler").not.toBeNull();
+  });
+
+  /* Le lien qui fait tout l'intérêt du circuit côté RH : l'invitation désigne
+     une fiche, et c'est la base qui la rattache — l'écran n'écrit jamais
+     `profile_id` lui-même. */
+  it("renseigne le compte sur la fiche du salarié désigné", async () => {
+    const email = adresse("salarie");
+    const { data: salarie } = await service
+      .from("salaries")
+      .insert({ societe_id: societeId, nom: "INVITÉ DE TEST", prenom: "Circuit" })
+      .select()
+      .single();
+
+    const { error } = await supabase
+      .from("invitations")
+      .insert({ societe_id: societeId, email, role: "technicien", salarie_id: salarie!.id });
+    if (error) throw new Error(`Invitation refusée : ${error.message}`);
+
+    const profileId = await sInscrire(email);
+
+    const { data: fiche } = await service
+      .from("salaries")
+      .select("profile_id")
+      .eq("id", salarie!.id)
+      .single();
+    expect(fiche?.profile_id).toBe(profileId);
+
+    await service.from("salaries").delete().eq("id", salarie!.id);
+  });
 });

@@ -27,10 +27,18 @@ import type {
   FactureStatut,
   FactureTotaux,
   FactureUpdate,
+  Reglement,
   ReglementInsert,
   Uuid,
 } from "../types";
-import { refusAvoir } from "../regles-avoir";
+import {
+  MODE_REGLEMENT_AVOIR,
+  MODE_REGLEMENT_IMPUTATION,
+  refusAvoir,
+  refusImputationAvoir,
+  resteAImputer,
+} from "../regles-avoir";
+import { resteAPayer } from "../regles-reglements";
 import { getDevisComplet } from "./devis";
 import { getBonCommandeComplet } from "./bonCommande";
 
@@ -356,6 +364,79 @@ export function addReglement(
   input: Omit<ReglementInsert, "societe_id">
 ) {
   return insertOne("reglements", { ...input, societe_id: societeId });
+}
+
+/**
+ * Impute un avoir sur une facture : les deux côtés de la même écriture.
+ *
+ * Une ligne solde la facture, l'autre consomme l'avoir. Elles partent dans une
+ * **seule** insertion : PostgREST exécute un insert multi-lignes en une
+ * instruction, donc les deux passent ou aucune. Écrites l'une après l'autre,
+ * un échec sur la seconde laisserait une facture soldée par un avoir toujours
+ * disponible — et le crédit serait consommé deux fois.
+ *
+ * Le montant est positif des deux côtés : `reglements.montant` porte un
+ * `CHECK (montant > 0)`. C'est le `mode` qui dit le sens de chaque ligne.
+ */
+export async function imputerAvoir(
+  societeId: Uuid,
+  avoirId: Uuid,
+  factureId: Uuid,
+  montant: number,
+  date?: string
+): Promise<Reglement[]> {
+  const [avoir, facture] = await Promise.all([getFacture(avoirId), getFacture(factureId)]);
+
+  const [totauxAvoir, reglementsAvoir, totauxFacture, reglementsFacture] = await Promise.all([
+    getFactureTotaux(avoirId),
+    listReglementsFacture(avoirId),
+    getFactureTotaux(factureId),
+    listReglementsFacture(factureId),
+  ]);
+
+  /* La vue rend le montant BRUT, sans regarder `type_document` : elle est déjà
+     en valeur absolue pour un avoir. C'est `resteAImputer` qui en fait un
+     crédit, et c'est la même règle que l'écran applique. */
+  const resteAvoir = resteAImputer(totauxAvoir?.ttc, reglementsAvoir);
+  const resteFacture = resteAPayer(totauxFacture?.ttc, reglementsFacture);
+
+  const refus = refusImputationAvoir({
+    avoir: avoir && {
+      numero: avoir.numero,
+      typeDocument: avoir.type_document,
+      clientNom: avoir.client_nom,
+    },
+    facture: facture && {
+      numero: facture.numero,
+      typeDocument: facture.type_document,
+      clientNom: facture.client_nom,
+    },
+    montant,
+    resteFacture,
+    resteAvoir,
+  });
+  if (refus) throw new Error(refus);
+
+  const jour = date || todayISO();
+
+  return insertMany("reglements", [
+    {
+      societe_id: societeId,
+      facture_id: factureId,
+      montant,
+      date: jour,
+      mode: MODE_REGLEMENT_AVOIR,
+      reference: avoir?.numero ?? null,
+    },
+    {
+      societe_id: societeId,
+      facture_id: avoirId,
+      montant,
+      date: jour,
+      mode: MODE_REGLEMENT_IMPUTATION,
+      reference: facture?.numero ?? null,
+    },
+  ]);
 }
 
 export function deleteReglement(id: Uuid) {

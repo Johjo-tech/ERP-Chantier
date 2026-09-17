@@ -159,6 +159,7 @@ export type SalarieAbsence = Tables<"salarie_absences">;
 export type SalarieContrat = Tables<"salarie_contrats">;
 export type SalarieDocument = Tables<"salarie_documents">;
 export type SalarieFormation = Tables<"salarie_formations">;
+export type SalarieVisiteMedicale = Tables<"salarie_visites_medicales">;
 
 // ============ RESSOURCES ============
 

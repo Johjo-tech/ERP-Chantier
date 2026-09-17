@@ -58,9 +58,14 @@ import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "
 import { apercuDe, urlApercuPdf, verifierPieceJointe } from "@/api/regles-piece-jointe";
 import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
+  avoirDisponible,
   estAvoir,
   libelleDocument,
+  montantImputable,
+  MOTIFS_AVOIR,
   refusAvoir,
+  refusImputationAvoir,
+  resteAImputer,
   signeDocument,
   totauxSignes,
 } from "@/api/regles-avoir";
@@ -103,6 +108,33 @@ import {
   trierDocumentsRh,
   typeDocumentRh,
 } from "@/api/regles-documents-rh";
+import {
+  ajouterVisiteMedicale,
+  chargerVisitesMedicales,
+  majVisiteMedicale,
+  ouvrirAttestationVisite,
+  purgerVisitesMedicales,
+  supprimerVisiteMedicale,
+} from "./visites-medicales";
+import {
+  AVIS_APTITUDE,
+  REGIMES_SUIVI,
+  TYPES_VISITE,
+  avisAptitude,
+  depasseLePlafondLegal,
+  derniereVisite,
+  etatVisite,
+  libelleAvis,
+  prochaineVisiteSuggeree,
+  regimeSuivi,
+  trierVisites,
+  typeVisite,
+} from "@/api/regles-visite-medicale";
+import {
+  annulerInvitation,
+  chargerInvitations,
+  inviterSalarie,
+} from "./invitations";
 import {
   attenteAnnoncee,
   etatAnnule,
@@ -368,6 +400,24 @@ export async function etablirAvoir(factureId: Uuid, motif: string) {
   return queries.createAvoir(societe.uuid, factureId, motif);
 }
 
+/**
+ * Impute un avoir sur une facture, au nom de la société active.
+ *
+ * Même raison qu'`etablirAvoir` de tenir la société ici : les deux règlements
+ * écrits appartiennent à la société du document, et l'écran n'a pas à la
+ * désigner.
+ */
+export async function imputerAvoirSurFacture(
+  avoirId: Uuid,
+  factureId: Uuid,
+  montant: number,
+  date?: string
+) {
+  const societe = societeActive();
+  if (!societe) throw new Error("Aucune société active.");
+  return queries.imputerAvoir(societe.uuid, avoirId, factureId, montant, date);
+}
+
 export type { ActionsTache };
 
 /**
@@ -553,6 +603,13 @@ export function injecterSession() {
   w.libelleDocument = libelleDocument;
   w.totauxSignes = totauxSignes;
   w.refusAvoir = refusAvoir;
+  w.MOTIFS_AVOIR = MOTIFS_AVOIR;
+  /* L'imputation : un avoir éteint une créance, il ne s'encaisse pas. */
+  w.imputerAvoir = imputerAvoirSurFacture;
+  w.resteAImputer = resteAImputer;
+  w.avoirDisponible = avoirDisponible;
+  w.montantImputable = montantImputable;
+  w.refusImputationAvoir = refusImputationAvoir;
   w.validerChiffrage = queries.validerChiffrage;
   w.validerAffaireConducteur = queries.validerAffaireConducteur;
   w.emettreFacture = queries.emettreFacture;
@@ -692,6 +749,41 @@ export function injecterSession() {
   w.supprimerDocumentRh = supprimerDocumentRh;
   w.purgerDocumentsRh = purgerDocumentsRh;
   w.ouvrirDocumentRh = ouvrirDocumentRh;
+
+  /* Le registre des visites médicales. Le suivi médical a quitté le catalogue
+     des documents : il a son propre écran, son propre seuil (45 j) et sa
+     propre alerte. Écrire ici recalcule, par déclencheur, les deux dates de la
+     fiche salarié — ne jamais les écrire à la main. */
+  w.TYPES_VISITE = TYPES_VISITE;
+  w.REGIMES_SUIVI = REGIMES_SUIVI;
+  w.AVIS_APTITUDE = AVIS_APTITUDE;
+  w.typeVisite = typeVisite;
+  w.regimeSuivi = regimeSuivi;
+  w.avisAptitude = avisAptitude;
+  w.libelleAvis = libelleAvis;
+  w.etatVisite = etatVisite;
+  w.derniereVisite = derniereVisite;
+  w.trierVisites = trierVisites;
+  w.prochaineVisiteSuggeree = prochaineVisiteSuggeree;
+  w.depasseLePlafondLegal = depasseLePlafondLegal;
+  w.chargerVisitesMedicales = chargerVisitesMedicales;
+  w.ajouterVisiteMedicale = ajouterVisiteMedicale;
+  w.majVisiteMedicale = majVisiteMedicale;
+  w.supprimerVisiteMedicale = supprimerVisiteMedicale;
+  w.purgerVisitesMedicales = purgerVisitesMedicales;
+  w.ouvrirAttestationVisite = ouvrirAttestationVisite;
+
+  /* Inviter un salarié. Seul l'envoi passe par une fonction de bord — il exige
+     la clé de service ; lister et annuler se font à la clé publique. */
+  w.inviterSalarie = inviterSalarie;
+  /* L'écran ne connaît sa société que par son code : l'uuid se résout ici,
+     comme pour `etablirAvoir`. Le module d'invitation, lui, ne peut pas
+     interroger la session — c'est elle qui l'importe. */
+  w.chargerInvitations = () => {
+    const societe = societeActive();
+    return societe ? chargerInvitations(societe.uuid) : Promise.resolve([]);
+  };
+  w.annulerInvitation = annulerInvitation;
 
   // Alertes d'échéance, calées sur les colonnes réelles
   w.alertesVehicule = alertesVehicule;

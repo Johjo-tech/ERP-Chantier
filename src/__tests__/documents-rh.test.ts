@@ -49,6 +49,17 @@ describe("catalogue des types", () => {
     expect(typeDocumentRh("visa-2019").code).toBe("autre");
     expect(typeDocumentRh(null).code).toBe("autre");
   });
+
+  it("laisse le suivi médical à son registre, et n'en fait pas un document", () => {
+    /* Ce n'est pas un oubli : la visite médicale a sa propre table, qui porte
+       le type de visite, l'avis d'aptitude, les réserves et l'échéance — voir
+       `regles-visite-medicale`. La remettre ici ferait deux sources, deux
+       seuils (30 j pour un document, 45 j pour le médical) et deux alertes
+       pour le même manquement. Une ligne héritée retomberait sur « autre »,
+       donc resterait visible et supprimable. */
+    expect(TYPES_DOCUMENT_RH.map((t) => t.code)).not.toContain("visiteMedicale");
+    expect(typeDocumentRh("visiteMedicale").code).toBe("autre");
+  });
 });
 
 describe("joursEntre", () => {
