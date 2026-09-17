@@ -10812,6 +10812,11 @@ function renderReglagesOnglet(){
   const onglet = state.reglagesTab || 'organisation';
   if(onglet === 'organisation') setTimeout(majCompletudeSociete, 0);
   if(onglet === 'identite') setTimeout(()=>apercuCouleur(reglagesCourants().documents.couleurAccent), 0);
+  /* La numérotation appelait `rafraichirNumerotation()` depuis sa propre
+     fonction de rendu, c'est-à-dire pendant qu'on assemblait sa chaîne : la
+     zone `#zoneNumerotation` n'existait pas encore, le `if(!zone) return` en
+     tête sortait aussitôt, et l'écran restait sur « Chargement… ». */
+  if(onglet === 'numerotation') setTimeout(rafraichirNumerotation, 0);
 
   switch(onglet){
     case 'organisation':  return renderInfosEntrepriseSection();
@@ -11295,7 +11300,6 @@ async function saveNumerotation(){
 }
 
 function renderNumerotationSection(){
-  rafraichirNumerotation();
   return `<div class="card">
     <div class="card-title" style="margin-bottom:10px;">🔢 Numérotation</div>
     <div class="card-sub" style="margin-bottom:12px;">Préfixe et point de départ de chaque série, pour ${esc(societeName(state.societeId))} en ${new Date().getFullYear()}. Les numéros sont attribués par la base de façon atomique — deux personnes ne peuvent pas obtenir le même.</div>
