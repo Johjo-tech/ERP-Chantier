@@ -17,6 +17,9 @@ import {
   statutEnBase,
   statutReglement,
   totalRegle,
+  imputer,
+  surplusImputation,
+  refusImputation,
 } from "@/api/regles-reglements";
 
 const R = (id: string, montant: number | string) => ({ id, montant });
@@ -179,5 +182,107 @@ describe("L'arrondi au centime", () => {
   it("ramène à zéro ce qui n'est pas un nombre", () => {
     expect(arrondiCentime(null)).toBe(0);
     expect(arrondiCentime("abc")).toBe(0);
+  });
+});
+
+
+/*
+ * Un virement pour plusieurs factures.
+ *
+ * Le client règle en une fois ce qu'il doit sur plusieurs factures. Jusqu'ici
+ * l'écran soldait chacune en entier : un virement qui ne couvrait pas tout
+ * n'avait aucun chemin. L'imputation va de la plus ancienne à la plus récente —
+ * la règle d'usage, et celle que le client applique lui-même.
+ */
+const F = (id: string, reste: number, date: string, numero = id) => ({ id, reste, date, numero });
+
+describe("Imputer un virement sur plusieurs factures", () => {
+  const trois = [
+    F("b", 100, "2026-02-01"),
+    F("a", 200, "2026-01-15"),
+    F("c", 50, "2026-03-10"),
+  ];
+
+  it("solde tout quand le virement couvre le total", () => {
+    expect(imputer(350, trois)).toEqual([
+      { id: "a", numero: "a", montant: 200, resteApres: 0 },
+      { id: "b", numero: "b", montant: 100, resteApres: 0 },
+      { id: "c", numero: "c", montant: 50, resteApres: 0 },
+    ]);
+  });
+
+  /* Le cœur du sujet : la plus ancienne d'abord, la dernière encaisse le reste. */
+  it("paie la plus ancienne d'abord et laisse la dernière entamée", () => {
+    expect(imputer(250, trois)).toEqual([
+      { id: "a", numero: "a", montant: 200, resteApres: 0 },
+      { id: "b", numero: "b", montant: 50, resteApres: 50 },
+    ]);
+  });
+
+  it("n'atteint pas les factures que le virement ne couvre pas", () => {
+    const r = imputer(150, trois);
+    expect(r.map((x) => x.id)).toEqual(["a"]);
+    expect(r[0]).toMatchObject({ montant: 150, resteApres: 50 });
+  });
+
+  /* Une facture déjà entamée n'a plus que son reste à recevoir : l'imputation
+     part de ce reste, jamais du total de la facture. */
+  it("part du reste à payer, pas du total", () => {
+    const entamee = [F("x", 44, "2026-01-01")];
+    expect(imputer(100, entamee)).toEqual([
+      { id: "x", numero: "x", montant: 44, resteApres: 0 },
+    ]);
+    expect(surplusImputation(100, entamee)).toBe(56);
+  });
+
+  it("écarte les factures déjà soldées", () => {
+    const melange = [F("soldee", 0, "2026-01-01"), F("due", 80, "2026-02-01")];
+    expect(imputer(80, melange).map((x) => x.id)).toEqual(["due"]);
+  });
+
+  /* Deux factures du même jour : le numéro départage, pour que la répartition
+     soit la même à chaque fois. */
+  it("départage deux factures du même jour par leur numéro", () => {
+    const memeJour = [F("FAC-2", 30, "2026-01-01"), F("FAC-1", 30, "2026-01-01")];
+    expect(imputer(30, memeJour).map((x) => x.numero)).toEqual(["FAC-1"]);
+  });
+
+  it("ne rend rien pour un montant nul ou négatif", () => {
+    expect(imputer(0, trois)).toEqual([]);
+    expect(imputer(-10, trois)).toEqual([]);
+    expect(imputer(100, [])).toEqual([]);
+  });
+
+  /* Les centimes doivent retomber juste : la somme des parts vaut le virement. */
+  it("répartit au centime", () => {
+    const centimes = [F("a", 33.33, "2026-01-01"), F("b", 33.34, "2026-01-02")];
+    const r = imputer(50, centimes);
+    expect(r.reduce((s, x) => s + x.montant, 0)).toBeCloseTo(50, 10);
+    expect(r[0].montant).toBe(33.33);
+    expect(r[1]).toMatchObject({ montant: 16.67, resteApres: 16.67 });
+  });
+});
+
+describe("Ce qui refuse un virement groupé", () => {
+  const deux = [F("a", 100, "2026-01-01"), F("b", 50, "2026-02-01")];
+
+  it("laisse passer ce qui tient dans le total dû", () => {
+    expect(refusImputation(150, deux)).toBeNull();
+    expect(refusImputation(1, deux)).toBeNull();
+  });
+
+  it("refuse zéro", () => {
+    expect(refusImputation(0, deux)).toMatch(/supérieur à 0/);
+  });
+
+  /* Un trop-perçu ne s'impute nulle part : il faut le dire, pas l'absorber. */
+  it("refuse au-delà du total dû, et annonce ce total", () => {
+    const refus = refusImputation(200, deux);
+    expect(refus).toMatch(/dépasse le total dû/);
+    expect(refus).toContain("150,00 €");
+  });
+
+  it("refuse une sélection déjà soldée", () => {
+    expect(refusImputation(10, [F("a", 0, "2026-01-01")])).toMatch(/déjà réglées/);
   });
 });

@@ -164,3 +164,95 @@ export function montantPropose(
 function formaterEuros(n: number): string {
   return `${n.toFixed(2).replace(".", ",")} €`;
 }
+
+/** Une facture à régler, dans l'ordre où elle doit l'être. */
+export interface FactureAImputer {
+  id: string;
+  /** Ce qu'il reste à payer sur elle. */
+  reste: number;
+  /** Date de facture — c'est elle qui donne l'ordre d'imputation. */
+  date?: string | null;
+  /** Numéro, pour départager deux factures du même jour. */
+  numero?: string | null;
+}
+
+export interface Imputation {
+  id: string;
+  numero?: string | null;
+  montant: number;
+  /** Ce qui restera dû sur cette facture après imputation. */
+  resteApres: number;
+}
+
+/**
+ * Répartit un virement unique sur plusieurs factures.
+ *
+ * **De la plus ancienne à la plus récente** : c'est la règle d'imputation
+ * usuelle, et celle que le client applique lui-même en payant. Un virement qui
+ * ne couvre pas tout laisse donc la dernière facture partiellement réglée, et
+ * les plus vieilles soldées — l'inverse ferait vieillir une créance qu'on
+ * pouvait éteindre.
+ *
+ * Aucune facture ne reçoit plus que son reste : le trop-perçu n'est pas
+ * réparti, il est signalé par `refusImputation`. Et aucune ne reçoit zéro : un
+ * règlement de 0 € est une écriture vide dans le livre.
+ */
+export function imputer(
+  montantRecu: unknown,
+  factures: FactureAImputer[] | null | undefined
+): Imputation[] {
+  let reste = arrondiCentime(montantRecu);
+  if (reste <= 0) return [];
+
+  const ordre = [...(factures ?? [])]
+    .filter((f) => f && arrondiCentime(f.reste) > 0)
+    .sort((a, b) => {
+      const da = String(a.date ?? "");
+      const db = String(b.date ?? "");
+      if (da !== db) return da < db ? -1 : 1;
+      return String(a.numero ?? "").localeCompare(String(b.numero ?? ""));
+    });
+
+  const imputations: Imputation[] = [];
+  for (const f of ordre) {
+    if (reste < EPSILON) break;
+    const du = arrondiCentime(f.reste);
+    const part = arrondiCentime(Math.min(du, reste));
+    if (part < EPSILON) continue;
+    imputations.push({
+      id: f.id,
+      numero: f.numero,
+      montant: part,
+      resteApres: arrondiCentime(du - part),
+    });
+    reste = arrondiCentime(reste - part);
+  }
+  return imputations;
+}
+
+/** Ce qui resterait non imputé — un trop-perçu, qu'on ne range nulle part. */
+export function surplusImputation(
+  montantRecu: unknown,
+  factures: FactureAImputer[] | null | undefined
+): number {
+  const total = imputer(montantRecu, factures).reduce((s, i) => s + i.montant, 0);
+  return arrondiCentime(arrondiCentime(montantRecu) - total);
+}
+
+/** Ce qui interdit d'enregistrer ce virement groupé, ou `null` si rien. */
+export function refusImputation(
+  montantRecu: unknown,
+  factures: FactureAImputer[] | null | undefined
+): string | null {
+  const montant = arrondiCentime(montantRecu);
+  if (montant <= 0) return "Le montant reçu doit être supérieur à 0.";
+
+  const du = arrondiCentime(
+    (factures ?? []).reduce((s, f) => s + Math.max(0, arrondiCentime(f?.reste)), 0)
+  );
+  if (du <= 0) return "Les factures sélectionnées sont déjà réglées.";
+  if (montant - du > EPSILON) {
+    return `Le montant reçu dépasse le total dû (${formaterEuros(du)}). Un trop-perçu ne s'impute pas.`;
+  }
+  return null;
+}
