@@ -3627,9 +3627,23 @@ function creerArticleDepuisLigne(i){
 }
 
 
+/* Une liste déroulante écarte EN SILENCE une valeur qu'elle ne propose pas.
+   Transformer un rapport en devis remplissait donc un champ Client vide dès
+   que le client n'était plus au répertoire — supprimé, renommé, ou saisi
+   avant sa fiche — et l'enregistrement effaçait le nom que le rapport
+   portait. On garde la valeur reçue, en la signalant : c'est le motif déjà
+   employé par `comptesLinkOptions` pour les comptes détachés. */
+function optionConservee(current, connu, libelle){
+  return (current && !connu)
+    ? `<option value="${esc(current)}" selected>${esc(current)} ${libelle}</option>`
+    : '';
+}
+
 function clientSelectOptions(current){
   const list = state.clients.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return '<option value="">— Sélectionner un client —</option>' + list.map(c=>`<option value="${esc(c.nom)}" ${c.nom===current?'selected':''}>${esc(c.nom)}</option>`).join('');
+  return '<option value="">— Sélectionner un client —</option>'
+    + optionConservee(current, list.some(c=>c.nom===current), '— hors répertoire')
+    + list.map(c=>`<option value="${esc(c.nom)}" ${c.nom===current?'selected':''}>${esc(c.nom)}</option>`).join('');
 }
 function bcSelectOptionsPourIntervention(clientNom, current){
   const list = state.bonsCommande.filter(b=>{
@@ -3815,7 +3829,9 @@ function metierCouleur(value){
 function interlocuteurOptions(clientNom, current){
   const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===clientNom);
   const list = client ? state.interlocuteurs.filter(i=>i.clientId===client.id) : [];
-  return '<option value="">— Aucun —</option>' + list.map(i=>`<option value="${esc(i.nom)}" ${i.nom===current?'selected':''}>${esc(i.nom)}${i.fonction? ' ('+esc(i.fonction)+')':''}</option>`).join('');
+  return '<option value="">— Aucun —</option>'
+    + optionConservee(current, list.some(i=>i.nom===current), '— hors répertoire')
+    + list.map(i=>`<option value="${esc(i.nom)}" ${i.nom===current?'selected':''}>${esc(i.nom)}${i.fonction? ' ('+esc(i.fonction)+')':''}</option>`).join('');
 }
 async function lookupVilleParCodePostal(cp, targetId){
   if(!cp || !/^\d{5}$/.test(cp)) return;
