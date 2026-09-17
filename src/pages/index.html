@@ -2958,7 +2958,7 @@ function ouvrirClientDepuisDashboard(nom){
 }
 
 function renderDashboard(){
-  if(state.currentRole==='soustraitant') return renderDashboardSousTraitant();
+  if(estSousTraitant()) return renderDashboardSousTraitant();
   const soc = state.societeId;
   const devis = state.devis.filter(d=>d.societeId===soc);
   const factures = state.factures.filter(f=>f.societeId===soc);
@@ -4611,7 +4611,7 @@ function printDocument(type, id, action){
 
 /* ---------- Devis ---------- */
 function renderDevis(){
-  const estST = state.currentRole==='soustraitant';
+  const estST = estSousTraitant();
   const list = state.devis.filter(d=>d.societeId===state.societeId && (estST ? (d.sousTraitantEmetteur && (!sousTraitantActuel() || d.sousTraitantEmetteur===sousTraitantActuel())) : !d.sousTraitantEmetteur));
   return `
     <div class="page-head"><h1>Devis</h1>${state.formOpen.devis? '' : '<button class="btn primary" onclick="openForm(\'devis\')">+ Nouveau devis</button>'}</div>
@@ -4910,7 +4910,7 @@ async function saveDevis(){
     }),
     date: document.getElementById('f_date').value || todayISO(),
     lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'brouillon', ...conducteurDuSelect('f_conducteur') };
-  if(state.currentRole==='soustraitant') obj.sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
+  if(estSousTraitant()) obj.sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
   const r = await stSet('devis:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('devis');
@@ -5340,7 +5340,7 @@ function transformerInterventionEn(type, interventionId){
 /* ---------- Factures ---------- */
 function renderFactures(){
   const soc = state.societeId;
-  const estST = state.currentRole==='soustraitant';
+  const estST = estSousTraitant();
   const view = state.facturesView || 'liste';
   if(estST){
     const mesFactures = facturesDuSousTraitant();
@@ -7715,7 +7715,7 @@ function resolvePlanningItem(kind, compositeId){
 }
 function renderPlanning(){
   if(state.currentRole==='technicien') state.planningView = 'technicien';
-  if(state.currentRole==='soustraitant'){
+  if(estSousTraitant()){
     state.planningView = 'soustraitant';
     if(sousTraitantActuel()) state.planningSousTraitantFilter = sousTraitantActuel();
   }
@@ -7726,7 +7726,7 @@ function renderPlanning(){
   const firstMonday = currentWeekStart();
   return `
     <div class="plus-subnav" style="justify-content:center;">
-      ${state.currentRole==='soustraitant' ? `<button class="plus-subnav-btn active">Mon planning ${esc(societeName(state.societeId))}</button>` : `<button class="plus-subnav-btn ${view==='technicien'?'active':''}" onclick="setPlanningView('technicien')">Planning Technicien</button>
+      ${estSousTraitant() ? `<button class="plus-subnav-btn active">Mon planning ${esc(societeName(state.societeId))}</button>` : `<button class="plus-subnav-btn ${view==='technicien'?'active':''}" onclick="setPlanningView('technicien')">Planning Technicien</button>
       ${state.currentRole==='technicien' ? '' : `<button class="plus-subnav-btn ${view==='soustraitant'?'active':''}" onclick="setPlanningView('soustraitant')">Planning Sous-traitant</button>
       <button class="plus-subnav-btn ${view==='attente'?'active':''}" onclick="setPlanningView('attente')">En attente technicien</button>
       <button class="plus-subnav-btn ${view==='attenteST'?'active':''}" onclick="setPlanningView('attenteST')">En attente sous-traitant</button>`}`}
@@ -7750,7 +7750,7 @@ function renderPlanning(){
 }
 function setPlanningView(view){
   if(state.currentRole==='technicien' && view!=='technicien') return;
-  if(state.currentRole==='soustraitant' && view!=='soustraitant') return;
+  if(estSousTraitant() && view!=='soustraitant') return;
   state.planningView = view;
   renderTab();
 }
@@ -7815,7 +7815,7 @@ function renderPlanningCalendar(assigneeField){
   }
   return `
     <div class="planning-layout">
-      ${(state.currentRole!=='technicien' && state.currentRole!=='soustraitant')? `<div class="planning-unscheduled">
+      ${(state.currentRole!=='technicien' && !estSousTraitant())? `<div class="planning-unscheduled">
         <select style="width:100%; margin-bottom:10px;" onchange="filterPlanningConducteur(this.value)">${conducteurFilterOptions(state.planningConducteurFilter)}</select>
         <div class="section-title" style="margin-top:0; display:flex; align-items:center; justify-content:space-between;">
           <span>Non planifiés (${unscheduled.length})</span>
@@ -8268,7 +8268,7 @@ async function removeTentativeContact(kind, id, tentativeId){
 }
 function planningPrixSTZoneHTML(b, assigneeField){
   if(assigneeField!=='sousTraitant') return '';
-  if(state.currentRole==='soustraitant'){
+  if(estSousTraitant()){
     return b.montantSousTraitant!=null
       ? `<div class="planning-card-sub" style="font-weight:700; color:var(--success);">💶 Votre montant : ${moneyDisplay(b.montantSousTraitant)} HT</div>`
       : `<div class="planning-card-sub" style="color:var(--text-dim);">💶 Montant en cours de définition</div>`;
@@ -8312,7 +8312,7 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
     ${b.dateInterventionTerminee? `<div class="planning-card-sub" style="color:#2E9BF0;">✅ Terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
     ${planningPrixSTZoneHTML(b, assigneeField)}
     <input type="date" class="planning-quick-date" onchange="quickScheduleBC('${b.kind}','${b.id}', this.value, '${assigneeField||''}', '${jsAttr(assigneeValue||'')}')" title="Choisir une date (alternative au glisser-déposer)">
-    ${(b.montant!=null && state.currentRole!=='soustraitant')? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
+    ${(b.montant!=null && !estSousTraitant())? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
     ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a>`:''}
     ${savTriangle}
   </div>`;
@@ -8393,7 +8393,7 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     </div>`;
   }
   return `<div class="planning-card planning-card-scheduled ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="true" ondragstart="dragStartBC(event,'${b.kind}','${b.id}')" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}','${dayIso}')" style="top:${top}; height:${height}; ${couleurStyle}">
-    ${state.currentRole==='soustraitant'? '' : `<button class="planning-unschedule" onclick="unscheduleBC('${b.kind}','${b.id}')" title="Retirer du planning">✕</button>`}
+    ${estSousTraitant()? '' : `<button class="planning-unschedule" onclick="unscheduleBC('${b.kind}','${b.id}')" title="Retirer du planning">✕</button>`}
     <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
     ${planningContactZoneHTML(b)}
     <div class="planning-card-sub">${esc(b.numero)}</div>
@@ -8406,29 +8406,29 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     ${b.isSAV && b.problemeDescription? `<div class="planning-card-sub" style="color:var(--danger);">⚠ ${esc(b.problemeDescription)}</div>`:''}
     ${b.datePlanificationInitiale? `<div class="planning-card-sub" title="Reportée pour attente de pièce">🕓 1ère planif. : ${fmtDate(b.datePlanificationInitiale)}</div>`:''}
     ${b.dateInterventionTerminee? `<div class="planning-card-sub" style="color:#2E9BF0;">✅ Terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
-    ${state.currentRole==='soustraitant'? `${(b.datesSupplementaires||[]).length? `<div class="planning-extra-dates">${b.datesSupplementaires.map(d=>`<span class="planning-extra-date-tag">📅 ${fmtDate(d.date)} ${d.heure||'08:00'}</span>`).join('')}</div>`:''}` : `<div class="planning-extra-dates" onclick="event.stopPropagation()">
+    ${estSousTraitant()? `${(b.datesSupplementaires||[]).length? `<div class="planning-extra-dates">${b.datesSupplementaires.map(d=>`<span class="planning-extra-date-tag">📅 ${fmtDate(d.date)} ${d.heure||'08:00'}</span>`).join('')}</div>`:''}` : `<div class="planning-extra-dates" onclick="event.stopPropagation()">
       ${(b.datesSupplementaires||[]).map(d=>`<span class="planning-extra-date-tag">📅 ${fmtDate(d.date)} ${d.heure||'08:00'} (${d.duree||1}h) <button onclick="removeDateSupplementaire('${b.kind}','${b.id}','${d.date}')" title="Retirer">✕</button></span>`).join('')}
       <button class="btn small ghost" onclick="event.stopPropagation(); openAjoutDateSupplModal('${b.kind}','${b.id}')" title="Planifier ce même bon de commande sur une autre date, en plus">+ Autre date</button>
     </div>`}
-    ${state.currentRole==='soustraitant'? `<div class="planning-card-controls"><span class="planning-jour-heure" style="font-size:11px;">${b.heurePlanifiee||'—'}${b.dureeHeures? ' · '+b.dureeHeures+'h':''}</span></div>` : `<div class="planning-card-controls">
+    ${estSousTraitant()? `<div class="planning-card-controls"><span class="planning-jour-heure" style="font-size:11px;">${b.heurePlanifiee||'—'}${b.dureeHeures? ' · '+b.dureeHeures+'h':''}</span></div>` : `<div class="planning-card-controls">
       <input type="time" class="planning-time" value="${b.heurePlanifiee||''}" onchange="updateBCHeure('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()">
       <select class="planning-duree" onchange="updateBCDuree('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Durée">
         ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${duree===n?'selected':''}>${n} h</option>`).join('')}
       </select>
     </div>`}
-    ${state.currentRole==='soustraitant'? '' : `<select class="planning-technicien-select" onchange="updateBCAssignee('${b.kind}','${b.id}','${assigneeField}',this.value)" onclick="event.stopPropagation()" title="${assigneeField==='sousTraitant'?'Sous-traitant assigné':'Équipe assignée'}">${assigneeField==='sousTraitant'? sousTraitantSelectOptions(b.sousTraitant) : technicienSelectOptions(b.technicien)}</select>`}
-    ${state.currentRole==='soustraitant'? '' : `<input type="date" class="planning-enddate" value="${b.datePlanifieeFin||b.datePlanifiee||''}" min="${b.datePlanifiee||''}" onchange="updateBCDateFin('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Étirer jusqu'à cette date">`}
-    ${(b.montant!=null && state.currentRole!=='soustraitant')? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
+    ${estSousTraitant()? '' : `<select class="planning-technicien-select" onchange="updateBCAssignee('${b.kind}','${b.id}','${assigneeField}',this.value)" onclick="event.stopPropagation()" title="${assigneeField==='sousTraitant'?'Sous-traitant assigné':'Équipe assignée'}">${assigneeField==='sousTraitant'? sousTraitantSelectOptions(b.sousTraitant) : technicienSelectOptions(b.technicien)}</select>`}
+    ${estSousTraitant()? '' : `<input type="date" class="planning-enddate" value="${b.datePlanifieeFin||b.datePlanifiee||''}" min="${b.datePlanifiee||''}" onchange="updateBCDateFin('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Étirer jusqu'à cette date">`}
+    ${(b.montant!=null && !estSousTraitant())? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
     ${planningPrixSTZoneHTML(b, assigneeField)}
     ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎</a>`:''}
     ${savTriangle}
-    ${state.currentRole==='soustraitant'? '' : `<button class="planning-shift-left" onclick="event.stopPropagation(); shiftBCUnJourPlusTot('${b.kind}','${b.id}')" title="Annuler l'étirement (puis déplanifier au clic suivant)">←</button>`}
-    ${state.currentRole==='soustraitant'? '' : `<div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${b.kind}','${b.id}',false)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>`}
+    ${estSousTraitant()? '' : `<button class="planning-shift-left" onclick="event.stopPropagation(); shiftBCUnJourPlusTot('${b.kind}','${b.id}')" title="Annuler l'étirement (puis déplanifier au clic suivant)">←</button>`}
+    ${estSousTraitant()? '' : `<div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${b.kind}','${b.id}',false)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>`}
   </div>`;
 }
 let draggedItem = null;
 function handlePlanningCardClick(ev, kind, id, dayIso){
-  if(state.currentRole === 'soustraitant'){
+  if(estSousTraitant()){
     ev.stopPropagation();
     openSousTraitantValidationModal(kind, id, dayIso);
     return;
@@ -8981,7 +8981,7 @@ async function updateDateSupplChamp(kind, id, dateVal, champ, value){
   renderTab();
 }
 function dragStartBC(ev, kind, id){
-  if(state.currentRole==='technicien' || state.currentRole==='soustraitant'){ ev.preventDefault(); return; }
+  if(state.currentRole==='technicien' || estSousTraitant()){ ev.preventDefault(); return; }
   const resolved = resolvePlanningItem(kind, id);
   if(resolved && bcInterventionFaite(resolved.bc)){ ev.preventDefault(); return; }
   draggedItem = {kind, id};
@@ -9270,7 +9270,7 @@ async function onResizeEnd(){
 
 function renderReglements(embedded){
   const factures = facturesDesReglements();
-  if(state.currentRole==='soustraitant' && !factures.length) return '<div class="empty">Aucun règlement pour l\'instant — vos règlements apparaîtront ici une fois vos factures créées.</div>';
+  if(estSousTraitant() && !factures.length) return '<div class="empty">Aucun règlement pour l\'instant — vos règlements apparaîtront ici une fois vos factures créées.</div>';
   if(state.reglementsClient){
     return renderReglementsClientDetail(state.reglementsClient, factures);
   }
@@ -9283,7 +9283,7 @@ function renderReglements(embedded){
 
 /** Les factures de la société, telles que l'écran Règlements les voit. */
 function facturesDesReglements(){
-  const estST = state.currentRole==='soustraitant';
+  const estST = estSousTraitant();
   return state.factures.filter(f=>f.societeId===state.societeId && (estST
     ? (f.sousTraitantEmetteur && (!sousTraitantActuel() || f.sousTraitantEmetteur===sousTraitantActuel()))
     : !f.sousTraitantEmetteur));
@@ -9666,7 +9666,7 @@ async function syncFactureStatut(factureId){
 
 /* ---------- Interventions (parcours en 4 étapes) ---------- */
 function renderInterventions(){
-  const estST = state.currentRole==='soustraitant';
+  const estST = estSousTraitant();
   const list = state.interventions.filter(i=>i.societeId===state.societeId && (estST ? (i.sousTraitantEmetteur && (!sousTraitantActuel() || i.sousTraitantEmetteur===sousTraitantActuel())) : !i.sousTraitantEmetteur));
   return `
     <div class="page-head"><h1>Rapports / recherche de fuite</h1>${state.formOpen.intervention? '' : '<button class="btn primary" onclick="openForm(\'intervention\')">+ Nouveau rapport</button>'}</div>
@@ -10208,7 +10208,7 @@ async function saveIntervention(etCreerDevis){
     rapport: e.rapport || {constatations:'',preconisations:''},
     datePlanifiee: e.datePlanifiee || '', heurePlanifiee: e.heurePlanifiee || '', dureeHeures: e.dureeHeures || 1,
     statut: e.statut || 'en cours' };
-  if(state.currentRole==='soustraitant') obj.sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
+  if(estSousTraitant()) obj.sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
   const r = await stSet('intervention:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   const isNouveauSAV = !!obj.bonCommandeId && !e.id;
@@ -10474,7 +10474,7 @@ function renderParametres(){
     </div>
     `;
   }
-  if(state.currentRole==='soustraitant'){
+  if(estSousTraitant()){
     const sts = state.sousTraitants.filter(s=>s.societeId===state.societeId);
     return `
     <div class="page-head"><h1>Réglages — Espace sous-traitant</h1></div>
@@ -14645,6 +14645,14 @@ async function saveConducteur(){
    `conducteurIdDe` rattrape les documents écrits avant la reprise, dont l'écran
    ne connaît encore que le nom : sans lui, ouvrir une vieille fiche afficherait
    « Non attribué » et l'enregistrer effacerait le conducteur. */
+/* Le rôle vaut `sous_traitant`, avec un tiret bas, comme en base et comme dans
+   `ROLES_LIBELLES`. Vingt-quatre comparaisons le cherchaient sous
+   « soustraitant » : aucune n'a jamais été vraie, et tout le parcours
+   sous-traitant — son tableau de bord, ses devis, ses factures, son planning en
+   lecture seule — est resté inatteignable depuis qu'il existe. Une seule
+   fonction désormais, pour que la faute ne puisse plus se répéter. */
+function estSousTraitant(){ return state.currentRole === 'sous_traitant'; }
+
 function conducteurIdDe(e){
   if(e && e.conducteurId) return e.conducteurId;
   const nom = ((e && e.conducteur) || '').trim().toLowerCase();
