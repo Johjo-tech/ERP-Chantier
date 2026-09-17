@@ -74,6 +74,9 @@ import {
   statutEnBase,
   statutReglement,
   totalRegle,
+  imputer,
+  surplusImputation,
+  refusImputation,
 } from "@/api/regles-reglements";
 import { extraireBonCommande, preparer, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import { urlPieceJointe, urlTelechargementPieceJointe } from "./pieces-jointes";
@@ -541,6 +544,11 @@ export function injecterSession() {
   w.refusReglement = refusReglement;
   w.montantPropose = montantPropose;
   w.arrondiCentime = arrondiCentime;
+  /* Un virement unique réparti sur plusieurs factures, de la plus ancienne à
+     la plus récente. */
+  w.imputer = imputer;
+  w.surplusImputation = surplusImputation;
+  w.refusImputation = refusImputation;
 
   /* La couleur de la société, déclinée. Le réglage existait depuis longtemps
      et n'avait aucun lecteur : KTA portait un violet, l'écran restait orange. */

@@ -9168,50 +9168,121 @@ function reglementCardClick(ev, factureId){
 function openBulkReglementForm(){
   state.formOpen.reglementBulk = true;
   renderTab();
+  /* La répartition lit le DOM : elle se peint une fois la fenêtre posée. */
+  setTimeout(majRepartitionBulk, 0);
 }
 function closeBulkReglementForm(){
   state.formOpen.reglementBulk = false;
   renderTab();
 }
+/** Les factures de la sélection, dans la forme qu'attend la règle d'imputation. */
+function facturesAImputer(selection, list){
+  return list.filter(f=>selection.includes(f.id))
+    .map(f=>({ id:f.id, numero:f.numero, date:f.date, reste: reglementStatutFacture(f).reste }));
+}
+
+/**
+ * Le virement groupé.
+ *
+ * En SURIMPRESSION, et non ajouté au bas de la liste : là, il atterrissait
+ * plusieurs écrans sous la barre de sélection restée collée en bas, et rien ne
+ * semblait se passer au clic.
+ *
+ * Le montant est saisissable. Un virement qui ne couvre pas tout s'impute de la
+ * plus ancienne facture à la plus récente — jusqu'ici l'écran soldait chacune
+ * en entier, et un règlement partiel sur plusieurs factures n'avait aucun
+ * chemin.
+ */
 function renderBulkReglementModal(selection, list){
+  const cibles = facturesAImputer(selection, list);
+  const total = window.arrondiCentime(cibles.reduce((s,f)=> s + f.reste, 0));
   const factures = list.filter(f=>selection.includes(f.id));
-  const total = factures.reduce((s,f)=> s + reglementStatutFacture(f).reste, 0);
   return `
-  <div class="form-panel" style="margin-top:14px;">
-    <h3>Règlement groupé — ${factures.length} facture${factures.length>1?'s':''}</h3>
-    <div class="card-sub" style="margin-bottom:12px;">${factures.map(f=>`${esc(f.numero)} (${moneyDisplay(reglementStatutFacture(f).reste)})`).join(', ')}</div>
-    <div class="field-grid">
-      <div class="field"><label>Date</label><input type="date" id="rb_date" value="${todayISO()}"></div>
-      <div class="field"><label>Mode de règlement</label><select id="rb_mode">${optionsModeReglementHTML(factures[0] && factures[0].modePaiement)}</select></div>
-      <div class="field full"><label>Référence</label><input type="text" id="rb_reference" placeholder="N° chèque, réf. virement…"></div>
-    </div>
-    <div class="summary-row" style="margin-bottom:12px;"><span>Total à régler</span><b>${moneyDisplay(total)}</b></div>
-    <div style="display:flex; gap:10px;">
-      <button class="btn primary" onclick="saveBulkReglement()">Enregistrer le règlement</button>
-      <button class="btn ghost" onclick="closeBulkReglementForm()">Annuler</button>
+  <div class="view-modal" style="display:flex;" onclick="fermerBulkSiFond(event)">
+    <div class="view-modal-panel" style="max-width:620px; padding:22px; font-family:inherit; font-size:14px;">
+      <button class="view-modal-close" onclick="closeBulkReglementForm()">✕</button>
+      <h3 style="margin:0 0 4px;">Règlement groupé — ${cibles.length} facture${cibles.length>1?'s':''}</h3>
+      <div class="card-sub" style="margin-bottom:14px;">Total dû : <b>${moneyDisplay(total)}</b></div>
+      <div class="field-grid">
+        <div class="field"><label>Montant reçu</label>
+          <input type="number" step="0.01" min="0" id="rb_montant" value="${total.toFixed(2)}" oninput="majRepartitionBulk()"></div>
+        <div class="field"><label>Date</label><input type="date" id="rb_date" value="${todayISO()}"></div>
+        <div class="field"><label>Mode de règlement</label><select id="rb_mode">${optionsModeReglementHTML(factures[0] && factures[0].modePaiement)}</select></div>
+        <div class="field"><label>Référence</label><input type="text" id="rb_reference" placeholder="N° chèque, réf. virement…"></div>
+      </div>
+      ${/* La répartition se voit AVANT de valider : c'est elle qu'on accepte,
+           pas un montant global dont on devine l'effet. */''}
+      <div class="section-title" style="margin-top:6px;">Répartition</div>
+      <div id="rb_repartition"></div>
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn primary" id="rb_valider" onclick="saveBulkReglement()">Enregistrer le règlement</button>
+        <button class="btn ghost" onclick="closeBulkReglementForm()">Annuler</button>
+      </div>
     </div>
   </div>`;
 }
+
+/* Le fond ferme, le panneau non. */
+function fermerBulkSiFond(ev){
+  if(ev.target === ev.currentTarget) closeBulkReglementForm();
+}
+
+/** Ce que le montant saisi donnerait, facture par facture. */
+function majRepartitionBulk(){
+  const zone = document.getElementById('rb_repartition');
+  if(!zone) return;
+  const cibles = facturesAImputer(state.reglementSelection || [], state.factures);
+  const montant = window.arrondiCentime((document.getElementById('rb_montant')||{}).value);
+  const refus = window.refusImputation(montant, cibles);
+  const bouton = document.getElementById('rb_valider');
+  if(bouton) bouton.disabled = !!refus;
+
+  if(refus){ zone.innerHTML = `<div class="bc-attente-message">${esc(refus)}</div>`; return; }
+
+  const parts = window.imputer(montant, cibles);
+  const servies = new Set(parts.map(p=>p.id));
+  zone.innerHTML = cibles.map(f=>{
+    const p = parts.find(x=>x.id===f.id);
+    if(!p) return `<div class="summary-row" style="opacity:.5;"><span>${esc(f.numero||'')} <small>— rien cette fois</small></span><b>—</b></div>`;
+    const solde = p.resteApres <= 0.004;
+    return `<div class="summary-row"><span>${esc(f.numero||'')} ${solde
+        ? '<small style="color:var(--success);">soldée</small>'
+        : `<small style="color:var(--text-dim);">reste ${moneyDisplay(p.resteApres)}</small>`}</span><b>${moneyDisplay(p.montant)}</b></div>`;
+  }).join('') + (servies.size < cibles.length
+      ? `<div class="card-sub" style="margin-top:6px;">Les factures non servies restent dues : le virement ne va pas jusqu'à elles.</div>`
+      : '');
+}
 async function saveBulkReglement(){
+  const selection = state.reglementSelection || [];
+  const cibles = facturesAImputer(selection, state.factures);
+  const montant = window.arrondiCentime((document.getElementById('rb_montant')||{}).value);
+
+  /* Le refus et son message viennent de la règle : l'écran ne redécide pas de
+     ce qui est acceptable. */
+  const refus = window.refusImputation(montant, cibles);
+  if(refus){ alert(refus); return; }
+
   const date = document.getElementById('rb_date').value || todayISO();
   const mode = document.getElementById('rb_mode').value;
   const reference = document.getElementById('rb_reference').value;
-  const selection = state.reglementSelection || [];
-  for(const factureId of selection){
-    const facture = state.factures.find(f=>f.id===factureId);
-    if(!facture) continue;
-    const st = reglementStatutFacture(facture);
-    if(st.reste <= 0.01) continue;
+
+  /* Un règlement par facture, du montant imputé — et non du reste dû : c'est
+     ce qui permet qu'un virement partiel se répartisse au lieu de tout solder.
+     La référence commune les rattache au même mouvement bancaire. */
+  const parts = window.imputer(montant, cibles);
+  for(const part of parts){
     const id = uid();
-    const obj = { id, societeId: state.societeId, factureId, createdAt: new Date().toISOString(), date, montant: st.reste, mode, reference };
+    const obj = { id, societeId: state.societeId, factureId: part.id,
+      createdAt: new Date().toISOString(), date, montant: part.montant, mode, reference };
     const r = await stSet('reglement:'+id, obj);
     if(!r){ showToast(saveFailedMessage()); return; }
   }
   await loadAll();
-  for(const factureId of selection){ await maybeMarkFacturePayee(factureId); }
+  for(const part of parts){ await maybeMarkFacturePayee(part.id); }
   state.reglementSelection = [];
   state.formOpen.reglementBulk = false;
-  showToast('Règlement enregistré pour les factures sélectionnées.', 'success');
+  const soldees = parts.filter(x=>x.resteApres <= 0.004).length;
+  showToast(`${moneyDisplay(montant)} enregistré${parts.length>1? ' sur '+parts.length+' factures':''} — ${soldees} soldée${soldees>1?'s':''}.`, 'success');
   renderTab();
 }
 /**
