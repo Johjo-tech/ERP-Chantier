@@ -2906,6 +2906,155 @@ function bcFacturesKTA(){
   const st = sousTraitantActuel();
   return state.bonsCommande.filter(b=>b.societeId===state.societeId && b.sousTraitant && (!st || b.sousTraitant===st) && b.valideConducteur);
 }
+/* ---------- Tuiles partagées ----------
+   Les trois tableaux de bord de métier montrent les mêmes tuiles, dans le même
+   habillage que celui du pilotage : une deuxième écriture du même HTML aurait
+   fini par ne plus lui ressembler. */
+/* Le tableau de bord de pilotage saluait « Aissa Choumane » en toutes lettres :
+   tout le monde était accueilli sous ce nom. */
+function salutation(){
+  const qui = (window.utilisateurCourant && window.utilisateurCourant()) || '';
+  const nom = qui.includes('@') ? qui.split('@')[0].replace(/[._-]+/g, ' ') : qui;
+  return 'Bonjour 👋' + (nom ? ' ' + nom : '');
+}
+
+function tuileDashboard({ icone, libelle, valeur, sous, ton, destination, titre }){
+  const classe = 'stat-card cliquable' + (ton ? ' ' + ton : '');
+  return `<div class="${classe}" role="button" tabindex="0" title="${esc(titre||libelle)}"
+      onclick="ouvrirDepuisDashboard('${destination}')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('${destination}');}">
+    <div class="stat-card-top"><span class="stat-icon" style="background:var(--${ton==='danger'?'danger':ton==='warn'?'accent':'info'}-soft); color:var(--${ton==='danger'?'danger':ton==='warn'?'accent-2':'info'});">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icone}</svg></span></div>
+    <div class="stat-label">${esc(libelle)}</div>
+    <div class="stat-num">${valeur}</div>
+    ${sous ? `<div class="stat-subamount">${sous}</div>` : ''}
+  </div>`;
+}
+
+function enteteDashboard(titre, sousTitre){
+  const dateLabel = new Date().toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
+  return `<div class="dash-greetrow">
+      <div>
+        <h1 class="dash-greeting">${esc(titre)}</h1>
+        <div class="dash-subtitle">${esc(sousTitre)}</div>
+      </div>
+      <div class="dash-date-pill">${dateLabel.charAt(0).toUpperCase()+dateLabel.slice(1)}</div>
+    </div>`;
+}
+
+/* ---------- Le technicien ----------
+   Son écran ne porte pas un euro : `voitLesPrix()` le lui refuse, et son
+   travail ne s'évalue pas en chiffre d'affaires. Ce qu'il lui faut, c'est ce
+   qu'il a à faire aujourd'hui. */
+
+/** Les bons confiés à l'équipe du compte qui regarde. */
+function mesBonsTechnicien(){
+  const equipe = monEquipeId();
+  const bons = state.bonsCommande.filter(b=>b.societeId===state.societeId);
+  if(!equipe) return bons;   // équipe inconnue : mieux vaut tout montrer que rien
+  const libelles = state.techniciens.filter(x=>x.id===equipe).map(x=>technicienLabel(x));
+  return bons.filter(b=> b.technicien === equipe || libelles.includes(b.technicien));
+}
+
+/* Un aperçu, pas la journée entière : au-delà, l'écran devient un mur et le
+   planning fait mieux le travail. */
+const JOURNEE_VISIBLE = 8;
+
+function renderDashboardTechnicien(){
+  const today = todayISO();
+  const finSemaine = dateLocaleISO(new Date(Date.now() + 6*86400000));
+  const miens = mesBonsTechnicien();
+  const duJour = miens.filter(b=>b.datePlanifiee === today);
+  const laSemaine = miens.filter(b=>b.datePlanifiee && b.datePlanifiee > today && b.datePlanifiee <= finSemaine);
+  /* « À pointer » : la date est passée et tous les métiers ne sont pas
+     déclarés faits. C'est le retard tel que le terrain le vit. */
+  const aPointer = miens.filter(b=>{
+    if(!b.datePlanifiee || b.datePlanifiee >= today) return false;
+    const metiers = (b.metiers && b.metiers.length) ? b.metiers : (b.metier ? [b.metier] : []);
+    const faits = b.metiersFait || {};
+    return !metiers.length || metiers.some(m=>!faits[m]);
+  });
+  const pieces = miens.filter(b=>b.pieceACommander && !b.pieceACommanderDateCommande);
+
+  return `
+    ${enteteDashboard(salutation(), "Votre journée sur le terrain — " + societeName(state.societeId))}
+    <div class="grid-stats grid-stats-4">
+      ${tuileDashboard({icone:ICONS.planning, libelle:"Mes interventions aujourd'hui", valeur:duJour.length,
+        ton: duJour.length?'warn':'', destination:'planning', titre:'Ouvrir le planning'})}
+      ${tuileDashboard({icone:ICONS.planning, libelle:'Les six prochains jours', valeur:laSemaine.length,
+        destination:'planning', titre:'Ouvrir le planning'})}
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Travaux à pointer', valeur:aPointer.length,
+        ton: aPointer.length?'danger':'', destination:'planning', titre:'Ouvrir le planning'})}
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Pièces que j’ai signalées', valeur:pieces.length,
+        destination:'pieces', titre:'Voir les pièces en commande'})}
+    </div>
+    <div class="section-title-row"><span class="section-title" style="margin:0;">Aujourd’hui</span></div>
+    <div class="card traiter-card">
+      ${duJour.length ? duJour
+        /* L'heure d'abord : une journée de terrain se lit dans l'ordre où elle
+           se vit, pas dans celui où les bons ont été saisis. */
+        .slice().sort((x,y)=>(x.heurePlanifiee||'99:99').localeCompare(y.heurePlanifiee||'99:99'))
+        .slice(0, JOURNEE_VISIBLE).map(b=>`
+        <div class="traiter-row cliquable" role="button" tabindex="0"
+             onclick="ouvrirDepuisDashboard('planning')"
+             onkeydown="if(event.key==='Enter'){ouvrirDepuisDashboard('planning');}">
+          <span class="traiter-ico" style="background:var(--info-soft);">🔧</span>
+          <span class="traiter-label">${esc(b.client||'—')}${b.adresse? ' — '+esc(b.adresse):''}</span>
+          ${b.heurePlanifiee? `<span class="traiter-count">${esc(b.heurePlanifiee)}</span>` : ''}
+          <span class="traiter-chev">›</span>
+        </div>`).join('')
+        : '<div class="empty">🎉 Rien de planifié aujourd’hui.</div>'}
+      ${duJour.length > JOURNEE_VISIBLE ? `
+        <div class="traiter-row cliquable" role="button" tabindex="0"
+             onclick="ouvrirDepuisDashboard('planning')"
+             onkeydown="if(event.key==='Enter'){ouvrirDepuisDashboard('planning');}">
+          <span class="traiter-ico" style="background:var(--accent-soft);">→</span>
+          <span class="traiter-label">Voir les ${duJour.length - JOURNEE_VISIBLE} autres dans le planning</span>
+          <span class="traiter-chev">›</span>
+        </div>` : ''}
+    </div>
+  `;
+}
+
+/* ---------- Le conducteur de travaux ----------
+   Il voit les montants, mais le chiffre d'affaires et le classement des
+   clients ne sont pas son métier : ce qu'il arbitre, ce sont des validations,
+   des retards et des pièces qui manquent. */
+function renderDashboardConducteur(){
+  const soc = state.societeId;
+  const today = todayISO();
+  const traiter = computeDashTraiter(soc);
+  const bons = state.bonsCommande.filter(b=>b.societeId===soc);
+  const enRetard = bons.filter(b=>b.dateFinTravaux && b.dateFinTravaux < today
+    && !state.factures.some(f=>f.bonCommandeId===b.id));
+  const piecesAttendues = bons.filter(b=>b.pieceACommander && !b.pieceACommanderDateCommande);
+  const nonPlanifies = bons.filter(b=>!b.datePlanifiee && !b.valideDirecteur);
+
+  return `
+    ${enteteDashboard(salutation(), 'Vos chantiers en cours — ' + societeName(soc))}
+    <div class="grid-stats grid-stats-4">
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Bons à valider', valeur:traiter.enAttenteConducteur,
+        ton: traiter.enAttenteConducteur?'warn':'', destination:'aValider', titre:'Voir les bons en attente de validation'})}
+      ${tuileDashboard({icone:ICONS.planning, libelle:'Travaux en retard', valeur:enRetard.length,
+        ton: enRetard.length?'danger':'', destination:'planning', titre:'Ouvrir le planning'})}
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Pièces à commander', valeur:piecesAttendues.length,
+        destination:'pieces', titre:'Voir les pièces en commande'})}
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'À facturer', valeur:traiter.aFacturer,
+        sous: moneyDisplay(traiter.aFacturerMontant) + ' HT', destination:'aFacturer',
+        titre:'Voir les bons de commande à facturer'})}
+    </div>
+    <div class="section-title-row"><span class="section-title" style="margin:0;">À traiter</span></div>
+    <div class="card traiter-card">
+      ${traiter.enAttenteConducteur || traiter.aValiderDirecteur || nonPlanifies.length || traiter.rappelsAujourdhui ? `
+      ${traiter.enAttenteConducteur? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('aValider')"><span class="traiter-ico" style="background:var(--info-soft);">🦺</span><span class="traiter-label">Bons de commande à valider</span><span class="traiter-count">${traiter.enAttenteConducteur}</span><span class="traiter-chev">›</span></div>`:''}
+      ${nonPlanifies.length? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('planning')"><span class="traiter-ico" style="background:var(--accent-soft);">📅</span><span class="traiter-label">Bons non planifiés</span><span class="traiter-count">${nonPlanifies.length}</span><span class="traiter-chev">›</span></div>`:''}
+      ${traiter.rappelsAujourdhui? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('planning')"><span class="traiter-ico" style="background:#EDE4FF;">🔄</span><span class="traiter-label">Locataires à rappeler</span><span class="traiter-count">${traiter.rappelsAujourdhui}</span><span class="traiter-chev">›</span></div>`:''}
+      ${traiter.aValiderDirecteur? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('impayees')"><span class="traiter-ico" style="background:var(--success-soft);">✍️</span><span class="traiter-label">En attente du directeur</span><span class="traiter-count">${traiter.aValiderDirecteur}</span><span class="traiter-chev">›</span></div>`:''}
+      ` : '<div class="empty">🎉 Rien à traiter — tout est à jour.</div>'}
+    </div>
+  `;
+}
+
 function renderDashboardSousTraitant(){
   const mesFactures = facturesDuSousTraitant();
   const impayees = mesFactures.filter(f=>f.statut==='impayée').length;
@@ -2922,9 +3071,9 @@ function renderDashboardSousTraitant(){
     </div>
     ${!sousTraitantActuel()? `<div class="card" style="border-color:var(--accent); background:var(--accent-soft); margin-bottom:16px;">👤 Sélectionnez votre nom dans <b>Réglages</b> pour ne voir que vos documents.</div>`:''}
     <div class="grid-stats">
-      <div class="stat-card ${facturesKTAPretes?'warn':''}" onclick="state.facturesView='factureskta'; setTab('factures')" style="cursor:pointer;"><div class="stat-card-top"><span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-2);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.bonsCommande}</svg></span></div><div class="stat-label">Factures ${esc(societeName(state.societeId))} prêtes</div><div class="stat-num">${facturesKTAPretes}</div></div>
-      <div class="stat-card" onclick="setTab('devis')" style="cursor:pointer;"><div class="stat-card-top"><span class="stat-icon" style="background:var(--info-soft); color:var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.devis}</svg></span></div><div class="stat-label">Mes devis</div><div class="stat-num">${devisST.length}</div></div>
-      <div class="stat-card ${impayees?'danger':''}" onclick="setTab('factures')" style="cursor:pointer;"><div class="stat-card-top"><span class="stat-icon" style="background:var(--danger-soft); color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">Mes factures impayées</div><div class="stat-num">${impayees}</div></div>
+      <div class="stat-card cliquable ${facturesKTAPretes?'warn':''}" role="button" tabindex="0" onclick="state.facturesView='factureskta'; setTab('factures')" onkeydown="if(event.key===&#39;Enter&#39;||event.key===&#39; &#39;){event.preventDefault();state.facturesView='factureskta'; setTab('factures')}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-2);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.bonsCommande}</svg></span></div><div class="stat-label">Factures ${esc(societeName(state.societeId))} prêtes</div><div class="stat-num">${facturesKTAPretes}</div></div>
+      <div class="stat-card cliquable" role="button" tabindex="0" onclick="setTab('devis')" onkeydown="if(event.key===&#39;Enter&#39;||event.key===&#39; &#39;){event.preventDefault();setTab(&#39;devis&#39;);}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--info-soft); color:var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.devis}</svg></span></div><div class="stat-label">Mes devis</div><div class="stat-num">${devisST.length}</div></div>
+      <div class="stat-card cliquable ${impayees?'danger':''}" role="button" tabindex="0" onclick="setTab('factures')" onkeydown="if(event.key===&#39;Enter&#39;||event.key===&#39; &#39;){event.preventDefault();setTab('factures')}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--danger-soft); color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">Mes factures impayées</div><div class="stat-num">${impayees}</div></div>
     </div>
   `;
 }
@@ -2939,6 +3088,10 @@ const DESTINATIONS_DASHBOARD = {
   impayees:      { tab:'factures', etat:{ facturesView:'liste', factureReglementFilter:'impayee', facturePeriode:'tout' } },
   aFacturer:     { tab:'factures', etat:{ facturesView:'afacturer' } },
   reglements:    { tab:'factures', etat:{ facturesView:'reglements', reglementsClient:null } },
+  aValider:      { tab:'planning',  etat:{ planningView:'attente' } },
+  planning:      { tab:'planning',  etat:{} },
+  pieces:        { tab:'piecesCommande', etat:{} },
+  chantiers:     { tab:'chantiers', etat:{} },
 };
 
 function ouvrirDepuisDashboard(cle){
@@ -2957,8 +3110,20 @@ function ouvrirClientDepuisDashboard(nom){
   setTab('factures');
 }
 
+/* Un tableau de bord par métier.
+
+   Les six rôles recevaient le même écran : un technicien, dont la navigation
+   est réduite à sept onglets et à qui `voitLesPrix()` refuse tout montant,
+   lisait « CA encaissé 386 843 € » et le classement des clients. Ce n'est ni
+   son métier ni son affaire.
+
+   Le pilotage — chiffre d'affaires, impayés, top clients — reste celui de
+   l'administrateur, de la secrétaire et de la lecture seule : c'est
+   exactement ce qu'ils ont à surveiller. */
 function renderDashboard(){
   if(estSousTraitant()) return renderDashboardSousTraitant();
+  if(state.currentRole === 'technicien') return renderDashboardTechnicien();
+  if(state.currentRole === 'conducteur') return renderDashboardConducteur();
   const soc = state.societeId;
   const devis = state.devis.filter(d=>d.societeId===soc);
   const factures = state.factures.filter(f=>f.societeId===soc);
@@ -2983,7 +3148,7 @@ function renderDashboard(){
     </div>
     <div class="dash-greetrow">
       <div>
-        <h1 class="dash-greeting">Bonjour 👋 Aissa Choumane</h1>
+        <h1 class="dash-greeting">${esc(salutation())}</h1>
         <div class="dash-subtitle">Voici un aperçu de votre activité aujourd'hui</div>
       </div>
       <div class="dash-date-pill">${dateLabel.charAt(0).toUpperCase()+dateLabel.slice(1)}</div>
