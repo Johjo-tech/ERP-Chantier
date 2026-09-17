@@ -252,17 +252,58 @@ const societeParCode = new Map<string, Uuid>();
 const codeParSocieteId = new Map<Uuid, string>();
 let societesChargees = false;
 
+/**
+ * La société sur laquelle on travaille.
+ *
+ * La RLS laisse passer TOUTES les sociétés dont l'utilisateur est membre, et
+ * l'écran filtrait ensuite lui-même. On téléchargeait donc les documents de
+ * sociétés qu'on n'affiche pas — invisible tant qu'une seule travaille, mais
+ * le volume double à la deuxième. Le filtre descend ici, au plus près de la
+ * requête.
+ *
+ * Nulle au démarrage : tant qu'aucune société n'est choisie, on ne restreint
+ * rien, et la RLS reste seule à décider.
+ */
+let societeActive: string | null = null;
+
+/** Change de société : le prochain chargement ne ramènera plus que la sienne. */
+export function definirSocieteActive(code: string | null | undefined): void {
+  societeActive = code ? String(code) : null;
+}
+
+/**
+ * Charge la table des sociétés, une seule fois — y compris quand seize
+ * collections la demandent EN MÊME TEMPS.
+ *
+ * Un simple drapeau ne suffisait pas : les seize appels partaient ensemble,
+ * aucun n'avait encore fini, donc aucun ne voyait le drapeau posé. Résultat,
+ * seize requêtes identiques par chargement — vingt-cinq relevées au démarrage.
+ * C'est la promesse en cours qu'il faut mémoriser, pas seulement son résultat.
+ */
+let chargementSocietes: Promise<void> | null = null;
+
 async function chargerSocietes(): Promise<void> {
   if (societesChargees) return;
+  if (chargementSocietes) return chargementSocietes;
 
-  const { data, error } = await supabase.from("societes").select("id, code");
-  if (error) throw error;
+  chargementSocietes = (async () => {
+    const { data, error } = await supabase.from("societes").select("id, code");
+    if (error) throw error;
 
-  for (const s of data ?? []) {
-    societeParCode.set(s.code, s.id);
-    codeParSocieteId.set(s.id, s.code);
+    for (const s of data ?? []) {
+      societeParCode.set(s.code, s.id);
+      codeParSocieteId.set(s.id, s.code);
+    }
+    societesChargees = true;
+  })();
+
+  try {
+    await chargementSocietes;
+  } finally {
+    /* Relâchée dans tous les cas : un échec réseau ne doit pas figer
+       l'application sur une promesse rejetée pour le reste de la session. */
+    chargementSocietes = null;
   }
-  societesChargees = true;
 }
 
 /** Le HTML passe un code court (« kta ») là où la base attend un uuid. */
@@ -559,13 +600,32 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
   // La RLS restreint déjà aux sociétés de l'utilisateur ; le HTML filtre
   // ensuite lui-même sur `societeId`. Pour une table fille, on remonte la
   // société du parent dans la même requête.
-  const select = collection.societeVia
-    ? `*, ${collection.societeVia.table}(societe_id)`
-    : "*";
   const source = collection.vueLecture ?? collection.table;
-  const { data, error, count } = await dyn()
-    .from(source)
-    .select(select, { count: "exact" });
+  const idSociete = societeActive ? societeParCode.get(societeActive) : undefined;
+
+  /* `interlocuteurs` n'a pas de `societe_id` : la sienne est chez son client.
+     Pour que le filtre porte sur les LIGNES et non seulement sur l'objet
+     imbriqué, PostgREST exige `!inner` — sans lui, la jointure est facultative
+     et le parent revient quand même. */
+  const jointureFiltrante = !!(collection.societeVia && idSociete);
+  const select = collection.societeVia
+    ? `*, ${collection.societeVia.table}${jointureFiltrante ? "!inner" : ""}(societe_id)`
+    : "*";
+
+  let requete = dyn().from(source).select(select, { count: "exact" });
+
+  if (idSociete) {
+    if (collection.societeVia) {
+      requete = requete.eq(`${collection.societeVia.table}.societe_id`, idSociete);
+    } else if (colonnesDe(source)?.has("societe_id") !== false) {
+      /* `colonnesDe` ne connaît pas les vues : elle rend `null`, et on filtre
+         quand même — les trois vues de lecture portent la colonne, sauf celle
+         des lignes de bon, qui n'est jamais chargée par ce chemin. */
+      requete = requete.eq("societe_id", idSociete);
+    }
+  }
+
+  const { data, error, count } = await requete;
   /* Une erreur franche — réseau coupé, RLS qui refuse — dégrade déjà de façon
      visible : le bandeau « Supabase inaccessible » s'affiche. La troncature,
      elle, ne se voit nulle part : c'est le seul cas qu'on transforme en refus. */
@@ -1794,6 +1854,10 @@ export function injectGlobalFunctions() {
   w.stSet = stSet;
   w.stDelete = stDelete;
   w.stListKeys = stListKeys;
+  /* Le chargement ne ramène que la société sur laquelle on travaille : la RLS
+     laisse passer toutes celles dont on est membre, et rien ne servait à
+     l'écran de les recevoir. */
+  w.definirSocieteActive = definirSocieteActive;
   w.nextNumero = nextNumero;
   w.nextSAVNumero = nextSAVNumero;
   w.loadAllData = loadAllData;
