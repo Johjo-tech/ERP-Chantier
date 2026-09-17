@@ -147,3 +147,18 @@ export async function listIntervenants(societeId: Uuid): Promise<Intervenant[]> 
       role: m.role,
     }));
 }
+
+/**
+ * Le nom sous lequel l'utilisateur veut être désigné.
+ *
+ * `profiles.nom` retombe sur l'email faute de mieux, et la barre latérale
+ * affichait donc « laurent.johan1@… ». La politique `profiles_update_self`
+ * autorise déjà chacun à corriger le sien — aucune migration n'est requise.
+ */
+export async function renommerMonCompte(id: Uuid, nom: string): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ nom })
+    .eq("id", id);
+  if (error) throw new SupabaseError("Nom du compte non enregistré", error.code, error);
+}

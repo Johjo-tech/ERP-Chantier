@@ -390,6 +390,34 @@ export function listeIntervenants() {
   return intervenants;
 }
 
+/**
+ * Le nom sous lequel l'utilisateur veut être désigné.
+ *
+ * `profiles.nom` retombe sur l'email quand personne ne l'a renseigné, et la
+ * barre latérale affichait donc « laurent.johan1@… » à longueur de journée.
+ * La politique `profiles_update_self` autorise déjà chacun à corriger le sien.
+ *
+ * L'annuaire en mémoire est mis à jour dans la foulée : sans cela, l'écran
+ * continuerait d'afficher l'ancien nom jusqu'au prochain rechargement.
+ */
+export async function definirMonNom(nom: string): Promise<boolean> {
+  const moi = monCompteId();
+  const propre = (nom ?? "").trim();
+  if (!moi || !propre) return false;
+  try {
+    await queries.renommerMonCompte(moi, propre);
+  } catch (err) {
+    console.error("Nom du compte non enregistré", err);
+    return false;
+  }
+  const connu = annuaire?.get(moi);
+  if (connu) annuaire!.set(moi, { ...connu, nom: propre });
+  intervenants = intervenants
+    .map((i) => (i.id === moi ? { ...i, nom: propre } : i))
+    .sort((a, b) => a.nom.localeCompare(b.nom));
+  return true;
+}
+
 /** Nom lisible d'un intervenant ; son identifiant ne dit rien à personne. */
 export function nomIntervenant(id: string | null | undefined): string {
   if (!id) return "";
@@ -471,6 +499,7 @@ export function injecterSession() {
 
   w.chargerIntervenants = chargerIntervenants;
   w.nomIntervenant = nomIntervenant;
+  w.definirMonNom = definirMonNom;
   w.listeIntervenants = listeIntervenants;
   w.prochainActeur = prochainActeur;
   /* `validerPrefacture` n'est plus exposée au HTML : elle enchaîne le chiffrage

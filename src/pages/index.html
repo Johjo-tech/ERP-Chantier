@@ -66,10 +66,17 @@ body.sidebar-collapsed #sidebar{display:none;}
 .user-menu button:hover{background:var(--surface-2);}
 #sidebar .user-menu-name, #sidebar .user-menu-chevron{color:var(--sidebar-text);}
 #topbar .user-menu-name, #topbar .user-menu-chevron{color:var(--text);}
-#sidebar .brand{color:var(--sidebar-text);}
+#sidebar .brand{color:var(--sidebar-text);
+  /* Le bouton ☰ est fixe à 14px et fait 36px : il recouvrait le point et la
+     première lettre du nom, qui commençait à 38px. On passe dessous. */
+  margin-top:40px;}
 .brand-dot{width:10px;height:10px;border-radius:50%;background:var(--accent); box-shadow:0 0 0 3px rgba(var(--accent-rgb), .25);}
 .nav-items{display:flex; flex-direction:column; gap:3px; flex:1;}
-.nav-item{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; background:transparent; border:none; color:var(--sidebar-text-dim); font-size:13.5px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;}
+.nav-item{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; background:transparent; border:none; color:var(--sidebar-text-dim); font-size:13.5px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
+  /* Un <button> centre son texte par défaut. Invisible sur un libellé d'une
+     ligne ; « Pièces en commande » passe sur deux et paraissait décalé. */
+  text-align:left;}
+.nav-item span{flex:1; min-width:0;}
 .nav-item svg{width:18px; height:18px; flex-shrink:0;}
 .nav-item.active{background:var(--sidebar-active); color:var(--sidebar-text);}
 .nav-item.active svg{color:var(--accent);}
@@ -1667,6 +1674,9 @@ let SOCIETES = [
   {id:'akt', nom:'AKT Elec'}
 ];
 const ICONS = {
+  /* Le catalogue n'en avait aucune : `ICONS.catalogue` valant `undefined`, le
+     SVG sortait vide et le libellé glissait à la place du pictogramme. */
+  catalogue:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7"/><path d="M9 11h7"/>',
   dashboard:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/>',
   chantiers:'<path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
   rh:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v2"/><path d="M17 11a3 3 0 1 0 0-6"/><path d="M21 21v-2a5 5 0 0 0-3.5-4.77"/>',
@@ -2317,14 +2327,37 @@ function renderUserMenu(){
     if(el) el.textContent = nom;
   });
 
-  const email = window.utilisateurCourant ? window.utilisateurCourant() : '';
-  if(email){
+  const nomCompte = nomAffichable();
+  if(nomCompte){
     document.querySelectorAll('.user-menu-name').forEach(el=>{
       const badge = el.querySelector('.role-badge');
-      el.textContent = email;
+      el.textContent = nomCompte;
+      /* Le rôle reste sous le nom : c'est ce qui distingue un administrateur
+         d'un technicien d'un coup d'œil. */
       if(badge) el.appendChild(badge);
+      el.title = window.utilisateurCourant ? window.utilisateurCourant() : '';
     });
   }
+}
+
+/* Le nom du compte connecté, tel qu'on le montre.
+
+   `profiles.nom` retombe sur l'adresse quand personne ne l'a renseigné, et la
+   barre latérale affichait « laurent.johan1@… » à longueur de journée. Tant
+   que la personne n'a pas donné son nom, on présente au moins quelque chose de
+   lisible — sans jamais inventer : « laurent.johan1 » devient « Laurent
+   Johan1 », et l'adresse complète reste en infobulle. */
+function nomAffichable(){
+  const brut = (window.nomIntervenant && window.monCompteId
+    ? window.nomIntervenant(window.monCompteId()) : '') || '';
+  const source = (brut && brut !== 'un utilisateur') ? brut
+    : ((window.utilisateurCourant && window.utilisateurCourant()) || '');
+  if(!source) return '';
+  const sansDomaine = source.includes('@') ? source.split('@')[0] : source;
+  return sansDomaine
+    .split(/[._-]+/).filter(Boolean)
+    .map(m => m.charAt(0).toUpperCase() + m.slice(1))
+    .join(' ');
 }
 
 function renderShell(){
@@ -10715,6 +10748,9 @@ const REGLAGES_GROUPES = [
     {id:'vehicules', label:'Véhicules', icone:'🚚', desc:'Seuils d\'alerte'},
     {id:'notifications', label:'Notifications', icone:'🔔', desc:'Alertes et destinataires'},
   ]},
+  { titre:'Mon compte', items:[
+    {id:'moncompte', label:'Mon nom', icone:'👤', desc:'Le nom affiché dans l\'application'},
+  ]},
 ];
 
 function setReglagesTab(id){ state.reglagesTab = id; renderTab(); }
@@ -10747,6 +10783,7 @@ function renderReglagesOnglet(){
     case 'rh':            return renderSeuilsSection('rh');
     case 'vehicules':     return renderSeuilsSection('vehicules');
     case 'notifications': return renderNotificationsSection();
+    case 'moncompte':     return renderMonCompteSection();
     default:              return renderInfosEntrepriseSection();
   }
 }
@@ -11092,6 +11129,42 @@ function renderSeuilsSection(domaine){
     </div>
     <div style="margin-top:16px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
   </div>`;
+}
+
+/* Le nom appartient à la personne, pas à la société : il vit donc dans son
+   propre groupe. Sans cet écran, `profiles.nom` garderait indéfiniment la
+   partie gauche de l'adresse, faute de tout autre endroit pour le corriger. */
+function renderMonCompteSection(){
+  const adresse = (window.utilisateurCourant && window.utilisateurCourant()) || '';
+  const actuel = (window.nomIntervenant && window.monCompteId
+    ? window.nomIntervenant(window.monCompteId()) : '') || '';
+  const renseigne = actuel && actuel !== 'un utilisateur' && !actuel.includes('@')
+    && actuel !== adresse.split('@')[0];
+  return `
+    <div class="reglage-titre">👤 Mon nom</div>
+    <div class="card">
+      <div class="card-sub" style="margin-bottom:12px;">C'est ce nom qui s'affiche dans le menu, dans les validations et au-dessus de votre tableau de bord. ${renseigne? '' : "Tant qu'il n'est pas renseigné, l'application se rabat sur votre adresse e-mail."}</div>
+      <div class="field-grid">
+        <div class="field"><label>Nom affiché</label><input type="text" id="mc_nom" value="${esc(renseigne? actuel : '')}" placeholder="Ex : Johan"></div>
+        <div class="field"><label>Adresse de connexion</label><input type="text" value="${esc(adresse)}" disabled title="Votre adresse ne se change pas ici"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:12px;">
+        <button class="btn primary" onclick="saveMonNom()">Enregistrer</button>
+      </div>
+    </div>`;
+}
+
+async function saveMonNom(){
+  const nom = document.getElementById('mc_nom').value.trim();
+  if(!nom){ alert('Indiquez le nom à afficher.'); return; }
+  if(!window.definirMonNom || !(await window.definirMonNom(nom))){
+    showToast(saveFailedMessage()); return;
+  }
+  /* L'en-tête porte le nom : sans ce rendu, il resterait sur l'ancien jusqu'au
+     prochain rechargement de la page. */
+  renderShell();
+  renderTab();
+  showToast('Nom enregistré.', 'success');
 }
 
 function renderNotificationsSection(){
