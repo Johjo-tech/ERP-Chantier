@@ -1189,7 +1189,19 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* Un bon multi-métiers empile un bandeau par métier : sans séparation, les
    deux circuits se lisent comme un seul. */
 .wf-bandeau + .wf-bandeau{ margin-top:10px; }
+.bc-montant-note{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+.champ-calcule{ background:var(--bg, #F4F4F5); color:var(--text-dim); cursor:not-allowed; }
 .wf-metier{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+/* Les travaux que le bon prévoit : ce que le technicien vient faire. */
+.wf-travaux{ border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:10px; background:var(--bg, #FAFAFA); }
+.wf-travaux-titre{ font-size:11.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
+.wf-travaux-chapitre{ font-size:12px; font-weight:600; margin:8px 0 3px; }
+.wf-travaux-chapitre:first-of-type{ margin-top:2px; }
+.wf-travaux-liste{ list-style:none; margin:0; padding:0; }
+.wf-travaux-liste li{ display:flex; gap:10px; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed var(--border); }
+.wf-travaux-liste li:last-child{ border-bottom:0; }
+.wf-travaux-qte{ white-space:nowrap; color:var(--text-dim); font-variant-numeric:tabular-nums; }
+.wf-travaux-note{ font-style:italic; color:var(--text-dim); }
 /* Une tâche que plus aucun métier du bon ne réclame : elle bloque le passage au
    chiffrage, elle doit donc se voir et s'arbitrer comme les autres. */
 .wf-hors-metier{ color:var(--warning, #B8860B); }
@@ -8027,7 +8039,7 @@ function bonCommandeForm(){
     <div class="form-section">
       <div class="form-section-head"><span class="form-section-ico"></span>Chiffrage</div>
       <div class="field-grid">
-        <div class="field full" id="bcMontantFieldsZone">${bcMontantFieldsHTML(e.metiers || (e.metier? [e.metier] : []), e.montantParMetier || {}, e.montant)}</div>
+        <div class="field full" id="bcMontantFieldsZone">${bcMontantFieldsHTML(e.metiers || (e.metier? [e.metier] : []), e.montantParMetier || {}, e.montant, [], e.lignes)}</div>
       </div>
       <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; border-top:none; padding-top:0;">
         <span>Travaux à réaliser *</span>
@@ -8093,6 +8105,13 @@ async function saveBonCommande(){
     montantTotal = parseFloat(document.getElementById('bc_montant').value) || 0;
   }
   const lignesRenseignees = bcLignesOntDuContenu(state.editing.lignes) ? state.editing.lignes.filter(l=>(l.type||'ligne')==='ligne' && (l.designation||(parseFloat(l.prixUnitaire)||0)>0)) : [];
+  /* Quand le bon porte des lignes, ce sont elles qui font foi : le montant est
+     leur total, et le champ n'est plus qu'un affichage.
+     La réserve : un bon **sans aucune ligne** garde son montant saisi. Sans
+     elle, rouvrir puis enregistrer l'un des 12 bons que la production compte
+     dans ce cas — 25 323,48 € au total — le ramènerait à zéro, alors qu'il n'y
+     a rien à recalculer. Le total des lignes ne fait loi que s'il y a des
+     lignes. */
   if(lignesRenseignees.length){
     montantTotal = computeTotals(state.editing.lignes).ht;
   }
@@ -9281,12 +9300,25 @@ async function chargerWorkflowTache(b, dayIso, metierKey){
       : (metiers.length ? tous[0] : null);
     const cibles = [monMetier];
 
+    /* Les lignes du bon sont la seule description écrite des travaux. Sans
+       elles la carte n'annonçait qu'un métier et une date — le technicien
+       arrivait sans savoir ce qu'il venait faire, et le chiffrage repartait
+       d'une feuille blanche alors que le bon disait déjà tout. */
+    const connus = metiersDisponibles();
+    const travauxDe = (m) => window.travauxDeLaCarte
+      ? window.travauxDeLaCarte(b.lignes, connus, m, tous[0])
+      : [];
+
     const chargees = [];
     for(const m of cibles){
       /* En série : deux matérialisations concurrentes sur le même bon
          créeraient deux tâches pour un même métier. */
       const equipe = equipeDeLaCarte(b, m);
-      chargees.push({ metier: m, tache: await window.tacheDuBonCommande(b.id, date, libelle, m, equipe) });
+      chargees.push({
+        metier: m,
+        tache: await window.tacheDuBonCommande(b.id, date, libelle, m, equipe),
+        travaux: travauxDe(m)
+      });
     }
 
     /* Une tâche qu'aucun métier déclaré ne réclame — au métier vide, ou à un
@@ -9303,7 +9335,7 @@ async function chargerWorkflowTache(b, dayIso, metierKey){
         if(reclamees.has(t.id)) continue;
         // Réclamée par un autre métier du bon : elle a sa propre carte.
         if(tous.some(m => window.memeMetier(m, t.metier))) continue;
-        chargees.push({ metier: t.metier || null, tache: t, horsMetier: true });
+        chargees.push({ metier: t.metier || null, tache: t, horsMetier: true, travaux: [] });
       }
     }
 
@@ -9372,6 +9404,31 @@ function appartenanceTache(t){
   };
 }
 
+/**
+ * Les travaux du bon qui reviennent à cette tâche, tels qu'ils y sont écrits.
+ *
+ * En lecture seule, et sans prix : le pointage se fait à la journée, et le
+ * terrain ne voit aucun montant — c'est déjà la règle du reste de l'écran.
+ * Le titre du chapitre est conservé parce qu'il nomme la pièce : « PEINTURE
+ * CHAMBRE 1 » est la seule indication de lieu que porte le bon.
+ */
+function travauxTacheHTML(blocs){
+  if(!blocs || !blocs.length) return '';
+  const total = blocs.reduce((n, b)=>n + b.lignes.length, 0);
+  const corps = blocs.map(bloc=>`
+    ${bloc.chapitre ? `<div class="wf-travaux-chapitre">${esc(bloc.chapitre)}</div>` : ''}
+    <ul class="wf-travaux-liste">${bloc.lignes.map(l=>{
+      // La virgule décimale, comme partout ailleurs sur les quantités.
+      const q = (l.qte===0 || l.qte) ? `${esc(String(l.qte).replace('.', ','))}${l.unite? ' '+esc(l.unite):''}` : '';
+      return `<li${(l.type||'ligne')==='commentaire'? ' class="wf-travaux-note"':''}>`
+        + `<span>${esc(l.designation||'')}</span>${q? `<span class="wf-travaux-qte">${q}</span>`:''}</li>`;
+    }).join('')}</ul>`).join('');
+  return `<div class="wf-travaux">
+    <div class="wf-travaux-titre">📋 Travaux prévus au bon — ${total} ligne${total>1?'s':''}</div>
+    ${corps}
+  </div>`;
+}
+
 function bandeauTacheHTML(entree, i){
   const t = entree.tache;
   const statut = t.statut || 'planifiee';
@@ -9423,6 +9480,7 @@ function bandeauTacheHTML(entree, i){
 
   return `<div class="wf-bandeau">
     ${entree.metier ? `<div class="wf-metier">${esc(metierDisplayLabel(entree.metier))}</div>` : ''}
+    ${travauxTacheHTML(entree.travaux)}
     ${entree.horsMetier ? `<div class="wf-metier wf-hors-metier">Hors métier${entree.metier ? '' : ' — tâche sans métier'}</div>` : ''}
     <span class="wf-etat wf-${esc(statut)}">${esc(WF_LIBELLES[statut] || statut)}</span>
     ${equipe ? `<div class="wf-equipe">👷 Confiée à ${esc(equipe)}</div>` : '<div class="wf-equipe wf-sans-equipe">👷 Aucune équipe affectée</div>'}
@@ -16685,10 +16743,32 @@ async function lireBonCommande(fichier, input){
   }
 }
 
-function bcMontantFieldsHTML(metiers, montantParMetier, montantSimple, sansChapitre){
+/**
+ * Le montant du bon — saisi, ou dicté par les lignes.
+ *
+ * Dès qu'une ligne est renseignée, l'enregistrement remplace le montant par le
+ * total des lignes. Laisser le champ ouvert donnait donc un champ qui ment :
+ * on y tapait une somme que la sauvegarde écrasait sans le dire. Il devient
+ * alors un affichage, et la phrase dit d'où vient le chiffre.
+ */
+function bcMontantFieldsHTML(metiers, montantParMetier, montantSimple, sansChapitre, lignes){
   const uniq = [...new Set(metiers||[])];
   const sansChap = sansChapitre || [];
+  const parLesLignes = bcLignesOntDuContenu(lignes);
+  const totalLignes = parLesLignes ? computeTotals(lignes).ht : 0;
+  const nbLignes = (lignes||[]).filter(l=>(l.type||'ligne')==='ligne').length;
+  const note = parLesLignes
+    ? `<div class="bc-montant-note">${uniq.length > 1
+        ? `Le total enregistré est celui des lignes du bon (${nbLignes === 1 ? 'une ligne' : nbLignes+' lignes'}) ; la répartition ci-dessus ne sert qu'à ventiler par métier.`
+        : `Calculé sur ${nbLignes === 1 ? 'la ligne' : 'les '+nbLignes+' lignes'} du bon.`}${
+        totalLignes ? '' : ' Aucune n\'est chiffrée : le montant restera à 0 tant que la pré-facture ne l\'est pas.'}</div>`
+    : '';
   if(uniq.length <= 1){
+    if(parLesLignes){
+      return `<label>Montant des travaux (HT)</label>
+        <input type="number" step="0.01" id="bc_montant" value="${totalLignes}" readonly class="champ-calcule">
+        ${note}`;
+    }
     return `<label>Montant des travaux (HT)</label><input type="number" step="0.01" id="bc_montant" value="${montantSimple!=null?montantSimple:''}" placeholder="0,00">`;
   }
   return `<label>Montant des travaux (HT) — par métier</label>
@@ -16697,7 +16777,7 @@ function bcMontantFieldsHTML(metiers, montantParMetier, montantSimple, sansChapi
         <div style="display:flex; align-items:center; gap:8px;"><span style="min-width:130px; font-size:13px; color:var(--text-dim);">${esc(m)}</span><input type="number" step="0.01" class="bc_montant_metier" data-metier="${esc(m)}" value="${montantParMetier[m]!=null?montantParMetier[m]:''}" placeholder="0,00" style="flex:1;"></div>
         ${sansChap.includes(m)? `<div style="font-size:11.5px; color:var(--accent-2); margin:3px 0 0 138px;">⚠ Aucun chapitre "${esc(m)}" trouvé dans le devis lié — montant à saisir manuellement.</div>` : ''}
       </div>`).join('')}
-    </div>`;
+    </div>${note}`;
 }
 function refreshBCMontantFields(){
   const checked = getCheckedMetiers('bc');
@@ -16726,7 +16806,7 @@ function refreshBCMontantFields(){
     }
   }
   const zone = document.getElementById('bcMontantFieldsZone');
-  if(zone) zone.innerHTML = bcMontantFieldsHTML(checked, existingAmounts, previousSimple, sansChapitre);
+  if(zone) zone.innerHTML = bcMontantFieldsHTML(checked, existingAmounts, previousSimple, sansChapitre, state.editing && state.editing.lignes);
 }
 /**
  * Les métiers proposés à la saisie, pour la société courante.
