@@ -1964,6 +1964,9 @@ async function importAllData(file){
   }
 }
 async function loadAll(){
+  /* Avant toute requête : le pont ne ramènera que cette société. Sans cela il
+     téléchargeait aussi les documents des sociétés qu'on n'affiche pas. */
+  if(window.definirSocieteActive) window.definirSocieteActive(state.societeId);
   /* `article:` ne figure plus ici : le catalogue peut compter un millier de
      références, et l'ouverture télécharge déjà seize tables entières. Il se
      consulte par requête, depuis l'onglet Catalogue et depuis la saisie d'une
@@ -2546,6 +2549,16 @@ async function changerSociete(code){
   document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
   const autorises = navPourRole().map(n=>n.id);
   if(autorises.length && !autorises.includes(state.tab)) state.tab = autorises[0];
+  renderShell();
+  renderTab();
+
+  /* Les données en mémoire sont celles de l'ancienne société : on les remplace
+     par celles de la nouvelle. Un formulaire ouvert est abandonné — il portait
+     sur une société qu'on vient de quitter. */
+  Object.keys(state.formOpen).forEach(k => { state.formOpen[k] = false; });
+  state.editing = null;
+  showToast('Chargement de ' + societeName(code) + '…');
+  await loadAll();
   renderShell();
   renderTab();
 }
@@ -15435,7 +15448,9 @@ async function saveDocument(){
       + '</div>';
     return;
   }
-  await loadAll();
+  /* Pas de second `loadAll()` ici : celui du `try` a déjà tout chargé. Le
+     doublon retéléchargeait seize tables entières — 12,2 Mo et 12 s de
+     démarrage, au lieu de la moitié. */
   // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
   pousserHistorique(true);
   renderShell();
