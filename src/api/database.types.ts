@@ -228,9 +228,12 @@ export type Database = {
           client_nom: string
           code_postal: string | null
           conducteur: string | null
+          conducteur_id: string | null
           cree_le: string
           date: string
           date_fin_travaux: string | null
+          date_intervention_terminee: string | null
+          date_planification_initiale: string | null
           date_planifiee: string | null
           date_planifiee_fin: string | null
           date_reception: string | null
@@ -256,6 +259,7 @@ export type Database = {
           montant: number
           montant_par_metier: Json | null
           montant_sous_traitant: number | null
+          nature_travaux: string | null
           notes: string | null
           numero_bc: string | null
           numero_interne: string | null
@@ -266,12 +270,15 @@ export type Database = {
           piece_jointe_nom: string | null
           precision_commune: string | null
           probleme_description: string | null
+          rappel_date: string | null
+          reference_chantier: string | null
           sans_bc: boolean
           schedule_par_metier: Json | null
           societe_id: string
           statut: string | null
           statut_workflow: string | null
           technicien: string | null
+          tentatives_contact: Json
           ville: string | null
         }
         Insert: {
@@ -283,9 +290,12 @@ export type Database = {
           client_nom: string
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date?: string
           date_fin_travaux?: string | null
+          date_intervention_terminee?: string | null
+          date_planification_initiale?: string | null
           date_planifiee?: string | null
           date_planifiee_fin?: string | null
           date_reception?: string | null
@@ -313,6 +323,7 @@ export type Database = {
           montant?: number
           montant_par_metier?: Json | null
           montant_sous_traitant?: number | null
+          nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
           numero_interne?: string | null
@@ -323,12 +334,15 @@ export type Database = {
           piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
+          rappel_date?: string | null
+          reference_chantier?: string | null
           sans_bc?: boolean
           schedule_par_metier?: Json | null
           societe_id: string
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          tentatives_contact?: Json
           ville?: string | null
         }
         Update: {
@@ -340,9 +354,12 @@ export type Database = {
           client_nom?: string
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date?: string
           date_fin_travaux?: string | null
+          date_intervention_terminee?: string | null
+          date_planification_initiale?: string | null
           date_planifiee?: string | null
           date_planifiee_fin?: string | null
           date_reception?: string | null
@@ -370,6 +387,7 @@ export type Database = {
           montant?: number
           montant_par_metier?: Json | null
           montant_sous_traitant?: number | null
+          nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
           numero_interne?: string | null
@@ -380,12 +398,15 @@ export type Database = {
           piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
+          rappel_date?: string | null
+          reference_chantier?: string | null
           sans_bc?: boolean
           schedule_par_metier?: Json | null
           societe_id?: string
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          tentatives_contact?: Json
           ville?: string | null
         }
         Relationships: [
@@ -408,6 +429,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_conducteur_id_fkey"
+            columns: ["conducteur_id"]
+            isOneToOne: false
+            referencedRelation: "conducteurs"
             referencedColumns: ["id"]
           },
           {
@@ -996,6 +1024,7 @@ export type Database = {
           client_nom: string | null
           code_postal: string | null
           conducteur: string | null
+          conducteur_id: string | null
           cree_le: string
           date_debut: string | null
           date_fin: string | null
@@ -1014,6 +1043,7 @@ export type Database = {
           client_nom?: string | null
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date_debut?: string | null
           date_fin?: string | null
@@ -1032,6 +1062,7 @@ export type Database = {
           client_nom?: string | null
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date_debut?: string | null
           date_fin?: string | null
@@ -1050,6 +1081,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chantiers_conducteur_id_fkey"
+            columns: ["conducteur_id"]
+            isOneToOne: false
+            referencedRelation: "conducteurs"
             referencedColumns: ["id"]
           },
           {
@@ -1299,6 +1337,7 @@ export type Database = {
           client_nom: string
           code_postal: string | null
           conducteur: string | null
+          conducteur_id: string | null
           cree_le: string
           date: string
           etage: string | null
@@ -1326,6 +1365,7 @@ export type Database = {
           client_nom: string
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date?: string
           etage?: string | null
@@ -1355,6 +1395,7 @@ export type Database = {
           client_nom?: string
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date?: string
           etage?: string | null
@@ -1395,6 +1436,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "devis_conducteur_id_fkey"
+            columns: ["conducteur_id"]
+            isOneToOne: false
+            referencedRelation: "conducteurs"
             referencedColumns: ["id"]
           },
           {
@@ -1814,12 +1862,15 @@ export type Database = {
           code_postal: string | null
           conditions_reglement: string | null
           conducteur: string | null
+          conducteur_id: string | null
           cree_le: string
           date: string
           date_fin_execution: string | null
           date_livraison: string | null
           delai_paiement_jours: number | null
-          delai_paiement_mode: Database["public"]["Enums"]["delai_paiement_mode"] | null
+          delai_paiement_mode:
+            | Database["public"]["Enums"]["delai_paiement_mode"]
+            | null
           depose_le: string | null
           devis_id: string | null
           devise: string
@@ -1902,12 +1953,15 @@ export type Database = {
           code_postal?: string | null
           conditions_reglement?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date?: string
           date_fin_execution?: string | null
           date_livraison?: string | null
           delai_paiement_jours?: number | null
-          delai_paiement_mode?: Database["public"]["Enums"]["delai_paiement_mode"] | null
+          delai_paiement_mode?:
+            | Database["public"]["Enums"]["delai_paiement_mode"]
+            | null
           depose_le?: string | null
           devis_id?: string | null
           devise?: string
@@ -1992,12 +2046,15 @@ export type Database = {
           code_postal?: string | null
           conditions_reglement?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string
           date?: string
           date_fin_execution?: string | null
           date_livraison?: string | null
           delai_paiement_jours?: number | null
-          delai_paiement_mode?: Database["public"]["Enums"]["delai_paiement_mode"] | null
+          delai_paiement_mode?:
+            | Database["public"]["Enums"]["delai_paiement_mode"]
+            | null
           depose_le?: string | null
           devis_id?: string | null
           devise?: string
@@ -2097,6 +2154,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factures_conducteur_id_fkey"
+            columns: ["conducteur_id"]
+            isOneToOne: false
+            referencedRelation: "conducteurs"
             referencedColumns: ["id"]
           },
           {
@@ -2531,6 +2595,7 @@ export type Database = {
           client_nom: string
           code_postal: string | null
           conducteur: string | null
+          conducteur_id: string | null
           constatations: string | null
           cree_le: string
           date: string
@@ -2560,6 +2625,7 @@ export type Database = {
           client_nom: string
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           constatations?: string | null
           cree_le?: string
           date?: string
@@ -2591,6 +2657,7 @@ export type Database = {
           client_nom?: string
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           constatations?: string | null
           cree_le?: string
           date?: string
@@ -2620,6 +2687,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interventions_conducteur_id_fkey"
+            columns: ["conducteur_id"]
+            isOneToOne: false
+            referencedRelation: "conducteurs"
             referencedColumns: ["id"]
           },
           {
@@ -5340,9 +5414,12 @@ export type Database = {
           client_nom: string | null
           code_postal: string | null
           conducteur: string | null
+          conducteur_id: string | null
           cree_le: string | null
           date: string | null
           date_fin_travaux: string | null
+          date_intervention_terminee: string | null
+          date_planification_initiale: string | null
           date_planifiee: string | null
           date_planifiee_fin: string | null
           date_reception: string | null
@@ -5368,6 +5445,7 @@ export type Database = {
           montant: number | null
           montant_par_metier: Json | null
           montant_sous_traitant: number | null
+          nature_travaux: string | null
           notes: string | null
           numero_bc: string | null
           numero_interne: string | null
@@ -5378,12 +5456,15 @@ export type Database = {
           piece_jointe_nom: string | null
           precision_commune: string | null
           probleme_description: string | null
+          rappel_date: string | null
+          reference_chantier: string | null
           sans_bc: boolean | null
           schedule_par_metier: Json | null
           societe_id: string | null
           statut: string | null
           statut_workflow: string | null
           technicien: string | null
+          tentatives_contact: Json | null
           ville: string | null
         }
         Insert: {
@@ -5395,9 +5476,12 @@ export type Database = {
           client_nom?: string | null
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string | null
           date?: string | null
           date_fin_travaux?: string | null
+          date_intervention_terminee?: string | null
+          date_planification_initiale?: string | null
           date_planifiee?: string | null
           date_planifiee_fin?: string | null
           date_reception?: string | null
@@ -5425,6 +5509,7 @@ export type Database = {
           montant?: never
           montant_par_metier?: never
           montant_sous_traitant?: never
+          nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
           numero_interne?: string | null
@@ -5435,12 +5520,15 @@ export type Database = {
           piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
+          rappel_date?: string | null
+          reference_chantier?: string | null
           sans_bc?: boolean | null
           schedule_par_metier?: Json | null
           societe_id?: string | null
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          tentatives_contact?: Json | null
           ville?: string | null
         }
         Update: {
@@ -5452,9 +5540,12 @@ export type Database = {
           client_nom?: string | null
           code_postal?: string | null
           conducteur?: string | null
+          conducteur_id?: string | null
           cree_le?: string | null
           date?: string | null
           date_fin_travaux?: string | null
+          date_intervention_terminee?: string | null
+          date_planification_initiale?: string | null
           date_planifiee?: string | null
           date_planifiee_fin?: string | null
           date_reception?: string | null
@@ -5482,6 +5573,7 @@ export type Database = {
           montant?: never
           montant_par_metier?: never
           montant_sous_traitant?: never
+          nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
           numero_interne?: string | null
@@ -5492,12 +5584,15 @@ export type Database = {
           piece_jointe_nom?: string | null
           precision_commune?: string | null
           probleme_description?: string | null
+          rappel_date?: string | null
+          reference_chantier?: string | null
           sans_bc?: boolean | null
           schedule_par_metier?: Json | null
           societe_id?: string | null
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          tentatives_contact?: Json | null
           ville?: string | null
         }
         Relationships: [
@@ -5520,6 +5615,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bons_commande_conducteur_id_fkey"
+            columns: ["conducteur_id"]
+            isOneToOne: false
+            referencedRelation: "conducteurs"
             referencedColumns: ["id"]
           },
           {
@@ -5899,6 +6001,10 @@ export type Database = {
         Returns: undefined
       }
       code_unite: { Args: { p_unite: string }; Returns: string }
+      conducteur_par_nom: {
+        Args: { p_nom: string; p_societe: string }
+        Returns: string
+      }
       date_echeance: {
         Args: {
           p_date: string

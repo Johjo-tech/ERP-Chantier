@@ -138,6 +138,13 @@ Un bug corrigé se double d'un test qui le reproduit.
   « cannot drop columns from view ». Une migration qui refait une vue part donc
   de sa définition **vivante** (`pg_get_viewdef`), jamais d'une liste écrite
   plus tôt — deux migrations s'y sont cassées.
+- Le conducteur d'un document est `conducteur_id`, et lui seul fait foi. La
+  colonne `conducteur` reste, mais comme une **étiquette tenue par la base** :
+  un déclencheur la réécrit d'après la fiche, rattrape un nom écrit sans
+  référence, et propage un renommage aux cinq tables concernées. Ne jamais
+  écrire `conducteur` seul en espérant qu'il tienne — il sera réécrit. Trois
+  graphies du même prénom avaient ainsi fait apparaître trois conducteurs dans
+  les statistiques.
 - Une colonne dérivée envoyée à l'écriture fait voir toutes les lignes comme
   modifiées par `enfantsIdentiques`, d'où un delete+insert que le déclencheur
   de facture figée refuse. `montant_ht` est exclu de la comparaison pour cela.

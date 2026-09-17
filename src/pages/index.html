@@ -4783,7 +4783,7 @@ function devisForm(){
         <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur')">${clientSelectOptions(e.client)}</select></div>
         <div class="field"><label>Interlocuteur</label><select id="f_interlocuteur">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
         <div class="field"><label>Date</label><input type="date" id="f_date" value="${e.date||todayISO()}"></div>
-        <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
+        <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
       </div>
     </div>
     <div class="form-section">
@@ -4856,7 +4856,7 @@ async function saveDevis(){
       ancienLocataire: document.getElementById('f_ancienLocataire').value
     }),
     date: document.getElementById('f_date').value || todayISO(),
-    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'brouillon', conducteur: document.getElementById('f_conducteur').value };
+    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'brouillon', ...conducteurDuSelect('f_conducteur') };
   if(state.currentRole==='soustraitant') obj.sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
   const r = await stSet('devis:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
@@ -4953,7 +4953,7 @@ function lierDevisABonCommande(devisId){
     client:d.client, interlocuteur:d.interlocuteur||'', adresse:d.adresseLocataire||'', codePostal:d.codePostal||'', ville:d.ville||'',
     occupant:d.occupant||'', logementStatut:d.logementStatut||'', etage:d.etage||'', numeroLogement:d.numeroLogement||'',
     precisionCommune:d.precisionCommune||'', ancienLocataire:d.ancienLocataire||'',
-    conducteur:d.conducteur||'', dateReception:todayISO(), montant: t.ht, lignes: JSON.parse(JSON.stringify(d.lignes||[])), devisId:d.id
+    conducteur:d.conducteur||'', conducteurId:d.conducteurId||'', dateReception:todayISO(), montant: t.ht, lignes: JSON.parse(JSON.stringify(d.lignes||[])), devisId:d.id
   });
 }
 function setBCMode(mode){
@@ -4985,7 +4985,7 @@ function setBCMode(mode){
     montantMetierEls.forEach(el=>{ e.montantParMetier[el.dataset.metier] = el.value; });
   }
   e.notes = grab('bc_notes') ?? e.notes;
-  e.conducteur = grab('bc_conducteur') ?? e.conducteur;
+  if(document.getElementById('bc_conducteur')) Object.assign(e, conducteurDuSelect('bc_conducteur'));
   e.natureTravaux = grab('bc_natureTravaux') ?? e.natureTravaux;
   const checkedMetiers = document.querySelector('input[name="bc_metiers"]') ? getCheckedMetiers('bc') : null;
   if(checkedMetiers) e.metiers = checkedMetiers;
@@ -5061,7 +5061,7 @@ function transformerBonCommandeEnFacture(bcId, ignorerValidationDirecteur){
     codePostal: b.codePostal || '', ville: b.ville || '',
     logementStatut:b.logementStatut||'', etage:b.etage||'', numeroLogement:b.numeroLogement||'',
     precisionCommune:b.precisionCommune||'', ancienLocataire:b.ancienLocataire||'',
-    interlocuteur:'', conducteur:b.conducteur||'',
+    interlocuteur:'', conducteur:b.conducteur||'', conducteurId:b.conducteurId||'',
     date:todayISO(), echeance:'',
     lignes: (b.lignes&&b.lignes.length)? JSON.parse(JSON.stringify(b.lignes)) : [{type:'ligne', designation:`Travaux — BC ${b.numeroBC||''}`, qte:1, prixUnitaire:b.montant||0, tva: tvaDefaut()}],
     remisePourcentage:0, bonCommandeId:b.id, chantierId:b.chantierId||null, statut:'impayée',
@@ -5085,7 +5085,7 @@ function transformerBonCommandeEnSAV(bcId){
     client:b.client, interlocuteur:b.interlocuteur||'', adresse:b.adresse||'', codePostal:b.codePostal||'', ville:b.ville||'',
     occupant:b.occupant||'', logementStatut:b.logementStatut||'', etage:b.etage||'', numeroLogement:b.numeroLogement||'',
     precisionCommune:b.precisionCommune||'', ancienLocataire:b.ancienLocataire||'',
-    conducteur:b.conducteur||'', metier:b.metier||'', dateReception:todayISO(),
+    conducteur:b.conducteur||'', conducteurId:b.conducteurId||'', metier:b.metier||'', dateReception:todayISO(),
     bonCommandeId:b.id, sansBC:true, problemeDescription:'', photos:[]
   });
 }
@@ -5773,7 +5773,7 @@ function factureForm(){
         <div class="field"><label>Échéance <button type="button" class="btn small ghost" style="padding:0 6px;" onclick="recalculerEcheance()" title="Recalculer d'après le délai">↻</button></label>
           <input type="date" id="f_echeance" value="${esc(e.echeance||'')}" oninput="echeanceSaisieAlaMain(this)">
           <small id="f_echeanceAide" class="card-sub"></small></div>
-        <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
+        <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
         <div class="field"><label>Travaux achevés le <small class="card-sub">(si différent de la date)</small></label><input type="date" id="f_dateFinExecution" value="${esc(e.dateFinExecution||'')}"></div>
         ${/* BT-13 : la référence que l'acheteur rapproche. Elle s'enregistrait
              déjà — reprise du bon — mais aucun champ ne la montrait : on ne
@@ -5878,7 +5878,7 @@ async function saveFacture(){
        puisque l'exception partait dans la console et que l'écran ne disait
        rien. Un test aurait tenu ; `index.html` n'en a pas. */
     modePaiement: champSaisi('f_modePaiement', e.modePaiement) || window.modeReglementRetenu(delaiModeDuClient(client)),
-    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', conducteur: document.getElementById('f_conducteur').value, verrouillee: e.verrouillee || false };
+    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', ...conducteurDuSelect('f_conducteur'), verrouillee: e.verrouillee || false };
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');
@@ -7285,7 +7285,7 @@ function bonCommandeForm(){
     <div class="form-section">
       <div class="form-section-head"><span class="form-section-ico"></span>Organisation</div>
       <div class="field-grid">
-        <div class="field"><label>Conducteur de travaux</label><select id="bc_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
+        <div class="field"><label>Conducteur de travaux</label><select id="bc_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
         <div class="field"><label>Nature des travaux</label><input type="text" id="bc_natureTravaux" value="${esc(e.natureTravaux)}" placeholder="Ex : Remise en état logement, Fuite d'eau…"></div>
         <div class="field full"><label>Métier(s)</label><div id="bc_metiersZone">${(()=>{ const m = metiersDuBrouillon(e); return bcMetiersZoneHTML(m.retenus, m.origines, m.ajoutes); })()}</div></div>
         <div class="field full"><label>Notes</label><input type="text" id="bc_notes" value="${esc(e.notes)}" placeholder="Remarques…"></div>
@@ -7395,7 +7395,7 @@ async function saveBonCommande(){
     montantParMetier,
     lignes: lignesRenseignees.length ? state.editing.lignes : [],
     statut: e.statut || 'en attente',
-    conducteur: document.getElementById('bc_conducteur').value,
+    ...conducteurDuSelect('bc_conducteur'),
     referenceChantier: (document.getElementById('bc_referenceChantier')||{value:''}).value.trim() || (e.referenceChantier||''),
     natureTravaux: document.getElementById('bc_natureTravaux').value,
     metiers: getCheckedMetiers('bc'),
@@ -10149,7 +10149,8 @@ async function saveIntervention(etCreerDevis){
       occupant: e.occupant||'', etage: e.etage||'', numeroLogement: e.numeroLogement||'',
       precisionCommune: e.precisionCommune||'', ancienLocataire: e.ancienLocataire||''
     }),
-    date: e.date || todayISO(), heure: e.heure||'', typePanne: e.typePanne||'', conducteur: e.conducteur||'',
+    date: e.date || todayISO(), heure: e.heure||'', typePanne: e.typePanne||'',
+    conducteur: e.conducteur||'', conducteurId: e.conducteurId||'',
     controles: e.controles || defaultControles(), controleAutreTexte: e.controleAutreTexte||'', photos: e.photos || [], signature: (e.logementStatut==='vacant'||e.logementStatut==='commune') ? null : (e.signature || null), signatureTechnicien: e.signatureTechnicien || null,
     rapport: e.rapport || {constatations:'',preconisations:''},
     datePlanifiee: e.datePlanifiee || '', heurePlanifiee: e.heurePlanifiee || '', dureeHeures: e.dureeHeures || 1,
@@ -11280,7 +11281,7 @@ function chantierForm(){
         <option value="terminé" ${e.statut==='terminé'?'selected':''}>Terminé</option>
       </select></div>
       <div class="field"><label>Client</label><select id="ch_client">${clientSelectOptions(e.client)}</select></div>
-      <div class="field"><label>Conducteur de travaux</label><select id="ch_conducteur">${conducteurSelectOptions(e.conducteur)}</select></div>
+      <div class="field"><label>Conducteur de travaux</label><select id="ch_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
       <div class="address-trio">
         <div class="field" style="position:relative;">
           <label>Adresse</label>
@@ -11320,7 +11321,7 @@ async function saveChantier(){
     nom, type: document.getElementById('ch_type').value,
     statut: document.getElementById('ch_statut').value,
     client: document.getElementById('ch_client').value,
-    conducteur: document.getElementById('ch_conducteur').value,
+    ...conducteurDuSelect('ch_conducteur'),
     adresse: document.getElementById('ch_adresse').value,
     codePostal: document.getElementById('ch_codePostal').value,
     ville: document.getElementById('ch_ville').value,
@@ -14569,18 +14570,50 @@ async function saveConducteur(){
   const nom = document.getElementById('cd_nom').value.trim();
   if(!nom){ alert('Le nom du conducteur est requis.'); return; }
   const id = e.id || uid();
+  /* Renommer une fiche réécrit, en base, l'étiquette de tous les documents qui
+     la désignent. Recharger les seuls conducteurs laisserait donc l'écran sur
+     l'ancien nom — partout ailleurs. */
+  const ancienNom = e.id ? (state.conducteurs.find(c=>c.id===e.id)||{}).nom : null;
   const obj = { id, societeId: state.societeId, nom,
     telephone: document.getElementById('cd_telephone').value,
     email: document.getElementById('cd_email').value };
   const r = await stSet('conducteur:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await recharger('conducteur');
+  if(ancienNom != null && ancienNom !== nom)
+    await recharger('conducteur', 'bonCommande', 'devis', 'facture', 'intervention', 'chantier');
+  else
+    await recharger('conducteur');
   closeForm('conducteur');
   showToast(e.id? 'Conducteur modifié.' : 'Conducteur créé.', 'success');
 }
-function conducteurSelectOptions(current){
+/* La valeur est l'IDENTIFIANT de la fiche, comme pour les chantiers — et non
+   plus son nom recopié. Un renommage ne scinde donc plus les statistiques.
+
+   `conducteurIdDe` rattrape les documents écrits avant la reprise, dont l'écran
+   ne connaît encore que le nom : sans lui, ouvrir une vieille fiche afficherait
+   « Non attribué » et l'enregistrer effacerait le conducteur. */
+function conducteurIdDe(e){
+  if(e && e.conducteurId) return e.conducteurId;
+  const nom = ((e && e.conducteur) || '').trim().toLowerCase();
+  if(!nom) return '';
+  const fiche = state.conducteurs.find(c=>c.societeId===state.societeId
+    && (c.nom||'').trim().toLowerCase() === nom);
+  return fiche ? fiche.id : '';
+}
+
+function conducteurSelectOptions(currentId){
   const list = state.conducteurs.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return '<option value="">— Non attribué —</option>' + list.map(c=>`<option value="${esc(c.nom)}" ${c.nom===current?'selected':''}>${esc(c.nom)}</option>`).join('');
+  return '<option value="">— Non attribué —</option>' + list.map(c=>`<option value="${esc(c.id)}" ${c.id===currentId?'selected':''}>${esc(c.nom)}</option>`).join('');
+}
+
+/* On envoie la référence ET le nom. La base tient l'étiquette d'après la
+   référence, mais sans ce nom, retirer le conducteur d'un document laisserait
+   son étiquette derrière lui — la colonne n'étant alors pas réécrite. */
+function conducteurDuSelect(idChamp){
+  const el = document.getElementById(idChamp);
+  if(!el) return {};
+  const fiche = state.conducteurs.find(c=>c.id === el.value);
+  return { conducteurId: el.value || '', conducteur: fiche ? fiche.nom : '' };
 }
 function chantierSelectOptions(current){
   const list = state.chantiers.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));

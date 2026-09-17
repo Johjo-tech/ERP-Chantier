@@ -187,6 +187,7 @@ export async function completerRapportEtCreerFacture(
     client_id: intervention.client_id,
     interlocuteur: intervention.interlocuteur,
     conducteur: intervention.conducteur,
+    conducteur_id: intervention.conducteur_id,
     date: todayISO(),
     intervention_id: interventionId,
     adresse: intervention.adresse,
