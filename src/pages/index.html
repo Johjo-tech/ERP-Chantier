@@ -1963,37 +1963,68 @@ async function importAllData(file){
     showToast("Ce fichier de sauvegarde est invalide ou corrompu.");
   }
 }
+/* ---------- Ce que porte chaque collection ----------
+   Une seule table, utilisée par `loadAll` ET par `recharger` : écrire le tri à
+   deux endroits, c'est se garantir que la liste rechargée après un
+   enregistrement finira par s'ordonner autrement que celle du démarrage.
+
+   Le plus récent d'abord. On prend la première date renseignée parmi celles qui
+   font sens pour le document — un bon de commande n'a pas de `date`, il a une
+   date de réception — et `createdAt` départage les ex æquo. */
+const parNom = (a,b)=> (a.nom||'').localeCompare(b.nom||'');
+const COLLECTIONS_ETAT = {
+  'devis':        { champ:'devis',         ranger: v => trierParDate(v, ['date']) },
+  'facture':      { champ:'factures',      ranger: v => trierParDate(v, ['date']) },
+  'intervention': { champ:'interventions', ranger: v => trierParDate(v, ['date']) },
+  'bonCommande':  { champ:'bonsCommande',  ranger: v => trierParDate(v, ['dateReception','datePlanifiee','date']) },
+  'client':       { champ:'clients',       ranger: v => v.sort(parNom) },
+  'document':     { champ:'documents',     ranger: v => v.sort((a,b)=> (a.dateValidite||'9999').localeCompare(b.dateValidite||'9999')) },
+  'reglement':    { champ:'reglements',    ranger: v => trierParDate(v, ['date']) },
+  'interlocuteur':{ champ:'interlocuteurs',ranger: v => v.sort(parNom) },
+  'conducteur':   { champ:'conducteurs',   ranger: v => v.sort(parNom) },
+  'technicien':   { champ:'techniciens',   ranger: v => v },
+  'metierPerso':  { champ:'metiersPerso',  ranger: v => v },
+  'sousTraitant': { champ:'sousTraitants', ranger: v => v },
+  'chantier':     { champ:'chantiers',     ranger: v => trierParDate(v, ['dateDebut']) },
+  'salarie':      { champ:'salaries',      ranger: v => v.sort(parNom) },
+  'vehicule':     { champ:'vehicules',     ranger: v => v.sort(parNom) },
+  'materiel':     { champ:'materiels',     ranger: v => v.sort(parNom) },
+};
+
+/**
+ * Recharge les collections nommées, et elles seules.
+ *
+ * Un enregistrement ne touche qu'une ou deux tables ; le rechargement complet
+ * qui le suivait en retéléchargeait seize — 67 requêtes, 3,7 Mo et 5,1 s en
+ * production, après CHAQUE écriture. On nomme donc ce qu'on a touché.
+ *
+ * Volontairement sans les réglages ni la couleur : ce sont deux requêtes par
+ * société, pour des données qu'un enregistrement de facture ne change pas.
+ * `refreshNotifBadge` reste, il ne lit que la mémoire.
+ *
+ *   await recharger('facture');                 // une facture enregistrée
+ *   await recharger('reglement', 'facture');    // un règlement change aussi le statut
+ */
+async function recharger(...prefixes){
+  const connus = prefixes.filter(p => COLLECTIONS_ETAT[p]);
+  const valeurs = await Promise.all(connus.map(p => loadPrefix(p + ':')));
+  connus.forEach((p, i) => {
+    const def = COLLECTIONS_ETAT[p];
+    state[def.champ] = def.ranger(valeurs[i]);
+  });
+  refreshNotifBadge();
+}
+
 async function loadAll(){
   /* Avant toute requête : le pont ne ramènera que cette société. Sans cela il
      téléchargeait aussi les documents des sociétés qu'on n'affiche pas. */
   if(window.definirSocieteActive) window.definirSocieteActive(state.societeId);
-  /* `article:` ne figure plus ici : le catalogue peut compter un millier de
-     références, et l'ouverture télécharge déjà seize tables entières. Il se
-     consulte par requête, depuis l'onglet Catalogue et depuis la saisie d'une
-     ligne. Le registre des collections le connaît toujours — la restauration
-     d'une sauvegarde en a besoin. */
-  const [devis, factures, interventions, bonsCommande, clients, documents, reglements, interlocuteurs, conducteurs, techniciens, metiersPerso, sousTraitants, chantiers, salaries, vehicules, materiels] = await Promise.all([
-    loadPrefix('devis:'), loadPrefix('facture:'), loadPrefix('intervention:'), loadPrefix('bonCommande:'), loadPrefix('client:'), loadPrefix('document:'), loadPrefix('reglement:'), loadPrefix('interlocuteur:'), loadPrefix('conducteur:'), loadPrefix('technicien:'), loadPrefix('metierPerso:'), loadPrefix('sousTraitant:'), loadPrefix('chantier:'), loadPrefix('salarie:'), loadPrefix('vehicule:'), loadPrefix('materiel:')
-  ]);
-  /* Le plus récent d'abord. On prend la première date renseignée parmi celles
-     qui font sens pour le document — un bon de commande n'a pas de `date`,
-     il a une date de réception — et `createdAt` départage les ex æquo. */
-  state.devis = trierParDate(devis, ['date']);
-  state.factures = trierParDate(factures, ['date']);
-  state.interventions = trierParDate(interventions, ['date']);
-  state.bonsCommande = trierParDate(bonsCommande, ['dateReception','datePlanifiee','date']);
-  state.clients = clients.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
-  state.documents = documents.sort((a,b)=> (a.dateValidite||'9999').localeCompare(b.dateValidite||'9999'));
-  state.reglements = trierParDate(reglements, ['date']);
-  state.interlocuteurs = interlocuteurs.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
-  state.conducteurs = conducteurs.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
-  state.techniciens = techniciens;
-  state.metiersPerso = metiersPerso;
-  state.sousTraitants = sousTraitants;
-  state.chantiers = trierParDate(chantiers, ['dateDebut']);
-  state.salaries = salaries.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
-  state.vehicules = vehicules.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
-  state.materiels = materiels.sort((a,b)=> (a.nom||'').localeCompare(b.nom||''));
+  /* `article:` ne figure pas dans la table : le catalogue peut compter un
+     millier de références, et l'ouverture télécharge déjà seize tables
+     entières. Il se consulte par requête, depuis l'onglet Catalogue et depuis
+     la saisie d'une ligne. Le registre des collections du pont le connaît
+     toujours — la restauration d'une sauvegarde en a besoin. */
+  await recharger(...Object.keys(COLLECTIONS_ETAT));
   state.settings = {};
   await Promise.all(SOCIETES.map(async s => { const v = await stGet('settings:' + s.id); if(v) state.settings[s.id] = v; }));
   /* La couleur se pose ici parce que c'est la ligne au-dessus qui l'apporte :
@@ -3362,7 +3393,7 @@ async function delierLien(interventionId){
   it.bonCommandeId = null;
   const r = await stSet('intervention:'+interventionId, it);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('intervention', 'bonCommande');
   renderTab();
   showToast('✂️ Lien retiré — vous pouvez maintenant lier à un autre document.', 'success', 2500);
 }
@@ -3381,7 +3412,7 @@ async function confirmerLien(depuis, id, targetId){
   it.bonCommandeId = bcId;
   const r = await stSet('intervention:'+interventionId, it);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('intervention', 'bonCommande');
   state.lienOuvert = null;
   renderTab();
   showToast('🔗 Lié avec succès !', 'success', 2000);
@@ -4052,6 +4083,10 @@ function cardRowClick(ev, type, id){
     openViewDoc(type, id);
   }
 }
+async function rechargerType(type){
+  if(COLLECTIONS_ETAT[type]) await recharger(type);
+  else await loadAll();
+}
 async function deleteItem(type, id){
   if(!confirm('Supprimer définitivement cet élément ?')) return;
   let factureIdToSync = null;
@@ -4060,7 +4095,8 @@ async function deleteItem(type, id){
     if(reg) factureIdToSync = reg.factureId;
   }
   await stDelete(type+':'+id);
-  await loadAll();
+  await rechargerType(type);
+  /* syncFactureStatut recharge les factures de son côté. */
   if(factureIdToSync) await syncFactureStatut(factureIdToSync);
   renderTab();
 }
@@ -4069,7 +4105,7 @@ async function updateStatut(type, id, newStatut){
   if(!item) return;
   item.statut = newStatut;
   await stSet(type+':'+id, item);
-  await loadAll();
+  await rechargerType(type);
   renderTab();
 }
 function printItem(){ window.print(); }
@@ -4729,7 +4765,7 @@ async function saveDevis(){
   if(state.currentRole==='soustraitant') obj.sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
   const r = await stSet('devis:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('devis');
   closeForm('devis');
   if(obj.chantierId){
     await syncDevisLignesVersDpgf(obj);
@@ -4754,7 +4790,7 @@ async function syncDevisLignesVersDpgf(devisObj){
     });
   });
   await stSet('chantier:'+c.id, c);
-  await loadAll();
+  await recharger('devis', 'chantier');
 }
 function dupliquerDevis(devisId){
   const d = state.devis.find(x=>x.id===devisId);
@@ -4793,7 +4829,7 @@ async function transmettreALaPlateforme(factureId){
   showToast('Transmission en cours…');
   const r = await window.transmettreFacture(factureId);
   showToast(r.message, r.depose ? 'success' : undefined);
-  if(r.depose){ await loadAll(); renderTab(); }
+  if(r.depose){ await recharger('facture'); renderTab(); }
 }
 
 function transformerEnFacture(devisId){
@@ -5448,7 +5484,7 @@ async function creerFactureGroupeeST(){
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   state.stFactureSelection = [];
-  await loadAll();
+  await recharger('facture');
   renderTab();
   showToast('🧾 Facture mensuelle '+numero+' créée ('+sel.length+' bons regroupés) !', 'success', 3000);
 }
@@ -5509,7 +5545,7 @@ async function creerFactureDepuisBCKTA(bcId){
   };
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('facture');
   renderTab();
   showToast('🧾 Facture '+numero+' créée dans « Mes factures » !', 'success', 2500);
 }
@@ -5539,7 +5575,7 @@ async function marquerFactureSTPayee(factureId){
   f.statut = 'payée';
   const r = await stSet('facture:'+factureId, f);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('facture');
   renderTab();
 }
 function setFacturesView(view){
@@ -5750,7 +5786,7 @@ async function saveFacture(){
     lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', conducteur: document.getElementById('f_conducteur').value, verrouillee: e.verrouillee || false };
   const r = await stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('facture');
   closeForm('facture');
 }
 
@@ -6055,7 +6091,7 @@ async function updatePieceCommandeChamp(bcId, champ, value){
   if(!b) return;
   b[champ] = value;
   await stSet('bonCommande:'+bcId, b);
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
 }
 async function marquerPieceCommandee(bcId){
@@ -6064,7 +6100,7 @@ async function marquerPieceCommandee(bcId){
   b.pieceACommanderDateCommande = todayISO();
   const r = await stSet('bonCommande:'+bcId, b);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
   showToast('📦 Pièce commandée — classée dans le dossier '+(b.pieceACommanderFournisseur||'fournisseur'), 'success', 2500);
 }
@@ -6080,7 +6116,7 @@ async function replanifierApresPiece(bcId){
   b.dateInterventionTerminee = '';
   const r = await stSet('bonCommande:'+bcId, b);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   state.tab = 'planning';
   state.planningView = 'technicien';
   renderShell();
@@ -6375,7 +6411,7 @@ async function confirmerValidationConducteur(){
 
   try{
     await window.validerAffaireConducteur(b.id);
-    await loadAll();
+    await recharger('bonCommande', 'facture');
     closeValidationConducteurModal();
     renderTab();
     showToast('Affaire validée par le conducteur.', 'success');
@@ -7000,7 +7036,7 @@ async function confirmerValidationDirecteur(){
 
   try{
     await window.validerChiffrage(ctx.bcId);
-    await loadAll();
+    await recharger('bonCommande', 'facture');
     closeValidationDirecteurModal();
     renderTab();
     showToast('Pré-facture validée — le bon passe à « À facturer ».', 'success', 3000);
@@ -7029,7 +7065,7 @@ async function toggleBCMetierFait(bcId, metier){
   if(!b.metiersFait) b.metiersFait = {};
   b.metiersFait[metier] = !b.metiersFait[metier];
   await stSet('bonCommande:'+bcId, b);
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
 }
 async function validerBCEtape(bcId, etape){
@@ -7043,7 +7079,7 @@ async function validerBCEtape(bcId, etape){
   /* Même règle que dans la modale : toutes les tâches ou aucune. */
   try{
     await window.validerAffaireConducteur(bcId);
-    await loadAll();
+    await recharger('bonCommande', 'facture');
     renderTab();
     showToast('Affaire validée par le conducteur.', 'success');
   }catch(err){
@@ -7296,7 +7332,7 @@ async function saveBonCommande(){
     notes: document.getElementById('bc_notes').value };
   const r = await stSet('bonCommande:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   closeForm('bonCommande');
   showToast(e.id? 'Bon de commande modifié.' : 'Bon de commande créé.', 'success');
   } finally {
@@ -8005,7 +8041,7 @@ async function confirmerRappel(){
   const { bc, bcId } = resolved;
   bc.rappelDate = dateVal;
   await stSet(planningKeyPrefix(rappelCtx.kind)+bcId, bc);
-  await loadAll();
+  await recharger('bonCommande');
   closeRappelModal();
   renderTab();
   majContactsFicheTechnicien();
@@ -8017,7 +8053,7 @@ async function annulerRappel(kind, id){
   const { bc, bcId } = resolved;
   bc.rappelDate = null;
   await stSet(planningKeyPrefix(kind)+bcId, bc);
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
 }
 /* Le suivi des contacts : ce qu'on a tenté, et ce qu'on a prévu.
@@ -8100,7 +8136,7 @@ async function updatePrixSousTraitant(kind, compositeId, value){
   resolved.bc.montantSousTraitant = value===''? null : (parseFloat(value)||0);
   const r = await stSet(planningKeyPrefix(kind)+resolved.bcId, resolved.bc);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
   showToast('💶 Prix sous-traitant enregistré', 'success', 1800);
 }
@@ -8323,7 +8359,7 @@ async function saveSousTraitantValidation(){
   else b.dateInterventionTerminee = '';
   const r = await stSet('bonCommande:'+b.id, b);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   closeSousTraitantValidationModal();
   renderTab();
   showToast('✓ Travaux validés — merci !', 'success');
@@ -8737,7 +8773,7 @@ async function saveTechnicienIntervention(){
   if(bcInterventionFaite(b)) b.dateInterventionTerminee = todayISO();
   const r = await stSet('bonCommande:'+b.id, b);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   closeTechnicienInterventionModal();
   renderTab();
   showToast('Intervention enregistrée.', 'success');
@@ -8771,7 +8807,7 @@ async function confirmerAjoutDateSuppl(){
   bc.datesSupplementaires.sort((a,b)=> a.date.localeCompare(b.date));
   const r = await stSet(planningKeyPrefix(kind)+bcId, bc);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('bonCommande');
   closeAjoutDateSupplModal();
   renderTab();
   showToast(`Date ajoutée : ${fmtDate(dateVal)} de ${heureVal} (${dureeVal}h).`, 'success');
@@ -8782,7 +8818,7 @@ async function removeDateSupplementaire(kind, id, dateVal){
   const { bc, bcId } = resolved;
   bc.datesSupplementaires = (bc.datesSupplementaires||[]).filter(d=>d.date!==dateVal);
   await stSet(planningKeyPrefix(kind)+bcId, bc);
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
 }
 async function updateDateSupplChamp(kind, id, dateVal, champ, value){
@@ -8793,7 +8829,7 @@ async function updateDateSupplChamp(kind, id, dateVal, champ, value){
   if(!occ) return;
   occ[champ] = champ==='duree' ? (parseInt(value,10)||1) : value;
   await stSet(planningKeyPrefix(kind)+bcId, bc);
-  await loadAll();
+  await recharger('bonCommande');
   renderTab();
 }
 function dragStartBC(ev, kind, id){
@@ -9290,7 +9326,7 @@ async function saveBulkReglement(){
     const r = await stSet('reglement:'+id, obj);
     if(!r){ showToast(saveFailedMessage()); return; }
   }
-  await loadAll();
+  await recharger('reglement', 'facture');
   for(const part of parts){ await maybeMarkFacturePayee(part.id); }
   state.reglementSelection = [];
   state.formOpen.reglementBulk = false;
@@ -9413,7 +9449,7 @@ async function saveReglement(){
     reference: document.getElementById('r_reference').value };
   const r = await stSet('reglement:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('reglement', 'facture');
   await maybeMarkFacturePayee(factureId);
   closeForm('reglement');
 }
@@ -9431,7 +9467,7 @@ async function syncFactureStatut(factureId){
   if(facture.statut !== newStatut){
     facture.statut = newStatut;
     await stSet('facture:'+factureId, facture);
-    await loadAll();
+    await recharger('facture');
   }
 }
 
@@ -9927,7 +9963,7 @@ async function marquerFactureVerrouillee(id){
   f.verrouillee = true;
   Object.assign(f, instantaneIdentite(f));
   await stSet('facture:'+id, f);
-  await loadAll();
+  await recharger('facture');
 }
 async function deverrouillerFacture(id){
   if(!confirm("Cette facture a déjà été téléchargée ou envoyée. Confirmez-vous vouloir la déverrouiller pour la modifier ?\n\nAttention : si le client a déjà reçu une version, pensez à lui renvoyer la version corrigée.")) return;
@@ -9935,7 +9971,7 @@ async function deverrouillerFacture(id){
   if(!f) return;
   f.verrouillee = false;
   await stSet('facture:'+id, f);
-  await loadAll();
+  await recharger('facture');
   state.editing = {...state.factures.find(x=>x.id===id)};
   renderTab();
 }
@@ -9982,7 +10018,7 @@ async function saveIntervention(etCreerDevis){
   const r = await stSet('intervention:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   const isNouveauSAV = !!obj.bonCommandeId && !e.id;
-  await loadAll();
+  await recharger('intervention');
   closeForm('intervention');
   if(etCreerDevis){
     transformerInterventionEn('devis', id);
@@ -11160,7 +11196,7 @@ async function saveChantier(){
     inspections: e.inspections || [], ppsps: e.ppsps || [], doe: e.doe || [], ccap: e.ccap || [], avenants: e.avenants || [], dgd: e.dgd || [], infosDiverses: e.infosDiverses || '' };
   const r = await stSet('chantier:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('chantier');
   closeForm('chantier');
   showToast(e.id? 'Chantier modifié.' : 'Chantier créé.', 'success');
 }
@@ -11246,7 +11282,7 @@ async function confirmerFacturationAvancement(){
     date: todayISO(), echeance:'', lignes: lignesFacture, remisePourcentage:0, statut:'brouillon',
     chantierId: c.id, notes: `Situation de travaux — ${c.nom}` };
   await stSet('facture:'+factureId, factureObj);
-  await loadAll();
+  await recharger('chantier', 'facture');
   closeFacturerAvancement();
   renderTab();
   showToast('Facture d\'avancement créée avec succès.', 'success');
@@ -11367,7 +11403,7 @@ async function saveChantierInfosDiverses(chantierId, value){
   c.infosDiverses = value;
   const r = await stSet('chantier:'+chantierId, c);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('chantier');
   showToast('Informations enregistrées.', 'success');
 }
 function chantierFileInputHTML(chantierId, listKey, inputId, accept){
@@ -11385,7 +11421,7 @@ async function handleChantierFileAdd(chantierId, listKey, file){
     if(listKey==='comptesRendus') entry.vu = false;
     c[listKey].push(entry);
     await stSet('chantier:'+chantierId, c);
-    await loadAll();
+    await recharger('chantier');
     renderTab();
   };
   reader.readAsDataURL(file);
@@ -11395,7 +11431,7 @@ async function removeChantierFile(chantierId, listKey, fileId){
   if(!c) return;
   c[listKey] = (c[listKey]||[]).filter(f=>f.id!==fileId);
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   renderTab();
 }
 function chantierFileListHTML(c, listKey, dlPrefix){
@@ -11426,7 +11462,7 @@ async function updateChantierFileDate(chantierId, listKey, fileId, newDate){
   if(!f) return;
   f.date = newDate;
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   showToast('Date mise à jour.', 'success');
 }
 function dataUrlToUint8Array(dataUrl){
@@ -11665,7 +11701,7 @@ async function openCompteRenduFile(chantierId, fileId, dataUrl, nom){
   if(!f || f.vu!==false) return;
   f.vu = true;
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('bonCommande', 'chantier');
   renderTab();
 }
 function parseMontantCell(raw){
@@ -11998,7 +12034,7 @@ async function saveChantierDpgfLignes(chantierId){
   if(!c) return;
   const r = await stSet('chantier:'+chantierId, c);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('chantier');
   renderTab();
   showToast('Lignes DPGF enregistrées.', 'success');
 }
@@ -12154,7 +12190,7 @@ async function addChantierAchat(chantierId){
   if(!c.achats) c.achats = [];
   c.achats.push({ id: uid(), categorie, designation, montant, date, salarieId, heures });
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   renderTab();
   showToast('Achat enregistré.', 'success');
 }
@@ -12163,7 +12199,7 @@ async function removeChantierAchat(chantierId, achatId){
   if(!c) return;
   c.achats = (c.achats||[]).filter(a=>a.id!==achatId);
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   renderTab();
 }
 let planifierQteCtx = { chantierId: null, ligneId: null };
@@ -12231,7 +12267,7 @@ async function confirmPlanifierQte(){
   if(!ligne.tachesPlanifiees) ligne.tachesPlanifiees = [];
   ligne.tachesPlanifiees.push({ id: uid(), bonCommandeId: bcId, qte });
   await stSet('chantier:'+c.id, c);
-  await loadAll();
+  await recharger('chantier', 'bonCommande');
   closePlanifierQteModal();
   renderTab();
   showToast('Tâche créée — retrouvez-la dans "Non planifiés" du Planning pour l\'assigner.', 'success', 4500);
@@ -12380,7 +12416,7 @@ async function dropTodoColumn(ev, chantierId, newStatut){
   t.statut = newStatut;
   t.fait = newStatut==='fait';
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   renderTab();
 }
 async function addChantierTodo(chantierId){
@@ -12392,7 +12428,7 @@ async function addChantierTodo(chantierId){
   if(!c.todoList) c.todoList = [];
   c.todoList.push({ id: uid(), texte, statut:'a_faire', fait:false });
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   renderTab();
 }
 async function removeChantierTodo(chantierId, todoId){
@@ -12400,7 +12436,7 @@ async function removeChantierTodo(chantierId, todoId){
   if(!c) return;
   c.todoList = (c.todoList||[]).filter(x=>x.id!==todoId);
   await stSet('chantier:'+chantierId, c);
-  await loadAll();
+  await recharger('chantier');
   renderTab();
 }
 let todoDetailCtx = { chantierId: null, todoId: null };
@@ -12432,7 +12468,7 @@ async function saveTodoDetail(){
   t.salarieId = document.getElementById('todoDetailSalarieId').value || null;
   t.notes = document.getElementById('todoDetailNotes').value;
   await stSet('chantier:'+c.id, c);
-  await loadAll();
+  await recharger('chantier');
   closeTodoDetail();
   renderTab();
   showToast('Tâche mise à jour.', 'success');
@@ -12517,7 +12553,7 @@ async function deleteMateriel(id){
   if(!confirm('Supprimer ce matériel et tout son historique de prêt ?')) return;
   await stDelete('materiel:'+id);
   state.viewingMateriel = null;
-  await loadAll();
+  await recharger('materiel');
   renderTab();
 }
 function materielForm(){
@@ -12551,7 +12587,7 @@ async function saveMateriel(){
     prets: e.prets || [] };
   const r = await stSet('materiel:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('materiel');
   closeForm('materiel');
   showToast(e.id? 'Matériel modifié.' : 'Matériel créé.', 'success');
 }
@@ -12620,7 +12656,7 @@ async function creerPretMateriel(materielId){
   if(!m.prets) m.prets = [];
   m.prets.push({ id: uid(), salarieId, etatAuPret, datePret, dureeJours, dateRetourReelle: null });
   await stSet('materiel:'+materielId, m);
-  await loadAll();
+  await recharger('materiel');
   renderTab();
   showToast('Matériel prêté.', 'success');
 }
@@ -12631,7 +12667,7 @@ async function marquerMaterielRendu(materielId, pretId){
   if(!p) return;
   p.dateRetourReelle = todayISO();
   await stSet('materiel:'+materielId, m);
-  await loadAll();
+  await recharger('materiel');
   renderTab();
   showToast('Matériel marqué comme rendu.', 'success');
 }
@@ -12640,7 +12676,7 @@ async function removeMaterielPret(materielId, pretId){
   if(!m) return;
   m.prets = (m.prets||[]).filter(x=>x.id!==pretId);
   await stSet('materiel:'+materielId, m);
-  await loadAll();
+  await recharger('materiel');
   renderTab();
 }
 function renderPiecesCommande(){
@@ -12993,7 +13029,7 @@ async function saveVehicule(){
     entretiens: e.entretiens || [], prets: e.prets || [] };
   const r = await stSet('vehicule:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('vehicule');
   closeForm('vehicule');
   showToast(e.id? 'Véhicule modifié.' : 'Véhicule créé.', 'success');
 }
@@ -13011,7 +13047,7 @@ async function addVehiculeEntretien(vehiculeId){
     v.entretiens.push({ id: uid(), designation, kilometrage, montant, date, fichierNom: fichierNom||'', fichierData: fichierData||null });
     if(kilometrage!=null && kilometrage > (parseFloat(v.kilometrage)||0)) v.kilometrage = kilometrage;
     await stSet('vehicule:'+vehiculeId, v);
-    await loadAll();
+    await recharger('vehicule');
     renderTab();
     showToast('Entretien enregistré.', 'success');
   };
@@ -13028,7 +13064,7 @@ async function removeVehiculeEntretien(vehiculeId, entretienId){
   if(!v) return;
   v.entretiens = (v.entretiens||[]).filter(en=>en.id!==entretienId);
   await stSet('vehicule:'+vehiculeId, v);
-  await loadAll();
+  await recharger('vehicule');
   renderTab();
 }
 async function creerPretVehicule(vehiculeId){
@@ -13045,7 +13081,7 @@ async function creerPretVehicule(vehiculeId){
   v.prets.push({ id: uid(), salarieId, etatAuPret, datePret, dureeJours, dateRetourReelle: null, schemaMarks });
   vehiculeSchemaMarks[schemaId] = [];
   await stSet('vehicule:'+vehiculeId, v);
-  await loadAll();
+  await recharger('vehicule');
   renderTab();
   showToast('Véhicule prêté.', 'success');
 }
@@ -13063,7 +13099,7 @@ async function confirmerRetourVehicule(vehiculeId, pretId){
   p.dateRetourReelle = todayISO();
   vehiculeSchemaMarks[schemaId] = [];
   await stSet('vehicule:'+vehiculeId, v);
-  await loadAll();
+  await recharger('vehicule');
   state.marquantRetourPretId = null;
   renderTab();
   const nbNouvelles = p.schemaMarksRetour.length;
@@ -13074,7 +13110,7 @@ async function removeVehiculePret(vehiculeId, pretId){
   if(!v) return;
   v.prets = (v.prets||[]).filter(x=>x.id!==pretId);
   await stSet('vehicule:'+vehiculeId, v);
-  await loadAll();
+  await recharger('vehicule');
   renderTab();
 }
 function startEditEntretien(entretienId){
@@ -13109,7 +13145,7 @@ async function saveEditEntretien(vehiculeId, entretienId){
   en.date = document.getElementById('editEntretienDate_'+entretienId).value || en.date;
   if(en.kilometrage!=null && en.kilometrage > (parseFloat(v.kilometrage)||0)) v.kilometrage = en.kilometrage;
   await stSet('vehicule:'+vehiculeId, v);
-  await loadAll();
+  await recharger('vehicule');
   state.editingEntretienId = null;
   renderTab();
   showToast('Entretien modifié.', 'success');
@@ -13200,7 +13236,7 @@ async function confirmVendreVehicule(){
   if(!r){ showToast(saveFailedMessage()); return; }
   v.vendu = true; v.dateVente = date; v.prixVente = prix; v.factureVenteId = factureId;
   await stSet('vehicule:'+v.id, v);
-  await loadAll();
+  await recharger('vehicule', 'facture');
   closeVendreVehiculeModal();
   renderTab();
   showToast('Véhicule marqué comme vendu, facture créée.', 'success');
@@ -13312,7 +13348,7 @@ async function majEquipeSalarie(salarieId, equipeId){
   if(!s) return;
   const r = await stSet('salarie:'+salarieId, { ...s, technicienId: equipeId });
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('salarie');
   renderTab();
   showToast(equipeId? 'Salarié rattaché à l\'équipe.' : 'Salarié retiré de l\'équipe.', 'success');
 }
@@ -13455,7 +13491,7 @@ async function handleSalarieFileAdd(salarieId, listKey, file){
     s[listKey].push({ id: uid(), nom: file.name, date: todayISO(), data: ev.target.result });
     if(state.editing && state.editing.id===salarieId) state.editing[listKey] = s[listKey];
     await stSet('salarie:'+salarieId, s);
-    await loadAll();
+    await recharger('salarie');
     renderTab();
   };
   reader.readAsDataURL(file);
@@ -13466,7 +13502,7 @@ async function removeSalarieFile(salarieId, listKey, fileId){
   s[listKey] = (s[listKey]||[]).filter(f=>f.id!==fileId);
   if(state.editing && state.editing.id===salarieId) state.editing[listKey] = s[listKey];
   await stSet('salarie:'+salarieId, s);
-  await loadAll();
+  await recharger('salarie');
   renderTab();
 }
 async function updateSalarieFileDate(salarieId, listKey, fileId, newDate){
@@ -13477,7 +13513,7 @@ async function updateSalarieFileDate(salarieId, listKey, fileId, newDate){
   f.date = newDate;
   if(state.editing && state.editing.id===salarieId) state.editing[listKey] = s[listKey];
   await stSet('salarie:'+salarieId, s);
-  await loadAll();
+  await recharger('salarie');
   showToast('Date mise à jour.', 'success');
 }
 function salarieFileListHTML(s, listKey){
@@ -13543,7 +13579,7 @@ async function addAbsence(salarieId){
     s.absences.push({ id: uid(), type, dateDebut, dateFin, nbJours, commentaire, fichierNom: fichierNom||'', fichierData: fichierData||null });
     if(state.editing && state.editing.id===salarieId) state.editing.absences = s.absences;
     await stSet('salarie:'+salarieId, s);
-    await loadAll();
+    await recharger('salarie');
     renderTab();
     showToast('Absence enregistrée.', 'success');
   };
@@ -13561,7 +13597,7 @@ async function removeAbsence(salarieId, absenceId){
   s.absences = (s.absences||[]).filter(a=>a.id!==absenceId);
   if(state.editing && state.editing.id===salarieId) state.editing.absences = s.absences;
   await stSet('salarie:'+salarieId, s);
-  await loadAll();
+  await recharger('salarie');
   renderTab();
 }
 function salarieForm(){
@@ -13729,7 +13765,7 @@ async function saveSalarie(){
     absences: e.absences || [] };
   const r = await stSet('salarie:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('salarie');
   closeForm('salarie');
   showToast(e.id? 'Salarié modifié.' : 'Salarié créé.', 'success');
 }
@@ -13795,7 +13831,7 @@ async function saveInterlocuteur(clientId){
     email: document.getElementById('i_email').value };
   const r = await stSet('interlocuteur:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('interlocuteur');
   closeForm('interlocuteur');
 }
 /* Champs que l'annuaire sait remplir sur la fiche client. */
@@ -14250,7 +14286,7 @@ async function saveClient(){
 
   const r = await stSet('client:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('client');
   closeForm('client');
 }
 
@@ -14309,7 +14345,7 @@ async function saveMetierPerso(){
   const obj = { id, societeId: state.societeId, nom, couleur: document.getElementById('mp_couleur').value };
   const r = await stSet('metierPerso:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('metierPerso');
   closeForm('metierPerso');
   showToast(e.id? 'Métier modifié.' : 'Métier créé.', 'success');
 }
@@ -14365,7 +14401,7 @@ async function saveConducteur(){
     email: document.getElementById('cd_email').value };
   const r = await stSet('conducteur:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('conducteur');
   closeForm('conducteur');
   showToast(e.id? 'Conducteur modifié.' : 'Conducteur créé.', 'success');
 }
@@ -14486,7 +14522,7 @@ async function addSousTraitantDoc(sousTraitantId){
     st.documents.push({ id: uid(), type, dateExpiration, fichierNom: fichierNom||'', fichierData: fichierData||null });
     if(state.editing && state.editing.id===sousTraitantId) state.editing.documents = st.documents;
     await stSet('sousTraitant:'+sousTraitantId, st);
-    await loadAll();
+    await recharger('sousTraitant');
     renderTab();
     showToast('Document enregistré.', 'success');
   };
@@ -14504,7 +14540,7 @@ async function removeSousTraitantDoc(sousTraitantId, docId){
   st.documents = (st.documents||[]).filter(d=>d.id!==docId);
   if(state.editing && state.editing.id===sousTraitantId) state.editing.documents = st.documents;
   await stSet('sousTraitant:'+sousTraitantId, st);
-  await loadAll();
+  await recharger('sousTraitant');
   renderTab();
 }
 async function saveSousTraitant(){
@@ -14531,7 +14567,7 @@ async function saveSousTraitant(){
 
   const r = await stSet('sousTraitant:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('sousTraitant');
   closeForm('sousTraitant');
   showToast(e.id? 'Sous-traitant modifié.' : 'Sous-traitant créé.', 'success');
 }
@@ -14951,7 +14987,7 @@ async function saveTechnicien(){
     couleur: document.getElementById('tc_couleur').value };
   const r = await stSet('technicien:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('technicien');
   closeForm('technicien');
   showToast(e.id? 'Équipe modifiée.' : 'Équipe créée.', 'success');
 }
@@ -15405,7 +15441,7 @@ async function saveDocument(){
     notes: document.getElementById('doc_notes').value };
   const r = await stSet('document:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
-  await loadAll();
+  await recharger('document');
   closeForm('document');
 }
 
