@@ -54,6 +54,50 @@ export function listFormations(salarieId: Uuid) {
   return listByParent("salarie_formations", "salarie_id", salarieId, "cree_le");
 }
 
+// ============ DOSSIER DOCUMENTAIRE ============
+
+/*
+ * `salarie_documents` porte le dossier : contrat, DPAE, carte BTP, visite
+ * médicale… Le fichier lui-même vit dans le bucket `terrain` ; la ligne n'en
+ * garde que le chemin, comme pour le bon de commande du client.
+ *
+ * Tri par date d'expiration : l'écran RH affiche le plus urgent en premier, et
+ * un document sans échéance (contrat, RIB) passe derrière — PostgREST range
+ * les NULL en fin sur un tri croissant.
+ */
+export function listDocumentsSalarie(salarieId: Uuid) {
+  return listByParent("salarie_documents", "salarie_id", salarieId, "date_expiration");
+}
+
+/** Les dossiers de plusieurs salariés en une requête, pas une par fiche. */
+export function listDocumentsSalaries(salarieIds: Uuid[]) {
+  return listByParents(
+    "salarie_documents",
+    "salarie_id",
+    salarieIds,
+    "date_expiration"
+  );
+}
+
+export function getDocumentSalarie(id: Uuid) {
+  return getOne("salarie_documents", id);
+}
+
+export function addDocumentSalarie(input: TablesInsert<"salarie_documents">) {
+  return insertOne("salarie_documents", input);
+}
+
+export function updateDocumentSalarie(
+  id: Uuid,
+  updates: TablesUpdate<"salarie_documents">
+) {
+  return updateOne("salarie_documents", id, updates);
+}
+
+export function deleteDocumentSalarie(id: Uuid) {
+  return remove("salarie_documents", id);
+}
+
 export async function getSalarieComplet(id: Uuid): Promise<SalarieComplet | null> {
   const salarie = await getSalarie(id);
   if (!salarie) return null;

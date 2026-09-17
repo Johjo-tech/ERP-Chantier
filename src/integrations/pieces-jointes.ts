@@ -26,16 +26,29 @@ const DOMAINE = "bons-commande";
  * Le nom conservé est celui d'origine, celui rangé est assaini : l'utilisateur
  * doit retrouver « Bon n°12 – Résidence Côte d'Azur.pdf », le stockage ne doit
  * pas avoir à porter ses accents.
+ *
+ * `domaine` dit à quoi le document se rattache — c'est le deuxième segment du
+ * chemin, celui qui sépare les bons des dossiers RH. Le premier reste la
+ * société : c'est lui, et lui seul, que lisent les policies Storage.
  */
-export async function televerserPieceJointeBC(
+export async function televerserPieceJointe(
   societeId: Uuid,
-  bcId: Uuid,
+  domaine: string,
+  entiteId: Uuid,
   fichier: File
 ): Promise<PieceJointeRangee> {
   const nom = fichier.name || "document";
   const pourStockage = new File([fichier], nomSurPourStockage(nom), { type: fichier.type });
-  const chemin = await uploadFile(societeId, DOMAINE, bcId, pourStockage);
+  const chemin = await uploadFile(societeId, domaine, entiteId, pourStockage);
   return { chemin, nom, mime: mimeDePieceJointe(fichier.type, nom) };
+}
+
+export function televerserPieceJointeBC(
+  societeId: Uuid,
+  bcId: Uuid,
+  fichier: File
+): Promise<PieceJointeRangee> {
+  return televerserPieceJointe(societeId, DOMAINE, bcId, fichier);
 }
 
 /*
