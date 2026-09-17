@@ -33,6 +33,18 @@ Le schéma **n'est jamais décrit à la main**. Après tout changement en base :
 npm run db:types    # régénère database.types.ts puis columns.ts
 ```
 
+```bash
+./scripts/deployer.sh              # tout : contrôles, base, code, constat
+./scripts/deployer.sh --controle   # les contrôles seuls, rien n'est publié
+./scripts/deployer.sh --base       # contrôles et base, sans pousser le code
+```
+
+Le script enchaîne l'ordre qui compte — **la base d'abord, le code ensuite** —
+fait un essai à blanc de chaque migration, demande confirmation avant chaque
+écriture, et s'arrête au premier échec. Il attend ensuite que Vercel serve
+bien le commit poussé. Ce qui suit explique ce qu'il fait, pour les cas où on
+préfère le faire à la main.
+
 `supabase db push` **ne fonctionne pas** sur ce projet et ne fonctionnera pas :
 88 migrations ont été appliquées depuis le tableau de bord et n'ont aucun
 fichier local, si bien que la CLI exige de les marquer « annulées » — ce qui
