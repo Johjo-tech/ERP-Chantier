@@ -1138,7 +1138,14 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    d'autre de `#printArea`, moins 5 mm de sûreté. Sans cette marge, le calcul
    tombait à 297,0 mm pile — mesuré à 297,1 après arrondi des sous-pixels, et
    html2pdf ajoutait une seconde page entièrement vide. */
-.p-page{ display:flex; flex-direction:column; min-height:calc(297mm - 28mm - 5mm); }
+/* Les 12 mm du bas sont réservés au pied de page que jsPDF dessine sur CHAQUE
+   page : html2pdf découpe une image, où ni `position:fixed` ni `<tfoot>` ne se
+   répètent. La hauteur ci-dessous doit rester accordée à `PIED_PDF_MM`, sans
+   quoi le document déborde d'une page. */
+.p-page{ display:flex; flex-direction:column; min-height:calc(297mm - 28mm - 5mm - 12mm); }
+/* Le pied vit dans le document pour l'impression navigateur ; pendant la
+   génération du PDF, jsPDF le dessine lui-même, page après page. */
+#printArea.pdf-en-cours .p-footer{ display:none; }
 .p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
@@ -4518,6 +4525,67 @@ function telechargerBlob(blob, nomFichier){
  * Le rognage de la moitié gauche, lui, ne venait pas d'ici : il tenait à la
  * version d'html2pdf chargée (voir la balise script).
  */
+/* Hauteur de la bande réservée au pied, en millimètres. À garder accordée à la
+   soustraction de `.p-page{min-height}` ci-dessus. */
+const PIED_PDF_MM = 12;
+
+/**
+ * Écrit l'identification légale au bas de CHAQUE page.
+ *
+ * Elle ne figurait qu'une fois, à la suite du contenu : sur un document de
+ * deux pages elle tombait en bas de la dernière, et le découpage en images
+ * pouvait la couper en deux. Or l'article R123-238 l'exige sur tout document
+ * commercial — et le lecteur d'une page isolée doit savoir de qui elle vient.
+ *
+ * jsPDF l'écrit en vrai texte, pas en image : elle reste donc sélectionnable
+ * et cherchable dans le PDF, contrairement au reste du document.
+ */
+function dessinerPiedDePage(pdf, texte){
+  const total = pdf.internal.getNumberOfPages();
+  const L = pdf.internal.pageSize.getWidth();
+  const H = pdf.internal.pageSize.getHeight();
+  const base = H - PIED_PDF_MM;
+  const MARGE = 14;           // mm, comme les marges latérales du document
+  const PLACE_NUMERO = 18;    // mm réservés à « 3 / 12 », à droite
+
+  /* Les espaces insécables empêchent jsPDF de couper la ligne : « Capital
+     150 000 € » et « 43.22 » en contiennent, et le pied entier devenait un
+     seul mot. Il débordait alors la page, se faisait rogner au bord droit, et
+     le RCS comme le code APE disparaissaient — les deux étant obligatoires. */
+  const propre = (texte || '').replace(/[\u00A0\u202F\u2007]/g, ' ').trim();
+  const largeurMax = L - 2 * MARGE - PLACE_NUMERO;
+
+  /* On rétrécit jusqu'à ce que tout tienne en deux lignes au plus, et on ne
+     coupe jamais : mieux vaut un pied menu que des mentions amputées. */
+  let taille = 7, lignes = [];
+  if(propre){
+    for(; taille >= 4.5; taille -= 0.25){
+      pdf.setFontSize(taille);
+      lignes = pdf.splitTextToSize(propre, largeurMax);
+      if(lignes.length <= 2 && lignes.every(l => pdf.getTextWidth(l) <= largeurMax)) break;
+    }
+  }
+
+  for(let i = 1; i <= total; i++){
+    pdf.setPage(i);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setDrawColor(226, 230, 237);
+    pdf.setLineWidth(0.2);
+    pdf.line(MARGE, base + 1, L - MARGE, base + 1);
+
+    pdf.setTextColor(150, 155, 165);
+    pdf.setFontSize(taille);
+    /* Centré sur la zone de texte, pas sur la page : sans ce décalage, une
+       ligne pleine passait sous le numéro de page. */
+    const centre = MARGE + largeurMax / 2;
+    lignes.forEach((ligne, n) => pdf.text(ligne, centre, base + 4.5 + n * 2.8, { align: 'center' }));
+
+    pdf.setFontSize(7);
+    pdf.text(`${i} / ${total}`, L - MARGE, base + 4.5, { align: 'right' });
+  }
+}
+
+
 async function lancerGenerationPdf(area, nomFichier, action, factureId){
   try{
     await attendreRendu();
@@ -4527,7 +4595,9 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
     if(!hauteur || !largeur) throw new Error("le document à imprimer est vide");
 
     const opt = {
-      margin: 0,
+      /* [haut, gauche, bas, droite] : seule la bande du bas est réservée, pour
+         le pied que `dessinerPiedDePage` écrit ensuite. */
+      margin: [0, 0, PIED_PDF_MM, 0],
       filename: `${nomFichier}.pdf`,
       image: { type:'jpeg', quality:0.98 },
       html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, scrollX:0, scrollY:0, height: hauteur, windowHeight: hauteur, width: largeur, windowWidth: largeur },
@@ -4535,7 +4605,19 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
       pagebreak: { mode: ['css','legacy'] }
     };
 
-    let blob = await html2pdf().set(opt).from(area).outputPdf('blob');
+    /* Le texte du pied est lu dans le document lui-même : il dit donc toujours
+       la même chose que ce que le modèle a composé, pied personnalisé compris. */
+    const textePied = (area.querySelector('.p-footer')?.textContent || '').trim();
+    area.classList.add('pdf-en-cours');
+
+    let blob;
+    try{
+      blob = await html2pdf().set(opt).from(area).toPdf()
+        .get('pdf').then(pdf => dessinerPiedDePage(pdf, textePied))
+        .outputPdf('blob');
+    } finally {
+      area.classList.remove('pdf-en-cours');
+    }
 
     /* Une facture emporte sa version structurée : le même fichier porte la page
        que l'humain lit et les données que la machine du client exploite. Un
