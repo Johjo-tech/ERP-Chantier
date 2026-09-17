@@ -1294,6 +1294,7 @@ export type Database = {
           legacy_id: string | null
           maj_le: string
           nom: string
+          profile_id: string | null
           societe_id: string
           telephone: string | null
         }
@@ -1304,6 +1305,7 @@ export type Database = {
           legacy_id?: string | null
           maj_le?: string
           nom: string
+          profile_id?: string | null
           societe_id: string
           telephone?: string | null
         }
@@ -1314,10 +1316,18 @@ export type Database = {
           legacy_id?: string | null
           maj_le?: string
           nom?: string
+          profile_id?: string | null
           societe_id?: string
           telephone?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "conducteurs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conducteurs_societe_id_fkey"
             columns: ["societe_id"]

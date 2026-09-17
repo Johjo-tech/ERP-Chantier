@@ -2884,9 +2884,12 @@ function computeMonthSummary(soc){
   const tauxEncaisse = Math.max(0, Math.round((1 - impayeesMontant/totalFacture)*100));
   return { caMois, caMoisPct: Math.min(100, Math.round(caMois/maxMois*100)), tauxConversion, devisCount: devisDuMois.length, tauxEncaisse, impayeesMontant };
 }
-function computeDashTraiter(soc){
+/* `fiche` restreint le décompte à un conducteur. Absente, on compte toute la
+   société — c'est ce qu'attendent le pilotage et l'écran d'accueil. */
+function computeDashTraiter(soc, fiche){
   const today = todayISO();
-  const bcs = state.bonsCommande.filter(b=>b.societeId===soc);
+  const bcs = state.bonsCommande.filter(b=>b.societeId===soc
+    && (!fiche || b.conducteurId === fiche.id));
   const enAttenteConducteur = bcs.filter(b=>!b.valideConducteur && !b.bonCommandeId).length;
   const aValiderDirecteur = bcs.filter(b=>b.valideConducteur && !b.valideDirecteur).length;
   const aFacturerList = bcs.filter(b=>b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
@@ -3020,18 +3023,35 @@ function renderDashboardTechnicien(){
    Il voit les montants, mais le chiffre d'affaires et le classement des
    clients ne sont pas son métier : ce qu'il arbitre, ce sont des validations,
    des retards et des pièces qui manquent. */
+/* La fiche conducteur du compte connecté, sur le modèle de `monEquipeId()`
+   pour le terrain. Sans elle, « mes bons » n'a pas de sens : le tableau de
+   bord montrait les validations de toute la société. */
+function maFicheConducteur(){
+  const moi = window.monCompteId && window.monCompteId();
+  if(!moi) return null;
+  return state.conducteurs.find(c => c.profileId === moi && c.societeId === state.societeId) || null;
+}
+
 function renderDashboardConducteur(){
   const soc = state.societeId;
   const today = todayISO();
-  const traiter = computeDashTraiter(soc);
-  const bons = state.bonsCommande.filter(b=>b.societeId===soc);
+  const fiche = maFicheConducteur();
+  /* Sans fiche rattachée, on ne peut pas distinguer ses affaires : on montre
+     tout, et on le DIT — un écran qui filtre en silence ferait croire à un
+     conducteur qu'il n'a rien à valider. */
+  const bons = state.bonsCommande.filter(b=>b.societeId===soc
+    && (!fiche || b.conducteurId === fiche.id));
+  const traiter = computeDashTraiter(soc, fiche);
   const enRetard = bons.filter(b=>b.dateFinTravaux && b.dateFinTravaux < today
     && !state.factures.some(f=>f.bonCommandeId===b.id));
   const piecesAttendues = bons.filter(b=>b.pieceACommander && !b.pieceACommanderDateCommande);
   const nonPlanifies = bons.filter(b=>!b.datePlanifiee && !b.valideDirecteur);
 
   return `
-    ${enteteDashboard(salutation(), 'Vos chantiers en cours — ' + societeName(soc))}
+    ${enteteDashboard(salutation(), fiche
+      ? 'Vos chantiers en cours — ' + societeName(soc)
+      : 'Tous les chantiers — ' + societeName(soc))}
+    ${fiche? '' : `<div class="card" style="border-color:var(--accent); background:var(--accent-soft); margin-bottom:16px;">👤 Votre compte n'est rattaché à aucune fiche de conducteur : cet écran montre les affaires de <b>toute la société</b>. Un administrateur peut faire le lien dans <b>Réglages › Intervenants</b>.</div>`}
     <div class="grid-stats grid-stats-4">
       ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Bons à valider', valeur:traiter.enAttenteConducteur,
         ton: traiter.enAttenteConducteur?'warn':'', destination:'aValider', titre:'Voir les bons en attente de validation'})}
@@ -14761,7 +14781,7 @@ const listeConducteursHTML = declarerListing('conducteur',
   ()=> state.conducteurs.filter(c=>c.societeId===state.societeId),
   list => list.map(c=>`
       <div class="card"><div class="card-row">
-        <div><div class="card-title">${esc(c.nom)}</div>${c.telephone||c.email? `<div class="card-sub">${[c.telephone,c.email].filter(Boolean).join(' · ')}</div>`:''}</div>
+        <div><div class="card-title">${esc(c.nom)}</div>${c.telephone||c.email? `<div class="card-sub">${[c.telephone,c.email].filter(Boolean).join(' · ')}</div>`:''}${c.profileId? '' : '<div class="card-sub" title="Sans compte, son tableau de bord montre les affaires de toute la société">⚠ sans compte utilisateur</div>'}</div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
         <button class="btn small" onclick="editItem('conducteur','${c.id}')">Modifier</button>
@@ -14776,6 +14796,7 @@ function conducteurForm(){
       <div class="field full"><label>Nom</label><input type="text" id="cd_nom" value="${esc(e.nom)}" placeholder="Ex : M. Martin"></div>
       <div class="field"><label>Téléphone</label><input type="tel" id="cd_telephone" value="${esc(e.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="cd_email" value="${esc(e.email)}"></div>
+      <div class="field full"><label>Compte utilisateur</label><select id="cd_profileId">${comptesLinkOptions(e.profileId)}</select><div class="card-sub" style="margin-top:4px;">Sans compte, son tableau de bord montrera les affaires de toute la société au lieu des siennes.</div></div>
     </div>
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="btn primary" onclick="saveConducteur()">Enregistrer</button>
@@ -14794,7 +14815,8 @@ async function saveConducteur(){
   const ancienNom = e.id ? (state.conducteurs.find(c=>c.id===e.id)||{}).nom : null;
   const obj = { id, societeId: state.societeId, nom,
     telephone: document.getElementById('cd_telephone').value,
-    email: document.getElementById('cd_email').value };
+    email: document.getElementById('cd_email').value,
+    profileId: document.getElementById('cd_profileId').value || null };
   const r = await stSet('conducteur:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   if(ancienNom != null && ancienNom !== nom)

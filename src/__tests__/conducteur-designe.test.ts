@@ -47,6 +47,7 @@ suite("Le conducteur d'un document", () => {
   afterAll(async () => {
     if (aSupprimer.length) {
       await supabase.from("bons_commande").delete().in("id", aSupprimer);
+      await supabase.from("conducteurs").delete().in("id", aSupprimer);
     }
     if (ficheId) await supabase.from("conducteurs").delete().eq("id", ficheId);
   });
@@ -114,6 +115,50 @@ suite("Le conducteur d'un document", () => {
 
     expect(data?.conducteur).toBe("ÉPREUVE Renommée");
     expect(data?.conducteur_id).toBe(ficheId);
+  });
+
+  it("se rattache à un compte utilisateur, et à un seul par société", async () => {
+    // Sans ce lien, le tableau de bord du conducteur montrait les validations
+    // de toute la société : il ne pouvait pas distinguer ses affaires.
+    const { data: moi } = await supabase.from("profiles").select("id").limit(1).single();
+    if (!moi) return;
+
+    const { error: pose } = await supabase
+      .from("conducteurs")
+      .update({ profile_id: moi.id })
+      .eq("id", ficheId);
+    expect(pose).toBeNull();
+
+    // Deux fiches pour la même personne rendraient « mes bons » ambigu :
+    // l'écran en montrerait la moitié sans jamais le dire.
+    const { data: doublon, error: refus } = await supabase
+      .from("conducteurs")
+      .insert({ societe_id: societeId, nom: "ÉPREUVE Doublon", profile_id: moi.id })
+      .select("id")
+      .maybeSingle();
+    if (doublon) aSupprimer.push(doublon.id as Uuid);
+    expect(doublon).toBeNull();
+    /* Sur le code, et pas seulement sur l'absence de ligne : un refus de RLS
+       ferait passer ce test sans que l'unicité existe. 23505 = violation
+       d'unicité, et rien d'autre. */
+    expect(refus?.code).toBe("23505");
+
+    // La même personne dans une AUTRE société reste légitime.
+    const { data: autreSociete } = await supabase
+      .from("societes").select("id").neq("id", societeId).limit(1).maybeSingle();
+    if (autreSociete) {
+      const { data: ailleurs, error: erreurAilleurs } = await supabase
+        .from("conducteurs")
+        .insert({ societe_id: autreSociete.id, nom: "ÉPREUVE Ailleurs", profile_id: moi.id })
+        .select("id")
+        .maybeSingle();
+      if (ailleurs) {
+        aSupprimer.push(ailleurs.id as Uuid);
+        expect(erreurAilleurs).toBeNull();
+      }
+    }
+
+    await supabase.from("conducteurs").update({ profile_id: null }).eq("id", ficheId);
   });
 
   it("laisse retirer le conducteur sans que son nom reste derrière", async () => {

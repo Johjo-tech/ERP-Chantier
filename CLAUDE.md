@@ -144,7 +144,9 @@ Un bug corrigé se double d'un test qui le reproduit.
   référence, et propage un renommage aux cinq tables concernées. Ne jamais
   écrire `conducteur` seul en espérant qu'il tienne — il sera réécrit. Trois
   graphies du même prénom avaient ainsi fait apparaître trois conducteurs dans
-  les statistiques.
+  les statistiques. Sa fiche porte aussi un `profile_id` — le compte de la
+  personne, un seul par société — sans lequel son tableau de bord ne peut pas
+  distinguer ses affaires de celles de ses collègues.
 - Une colonne dérivée envoyée à l'écriture fait voir toutes les lignes comme
   modifiées par `enfantsIdentiques`, d'où un delete+insert que le déclencheur
   de facture figée refuse. `montant_ht` est exclu de la comparaison pour cela.
