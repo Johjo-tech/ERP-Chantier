@@ -149,6 +149,13 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     client = data;
   }
 
+  /* BT-25 / BT-26 — un avoir doit désigner la facture qu'il rectifie, par son
+     numéro et sa date. La plateforme refuse le type 381 sans cette référence,
+     et le destinataire n'aurait de toute façon rien à quoi l'imputer. */
+  const rectifiee = facture.facture_rectifiee_id
+    ? await queries.getFacture(facture.facture_rectifiee_id).catch(() => null)
+    : null;
+
   const emetteur = versEmetteur(facture, societe);
   const destinataire = versDestinataire(facture, client);
   const lignesEN = lignes.map(versLigne);
@@ -171,6 +178,8 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     dateLivraison: facture.date_livraison ?? facture.date_fin_execution ?? facture.date,
     devise: facture.devise,
     typeDocument: facture.type_document,
+    factureRectifieeNumero: rectifiee?.numero ?? null,
+    factureRectifieeDate: rectifiee?.date ?? null,
     // BT-10 : la référence que l'acheteur exige de voir sur ses factures.
     referenceAcheteur: client?.reference_acheteur ?? facture.client_code_service ?? null,
     refBonCommandeClient: facture.ref_bon_commande_client,
@@ -188,8 +197,13 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     totalHt,
     totalTva,
     totalTtc,
-    mentionsComplementaires: [facture.tva_motif_exoneration, societe?.mention_penalites_retard]
-      .filter((m): m is string => !!m && !!m.trim()),
+    /* Le motif de la rectification voyage comme mention : il justifie l'avoir
+       pour qui le reçoit, et rien dans la norme ne lui donne de champ à lui. */
+    mentionsComplementaires: [
+      facture.tva_motif_exoneration,
+      facture.motif_rectification,
+      societe?.mention_penalites_retard,
+    ].filter((m): m is string => !!m && !!m.trim()),
   };
 
   return {

@@ -30,6 +30,7 @@ import type {
   ReglementInsert,
   Uuid,
 } from "../types";
+import { refusAvoir } from "../regles-avoir";
 import { getDevisComplet } from "./devis";
 import { getBonCommandeComplet } from "./bonCommande";
 
@@ -199,6 +200,69 @@ export async function emettreFacture(
 
 export function deleteFacture(id: Uuid) {
   return remove("factures", id);
+}
+
+/**
+ * L'avoir qui rectifie une facture émise : même en-tête, mêmes lignes.
+ *
+ * Les montants restent **positifs** — c'est `type_document` qui porte le sens,
+ * et le reste du code s'appuie dessus (`signeDocument` à l'écran, le signe de
+ * `chargeEN16931` à l'export). Le numéro naît du déclencheur, dans la série
+ * « AV » : la base tient la continuité des deux séries, pas l'appelant.
+ */
+export async function createAvoir(
+  societeId: Uuid,
+  factureId: Uuid,
+  motif: string,
+  overrides: Partial<NouvelleFacture> = {}
+): Promise<FactureComplete> {
+  const facture = await getFactureComplete(factureId);
+
+  const refus = refusAvoir({
+    facture: { numero: facture?.numero, typeDocument: facture?.type_document },
+    motif,
+  });
+  if (refus) throw new Error(refus);
+  if (!facture) throw new Error(`Facture ${factureId} introuvable`);
+
+  return createFacture(
+    societeId,
+    {
+      type_document: "avoir",
+      facture_rectifiee_id: factureId,
+      motif_rectification: motif.trim(),
+      client_nom: facture.client_nom,
+      client_id: facture.client_id,
+      interlocuteur: facture.interlocuteur,
+      conducteur: facture.conducteur,
+      conducteur_id: facture.conducteur_id,
+      date: todayISO(),
+      /* Ni `devis_id`, ni `bon_commande_id`, ni `intervention_id` : ces liens
+         disent « ce travail a été facturé », et le bon de commande s'y fie pour
+         savoir ce qui lui reste à facturer. L'avoir ne facture rien — le seul
+         lien qui le décrit est celui de la pièce qu'il rectifie. */
+      chantier_id: facture.chantier_id,
+      remise_pourcentage: facture.remise_pourcentage,
+      devise: facture.devise,
+      tva_categorie: facture.tva_categorie,
+      tva_motif_exoneration: facture.tva_motif_exoneration,
+      ref_marche: facture.ref_marche,
+      ref_contrat: facture.ref_contrat,
+      ref_bon_commande_client: facture.ref_bon_commande_client,
+      adresse: facture.adresse,
+      code_postal: facture.code_postal,
+      ville: facture.ville,
+      etage: facture.etage,
+      numero_logement: facture.numero_logement,
+      logement_statut: facture.logement_statut,
+      occupant: facture.occupant,
+      precision_commune: facture.precision_commune,
+      ancien_locataire: facture.ancien_locataire,
+      adresse_locataire: facture.adresse_locataire,
+      ...overrides,
+    },
+    facture.lignes.map(({ id, cree_le, facture_id, ...ligne }) => ligne)
+  );
 }
 
 // ============ DÉRIVATION ============
