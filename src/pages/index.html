@@ -11037,6 +11037,8 @@ const CIBLES_ANNUAIRE_SOCIETE = {
   adresse:'ie_adresse', codePostal:'ie_codePostal', ville:'ie_ville',
   siren:'ie_siren', tvaIntracom:'ie_tvaIntracom', codeNaf:'ie_codeNaf',
   formeJuridique:'ie_formeJuridique',
+  /* Le dirigeant était retapé à la main alors que l'annuaire le déclare. */
+  gerant:'ie_gerant',
   adresseElectroniqueValeur:'ie_adresseElectroniqueValeur',
   adresseElectroniqueSchema:'ie_adresseElectroniqueSchema',
 };
@@ -14777,6 +14779,20 @@ function champSiretHTML(idChamp, valeur, cibles){
   </div>`;
 }
 
+/* Ce qu'on dit après avoir rempli les champs.
+   Une société CESSÉE au registre reste facturable par erreur : l'annuaire le
+   disait, personne ne le regardait. On ne bloque pas — reprendre une créance
+   antérieure à la radiation est légitime — on avertit, et l'avertissement
+   REMPLACE le « champs remplis » au lieu d'être recouvert par lui. */
+function messageApresRemplissage(etab){
+  if(etab && etab.active === false){
+    const quand = etab.dateFermeture ? ` le ${fmtDate(etab.dateFermeture)}` : '';
+    return `<div class="suggest-empty" style="color:var(--danger); font-weight:600;">`
+      + `⚠ Entreprise radiée${esc(quand)} au registre — champs remplis. Vérifiez avant d'émettre un document.</div>`;
+  }
+  return '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Champs remplis.</div>';
+}
+
 async function chercherSiret(idChamp, cibles){
   const input = document.getElementById(idChamp);
   const box = document.getElementById(idChamp + '_res');
@@ -14800,14 +14816,14 @@ async function chercherSiret(idChamp, cibles){
   }
   if(res.type === 'siret'){
     appliquerEtablissement(res.etablissement, idChamp);
-    box.innerHTML = '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Établissement trouvé — champs remplis.</div>';
+    box.innerHTML = messageApresRemplissage(res.etablissement);
     return;
   }
 
   siretResults = res.etablissements || [];
   if(siretResults.length === 1){
     appliquerEtablissement(siretResults[0], idChamp);
-    box.innerHTML = '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Établissement trouvé — champs remplis.</div>';
+    box.innerHTML = messageApresRemplissage(siretResults[0]);
     return;
   }
   box.innerHTML = `<div class="suggest-empty">${siretResults.length} établissements ouverts — choisissez :</div>`
@@ -14821,7 +14837,7 @@ function choisirEtablissement(i, idChamp){
   if(!r) return;
   appliquerEtablissement(r, idChamp);
   const box = document.getElementById(idChamp + '_res');
-  if(box){ box.innerHTML = '<div class="suggest-empty" style="color:var(--success,#1E6B37);">Champs remplis.</div>'; }
+  if(box) box.innerHTML = messageApresRemplissage(r);
 }
 
 /* Ne remplit que les champs déclarés par l'appelant : chaque formulaire a ses
@@ -14848,6 +14864,10 @@ function appliquerEtablissement(etab, idChamp){
   setSiVide(c.tvaIntracom, etab.tvaIntracom);
   setSiVide(c.codeNaf, etab.activite);
   setSiVide(c.formeJuridique, etab.formeJuridique);
+
+  /* Le dirigeant ne s'impose pas : un cabinet peut vouloir nommer un
+     représentant autre que celui du registre. On ne remplit que le vide. */
+  setSiVide(c.gerant, etab.dirigeant);
 
   const adr = window.adresseElectroniqueParDefaut(etab);
   if(adr){

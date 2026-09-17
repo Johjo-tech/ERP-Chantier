@@ -22,13 +22,34 @@ export interface EtablissementTrouve {
   /** Catégorie juridique INSEE — elle porte le caractère public de l'acheteur. */
   formeJuridique: string;
   /**
-   * N° de TVA intracommunautaire, déduit du SIREN.
+   * N° de TVA intracommunautaire.
    *
-   * L'annuaire ne le renvoie pas : la clé française se calcule. Le proposer ici
-   * évite de le faire saisir, donc de se tromper — quitte à le corriger si
-   * l'entreprise n'est pas assujettie.
+   * L'annuaire le renvoie — contrairement à ce qu'affirmait ce commentaire —
+   * et c'est lui qui fait foi : la clé française se calcule, mais le calcul ne
+   * peut pas deviner qu'une entreprise n'est PAS assujettie. On retombe sur le
+   * calcul quand l'annuaire se tait.
    */
   tvaIntracom: string;
+  /** Vrai quand l'annuaire donne le numéro, faux quand il est calculé. */
+  tvaConfirmee: boolean;
+  /**
+   * Le dirigeant, tel que le registre national des entreprises le déclare.
+   *
+   * Vide pour une personne morale sans dirigeant publié, ou lorsque
+   * l'entreprise a demandé la non-diffusion de ses données.
+   */
+  dirigeant: string;
+  /** Sa qualité : « Président de SAS », « Gérant »… */
+  dirigeantQualite: string;
+  /**
+   * Faux pour une entreprise CESSÉE.
+   *
+   * L'annuaire le dit, on ne le regardait pas : on pouvait donc adresser un
+   * devis ou une facture à une société radiée sans que rien ne le signale.
+   */
+  active: boolean;
+  /** Date de fermeture si elle est connue, pour le dire dans l'avertissement. */
+  dateFermeture: string;
 }
 
 export type ResultatEntreprise =
@@ -57,12 +78,24 @@ interface EtabApi {
   est_siege?: boolean;
 }
 
+interface DirigeantApi {
+  nom?: string;
+  prenoms?: string;
+  qualite?: string;
+  denomination?: string;
+  type_dirigeant?: string;
+}
+
 interface EntrepriseApi {
   siren?: string;
   nom_complet?: string;
   nature_juridique?: string;
   siege?: EtabApi;
   matching_etablissements?: EtabApi[];
+  dirigeants?: DirigeantApi[];
+  tva?: string[] | null;
+  etat_administratif?: string;
+  date_fermeture?: string | null;
 }
 
 /**
@@ -97,12 +130,29 @@ export function nettoyerAdresse(adresse: string, codePostal: string, ville: stri
   return sansCp || a;
 }
 
+/**
+ * Le dirigeant en une ligne lisible.
+ *
+ * L'annuaire répète parfois le patronyme — « CHOUMANE (CHOUMANE) » — et range
+ * le prénom à part. Une personne morale n'a ni l'un ni l'autre, mais une
+ * dénomination. On rend ce qui se lit, ou rien.
+ */
+export function nomDuDirigeant(d: DirigeantApi | undefined): string {
+  if (!d) return "";
+  if (d.denomination) return d.denomination.trim();
+  const patronyme = (d.nom ?? "").replace(/\s*\(([^)]*)\)\s*$/, (tout, entre) =>
+    entre.trim().toUpperCase() === (d.nom ?? "").replace(/\s*\(.*$/, "").trim().toUpperCase() ? "" : tout
+  ).trim();
+  return [(d.prenoms ?? "").trim(), patronyme].filter(Boolean).join(" ");
+}
+
 function mapper(
   etab: EtabApi,
   siren: string,
   nom: string,
   estSiege: boolean,
-  formeJuridique: string
+  formeJuridique: string,
+  entreprise?: EntrepriseApi
 ): EtablissementTrouve {
   const codePostal = etab.code_postal ?? "";
   const ville = etab.libelle_commune ?? "";
@@ -116,7 +166,27 @@ function mapper(
     activite: etab.activite_principale ?? "",
     estSiege,
     formeJuridique,
-    tvaIntracom: tvaIntracomFr(siren) ?? "",
+    ...identiteEntreprise(siren, entreprise),
+  };
+}
+
+/**
+ * Ce que l'annuaire sait de l'ENTREPRISE, et non de l'établissement.
+ *
+ * `etat_administratif` vaut « A » (active) ou « C » (cessée) ; toute autre
+ * valeur, l'absence comprise, est traitée comme active — on n'alarme pas sur
+ * une donnée qu'on n'a pas.
+ */
+function identiteEntreprise(siren: string, e: EntrepriseApi | undefined) {
+  const premier = (e?.dirigeants ?? [])[0];
+  const tvaAnnuaire = (e?.tva ?? []).find((n) => typeof n === "string" && n.trim());
+  return {
+    tvaIntracom: (tvaAnnuaire ?? tvaIntracomFr(siren) ?? "").trim(),
+    tvaConfirmee: Boolean(tvaAnnuaire),
+    dirigeant: nomDuDirigeant(premier),
+    dirigeantQualite: (premier?.qualite ?? "").trim(),
+    active: (e?.etat_administratif ?? "A").toUpperCase() !== "C",
+    dateFermeture: (e?.date_fermeture ?? "").trim(),
   };
 }
 
@@ -157,7 +227,7 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
     const etablissements = results
       .filter((e) => e.siege)
       .map((e) =>
-        mapper(e.siege!, e.siren ?? "", e.nom_complet ?? "", true, e.nature_juridique ?? "")
+        mapper(e.siege!, e.siren ?? "", e.nom_complet ?? "", true, e.nature_juridique ?? "", e)
       );
     return etablissements.length
       ? { type: "nom", etablissements }
@@ -181,11 +251,11 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
   if (chiffres.length === 9) {
     const etablissements: EtablissementTrouve[] = [];
     if (siege?.etat_administratif === "A") {
-      etablissements.push(mapper(siege, siren, `${nom} (Siège)`, true, formeJuridique));
+      etablissements.push(mapper(siege, siren, `${nom} (Siège)`, true, formeJuridique, ent));
     }
     for (const etab of autres) {
       if (etab.etat_administratif === "A" && etab.est_siege !== true) {
-        etablissements.push(mapper(etab, siren, nom, false, formeJuridique));
+        etablissements.push(mapper(etab, siren, nom, false, formeJuridique, ent));
       }
     }
     return etablissements.length
@@ -224,6 +294,6 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
   return {
     type: "siret",
     formeJuridique,
-    etablissement: mapper(trouve.etab, siren, nom, trouve.estSiege, formeJuridique),
+    etablissement: mapper(trouve.etab, siren, nom, trouve.estSiege, formeJuridique, ent),
   };
 }
