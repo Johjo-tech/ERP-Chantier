@@ -58,6 +58,13 @@ import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "
 import { apercuDe, urlApercuPdf, verifierPieceJointe } from "@/api/regles-piece-jointe";
 import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
+  estAvoir,
+  libelleDocument,
+  refusAvoir,
+  signeDocument,
+  totauxSignes,
+} from "@/api/regles-avoir";
+import {
   formaterTaux,
   montantLigneHt,
   montantLigneTtc,
@@ -80,6 +87,22 @@ import {
 } from "@/api/regles-reglements";
 import { extraireBonCommande, preparer, rapprocherClient, versSaisieBonCommande } from "./ocr";
 import { urlPieceJointe, urlTelechargementPieceJointe } from "./pieces-jointes";
+import {
+  ajouterDocumentRh,
+  chargerDocumentsRh,
+  majDocumentRh,
+  ouvrirDocumentRh,
+  purgerDocumentsRh,
+  supprimerDocumentRh,
+} from "./documents-rh";
+import {
+  TYPES_DOCUMENT_RH,
+  dossierSalarie,
+  etatDocumentRh,
+  libelleDocumentRh,
+  trierDocumentsRh,
+  typeDocumentRh,
+} from "@/api/regles-documents-rh";
 import {
   attenteAnnoncee,
   etatAnnule,
@@ -332,6 +355,19 @@ export async function tacheDuBonCommande(
   });
 }
 
+/**
+ * Établit l'avoir qui rectifie une facture émise.
+ *
+ * La société vient de la session, jamais de l'écran : c'est elle qui porte la
+ * série « AV » dont l'avoir tire son numéro, et une facture rectifiée depuis
+ * la mauvaise société ouvrirait un trou dans les deux séries à la fois.
+ */
+export async function etablirAvoir(factureId: Uuid, motif: string) {
+  const societe = societeActive();
+  if (!societe) throw new Error("Aucune société active.");
+  return queries.createAvoir(societe.uuid, factureId, motif);
+}
+
 export type { ActionsTache };
 
 /**
@@ -509,6 +545,14 @@ export function injecterSession() {
   w.pdfFacturX = enrichirFactureX;
   w.transmettreFacture = transmettre;
   w.etatConnexionPdp = etatConnexionPdp;
+  /* L'avoir : la seule correction qu'une facture émise accepte. La règle qui
+     le refuse et celle qui le signe sont les mêmes que côté base et export. */
+  w.etablirAvoir = etablirAvoir;
+  w.estAvoir = estAvoir;
+  w.signeDocument = signeDocument;
+  w.libelleDocument = libelleDocument;
+  w.totauxSignes = totauxSignes;
+  w.refusAvoir = refusAvoir;
   w.validerChiffrage = queries.validerChiffrage;
   w.validerAffaireConducteur = queries.validerAffaireConducteur;
   w.emettreFacture = queries.emettreFacture;
@@ -632,6 +676,22 @@ export function injecterSession() {
   w.urlApercuPdf = urlApercuPdf;
   w.urlPieceJointe = urlPieceJointe;
   w.urlTelechargementPieceJointe = urlTelechargementPieceJointe;
+
+  /* Le dossier documentaire d'un salarié. Il ne passe pas par le pont
+     kv_store : `salarie` y est sans table fille, et tout tableau posé sur la
+     fiche est écarté à l'écriture — c'est ce qui perdait les contrats. */
+  w.TYPES_DOCUMENT_RH = TYPES_DOCUMENT_RH;
+  w.typeDocumentRh = typeDocumentRh;
+  w.etatDocumentRh = etatDocumentRh;
+  w.dossierSalarie = dossierSalarie;
+  w.libelleDocumentRh = libelleDocumentRh;
+  w.trierDocumentsRh = trierDocumentsRh;
+  w.chargerDocumentsRh = chargerDocumentsRh;
+  w.ajouterDocumentRh = ajouterDocumentRh;
+  w.majDocumentRh = majDocumentRh;
+  w.supprimerDocumentRh = supprimerDocumentRh;
+  w.purgerDocumentsRh = purgerDocumentsRh;
+  w.ouvrirDocumentRh = ouvrirDocumentRh;
 
   // Alertes d'échéance, calées sur les colonnes réelles
   w.alertesVehicule = alertesVehicule;

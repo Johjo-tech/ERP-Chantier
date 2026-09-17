@@ -671,6 +671,23 @@ body.role-technicien .planning-card{ cursor:default; }
   margin-right:5px; animation:unreadBlink 1s ease-in-out infinite;
 }
 .chantier-file-row.is-unread{ font-weight:700; }
+/* Tableau de conformité RH : la pastille dit l'état d'une pièce en un coup
+   d'œil. La couleur seule ne suffit pas — chacune porte aussi un signe. */
+.doc-rh-pastille{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:50%; font-size:12px; font-weight:800;
+}
+.doc-rh-pastille.ok{ background:#e7f6ec; color:#15803d; }
+.doc-rh-pastille.bientot{ background:#fff4e0; color:#a56200; }
+.doc-rh-pastille.expire{ background:#ffe9ec; color:#a30f22; }
+.doc-rh-pastille.manquant{ background:var(--surface-2); color:#8a8f98; }
+/* L'icône seule ne se lit pas : « 🪪 » et « 🦺 » ne disent leur pièce à
+   personne. Le libellé l'accompagne, en petit, sous elle. */
+.stats-table thead th.doc-rh-colonne{
+  white-space:normal; text-align:center; width:76px; padding:8px 4px;
+  font-size:9.5px; letter-spacing:0; line-height:1.2;
+}
+.doc-rh-colonne span{ display:block; font-size:15px; margin-bottom:2px; }
 @keyframes unreadBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.15; } }
 .vehicule-card.is-vendu{ opacity:.65; }
 .vehicule-vendu-info{
@@ -1850,6 +1867,11 @@ let state = {
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]},
+  /* Le dossier documentaire des salariés. À part du reste : il ne transite pas
+     par le pont kv_store — `salarie` y est déclaré sans table fille, donc un
+     tableau posé sur la fiche est écarté à l'écriture. Il se charge et
+     s'enregistre par `src/integrations/documents-rh.ts`. */
+  documentsRh: [], documentsRhCharges: false, documentsRhSociete: null, rhDocFiltre: '', rhDocSalarieId: null, rhDocForm: null,
   /* Une entrée par listing, au lieu d'une propriété d'état par écran : c'est
      ce qui permet à `barreRecherche` et `filtrerListe` de rester génériques. */
   recherches: {}
@@ -2124,6 +2146,24 @@ function computeNotifications(){
   state.documents.filter(d=>d.societeId===soc).forEach(d=>{
     window.alertesDocument(d).forEach(a=> notifs.push(versNotif(a, '📑', 'parametres')));
   });
+
+  /* Le dossier documentaire des salariés : carte BTP, titre de séjour, visite
+     médicale… Le seuil est celui des documents légaux, réglable dans
+     Paramètres › RH. Rien tant que les dossiers ne sont pas chargés — l'onglet
+     RH les demande à son ouverture. */
+  if(dossiersRhPrets() && soc===state.societeId){
+    const today = todayISO(), seuil = seuilDocumentRh();
+    const nomDe = id => { const s = state.salaries.find(x=>x.id===id); return s? [s.prenom,s.nom].filter(Boolean).join(' ') : 'Salarié'; };
+    state.documentsRh.forEach(d=>{
+      const info = window.etatDocumentRh(d, today, seuil);
+      if(info.etat!=='expire' && info.etat!=='bientot') return;
+      notifs.push({
+        id:`docrh_${d.id}`, icon:'📁', urgent: info.etat==='expire',
+        texte: `${nomDe(d.salarieId)} — ${window.libelleDocumentRh(d)} ${info.jours<0? 'expiré' : `dans ${info.jours} j`} (${fmtDate(d.dateExpiration)})`,
+        onclick: `setTab('rh')`
+      });
+    });
+  }
   // Bons de commande en retard
   const today = todayISO();
   state.bonsCommande.filter(b=>b.societeId===soc && b.dateFinTravaux && b.dateFinTravaux<today).forEach(b=>{
@@ -2266,7 +2306,17 @@ function computeTotals(lignes){
   return {ht: t.ht, tva: t.tva, ttc: t.ttc};
 }
 function computeDocTotals(doc){
-  return computeTotalsAvecRemise(doc.lignes, doc.remisePourcentage||0);
+  /* Un avoir porte des montants POSITIFS, comme la facture qu'il rectifie :
+     c'est son type qui dit le sens, et l'export de la facture électronique
+     s'appuie déjà là-dessus pour signer. Le signe s'applique donc ici, à
+     l'unique endroit par où passent tous les montants affichés — listes,
+     tableau de bord, chiffre d'affaires, reste à payer. Le poser plus haut
+     obligerait à le poser vingt-quatre fois, et à n'en oublier aucune : un
+     avoir compté positif gonflerait les impayés de son propre montant. */
+  return window.totauxSignes(
+    computeTotalsAvecRemise(doc.lignes, doc.remisePourcentage||0),
+    doc.typeDocument
+  );
 }
 function esc(s){ return (s===undefined||s===null?'':s).toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function jsAttr(s){
@@ -4409,6 +4459,13 @@ async function rechargerType(type){
 }
 async function deleteItem(type, id){
   if(!confirm('Supprimer définitivement cet élément ?')) return;
+  /* `salarie_documents` part en cascade avec le salarié, mais pas les fichiers
+     du bucket : sans ce passage, le stockage garderait les contrats de gens
+     qui ne sont plus dans la base — précisément ce qu'on ne doit pas garder. */
+  if(type === 'salarie'){
+    try{ await window.purgerDocumentsRh(id); }
+    catch(err){ console.error('Dossier documentaire non purgé', id, err); }
+  }
   let factureIdToSync = null;
   if(type === 'reglement'){
     const reg = state.reglements.find(r=>r.id===id);
@@ -4416,6 +4473,7 @@ async function deleteItem(type, id){
   }
   await stDelete(type+':'+id);
   await rechargerType(type);
+  if(type === 'salarie') await chargerDossiersRh(true);
   /* syncFactureStatut recharge les factures de son côté. */
   if(factureIdToSync) await syncFactureStatut(factureIdToSync);
   renderTab();
@@ -4715,7 +4773,9 @@ function documentImprimable(type, id){
   }
   const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
   if(!doc) return null;
-  return { doc, titre: type==='devis' ? 'DEVIS' : 'FACTURE' };
+  /* « AVOIR », et non « FACTURE » : un avoir imprimé sous le mot facture est
+     faux pour qui le reçoit comme pour qui le comptabilise. */
+  return { doc, titre: type==='devis' ? 'DEVIS' : window.libelleDocument(doc.typeDocument) };
 }
 function renderPrintDoc(type, id, hidePrices, lignesOverride){
   const resolu = documentImprimable(type, id);
@@ -4876,6 +4936,12 @@ function factureDocMetaHTML(doc){
   if(doc.refBonCommandeClient) lignes.push('Votre bon de commande : <b>'+esc(doc.refBonCommandeClient)+'</b>');
   if(devis && devis.numero) lignes.push('Devis : <b>'+esc(devis.numero)+'</b>');
   if(doc.refMarche) lignes.push('Marché : <b>'+esc(doc.refMarche)+'</b>');
+  /* Un avoir désigne la pièce qu'il rectifie et dit pourquoi : sans cela, le
+     destinataire ne sait pas sur quoi l'imputer, et rien ne justifie la
+     rectification à qui relira les comptes. */
+  const rectifiee = doc.factureRectifieeId ? state.factures.find(f=>f.id===doc.factureRectifieeId) : null;
+  if(rectifiee && rectifiee.numero) lignes.push('Rectifie la facture : <b>'+esc(rectifiee.numero)+'</b> du '+fmtDate(rectifiee.date));
+  if(doc.motifRectification) lignes.push('Motif : <b>'+esc(doc.motifRectification)+'</b>');
   return lignes.length ? '<br>'+lignes.join('<br>') : '';
 }
 
@@ -6112,13 +6178,16 @@ function renderFacturesListHTML(list){
        stocké ne distingue pas le partiel du non-réglé, et une facture réglée à
        moitié se lisait « impayée » sans qu'on sache qu'un acompte était tombé. */
     const reg = reglementStatutFacture(f);
+    const estUnAvoir = window.estAvoir(f.typeDocument);
+    const rectifiee = f.factureRectifieeId ? state.factures.find(x=>x.id===f.factureRectifieeId) : null;
     const devisOrigine = f.devisId ? state.devis.find(d=>d.id===f.devisId) : null;
     const rapportOrigine = f.interventionId ? state.interventions.find(i=>i.id===f.interventionId) : null;
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
     return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${f.id}')"><div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${esc(f.numero)}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
+      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${esc(f.numero)}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
       ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${devisOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
+      ${rectifiee? `<div class="card-sub">Rectifie la facture : <a href="javascript:void(0)" onclick="event.stopPropagation(); goToFacture('${rectifiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rectifiee.numero)}</a>${f.motifRectification? ' · '+esc(f.motifRectification):''}</div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="event.stopPropagation(); ouvrirBonCommandeOrigine('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;" title="${bonCommandeOrigine.pieceJointeChemin? 'Voir le bon reçu du client' : 'Aller au bon de commande'}">${esc(bonCommandeOrigine.numeroBC)}${bonCommandeOrigine.pieceJointeChemin? ' 📎':''}</a></div>`:''}
       </div>
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}${reg.paye > 0.004 ? `<div class="card-sub" style="margin-top:2px;">réglé ${moneyDisplay(reg.paye)}${reg.reste > 0.004? ' · reste '+moneyDisplay(reg.reste):''}</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}</div></div>
@@ -6128,6 +6197,7 @@ function renderFacturesListHTML(list){
       <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
       ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
+      ${f.numero && !estUnAvoir? `<button class="btn small" onclick="etablirAvoirPour('${f.id}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>` : ''}
       <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
     </div></div>`;
   }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';
@@ -6142,16 +6212,20 @@ function factureForm(){
   const emise = !!(e.id && e.numero);
   const verrouillee = e.id && e.verrouillee && !emise;
   const fige = emise || verrouillee;
+  const unAvoir = window.estAvoir(e.typeDocument);
+  const rectifieeEcran = e.factureRectifieeId ? state.factures.find(f=>f.id===e.factureRectifieeId) : null;
   return `
   <div class="form-panel">
-    <h3>${e.id? (emise? 'Facture '+esc(e.numero) : 'Modifier la facture') :'Nouvelle facture'}</h3>
+    <h3>${e.id? (emise? (unAvoir?'Avoir ':'Facture ')+esc(e.numero) : 'Modifier la facture') :'Nouvelle facture'}</h3>
     ${emise? `<div class="facture-verrou-banner">
-      <span>🔒 Facture émise sous le n° ${esc(e.numero)} — son contenu est définitif (art. L441-9). Une correction passe par un avoir.</span>
+      <span>🔒 ${unAvoir? 'Avoir' : 'Facture'} émis${unAvoir?'':'e'} sous le n° ${esc(e.numero)} — son contenu est définitif (art. L441-9).${unAvoir? '' : ' Une correction passe par un avoir.'}</span>
       <span style="font-weight:400;">L'encaissement s'enregistre dans l'onglet <b>Règlements</b>.</span>
+      ${unAvoir? '' : `<button type="button" class="btn small" onclick="etablirAvoirPour('${e.id}')" title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>`}
     </div>` : verrouillee? `<div class="facture-verrou-banner">
       <span>🔒 Cette facture a déjà été téléchargée ou envoyée — elle est verrouillée pour éviter une modification accidentelle.</span>
       <button type="button" class="btn small danger" onclick="deverrouillerFacture('${e.id}')">🔓 Déverrouiller pour modifier</button>
     </div>` : ''}
+    ${unAvoir && rectifieeEcran? `<div class="numref" style="margin-bottom:10px;">Rectifie la facture ${esc(rectifieeEcran.numero)} du ${fmtDate(rectifieeEcran.date)}${e.motifRectification? ' — '+esc(e.motifRectification):''}</div>`:''}
     <div style="${fige? 'pointer-events:none; opacity:.55;' : ''}">
     ${e.devisId? `<div class="numref" style="margin-bottom:10px;">Générée à partir d'un devis</div>`:''}
     ${e.interventionId? `<div class="numref" style="margin-bottom:10px;">Issue d'un rapport d'intervention</div>`:''}
@@ -6179,9 +6253,6 @@ function factureForm(){
              facture créée sans bon. */''}
         <div class="field"><label>N° de bon de commande du client</label><input type="text" id="f_refBonCommandeClient" value="${esc(e.refBonCommandeClient||'')}" placeholder="La référence que le client rapprochera"></div>
         <div class="field"><label>N° de marché</label><input type="text" id="f_refMarche" value="${esc(e.refMarche||'')}" placeholder="Lorsqu'il en existe un"></div>
-        <div class="field"><label>Acompte déjà versé (€)</label><input type="number" min="0" step="0.01" id="f_acomptesDeduits" value="${esc(e.acomptesDeduits||'')}"></div>
-        <div class="field"><label>Retenue de garantie (%)</label><input type="number" min="0" max="100" step="0.5" id="f_retenueGarantie" value="${esc(e.retenueGarantiePourcentage ?? '')}" placeholder="5 si le marché la prévoit"></div>
-        <div class="field"><label>Chantier lié (optionnel)</label><select id="f_chantierId">${chantierSelectOptions(e.chantierId)}</select></div>
       </div>
     </div>
     <div class="form-section">
@@ -6234,7 +6305,11 @@ async function saveFacture(){
      référence même si la saisie est abandonnée — c'est ce qui creusait des
      trous dans une série que la loi veut continue. */
   const numero = e.numero || '';
-  const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, refBonCommandeClient: champSaisi('f_refBonCommandeClient', e.refBonCommandeClient) || null, chantierId: document.getElementById('f_chantierId').value || null, client,
+  /* Ces trois-là ne se saisissent pas : ils viennent de l'établissement de
+     l'avoir. Absents de l'objet, ils seraient réécrits à NULL — `columns=` est
+     construit sur les clés envoyées, et un avoir rouvert puis enregistré
+     redeviendrait une facture, avec son numéro « AV » et son montant positif. */
+  const obj = { id, societeId: state.societeId, numero, typeDocument: e.typeDocument || 'facture', factureRectifieeId: e.factureRectifieeId || null, motifRectification: e.motifRectification || null, createdAt: e.createdAt || new Date().toISOString(), devisId: e.devisId || null, interventionId: e.interventionId || null, bonCommandeId: e.bonCommandeId || null, refBonCommandeClient: champSaisi('f_refBonCommandeClient', e.refBonCommandeClient) || null, chantierId: e.chantierId || null, client,
     adresse: resolveClientAdresse(client),
     interlocuteur: document.getElementById('f_interlocuteur').value,
     adresseLocataire: document.getElementById('f_adresseLocataire').value,
@@ -6257,12 +6332,13 @@ async function saveFacture(){
        que si elle diffère de la date de facture. */
     dateFinExecution: document.getElementById('f_dateFinExecution').value || null,
     refMarche: document.getElementById('f_refMarche').value || null,
-    acomptesDeduits: parseFloat(document.getElementById('f_acomptesDeduits').value) || 0,
-    /* `null` et non `0` : la colonne distingue « le marché n'en prévoit pas »
-       d'une retenue au taux nul, et le document n'affiche rien dans le premier
-       cas. */
-    retenueGarantiePourcentage: document.getElementById('f_retenueGarantie').value === ''
-      ? null : (parseFloat(document.getElementById('f_retenueGarantie').value) || 0),
+    /* Acompte, retenue de garantie et chantier lié ne se saisissent plus ici.
+       Les reconduire depuis `e` plutôt que les omettre : un champ absent est
+       écrit à NULL par PostgREST, et une facture reprise d'un devis perdrait
+       silencieusement son acompte. `null` et non `0` pour la retenue — la
+       colonne distingue « le marché n'en prévoit pas » d'un taux nul. */
+    acomptesDeduits: e.acomptesDeduits || 0,
+    retenueGarantiePourcentage: e.retenueGarantiePourcentage ?? null,
     /* Les conditions vivent SUR la facture, pas seulement chez le client :
        sans elles, changer le délai d'un client rendait impossible de savoir
        sous quelle condition une facture ancienne avait été émise, et de
@@ -6281,6 +6357,42 @@ async function saveFacture(){
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');
   closeForm('facture');
+}
+
+/**
+ * Établit l'avoir qui rectifie une facture émise.
+ *
+ * Le motif est demandé avant toute confirmation : c'est lui qui distingue un
+ * avoir d'une facture qu'on efface. Il s'imprime sur le document, part avec la
+ * facture électronique, et reste la seule trace de ce qui s'est passé.
+ *
+ * Ce qui refuse l'avoir est décidé par `refusAvoir`, la même règle que celle
+ * qu'appliquera la couche d'accès : demander deux fois évite d'ouvrir une
+ * saisie qui finirait rejetée, sans que les deux messages puissent diverger.
+ */
+async function etablirAvoirPour(factureId){
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+  if(!window.etablirAvoir){ showToast("L'établissement d'un avoir n'est pas disponible."); return; }
+
+  const motif = (prompt(`Avoir sur la facture ${f.numero}\n\nMotif de la rectification (il s'imprime sur l'avoir) :`, '') || '').trim();
+  if(!motif) return;
+
+  const refus = window.refusAvoir({ facture:{ numero:f.numero, typeDocument:f.typeDocument }, motif });
+  if(refus){ alert(refus); return; }
+
+  const ttc = Math.abs(computeDocTotals(f).ttc);
+  if(!confirm(`Établir un avoir de ${moneyDisplay(ttc)} TTC sur la facture ${f.numero} ?\n\nIl en reprend toutes les lignes et reçoit un numéro de la série « AV ». La facture, elle, ne bouge pas.`)) return;
+
+  try{
+    const avoir = await window.etablirAvoir(factureId, motif);
+    await recharger('facture');
+    showToast(`Avoir ${avoir && avoir.numero ? avoir.numero : ''} établi.`);
+    if(avoir && avoir.id) goToFacture(avoir.id);
+  }catch(err){
+    console.error('Avoir non établi', err);
+    alert((err && err.message) || "L'avoir n'a pas pu être établi.");
+  }
 }
 
 /* ---------- Règlements ---------- */
@@ -8556,7 +8668,14 @@ async function annulerRappel(kind, id){
    enregistrés — la base les gardait, l'écran ne les montrait plus. Et on ne
    joint pas qu'un locataire : un gardien, un syndic, un gestionnaire se
    relancent aussi. La zone se montre désormais partout ; en lecture seule,
-   elle reste muette tant qu'il n'y a rien à dire. */
+   elle reste muette tant qu'il n'y a rien à dire.
+
+   Une carte posée sur le planning est déjà planifiée : on ne relance plus un
+   locataire qu'on a fini par joindre, et les trois boutons mangeaient les
+   lignes utiles d'une vignette contrainte par sa durée. Elle n'y garde donc
+   que la trace — les tentatives, le rappel prévu. Les boutons restent sur la
+   colonne « à planifier », sur la fiche qu'ouvre un clic, et dans la liste des
+   bons de commande. */
 function planningContactZoneHTML(b, readOnly){
   const kind = b.kind || 'bonCommande';
   const tentatives = b.tentativesContact||[];
@@ -8740,7 +8859,7 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
   return `<div class="planning-card planning-card-scheduled ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="true" ondragstart="dragStartBC(event,'${b.kind}','${b.id}')" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}','${dayIso}')" style="top:${top}; height:${height}; ${couleurStyle}">
     ${estSousTraitant()? '' : `<button class="planning-unschedule" onclick="unscheduleBC('${b.kind}','${b.id}')" title="Retirer du planning">✕</button>`}
     <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
-    ${planningContactZoneHTML(b)}
+    ${planningContactZoneHTML(b, true)}
     <div class="planning-card-sub">${esc(b.numero)}</div>
     ${b.isSAV? '' : `<div class="planning-etape planning-etape-${etapeWorkflow(b).cle}" title="${esc(etapeWorkflow(b).label)}">${esc(etapeWorkflow(b).court)}</div>`}
     ${b.interlocuteur? `<div class="planning-card-sub">👤 ${esc(b.interlocuteur)}</div>`:''}
@@ -10539,12 +10658,17 @@ function envoyerDocumentEmail(type, id){
   if(!doc) return;
   const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===doc.client);
   const dest = client && client.email ? client.email : '';
-  const titre = type==='devis' ? 'devis' : 'facture';
+  /* « Notre facture » sur un avoir, avec un montant négatif dans la phrase :
+     le client lisait l'inverse de ce qu'il recevait. Le mot suit le type, et le
+     montant s'annonce en valeur absolue — c'est « en votre faveur » qui porte
+     le sens, pas un signe moins au milieu d'une phrase. */
+  const unAvoir = type!=='devis' && window.estAvoir(doc.typeDocument);
+  const titre = type==='devis' ? 'devis' : (unAvoir ? 'avoir' : 'facture');
   const t = computeDocTotals(doc);
   const subject = `${titre.charAt(0).toUpperCase()+titre.slice(1)} ${doc.numero} — ${societeName(state.societeId)}`;
   const infosLogement = lignesLogementPourEmail(doc);
   const blocLogement = infosLogement.length ? `\n${infosLogement.join('\n')}\n` : '';
-  const body = `Bonjour,\n${blocLogement}\nVeuillez trouver ci-joint notre ${titre} n° ${doc.numero} d'un montant de ${money(t.ttc)} TTC.\n\nN'hésitez pas à nous contacter pour toute question.\n\nCordialement,\n${societeName(state.societeId)}`;
+  const body = `Bonjour,\n${blocLogement}\nVeuillez trouver ci-joint notre ${titre} n° ${doc.numero} d'un montant de ${money(Math.abs(t.ttc))} TTC${unAvoir? ' en votre faveur':''}.\n\nN'hésitez pas à nous contacter pour toute question.\n\nCordialement,\n${societeName(state.societeId)}`;
   openEmailComposeModal({dest, subject, body, pdfAction: ()=> printDocument(type, id, 'save'), docType: type, docId: id});
 }
 
@@ -13877,11 +14001,17 @@ function renderRH(){
   if(state.viewingRegistre) return renderRegistreUniquePersonnel();
   const vue = state.rhView || 'salaries';
   const equipes = state.techniciens.filter(t=>t.societeId===state.societeId);
+  /* Les dossiers ne viennent pas du pont : on les demande dès qu'un écran RH
+     s'affiche, y compris la liste des salariés — c'est elle qui porte le
+     badge « dossier incomplet ». */
+  chargerDossiersRh();
   const sousNav = `
     <div class="plus-subnav" style="justify-content:center;">
       <button class="plus-subnav-btn ${vue==='salaries'?'active':''}" onclick="setRhView('salaries')">Salariés</button>
+      <button class="plus-subnav-btn ${vue==='documents'?'active':''}" onclick="setRhView('documents')">Documents</button>
       <button class="plus-subnav-btn ${vue==='equipes'?'active':''}" onclick="setRhView('equipes')">Équipes ${equipes.length? `(${equipes.length})`:''}</button>
     </div>`;
+  if(vue==='documents') return sousNav + renderRHDocuments();
   if(vue==='equipes') return sousNav + renderEquipesRH();
   return sousNav + renderRHSalaries();
 }
@@ -14084,10 +14214,14 @@ function renderSalarieListHTML(list){
     const visiteAlerte = alerteEcheance(s.visiteMedicaleProchaine);
     const today = todayISO();
     const absenceEnCours = (s.absences||[]).find(a=>a.dateDebut<=today && a.dateFin>=today);
+    /* Tant que les dossiers ne sont pas revenus, pas de badge : afficher
+       « incomplet » sur un dossier qu'on n'a pas encore lu serait un mensonge
+       le temps d'un aller-retour réseau. */
+    const dossier = dossiersRhPrets() ? dossierDuSalarie(s.id) : null;
     return `<div class="card">
       <div class="card-row">
         <div style="flex:1; min-width:0;">
-          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte||visiteAlerte? '<span class="badge warn" style="margin-left:6px;">⚠ à vérifier</span>':''}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}</div>
+          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte||visiteAlerte? '<span class="badge warn" style="margin-left:6px;">⚠ à vérifier</span>':''}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc(dossier.manquants.map(t=>t.libelle).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}</div>
           <div class="card-sub">${esc(s.poste||'')}${s.typeContrat? ' · '+esc(s.typeContrat):''}${s.technicienId? ' · 🔧 équipe liée':''}</div>
           <div class="card-sub">${s.telephone? '📞 '+esc(s.telephone):''}${s.email? ' · ✉ '+esc(s.email):''}</div>
         </div>
@@ -14100,59 +14234,346 @@ function renderSalarieListHTML(list){
       </div>
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn small" onclick="editItem('salarie','${s.id}')">Modifier</button>
+        <button class="btn small" onclick="ouvrirDossierRhDepuisListe('${s.id}')">📁 Dossier</button>
         <button class="btn small danger" onclick="deleteItem('salarie','${s.id}')">Supprimer</button>
       </div>
     </div>`;
   }).join('');
 }
-function salarieFileInputHTML(salarieId, listKey, inputId, accept){
-  return `<input type="file" id="${inputId}" accept="${accept||'*'}" style="display:none;" onchange="handleSalarieFileAdd('${salarieId}','${listKey}', this.files[0]); this.value='';">`;
+/* ---------- Dossier documentaire du salarié ----------
+
+   Les documents vivent dans `salarie_documents`, leurs fichiers dans le bucket
+   privé `terrain`. Ils ne transitent PAS par le pont kv_store : `salarie` y est
+   déclaré sans table fille, si bien qu'un tableau posé sur la fiche est filtré
+   par `colonnesDe()` avant l'envoi. C'est précisément ce qui arrivait aux
+   « Contrat de travail » et « Avenants » de cet écran : le fichier était encodé
+   en data-URL sur la fiche, affiché aussitôt depuis le cache, et perdu au
+   rechargement suivant sans qu'aucune erreur ne le dise.
+
+   Tout passe donc par les fonctions posées sur `window` par
+   `src/integrations/documents-rh.ts`, et les règles — types attendus, dossier
+   complet ou non — par `src/api/regles-documents-rh.ts`, qui est testé. */
+
+function seuilDocumentRh(){
+  const seuils = reglagesCourants().seuils || {};
+  return seuils.documentLegal != null ? seuils.documentLegal : 30;
 }
-async function handleSalarieFileAdd(salarieId, listKey, file){
-  if(!file) return;
-  if(file.size > 8*1024*1024){ showToast('Fichier trop volumineux (8 Mo maximum).'); return; }
-  const reader = new FileReader();
-  reader.onload = async (ev)=>{
-    const s = state.salaries.find(x=>x.id===salarieId);
-    if(!s) return;
-    if(!s[listKey]) s[listKey] = [];
-    s[listKey].push({ id: uid(), nom: file.name, date: todayISO(), data: ev.target.result });
-    if(state.editing && state.editing.id===salarieId) state.editing[listKey] = s[listKey];
-    await stSet('salarie:'+salarieId, s);
-    await recharger('salarie');
+function documentsDuSalarie(salarieId){
+  return window.trierDocumentsRh(state.documentsRh.filter(d=>d.salarieId===salarieId));
+}
+function dossierDuSalarie(salarieId){
+  return window.dossierSalarie(documentsDuSalarie(salarieId), todayISO(), seuilDocumentRh());
+}
+/* Le dossier se charge à part du reste, et il est indexé par société : sans
+   cette clé, changer de société montrerait les dossiers de la précédente.
+
+   La requête en vol se retient dans `chargementDossiersRh`. Deux raisons : le
+   rendu appelle cette fonction à chaque passage et ne doit pas la relancer, et
+   les écrans doivent savoir distinguer « dossier vide » de « pas encore lu » —
+   sans quoi ils annonceraient tous les dossiers incomplets le temps d'un
+   aller-retour réseau. */
+let chargementDossiersRh = null;
+function dossiersRhPrets(){
+  return !chargementDossiersRh
+    && state.documentsRhCharges
+    && state.documentsRhSociete === state.societeId;
+}
+function chargerDossiersRh(force){
+  if(chargementDossiersRh) return chargementDossiersRh;
+  if(!force && dossiersRhPrets()) return Promise.resolve();
+  const societe = state.societeId;
+  const ids = state.salaries.filter(s=>s.societeId===societe).map(s=>s.id);
+  chargementDossiersRh = (async ()=>{
+    try{
+      state.documentsRh = await window.chargerDocumentsRh(ids);
+    }catch(err){
+      console.error('Dossiers documentaires illisibles', err);
+      state.documentsRh = [];
+      showToast("Les dossiers documentaires n'ont pas pu être chargés.");
+    }finally{
+      /* Marqué lu même en cas d'échec : sinon chaque rendu relance la requête
+         qui vient d'échouer, et l'écran se met à clignoter. */
+      state.documentsRhCharges = true;
+      state.documentsRhSociete = societe;
+      chargementDossiersRh = null;
+    }
     renderTab();
-  };
-  reader.readAsDataURL(file);
+  })();
+  return chargementDossiersRh;
 }
-async function removeSalarieFile(salarieId, listKey, fileId){
-  const s = state.salaries.find(x=>x.id===salarieId);
-  if(!s) return;
-  s[listKey] = (s[listKey]||[]).filter(f=>f.id!==fileId);
-  if(state.editing && state.editing.id===salarieId) state.editing[listKey] = s[listKey];
-  await stSet('salarie:'+salarieId, s);
-  await recharger('salarie');
+
+function etatDocumentRhBadge(doc){
+  const info = window.etatDocumentRh(doc, todayISO(), seuilDocumentRh());
+  if(info.etat === 'expire') return `<span class="badge danger">Expiré le ${fmtDate(doc.dateExpiration)}</span>`;
+  if(info.etat === 'bientot') return `<span class="badge warn">Expire dans ${info.jours} j</span>`;
+  if(info.etat === 'valide') return `<span class="card-sub">Valide jusqu'au ${fmtDate(doc.dateExpiration)}</span>`;
+  /* Un périssable sans date de fin ne déclenchera jamais d'alerte : le dire,
+     sinon l'absence de badge se lit comme « tout va bien ». */
+  if(info.sansEcheance) return `<span class="badge warn" title="Aucune alerte ne préviendra de son expiration">Sans date de fin</span>`;
+  return '';
+}
+function documentRhRowHTML(doc){
+  const t = window.typeDocumentRh(doc.type);
+  const details = [t.libelle, doc.organisme, doc.numeroDocument? 'n° '+doc.numeroDocument : '', doc.dateDocument? 'du '+fmtDate(doc.dateDocument) : '']
+    .filter(Boolean).map(esc).join(' · ');
+  return `<div class="chantier-file-row">
+    <span style="flex:1; min-width:0;">
+      ${t.icone} <strong>${esc(window.libelleDocumentRh(doc))}</strong>
+      <span class="card-sub">${details}</span>
+      ${doc.notes? `<span class="card-sub">📝 ${esc(doc.notes)}</span>`:''}
+    </span>
+    ${etatDocumentRhBadge(doc)}
+    ${doc.fichierChemin
+      ? `<button class="btn small ghost" onclick="ouvrirDocumentRhEcran('${doc.id}')">📎 Ouvrir</button>`
+      : '<span class="card-sub" title="Ligne enregistrée sans fichier joint">sans fichier</span>'}
+    <button class="btn small" onclick="ouvrirFormDocumentRh('${doc.salarieId}','${doc.id}')">Modifier</button>
+    <button class="btn small danger" onclick="supprimerDocumentRhEcran('${doc.id}')">✕</button>
+  </div>`;
+}
+/* Le dossier d'un salarié : ce qu'il contient, ce qui lui manque, et de quoi
+   compléter. Servi tel quel dans l'onglet Documents et dans la fiche. */
+function dossierRhHTML(salarie){
+  if(!dossiersRhPrets()){
+    chargerDossiersRh();
+    return '<div class="empty">Chargement du dossier…</div>';
+  }
+  const docs = documentsDuSalarie(salarie.id);
+  const bilan = dossierDuSalarie(salarie.id);
+  const formIci = state.rhDocForm && state.rhDocForm.salarieId === salarie.id;
+  const resume = bilan.manquants.length
+    ? `<div class="card-sub" style="color:#a30f22;">⚠ Manque au dossier : ${bilan.manquants.map(t=>esc(t.libelle)).join(', ')}</div>`
+    : `<div class="card-sub" style="color:#15803d;">✓ Toutes les pièces obligatoires sont au dossier.</div>`;
+  return `
+    ${resume}
+    <div style="margin-top:10px;">${docs.length? docs.map(documentRhRowHTML).join('') : '<div class="empty">Aucun document au dossier.</div>'}</div>
+    ${formIci? formDocumentRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormDocumentRh('${salarie.id}')">+ Ajouter un document</button>`}
+  `;
+}
+function ouvrirFormDocumentRh(salarieId, docId){
+  const doc = docId ? state.documentsRh.find(d=>d.id===docId) : null;
+  state.rhDocForm = {
+    salarieId, id: doc? doc.id : null,
+    type: doc? doc.type : 'contrat',
+    nom: doc? (doc.nom||'') : '',
+    organisme: doc? (doc.organisme||'') : '',
+    numeroDocument: doc? (doc.numeroDocument||'') : '',
+    dateDocument: doc? (doc.dateDocument||'') : '',
+    dateExpiration: doc? (doc.dateExpiration||'') : '',
+    notes: doc? (doc.notes||'') : '',
+    fichierNom: doc? (doc.fichierNom||'') : ''
+  };
   renderTab();
 }
-async function updateSalarieFileDate(salarieId, listKey, fileId, newDate){
-  const s = state.salaries.find(x=>x.id===salarieId);
-  if(!s) return;
-  const f = (s[listKey]||[]).find(x=>x.id===fileId);
-  if(!f) return;
-  f.date = newDate;
-  if(state.editing && state.editing.id===salarieId) state.editing[listKey] = s[listKey];
-  await stSet('salarie:'+salarieId, s);
-  await recharger('salarie');
-  showToast('Date mise à jour.', 'success');
+function fermerFormDocumentRh(){
+  state.rhDocForm = null;
+  renderTab();
 }
-function salarieFileListHTML(s, listKey){
-  const list = s[listKey]||[];
-  if(!list.length) return '<div class="empty">Aucun fichier pour l\'instant.</div>';
-  return list.map(f=>`
-    <div class="chantier-file-row">
-      <a href="javascript:void(0)" onclick="openAttachmentPreview('${jsAttr(f.data)}','${jsAttr(f.nom)}')">📎 ${esc(f.nom)}</a>
-      <input type="date" value="${f.date||''}" style="width:auto; font-size:11px; padding:3px 6px;" onchange="updateSalarieFileDate('${s.id}','${listKey}','${f.id}', this.value)">
-      <button class="btn small danger" onclick="removeSalarieFile('${s.id}','${listKey}','${f.id}')">✕</button>
-    </div>`).join('');
+function formDocumentRhHTML(){
+  const f = state.rhDocForm;
+  const choisi = window.typeDocumentRh(f.type);
+  return `<div class="form-panel" style="margin-top:12px;">
+    <h3>${f.id? 'Modifier le document' : 'Ajouter un document au dossier'}</h3>
+    <div class="field-grid">
+      <div class="field"><label>Type de document</label><select id="docRh_type" onchange="onTypeDocumentRhChange()">
+        ${window.TYPES_DOCUMENT_RH.map(t=>`<option value="${t.code}" ${f.type===t.code?'selected':''}>${t.icone} ${esc(t.libelle)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Libellé</label><input type="text" id="docRh_nom" value="${esc(f.nom)}" placeholder="${esc(choisi.libelle)}"></div>
+      <div class="field"><label>Organisme émetteur</label><input type="text" id="docRh_organisme" value="${esc(f.organisme)}" placeholder="Ex : CIBTP, médecine du travail…"></div>
+      <div class="field"><label>Numéro du document</label><input type="text" id="docRh_numeroDocument" value="${esc(f.numeroDocument)}"></div>
+      <div class="field"><label>Date du document</label><input type="date" id="docRh_dateDocument" value="${f.dateDocument||''}"></div>
+      <div class="field"><label>Fin de validité</label><input type="date" id="docRh_dateExpiration" value="${f.dateExpiration||''}">
+        <div class="card-sub" id="docRh_avertissementEcheance" style="margin-top:4px; ${choisi.perissable?'':'display:none;'}">Sans cette date, aucune alerte ne préviendra de son expiration.</div></div>
+      <div class="field full"><label>Notes</label><input type="text" id="docRh_notes" value="${esc(f.notes)}"></div>
+    </div>
+    <div class="achat-salarie-zone">
+      <label class="btn small" style="cursor:pointer;">📎 ${f.id && f.fichierNom? 'Remplacer le fichier' : 'Joindre le fichier'}<input type="file" id="docRh_fichier" accept=".pdf,image/*" style="display:none;" onchange="onFichierDocumentRhChange()"></label>
+      <span class="card-sub" id="docRh_fichierNom">${f.fichierNom? esc(f.fichierNom) : 'PDF, JPEG, PNG ou WebP'}</span>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn primary" onclick="enregistrerDocumentRh()">Enregistrer</button>
+      <button class="btn ghost" onclick="fermerFormDocumentRh()">Annuler</button>
+    </div>
+  </div>`;
+}
+/* Le panneau ne se redessine pas au changement de type : le fichier déjà
+   choisi vit dans l'élément `input`, et un redessin le perdrait sans le dire. */
+function onTypeDocumentRhChange(){
+  const type = document.getElementById('docRh_type').value;
+  state.rhDocForm.type = type;
+  const t = window.typeDocumentRh(type);
+  document.getElementById('docRh_nom').placeholder = t.libelle;
+  document.getElementById('docRh_avertissementEcheance').style.display = t.perissable? '' : 'none';
+}
+function onFichierDocumentRhChange(){
+  const fichier = (document.getElementById('docRh_fichier').files||[])[0];
+  const zone = document.getElementById('docRh_fichierNom');
+  if(!fichier){ zone.textContent = 'PDF, JPEG, PNG ou WebP'; return; }
+  const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
+  zone.textContent = verdict.ok ? fichier.name : verdict.motif;
+}
+async function enregistrerDocumentRh(){
+  const f = state.rhDocForm;
+  if(!f) return;
+  const saisie = {
+    type: document.getElementById('docRh_type').value,
+    nom: document.getElementById('docRh_nom').value,
+    organisme: document.getElementById('docRh_organisme').value,
+    numeroDocument: document.getElementById('docRh_numeroDocument').value,
+    dateDocument: document.getElementById('docRh_dateDocument').value,
+    dateExpiration: document.getElementById('docRh_dateExpiration').value,
+    notes: document.getElementById('docRh_notes').value
+  };
+  const fichier = (document.getElementById('docRh_fichier').files||[])[0] || null;
+  if(fichier){
+    /* Même verdict que pour le bon du client : un seul jeu de règles, donc un
+       seul refus possible et les mêmes mots pour l'expliquer. */
+    const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
+    if(!verdict.ok){ showToast(verdict.motif); return; }
+  }
+  if(!f.id && !fichier && !saisie.nom.trim()){
+    showToast('Donnez au moins un libellé ou joignez un fichier.');
+    return;
+  }
+  try{
+    if(f.id) await window.majDocumentRh(f.id, saisie, fichier);
+    else await window.ajouterDocumentRh(f.salarieId, saisie, fichier);
+  }catch(err){
+    console.error('Document RH refusé', err);
+    showToast(refusDocumentRh(err));
+    return;
+  }
+  state.rhDocForm = null;
+  await chargerDossiersRh(true);
+  showToast('Document enregistré.', 'success');
+}
+/* Un refus de la base n'est pas une panne : le plus fréquent est le droit
+   manquant, et « échec de l'enregistrement » enverrait chercher ailleurs. */
+function refusDocumentRh(err){
+  const code = (err && (err.code || (err.cause && err.cause.code))) || '';
+  if(code === '42501') return "Vous n'avez pas le droit de modifier les dossiers RH.";
+  return saveFailedMessage();
+}
+async function supprimerDocumentRhEcran(docId){
+  const doc = state.documentsRh.find(d=>d.id===docId);
+  if(!doc) return;
+  if(!confirm('Retirer ce document du dossier ? Le fichier joint sera supprimé.')) return;
+  try{
+    await window.supprimerDocumentRh(doc);
+  }catch(err){
+    console.error('Document RH non supprimé', err);
+    showToast(refusDocumentRh(err));
+    return;
+  }
+  await chargerDossiersRh(true);
+  showToast('Document retiré du dossier.', 'success');
+}
+async function ouvrirDocumentRhEcran(docId){
+  const doc = state.documentsRh.find(d=>d.id===docId);
+  if(!doc) return;
+  try{
+    const ouvert = await window.ouvrirDocumentRh(doc);
+    if(!ouvert){ showToast("Ce document n'a pas de fichier joint."); return; }
+    openAttachmentPreview(ouvert.url, ouvert.nom, ouvert.mime, ouvert.urlTelechargement);
+  }catch(err){
+    /* Le chemin désigne un objet disparu, ou les droits ont changé. Le dire :
+       un aperçu qui ne s'ouvre pas sans un mot laisse croire à un clic raté. */
+    console.error('Document RH illisible', doc.fichierChemin, err);
+    showToast("Le document n'a pas pu être ouvert.");
+  }
+}
+/* Le tableau de conformité : une ligne par salarié, une colonne par pièce
+   obligatoire. La pastille donne l'état le PIRE des documents de ce type —
+   deux visites médicales dont une périmée, c'est une visite médicale périmée
+   tant que la nouvelle n'a pas de date. */
+function pastilleDocumentRh(docs, type){
+  const dedans = docs.filter(d=>d.type===type.code);
+  if(!dedans.length) return `<span class="doc-rh-pastille manquant" title="Manquant">✕</span>`;
+  const today = todayISO(), seuil = seuilDocumentRh();
+  const etats = dedans.map(d=>window.etatDocumentRh(d, today, seuil));
+  if(etats.some(e=>e.etat==='expire')) return `<span class="doc-rh-pastille expire" title="Expiré">!</span>`;
+  if(etats.some(e=>e.etat==='bientot')) return `<span class="doc-rh-pastille bientot" title="Expire bientôt">~</span>`;
+  if(etats.some(e=>e.sansEcheance)) return `<span class="doc-rh-pastille bientot" title="Sans date de fin de validité">?</span>`;
+  return `<span class="doc-rh-pastille ok" title="Au dossier">✓</span>`;
+}
+function renderRHDocuments(){
+  const salaries = state.salaries.filter(s=>s.societeId===state.societeId);
+  if(!dossiersRhPrets()){
+    chargerDossiersRh();
+    return '<div class="empty">Chargement des dossiers documentaires…</div>';
+  }
+  const obligatoires = window.TYPES_DOCUMENT_RH.filter(t=>t.obligatoire);
+  const bilans = salaries.map(s=>({ s, docs: documentsDuSalarie(s.id), bilan: dossierDuSalarie(s.id) }));
+  const nbIncomplets = bilans.filter(b=>b.bilan.manquants.length).length;
+  const nbExpires = bilans.reduce((n,b)=>n+b.bilan.expires.length, 0);
+  const nbBientot = bilans.reduce((n,b)=>n+b.bilan.bientot.length, 0);
+
+  const filtre = state.rhDocFiltre||'';
+  let liste = bilans;
+  if(filtre==='incomplets') liste = bilans.filter(b=>b.bilan.manquants.length);
+  else if(filtre==='expires') liste = bilans.filter(b=>b.bilan.expires.length);
+  else if(filtre==='bientot') liste = bilans.filter(b=>b.bilan.bientot.length);
+
+  const ouvert = state.rhDocSalarieId ? bilans.find(b=>b.s.id===state.rhDocSalarieId) : null;
+
+  return `
+    <div class="page-head"><h1>Dossiers documentaires</h1></div>
+    <div class="card-sub" style="margin-bottom:14px;">Contrat, DPAE, carte BTP, suivi médical, identité, RIB : les pièces que l'inspection du travail peut demander. Les fichiers sont rangés dans un espace privé, cloisonné par société.</div>
+    <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
+      <button class="btn small ${!filtre?'primary':''}" onclick="filtrerDossiersRh('')">Tous (${bilans.length})</button>
+      <button class="btn small ${filtre==='incomplets'?'primary':''}" onclick="filtrerDossiersRh('incomplets')">Dossiers incomplets (${nbIncomplets})</button>
+      <button class="btn small ${filtre==='expires'?'primary':''}" onclick="filtrerDossiersRh('expires')">Documents expirés (${nbExpires})</button>
+      <button class="btn small ${filtre==='bientot'?'primary':''}" onclick="filtrerDossiersRh('bientot')">Expirent bientôt (${nbBientot})</button>
+    </div>
+    ${salaries.length? `<div class="vehicule-liste-wrap">
+      <table class="stats-table">
+        <thead><tr>
+          <th style="text-align:left;">Salarié</th>
+          ${obligatoires.map(t=>`<th class="doc-rh-colonne" title="${esc(t.libelle)}"><span>${t.icone}</span>${esc(t.libelle)}</th>`).join('')}
+          <th>Autres</th><th>Dossier</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${liste.length? liste.map(({s, docs, bilan})=>{
+            const autres = docs.filter(d=>!obligatoires.some(t=>t.code===d.type)).length;
+            return `<tr>
+              <td style="text-align:left;"><strong>${esc(s.prenom)} ${esc(s.nom)}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
+              ${obligatoires.map(t=>`<td style="text-align:center;">${pastilleDocumentRh(docs, t)}</td>`).join('')}
+              <td>${autres||'—'}</td>
+              <td>${bilan.complet? '<span class="badge">Complet</span>' : `<span class="badge danger">${bilan.manquants.length? bilan.manquants.length+' manquant'+(bilan.manquants.length>1?'s':'') : bilan.expires.length+' expiré'+(bilan.expires.length>1?'s':'')}</span>`}</td>
+              <td><button class="btn small" onclick="ouvrirDossierRh('${s.id}')">${state.rhDocSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
+            </tr>`;
+          }).join('') : `<tr><td colspan="${obligatoires.length+4}" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>`}
+        </tbody>
+      </table>
+    </div>` : '<div class="empty">Aucun salarié pour cette société.</div>'}
+    <div class="card-sub" style="margin-top:8px;">Légende : ✓ au dossier · ~ expire bientôt · ! expiré · ? sans date de fin · ✕ manquant</div>
+    ${ouvert? `<div class="card" style="margin-top:20px;">
+      <div class="card-row">
+        <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — dossier documentaire</div>
+        <button class="btn small ghost" onclick="ouvrirDossierRh('${ouvert.s.id}')">Fermer</button>
+      </div>
+      <div style="margin-top:10px;">${dossierRhHTML(ouvert.s)}</div>
+    </div>` : ''}
+  `;
+}
+function filtrerDossiersRh(valeur){
+  state.rhDocFiltre = valeur;
+  renderTab();
+}
+/* Depuis la liste des salariés : changer de vue ET ouvrir le bon dossier, en
+   un seul rendu — deux appels enchaînés en dessinaient deux. */
+function ouvrirDossierRhDepuisListe(salarieId){
+  state.rhView = 'documents';
+  state.rhDocFiltre = '';
+  state.rhDocSalarieId = salarieId;
+  state.rhDocForm = null;
+  renderTab();
+}
+function ouvrirDossierRh(salarieId){
+  state.rhDocSalarieId = state.rhDocSalarieId===salarieId ? null : salarieId;
+  /* Le formulaire appartient au dossier qu'on referme : le laisser ouvert le
+     ferait réapparaître sur le prochain salarié consulté. */
+  if(state.rhDocForm && state.rhDocForm.salarieId!==state.rhDocSalarieId) state.rhDocForm = null;
+  renderTab();
 }
 const TYPES_ABSENCE = ['Congé payé','Arrêt maladie','Congé sans solde','Absence injustifiée','Accident du travail'];
 function soldeCPRestant(e){
@@ -14263,16 +14684,8 @@ function salarieForm(){
     <div id="habilitationsBody">${habilitationRowsHTML(e.habilitations)}</div>
     <button class="btn small" onclick="addHabilitation()">+ Habilitation</button>
     ${e.id? `
-    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:18px;">
-      <span>📄 Contrat de travail</span>
-      <label class="btn small primary" style="cursor:pointer;">+ Ajouter${salarieFileInputHTML(e.id,'contratTravail','sal_contrat_'+e.id,'.pdf')}</label>
-    </div>
-    ${salarieFileListHTML(e, 'contratTravail')}
-    <div class="chantier-subsection-title" style="display:flex; justify-content:space-between; align-items:center;">
-      <span>📝 Avenants au contrat</span>
-      <label class="btn small primary" style="cursor:pointer;">+ Ajouter${salarieFileInputHTML(e.id,'avenantsContrat','sal_avenant_'+e.id,'.pdf')}</label>
-    </div>
-    ${salarieFileListHTML(e, 'avenantsContrat')}
+    <div class="section-title" style="margin-top:18px;">📁 Dossier documentaire</div>
+    ${dossierRhHTML(e)}
     <div class="chantier-subsection-title" style="display:flex; justify-content:space-between; align-items:center;">
       <span>🏖️ Congés & Absences</span>
     </div>
@@ -14388,7 +14801,11 @@ async function saveSalarie(){
     visiteMedicaleDate: document.getElementById('sal_visiteMedicaleDate').value,
     visiteMedicaleProchaine: document.getElementById('sal_visiteMedicaleProchaine').value,
     habilitations: state.editing.habilitations.filter(h=>h.nom),
-    contratTravail: e.contratTravail || [], avenantsContrat: e.avenantsContrat || [],
+    /* `contratTravail` et `avenantsContrat` ne sont plus posés ici : ces deux
+       champs n'ont jamais eu de colonne, `colonnesDe()` les écartait avant
+       l'envoi, et les fichiers encodés en data-URL qu'ils portaient
+       disparaissaient au rechargement suivant. Le dossier documentaire les
+       remplace, dans `salarie_documents` et le bucket `terrain`. */
     soldeCPInitial: document.getElementById('sal_soldeCPInitial')? document.getElementById('sal_soldeCPInitial').value : (e.soldeCPInitial||null),
     absences: e.absences || [] };
   const r = await stSet('salarie:'+id, obj);
