@@ -9,6 +9,8 @@
 import { describe, it, expect } from "vitest";
 import {
   correspond,
+  correspondFiche,
+  texteFiche,
   dansLaPeriode,
   dateDocument,
   filtrerDocuments,
@@ -233,5 +235,73 @@ describe("Regroupement par client", () => {
   it("ne rend aucun groupe pour une liste vide", () => {
     // Un dossier vide laisserait croire à une file en attente
     expect(grouperParClient([])).toEqual([]);
+  });
+});
+
+describe("recherche dans les fiches", () => {
+  const client = {
+    id: "8f3c1e2a-0000-4000-8000-000000000001",
+    societeId: "kta",
+    createdAt: "2026-01-04T09:00:00.000Z",
+    nom: "Établissements Dupré",
+    ville: "Grenoble",
+    email: "compta@dupre.fr",
+    telephone: "04 76 12 34 56",
+    siret: "55210055400013",
+  };
+
+  it("retrouve une fiche par n'importe lequel de ses champs", () => {
+    expect(correspondFiche(client, "dupré")).toBe(true);
+    expect(correspondFiche(client, "grenoble")).toBe(true);
+    expect(correspondFiche(client, "55210055400013")).toBe(true);
+    expect(correspondFiche(client, "04 76")).toBe(true);
+  });
+
+  it("ignore les accents et l'ordre des mots", () => {
+    // Personne ne tape « Établissements » avec son accent dans une barre.
+    expect(correspondFiche(client, "etablissements")).toBe(true);
+    expect(correspondFiche(client, "grenoble dupre")).toBe(true);
+  });
+
+  it("ne cherche pas dans les identifiants techniques", () => {
+    // Sinon un fragment d'uuid ramènerait des fiches au hasard.
+    expect(correspondFiche(client, "8f3c1e2a")).toBe(false);
+    expect(correspondFiche(client, "kta")).toBe(false);
+    expect(correspondFiche(client, "2026-01-04")).toBe(false);
+  });
+
+  it("descend dans les listes de valeurs et les listes d'objets", () => {
+    const sousTraitant = { nom: "Peinture Vercors", metiers: ["peinture", "ravalement"] };
+    expect(correspondFiche(sousTraitant, "ravalement")).toBe(true);
+
+    // Les habilitations d'un salarié sont des objets dans une liste : sans
+    // traverser le tableau sans consommer la profondeur, elles seraient muettes.
+    const salarie = {
+      nom: "Nadia",
+      habilitations: [{ libelle: "CACES R482", dateExpiration: "2027-03-01" }],
+    };
+    expect(correspondFiche(salarie, "caces")).toBe(true);
+  });
+
+  it("accepte les nombres, qui portent des montants et des compteurs", () => {
+    expect(correspondFiche({ nom: "Kangoo", kilometrage: 148320 }, "148320")).toBe(true);
+  });
+
+  it("laisse tout passer quand la requête est vide", () => {
+    // Une barre vide ne doit jamais vider la liste.
+    expect(correspondFiche(client, "")).toBe(true);
+    expect(correspondFiche(client, "   ")).toBe(true);
+  });
+
+  it("ne tombe pas sur une fiche absente ou vide", () => {
+    expect(texteFiche(null as never)).toBe("");
+    expect(correspondFiche({}, "quoi que ce soit")).toBe(false);
+  });
+
+  it("reçoit les valeurs calculées que la fiche ne porte pas", () => {
+    // Le montant formaté d'un règlement vit à l'écran, pas dans la donnée.
+    const reglement = { mode: "virement", reference: "VIR-889" };
+    expect(correspondFiche(reglement, "1 250,00", ["1 250,00 €"])).toBe(true);
+    expect(correspondFiche(reglement, "virement")).toBe(true);
   });
 });

@@ -871,7 +871,7 @@ body.has-no-storage-banner #app{ padding-top:42px; }
 .reglage-titre{font-size:12px; color:#8A91A0; font-weight:600; margin-bottom:6px;}
 .reglage-duo{display:flex; flex-wrap:wrap; gap:30px; align-items:flex-start; margin:6px 0 16px;}
 .row-mic{display:flex; gap:6px;}
-input[type=text],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=email],textarea,select{background:#EEF1F7; border:2px solid transparent; color:var(--text); border-radius:16px; padding:11px 15px; font-size:14.5px; font-family:inherit; width:100%; transition:background .15s ease, border-color .15s ease, box-shadow .15s ease; box-sizing:border-box;}
+input[type=text],input[type=search],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=email],textarea,select{background:#EEF1F7; border:2px solid transparent; color:var(--text); border-radius:16px; padding:11px 15px; font-size:14.5px; font-family:inherit; width:100%; transition:background .15s ease, border-color .15s ease, box-shadow .15s ease; box-sizing:border-box;}
 input:hover, textarea:hover, select:hover{ background:#E8ECF4; }
 input:focus, textarea:focus, select:focus{ outline:none; background:#fff; border-color:var(--accent); box-shadow:0 6px 18px rgba(var(--accent-rgb), .15); }
 input::placeholder, textarea::placeholder{ color:#A6ADBB; }
@@ -883,11 +883,15 @@ select{ appearance:none; -webkit-appearance:none; background-image:url("data:ima
 .lignes-table input, .lignes-table select{ padding:8px 10px; border-radius:10px; background:#F3F5F9; font-size:13.5px; }
 .lignes-table select{ padding-right:26px; background-position:right 8px center; }
 input[type=checkbox], input[type=radio]{ accent-color:var(--accent); }
+input[type=search]::-webkit-search-cancel-button{ cursor:pointer; }
+.barre-recherche{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+.barre-recherche input{ flex:1; min-width:220px; }
+.barre-recherche .compteur-resultats{ align-self:center; color:var(--text-dim); font-size:13px; white-space:nowrap; }
 input[type=file]{ font-size:13px; color:var(--text-dim); }
 input[type=file]::file-selector-button{ background:var(--surface); border:1.5px solid var(--border); border-radius:9px; padding:9px 14px; font-size:13px; font-weight:600; font-family:inherit; color:var(--text); cursor:pointer; margin-right:10px; transition:border-color .15s ease; }
 input[type=file]::file-selector-button:hover{ border-color:var(--accent); color:var(--accent-2); }
 .form-panel .btn.primary{ padding:12px 24px; font-size:14.5px; border-radius:10px; }
-@media(max-width:860px){ input[type=text],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=email],textarea,select{ font-size:16px; } .form-panel{ padding:16px; } }
+@media(max-width:860px){ input[type=text],input[type=search],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=email],textarea,select{ font-size:16px; } .form-panel{ padding:16px; } }
 input:disabled{color:var(--text-dim); background:var(--surface-2);}
 textarea{resize:vertical; min-height:64px;}
 .mic-btn{flex-shrink:0; width:36px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); display:flex; align-items:center; justify-content:center;}
@@ -1791,7 +1795,10 @@ let state = {
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
-  editing: {type:null, id:null, lignes:[]}
+  editing: {type:null, id:null, lignes:[]},
+  /* Une entrée par listing, au lieu d'une propriété d'état par écran : c'est
+     ce qui permet à `barreRecherche` et `filtrerListe` de rester génériques. */
+  recherches: {}
 };
 
 /* ---------- Stockage (Supabase) ---------- */
@@ -2575,6 +2582,10 @@ async function changerSociete(code){
     return;
   }
   state.societeId = code;
+  /* Les recherches en cours portaient sur les fiches de l'autre société :
+     les garder afficherait une liste filtrée sans que la barre, hors écran,
+     explique pourquoi. */
+  state.recherches = {};
   state.currentRole = window.roleEffectif();
   appliquerCouleurSociete();
   document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
@@ -4576,6 +4587,90 @@ function renderDevis(){
     ${state.formOpen.devis ? '' : `<div id="devisListZone">${renderDevisListHTML(list)}</div>`}
   `;
 }
+/* ---------- Barres de recherche des listings ----------
+   Sept listings n'avaient aucune recherche ; les dix qui en avaient une
+   portaient chacune sa copie du même <input> et sa propre liste de champs,
+   si bien que chercher un numéro de série marchait sur le matériel mais pas
+   sur les véhicules. Une seule barre, un seul filtre, une seule table.
+
+   Le filtre redessine la zone de liste et elle seule : redessiner l'onglet
+   entier reconstruirait l'<input>, qui perdrait le focus à chaque frappe. */
+
+/** Par clé de listing : la zone à redessiner, et de quoi compter les résultats. */
+const LISTINGS = {};
+
+/**
+ * Déclare un listing.
+ *
+ * `toutes()` rend les fiches du listing avant recherche, `rendu(liste)` le HTML
+ * de sa zone. `extras(fiche)` sert aux valeurs que la fiche ne porte pas —
+ * un montant formaté, le nom d'un client qu'elle ne désigne que par son id.
+ */
+function declarerListing(cle, toutes, rendu, extras){
+  LISTINGS[cle] = {
+    toutes, extras,
+    zone: () => rendu(chercheesDans(cle, toutes(), extras)),
+  };
+  return LISTINGS[cle].zone;
+}
+
+/** Ne garde de `list` que ce qui répond à la recherche du listing `cle`. */
+function chercheesDans(cle, list, extras){
+  const q = (state.recherches[cle] || '').trim();
+  if(!q) return list;
+  return list.filter(o => window.correspondFiche(o, q, extras ? extras(o) : []));
+}
+
+/** Combien de fiches le listing montre, sur combien il en a. */
+function compteRecherche(cle){
+  const l = LISTINGS[cle];
+  if(!l || !(state.recherches[cle]||'').trim()) return '';
+  const total = l.toutes().length;
+  const affiches = chercheesDans(cle, l.toutes(), l.extras).length;
+  return affiches === total ? '' : `${affiches} sur ${total}`;
+}
+
+function barreRecherche(cle, placeholder){
+  const compte = compteRecherche(cle);
+  return `<div class="barre-recherche">
+    <input type="search" id="recherche-${cle}" value="${esc(state.recherches[cle]||'')}"
+      placeholder="${esc(placeholder)}" oninput="filtrerListe('${cle}', this.value)">
+    ${compte? `<span class="compteur-resultats">${compte}</span>` : ''}
+  </div>`;
+}
+
+function filtrerListe(cle, valeur){
+  state.recherches[cle] = valeur;
+  const zone = document.getElementById('liste-' + cle);
+  /* Sans zone déclarée, on retombe sur le rendu complet : une recherche qui
+     ne filtre rien serait pire qu'un focus perdu. */
+  if(!zone || !LISTINGS[cle]){ renderTab(); return; }
+  zone.innerHTML = LISTINGS[cle].zone();
+  majCompteurRecherche(cle);
+}
+
+/* Le compteur vit hors de la zone redessinée — l'y mettre le ferait
+   disparaître avec elle, et remonter d'un cran redessinerait l'<input>. */
+function majCompteurRecherche(cle){
+  const barre = document.getElementById('recherche-' + cle);
+  if(!barre) return;
+  const ancien = barre.parentElement.querySelector('.compteur-resultats');
+  const texte = compteRecherche(cle);
+  if(!texte){ if(ancien) ancien.remove(); return; }
+  if(ancien){ ancien.textContent = texte; return; }
+  const span = document.createElement('span');
+  span.className = 'compteur-resultats';
+  span.textContent = texte;
+  barre.parentElement.appendChild(span);
+}
+
+/** Le message d'une liste vide : « aucun » et « aucun résultat » diffèrent. */
+function listeVide(cle, messageSansRecherche, quoi){
+  return (state.recherches[cle]||'').trim()
+    ? `<div class="empty">Aucun ${quoi} ne correspond à la recherche.</div>`
+    : `<div class="empty">${messageSansRecherche}</div>`;
+}
+
 /* `sansAccents` et `multiWordMatch` viennent de src/integrations/recherche.ts,
    publiés sur window par le pont. Les redéfinir ici ferait diverger la
    recherche des écrans de celle du tableau de bord — c'est exactement ce qui
@@ -9121,48 +9216,92 @@ async function onResizeEnd(){
 }
 
 function renderReglements(embedded){
-  const estST = state.currentRole==='soustraitant';
-  const factures = state.factures.filter(f=>f.societeId===state.societeId && (estST ? (f.sousTraitantEmetteur && (!sousTraitantActuel() || f.sousTraitantEmetteur===sousTraitantActuel())) : !f.sousTraitantEmetteur));
-  if(estST && !factures.length) return '<div class="empty">Aucun règlement pour l\'instant — vos règlements apparaîtront ici une fois vos factures créées.</div>';
+  const factures = facturesDesReglements();
+  if(state.currentRole==='soustraitant' && !factures.length) return '<div class="empty">Aucun règlement pour l\'instant — vos règlements apparaîtront ici une fois vos factures créées.</div>';
   if(state.reglementsClient){
     return renderReglementsClientDetail(state.reglementsClient, factures);
   }
-  const groups = {};
-  factures.forEach(f=>{ (groups[f.client] = groups[f.client] || []).push(f); });
-  const clientNames = Object.keys(groups).sort();
   return `
     ${embedded? '' : '<div class="page-head"><h1>Règlements</h1></div>'}
-    ${clientNames.map(nom=>{
-      const list = groups[nom];
+    ${barreRecherche('reglementClient', 'Rechercher : client, n° de facture…')}
+    <div id="liste-reglementClient">${listeDossiersReglementsHTML()}</div>
+  `;
+}
+
+/** Les factures de la société, telles que l'écran Règlements les voit. */
+function facturesDesReglements(){
+  const estST = state.currentRole==='soustraitant';
+  return state.factures.filter(f=>f.societeId===state.societeId && (estST
+    ? (f.sousTraitantEmetteur && (!sousTraitantActuel() || f.sousTraitantEmetteur===sousTraitantActuel()))
+    : !f.sousTraitantEmetteur));
+}
+
+const listeDossiersReglementsHTML = declarerListing('reglementClient',
+  ()=> {
+    const groups = {};
+    facturesDesReglements().forEach(f=>{ (groups[f.client] = groups[f.client] || []).push(f); });
+    return Object.keys(groups).sort().map(nom=>({ nom, factures: groups[nom] }));
+  },
+  list => list.map(({nom, factures: facturesDuClient})=>{
       let totalDu = 0, enRetard = false;
-      list.forEach(f=>{
+      facturesDuClient.forEach(f=>{
         const st = reglementStatutFacture(f);
         totalDu += st.reste;
         if(st.reste>0.01 && (joursDepuisEcheance(f)||0) > 0) enRetard = true;
       });
+      const list = facturesDuClient;
       return `<div class="card" style="cursor:pointer;" onclick="openReglementsClient('${jsAttr(nom)}')">
         <div class="card-row">
           <div><div class="card-title">${esc(nom)}</div><div class="card-sub">${list.length} facture${list.length>1?'s':''}</div></div>
           <div style="text-align:right;"><div class="amount">${moneyDisplay(totalDu)}</div><div class="card-sub" style="margin-top:4px;">${totalDu>0.01? (enRetard? '<span class="badge danger">Retard</span>' : 'dû') : 'à jour'}</div></div>
         </div>
       </div>`;
-    }).join('') || '<div class="empty">Aucune facture pour cette société.</div>'}
-  `;
-}
+    }).join('') || listeVide('reglementClient', 'Aucune facture pour cette société.', 'dossier'),
+  /* Le dossier ne porte que le nom du client : sans les numéros de ses
+     factures, taper « FAC-2026-0412 » ici ne ramènerait rien. */
+  d => d.factures.map(f=>f.numero).filter(Boolean));
+
 function openReglementsClient(nom){ state.reglementsClient = nom; state.reglementSelection = []; renderTab(); }
 function closeReglementsClient(){ state.reglementsClient = null; state.reglementSelection = []; renderTab(); }
+/** Les factures d'un client, les plus récentes d'abord. */
+function facturesDuClientReglements(){
+  return facturesDesReglements()
+    .filter(f=>f.client===state.reglementsClient)
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+
 function renderReglementsClientDetail(nom, allFactures){
   const list = allFactures.filter(f=>f.client===nom).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const selection = state.reglementSelection || [];
-  let totalSelection = 0;
+  /* Le total de la sélection se calcule sur TOUTES les factures du client, et
+     non sur celles que la recherche laisse voir : filtrer l'écran ne déselectionne
+     rien, et la barre du bas doit continuer d'annoncer le bon montant. */
+  const totalSelection = list.reduce((somme, f)=>{
+    const st = reglementStatutFacture(f);
+    return somme + (st.reste > 0.01 && selection.includes(f.id) ? st.reste : 0);
+  }, 0);
   return `
     <div class="page-head"><h1>${esc(nom)}</h1><button class="btn" onclick="closeReglementsClient()">← Retour</button></div>
+    ${barreRecherche('reglementFacture', 'Rechercher : n° de facture, montant, mode, référence…')}
     <div id="formZoneReglement">${state.formOpen.reglement? reglementForm(): ''}</div>
-    ${list.map(f=>{
+    <div id="liste-reglementFacture">${listeFacturesReglementsHTML()}</div>
+    ${selection.length? `
+    <div class="reglement-bulk-bar">
+      <span>${selection.length} facture${selection.length>1?'s':''} sélectionnée${selection.length>1?'s':''} — Total : <b>${moneyDisplay(totalSelection)}</b></span>
+      <button class="btn primary" onclick="openBulkReglementForm()">Règlement</button>
+    </div>` : ''}
+    ${state.formOpen.reglementBulk? renderBulkReglementModal(selection, list) : ''}
+  `;
+}
+
+const listeFacturesReglementsHTML = declarerListing('reglementFacture',
+  facturesDuClientReglements,
+  list => {
+    const selection = state.reglementSelection || [];
+    return list.map(f=>{
       const st = reglementStatutFacture(f);
       const regs = reglementsForFacture(f.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
       const payable = st.reste > 0.01;
-      if(payable && selection.includes(f.id)) totalSelection += st.reste;
       return `<div class="card" ${payable? `style="cursor:pointer;" onclick="reglementCardClick(event,'${f.id}')"` : ''}>
         <div class="card-row">
           <div style="display:flex; align-items:flex-start; gap:10px;">
@@ -9183,15 +9322,16 @@ function renderReglementsClientDetail(nom, allFactures){
               <button class="btn small danger" style="padding:2px 7px;" title="Supprimer ce règlement" onclick="event.stopPropagation(); deleteItem('reglement','${r.id}')">✕</button></span>
           </div>`).join('')}
       </div>`;
-    }).join('') || '<div class="empty">Aucune facture pour ce client.</div>'}
-    ${selection.length? `
-    <div class="reglement-bulk-bar">
-      <span>${selection.length} facture${selection.length>1?'s':''} sélectionnée${selection.length>1?'s':''} — Total : <b>${moneyDisplay(totalSelection)}</b></span>
-      <button class="btn primary" onclick="openBulkReglementForm()">Règlement</button>
-    </div>` : ''}
-    ${state.formOpen.reglementBulk? renderBulkReglementModal(selection, list) : ''}
-  `;
-}
+    }).join('') || listeVide('reglementFacture', 'Aucune facture pour ce client.', 'facture');
+  },
+  /* Le montant et les règlements ne sont pas dans la facture : sans eux, on ne
+     pourrait pas chercher « virement » ni le montant qu'on voit à l'écran. */
+  f => {
+    const st = reglementStatutFacture(f);
+    return [moneyDisplay(st.ttc), moneyDisplay(st.reste), st.label,
+      ...reglementsForFacture(f.id).map(r =>
+        [libelleModeReglement(r.mode), r.reference, moneyDisplay(r.montant)].filter(Boolean).join(' '))];
+  });
 /**
  * Ouvre la saisie d'un règlement pour CETTE facture.
  *
@@ -12680,19 +12820,28 @@ async function removeMaterielPret(materielId, pretId){
   renderTab();
 }
 function renderPiecesCommande(){
-  const soc = state.societeId;
-  const list = state.bonsCommande.filter(b=>b.societeId===soc && b.pieceACommander);
-  const aCommander = list.filter(b=>!b.pieceACommanderDateCommande);
-  const commandees = list.filter(b=>b.pieceACommanderDateCommande);
   return `
     <div class="page-head"><h1>Pièces en commande</h1></div>
     <div class="card-sub" style="margin-bottom:14px;">Bons de commande pour lesquels un technicien a signalé une pièce à commander. Une fois la date de commande renseignée, la pièce est classée dans le dossier de son fournisseur.</div>
-    <div class="section-title-row"><span class="section-title" style="margin:0;">📦 À commander ${aCommander.length? `<span class="dossier-badge" style="margin-left:6px;">${aCommander.length}</span>`:''}</span></div>
-    <div>${aCommander.length? aCommander.map(b=>bonCommandeCardHTML(b,'pieceCommande')).join('') : '<div class="empty">Aucune pièce en attente de commande.</div>'}</div>
-    <div class="section-title-row" style="margin-top:24px;"><span class="section-title" style="margin:0;">🚚 Commandées — par fournisseur ${commandees.length? `<span class="dossier-badge" style="margin-left:6px;">${commandees.length}</span>`:''}</span></div>
-    ${renderDossiersFournisseurs(commandees)}
+    ${barreRecherche('pieceCommande', 'Rechercher : pièce, fournisseur, client, n° BC…')}
+    <div id="liste-pieceCommande">${listePiecesCommandeHTML()}</div>
   `;
 }
+
+/* Une seule barre pour les deux blocs : « à commander » et « commandées » sont
+   deux moments de la même pièce, et on cherche la pièce, pas son moment. */
+const listePiecesCommandeHTML = declarerListing('pieceCommande',
+  ()=> state.bonsCommande.filter(b=>b.societeId===state.societeId && b.pieceACommander),
+  list => {
+    const aCommander = list.filter(b=>!b.pieceACommanderDateCommande);
+    const commandees = list.filter(b=>b.pieceACommanderDateCommande);
+    return `
+    <div class="section-title-row"><span class="section-title" style="margin:0;">📦 À commander ${aCommander.length? `<span class="dossier-badge" style="margin-left:6px;">${aCommander.length}</span>`:''}</span></div>
+    <div>${aCommander.length? aCommander.map(b=>bonCommandeCardHTML(b,'pieceCommande')).join('') : listeVide('pieceCommande', 'Aucune pièce en attente de commande.', 'pièce à commander')}</div>
+    <div class="section-title-row" style="margin-top:24px;"><span class="section-title" style="margin:0;">🚚 Commandées — par fournisseur ${commandees.length? `<span class="dossier-badge" style="margin-left:6px;">${commandees.length}</span>`:''}</span></div>
+    ${commandees.length? renderDossiersFournisseurs(commandees) : listeVide('pieceCommande', "Aucune pièce commandée pour l'instant.", 'pièce commandée')}
+  `;
+  });
 function renderDossiersFournisseurs(list){
   if(!list.length) return '<div class="empty">Aucune pièce commandée pour l\'instant.</div>';
   const parFournisseur = {};
@@ -12719,10 +12868,19 @@ function renderDossiersFournisseurs(list){
     </div>`;
   }).join('');
 }
+/* La recherche se pose APRÈS le filtre En service / Vendus : chercher dans
+   « Vendus » ne doit pas ressusciter un véhicule en service. */
+const listeVehiculesHTML = declarerListing('vehicule',
+  ()=> {
+    const all = state.vehicules.filter(v=>v.societeId===state.societeId);
+    const filtre = state.vehiculeFiltre || 'actifs';
+    return filtre==='tous' ? all : filtre==='vendus' ? all.filter(v=>v.vendu) : all.filter(v=>!v.vendu);
+  },
+  list => renderVehiculeListeHTML(list));
+
 function renderVehicules(){
   const all = state.vehicules.filter(v=>v.societeId===state.societeId);
   const filtre = state.vehiculeFiltre || 'actifs';
-  const list = filtre==='tous' ? all : filtre==='vendus' ? all.filter(v=>v.vendu) : all.filter(v=>!v.vendu);
   const nbVendus = all.filter(v=>v.vendu).length;
 
   let bodyHtml;
@@ -12731,7 +12889,7 @@ function renderVehicules(){
   } else if(state.formOpen.vehicule){
     bodyHtml = `<div id="formZoneVehicule">${vehiculeForm()}</div>`;
   } else {
-    bodyHtml = renderVehiculeListeHTML(list);
+    bodyHtml = `<div id="liste-vehicule">${listeVehiculesHTML()}</div>`;
   }
 
   return `
@@ -12740,7 +12898,8 @@ function renderVehicules(){
       <button class="btn small ${filtre==='actifs'?'primary':''}" onclick="filterVehicules('actifs')">En service (${all.length-nbVendus})</button>
       <button class="btn small ${filtre==='vendus'?'primary':''}" onclick="filterVehicules('vendus')">Vendus (${nbVendus})</button>
       <button class="btn small ${filtre==='tous'?'primary':''}" onclick="filterVehicules('tous')">Tous (${all.length})</button>
-    </div>`}
+    </div>
+    ${barreRecherche('vehicule', 'Rechercher : immatriculation, marque, modèle, conducteur…')}`}
     ${bodyHtml}
   `;
 }
@@ -12753,7 +12912,7 @@ function setVehiculeVue(v){
   renderTab();
 }
 function renderVehiculeListeHTML(list){
-  if(!list.length) return '<div class="empty">Aucun véhicule dans cette catégorie.</div>';
+  if(!list.length) return listeVide('vehicule', 'Aucun véhicule dans cette catégorie.', 'véhicule');
   return `<div class="vehicule-liste-wrap">
     <table class="stats-table">
       <thead><tr><th>Véhicule</th><th>Immatriculation</th><th>Type</th><th>Motorisation</th><th>Pneus</th><th>Kilométrage</th><th>Contrôle technique</th><th>Conducteur</th><th>Statut</th></tr></thead>
@@ -13776,10 +13935,15 @@ function renderClients(){
   `;
 }
 function renderClientsSection(){
-  const list = state.clients.filter(c=>c.societeId===state.societeId);
   return `
+    ${barreRecherche('client', 'Rechercher : nom, interlocuteur, ville, SIRET, e-mail…')}
     <div id="formZoneClient">${state.formOpen.client? clientForm() : ''}</div>
-    ${list.map(c=>{
+    <div id="liste-client">${listeClientsHTML()}</div>
+  `;
+}
+const listeClientsHTML = declarerListing('client',
+  ()=> state.clients.filter(c=>c.societeId===state.societeId),
+  list => list.map(c=>{
       const contacts = state.interlocuteurs.filter(i=>i.clientId===c.id);
       return `
       <div class="card"><div class="card-row">
@@ -13800,9 +13964,12 @@ function renderClientsSection(){
       </div>
       ${state.formOpen.interlocuteur && state.editing.clientId===c.id? interlocuteurForm(c): ''}
       </div>`;
-    }).join('') || '<div class="empty">Aucun client enregistré pour cette société.</div>'}
-  `;
-}
+    }).join('') || listeVide('client', 'Aucun client enregistré pour cette société.', 'client'),
+  /* Les interlocuteurs s'affichent dans la fiche du client : chercher le nom
+     d'un contact doit donc ramener son client, sinon la barre ment sur ce
+     qu'elle voit. */
+  c => state.interlocuteurs.filter(i=>i.clientId===c.id)
+         .map(i=>[i.nom, i.fonction, i.telephone, i.email].filter(Boolean).join(' ')));
 function interlocuteurForm(client){
   const e = state.editing;
   return `
@@ -14292,23 +14459,26 @@ async function saveClient(){
 
 /* ---------- Articles / catalogue de prestations ---------- */
 function renderMetiersSection(){
-  const list = state.metiersPerso.filter(m=>m.societeId===state.societeId);
   return `
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
       <span>Métiers</span>
       <button class="btn small primary" onclick="openForm('metierPerso')">+ Nouveau métier</button>
     </div>
+    ${barreRecherche('metierPerso', 'Rechercher un métier…')}
     <div id="formZoneMetierPerso">${state.formOpen.metierPerso? metierPersoForm() : ''}</div>
-    ${list.map(m=>`
+    <div id="liste-metierPerso">${listeMetiersHTML()}</div>
+  `;
+}
+const listeMetiersHTML = declarerListing('metierPerso',
+  ()=> state.metiersPerso.filter(m=>m.societeId===state.societeId),
+  list => list.map(m=>`
       <div class="card"><div class="card-row">
         <div style="display:flex; align-items:center; gap:8px;"><span style="width:16px; height:16px; border-radius:4px; background:${esc(m.couleur||'#999')}; flex-shrink:0; border:1px solid rgba(0,0,0,.1);"></span><div class="card-title">${esc(m.nom)}</div></div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
         <button class="btn small" onclick="editItem('metierPerso','${m.id}')">Modifier</button>
         <button class="btn small danger" onclick="deleteItem('metierPerso','${m.id}')">Supprimer</button>
-      </div></div>`).join('') || '<div class="empty">Aucun métier enregistré pour cette société.</div>'}
-  `;
-}
+      </div></div>`).join('') || listeVide('metierPerso', 'Aucun métier enregistré pour cette société.', 'métier'));
 const METIER_PALETTE = ['#FF6A1A','#F5B301','#FFD23F','#2E9E4F','#5EC26A','#0E7C66','#178A7A','#1E8FD5','#3AA9E0','#0B5FA5','#5B5FE8','#7C6FF0','#8E5CE6','#B85CD1','#D65DB1','#C77DFF','#8A6D3B','#B08D57','#5C6470'];
 function pickMetierCouleur(couleur){
   const input = document.getElementById('mp_couleur');
@@ -14358,23 +14528,26 @@ function metierPersoFilterOptions(current){
   return '<option value="">Tous les métiers</option>' + list.map(m=>`<option value="${esc(m.nom)}" ${m.nom===current?'selected':''}>${esc(m.nom)}</option>`).join('');
 }
 function renderConducteursSection(){
-  const list = state.conducteurs.filter(c=>c.societeId===state.societeId);
   return `
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
       <span>Conducteurs de travaux</span>
       <button class="btn small primary" onclick="openForm('conducteur')">+ Nouveau conducteur</button>
     </div>
+    ${barreRecherche('conducteur', 'Rechercher : nom, téléphone, e-mail…')}
     <div id="formZoneConducteur">${state.formOpen.conducteur? conducteurForm() : ''}</div>
-    ${list.map(c=>`
+    <div id="liste-conducteur">${listeConducteursHTML()}</div>
+  `;
+}
+const listeConducteursHTML = declarerListing('conducteur',
+  ()=> state.conducteurs.filter(c=>c.societeId===state.societeId),
+  list => list.map(c=>`
       <div class="card"><div class="card-row">
         <div><div class="card-title">${esc(c.nom)}</div>${c.telephone||c.email? `<div class="card-sub">${[c.telephone,c.email].filter(Boolean).join(' · ')}</div>`:''}</div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
         <button class="btn small" onclick="editItem('conducteur','${c.id}')">Modifier</button>
         <button class="btn small danger" onclick="deleteItem('conducteur','${c.id}')">Supprimer</button>
-      </div></div>`).join('') || '<div class="empty">Aucun conducteur de travaux enregistré pour cette société.</div>'}
-  `;
-}
+      </div></div>`).join('') || listeVide('conducteur', 'Aucun conducteur de travaux enregistré pour cette société.', 'conducteur'));
 function conducteurForm(){
   const e = state.editing;
   return `
@@ -14444,23 +14617,26 @@ function filterPlanningUnschedInterlocuteur(value){
 }
 
 function renderSousTraitantsSection(){
-  const list = state.sousTraitants.filter(s=>s.societeId===state.societeId);
   return `
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
       <span>Sous-traitants</span>
       <button class="btn small primary" onclick="openForm('sousTraitant')">+ Nouveau sous-traitant</button>
     </div>
+    ${barreRecherche('sousTraitant', 'Rechercher : nom, métier, ville, SIRET…')}
     <div id="formZoneSousTraitant">${state.formOpen.sousTraitant? sousTraitantForm() : ''}</div>
-    ${list.map(s=>`
+    <div id="liste-sousTraitant">${listeSousTraitantsHTML()}</div>
+  `;
+}
+const listeSousTraitantsHTML = declarerListing('sousTraitant',
+  ()=> state.sousTraitants.filter(s=>s.societeId===state.societeId),
+  list => list.map(s=>`
       <div class="card"><div class="card-row">
         <div><div class="card-title">${esc(s.nom)}</div>${s.telephone||s.email? `<div class="card-sub">${[s.telephone,s.email].filter(Boolean).join(' · ')}</div>`:''}${(s.metiers&&s.metiers.length)? `<div class="card-sub">🔧 ${s.metiers.map(esc).join(', ')}</div>` : (s.metier? `<div class="card-sub">🔧 ${esc(s.metier)}</div>`:'')}</div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
         <button class="btn small" onclick="editItem('sousTraitant','${s.id}')">Modifier</button>
         <button class="btn small danger" onclick="deleteItem('sousTraitant','${s.id}')">Supprimer</button>
-      </div></div>`).join('') || '<div class="empty">Aucun sous-traitant enregistré pour cette société.</div>'}
-  `;
-}
+      </div></div>`).join('') || listeVide('sousTraitant', 'Aucun sous-traitant enregistré pour cette société.', 'sous-traitant'));
 function sousTraitantForm(){
   const e = state.editing;
   return `

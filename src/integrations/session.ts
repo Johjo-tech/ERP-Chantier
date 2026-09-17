@@ -91,6 +91,7 @@ import {
 import {
   correspond,
   dansLaPeriode,
+  correspondFiche,
   dateDocument,
   filtrerDocuments,
   grouperParClient,
@@ -98,6 +99,7 @@ import {
   multiWordMatch,
   sansAccents,
   texteDocument,
+  texteFiche,
 } from "./recherche";
 import {
   fusionnerReglages,
@@ -460,6 +462,8 @@ export function injecterSession() {
   w.lignesHaystack = lignesHaystack;
   w.texteDocument = texteDocument;
   w.correspond = correspond;
+  w.texteFiche = texteFiche;
+  w.correspondFiche = correspondFiche;
   w.dateDocument = dateDocument;
   w.dansLaPeriode = dansLaPeriode;
   w.filtrerDocuments = filtrerDocuments;

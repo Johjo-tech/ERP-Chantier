@@ -119,6 +119,60 @@ export function correspond(
   return multiWordMatch(texteDocument(doc, extras), requete);
 }
 
+/**
+ * Les fiches — clients, véhicules, salariés, règlements, sous-traitants… — ne
+ * se prêtent pas au traitement des documents : elles n'ont ni en-tête commun
+ * ni lignes de prestation, et leurs champs diffèrent d'une fiche à l'autre.
+ *
+ * Plutôt qu'une liste de champs par type — sept listes à tenir à jour, qu'un
+ * champ ajouté demain rendrait muettes sans prévenir — on parcourt tout ce que
+ * la fiche porte, en écartant ce qui n'a aucun sens à chercher : identifiants,
+ * horodatage, contenus binaires. Chercher « virement » dans les règlements ou
+ * « CB-1234 » dans les véhicules marche alors sans qu'on l'ait prévu.
+ */
+const CHAMPS_TECHNIQUES =
+  /^(id|legacyId|createdAt|cree_le|maj_le|societeId|profileId|.+Id|.+_id|.*[Ff]iles?|photos?|signature.*|.*[Bb]ase64|.*[Uu]rl)$/;
+
+/** Au-delà, on descend dans des structures qui ne portent plus de texte utile. */
+const PROFONDEUR_MAX = 2;
+
+function morceauxDe(valeur: unknown, profondeur: number): string[] {
+  if (profondeur > PROFONDEUR_MAX) return [];
+  if (typeof valeur === "string") return valeur.trim() ? [valeur] : [];
+  if (typeof valeur === "number") return [String(valeur)];
+  /* Un tableau ne compte pas comme un niveau : sans cela les habilitations
+     d'un salarié, qui sont des objets dans une liste, ne seraient jamais
+     parcourues — le tableau aurait consommé la profondeur à lui seul. */
+  if (Array.isArray(valeur)) {
+    return valeur.flatMap((v) => morceauxDe(v, profondeur));
+  }
+  if (valeur && typeof valeur === "object") {
+    return Object.entries(valeur as Document)
+      .filter(([cle]) => !CHAMPS_TECHNIQUES.test(cle))
+      .flatMap(([, v]) => morceauxDe(v, profondeur + 1));
+  }
+  return [];
+}
+
+/** Aplatit une fiche en une chaîne cherchable, minuscules comprises. */
+export function texteFiche(fiche: Document, extras: unknown[] = []): string {
+  if (!fiche) return "";
+  return [...morceauxDe(fiche, 0), ...extras]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+/** Le pendant de `correspond`, pour les fiches. */
+export function correspondFiche(
+  fiche: Document,
+  requete: string,
+  extras: unknown[] = []
+): boolean {
+  if (!requete || !requete.trim()) return true;
+  return multiWordMatch(texteFiche(fiche, extras), requete);
+}
+
 // ============ PÉRIODE ============
 
 export type Periode = "tout" | "mois" | "annee" | "plage";
