@@ -9009,6 +9009,18 @@ async function wfRafraichir(){
   const taches = await window.listTachesBonCommande(bcId);
   wfTaches = wfTaches.map(e => ({ ...e, tache: taches.find(x => x.id === e.tache.id) || e.tache }));
   renderWorkflowTaches();
+
+  /* Le bon de commande DÉRIVE de ses tâches : `metiersFait`, `valideConducteur`
+     et `pieceACommander` sont recalculés au chargement de la collection, pas
+     ici. Ne rafraîchir que la modale laissait donc `state.bonsCommande` sur
+     l'état d'avant : valider la dernière tâche d'un bon l'inscrivait bien en
+     base, mais il ne remontait dans Facturation › Validation qu'après un
+     rechargement complet de la page. Les trois gestes du terrain — constats,
+     travaux réalisés, validation — passent tous par ici.
+
+     La modale vit hors de `#content` : redessiner l'onglet ne la ferme pas. */
+  await recharger('bonCommande');
+  renderTab();
 }
 
 /* Enregistre commentaire et pièce sans changer d'état : le technicien peut

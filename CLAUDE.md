@@ -147,6 +147,14 @@ Un bug corrigé se double d'un test qui le reproduit.
   les statistiques. Sa fiche porte aussi un `profile_id` — le compte de la
   personne, un seul par société — sans lequel son tableau de bord ne peut pas
   distinguer ses affaires de celles de ses collègues.
+- Les champs `metiersFait`, `valideConducteur`, `nbTaches`, `tachesNonPointees`
+  et `pieceACommander` d'un bon de commande sont **dérivés de ses tâches** par
+  `chargerCollection`, et recalculés au chargement seulement. Écrire une tâche
+  (`validerTache`, `marquerRealisee`, `sauvegarderTerrain`) ne les met donc pas
+  à jour : il faut recharger la collection. Sans quoi la base est juste et
+  l'écran ment — valider la dernière tâche d'un bon l'inscrivait bien en base
+  sans le faire remonter dans Facturation › Validation. Le défaut a été
+  diagnostiqué deux fois côté base avant qu'on regarde du bon côté.
 - Une colonne dérivée envoyée à l'écriture fait voir toutes les lignes comme
   modifiées par `enfantsIdentiques`, d'où un delete+insert que le déclencheur
   de facture figée refuse. `montant_ht` est exclu de la comparaison pour cela.
