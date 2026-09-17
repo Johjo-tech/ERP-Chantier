@@ -884,6 +884,14 @@ select{ appearance:none; -webkit-appearance:none; background-image:url("data:ima
 .lignes-table select{ padding-right:26px; background-position:right 8px center; }
 input[type=checkbox], input[type=radio]{ accent-color:var(--accent); }
 input[type=search]::-webkit-search-cancel-button{ cursor:pointer; }
+/* Un chiffre qui mène quelque part doit le montrer avant qu'on l'essaie :
+   le curseur, un relief au survol, et un anneau au clavier. */
+.cliquable{ cursor:pointer; transition:transform .12s ease, box-shadow .12s ease, background .12s ease; }
+.cliquable:hover{ transform:translateY(-1px); box-shadow:0 8px 22px rgba(15,23,42,.10); }
+.cliquable:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(var(--accent-rgb), .35); border-radius:12px; }
+.summary-row.cliquable:hover, .topclient-row.cliquable:hover{ background:rgba(var(--accent-rgb), .06); transform:none; box-shadow:none; }
+.summary-row.cliquable, .topclient-row.cliquable{ border-radius:10px; padding:4px 6px; margin-left:-6px; margin-right:-6px; }
+@media (prefers-reduced-motion: reduce){ .cliquable, .cliquable:hover{ transition:none; transform:none; } }
 .barre-recherche{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
 .barre-recherche input{ flex:1; min-width:220px; }
 .barre-recherche .compteur-resultats{ align-self:center; color:var(--text-dim); font-size:13px; white-space:nowrap; }
@@ -1789,7 +1797,7 @@ function heureOptions(current){
 
 let state = {
   societeId: 'kta', tab: 'dashboard', plusTab: 'clients', reglagesTab: 'organisation', currentRole: null, devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
-  devisConducteurFilter: '', factureConducteurFilter: '',
+  devisConducteurFilter: '', devisStatutFilter: '', factureConducteurFilter: '',
   factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
   factureMetierFilter: '', factureReglementFilter: '',
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
@@ -2849,7 +2857,9 @@ function renderTopClientsHTML(factures){
   if(!top.length) return '<div class="empty">Pas encore de factures.</div>';
   const max = Math.max(...top.map(t=>t.total));
   return top.map((t,i)=>`
-    <div class="topclient-row">
+    <div class="topclient-row cliquable" role="button" tabindex="0" title="Ouvrir le dossier de règlements de ${esc(t.client)}"
+         onclick="ouvrirClientDepuisDashboard('${jsAttr(t.client)}')"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirClientDepuisDashboard('${jsAttr(t.client)}');}">
       <span class="topclient-rank">${i+1}</span>
       <div class="topclient-mid">
         <div class="topclient-name">${esc(t.client)}</div>
@@ -2918,6 +2928,35 @@ function renderDashboardSousTraitant(){
     </div>
   `;
 }
+/* ---------- Ce que le tableau de bord sait ouvrir ----------
+   Les quatre tuiles, le classement des clients et le résumé du mois affichaient
+   des chiffres qui appelaient le clic sans rien faire. Chaque destination est
+   décrite ici, une seule fois : un `onclick` bricolé dans chaque bloc aurait
+   fini par ouvrir un écran filtré autrement que ce que le chiffre annonçait. */
+const DESTINATIONS_DASHBOARD = {
+  caEncaisse:    { tab:'factures', etat:{ facturesView:'liste', factureReglementFilter:'payee', facturePeriode:'mois' } },
+  devisEnAttente:{ tab:'devis',    etat:{ devisStatutFilter:'envoyé' } },
+  impayees:      { tab:'factures', etat:{ facturesView:'liste', factureReglementFilter:'impayee', facturePeriode:'tout' } },
+  aFacturer:     { tab:'factures', etat:{ facturesView:'afacturer' } },
+  reglements:    { tab:'factures', etat:{ facturesView:'reglements', reglementsClient:null } },
+};
+
+function ouvrirDepuisDashboard(cle){
+  const d = DESTINATIONS_DASHBOARD[cle];
+  if(!d) return;
+  Object.assign(state, d.etat);
+  setTab(d.tab);
+}
+
+/* Un client du classement : on ouvre son dossier de règlements, pas la liste
+   entière — c'est le montant qu'il doit qu'on vient de regarder. */
+function ouvrirClientDepuisDashboard(nom){
+  Object.assign(state, DESTINATIONS_DASHBOARD.reglements.etat);
+  state.reglementsClient = nom;
+  state.reglementSelection = [];
+  setTab('factures');
+}
+
 function renderDashboard(){
   if(state.currentRole==='soustraitant') return renderDashboardSousTraitant();
   const soc = state.societeId;
@@ -2953,10 +2992,10 @@ function renderDashboard(){
     <div id="dashboardNormalContent" style="display:${state.globalSearch && state.globalSearch.trim() ? 'none':''};">
     ${quickActionsHTML()}
     <div class="grid-stats grid-stats-4">
-      <div class="stat-card success"><div class="stat-card-top"><span class="stat-icon" style="background:var(--success-soft); color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">CA encaissé ce mois (HT)</div><div class="stat-num stat-num-money">${moneyDisplay(summary.caMois)}</div></div>
-      <div class="stat-card"><div class="stat-card-top"><span class="stat-icon" style="background:var(--info-soft); color:var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.devis}</svg></span></div><div class="stat-label">Devis en attente</div><div class="stat-num">${devisEnAttente.length}</div><div class="stat-subamount">${moneyDisplay(devisEnAttenteMontant)} HT</div></div>
-      <div class="stat-card ${impayees.length?'danger':''}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--danger-soft); color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">Factures impayées</div><div class="stat-num">${impayees.length}</div><div class="stat-subamount">${moneyDisplay(summary.impayeesMontant)} restant dû</div></div>
-      <div class="stat-card ${traiter.aFacturer?'warn':''}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-2);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.bonsCommande}</svg></span></div><div class="stat-label">À facturer</div><div class="stat-num">${traiter.aFacturer}</div><div class="stat-subamount">${moneyDisplay(traiter.aFacturerMontant)} HT</div></div>
+      <div class="stat-card success cliquable" role="button" tabindex="0" title="Voir les factures réglées ce mois" onclick="ouvrirDepuisDashboard('caEncaisse')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('caEncaisse');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--success-soft); color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">CA encaissé ce mois (HT)</div><div class="stat-num stat-num-money">${moneyDisplay(summary.caMois)}</div></div>
+      <div class="stat-card cliquable" role="button" tabindex="0" title="Voir les devis en attente de réponse" onclick="ouvrirDepuisDashboard('devisEnAttente')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('devisEnAttente');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--info-soft); color:var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.devis}</svg></span></div><div class="stat-label">Devis en attente</div><div class="stat-num">${devisEnAttente.length}</div><div class="stat-subamount">${moneyDisplay(devisEnAttenteMontant)} HT</div></div>
+      <div class="stat-card ${impayees.length?'danger':''} cliquable" role="button" tabindex="0" title="Voir les factures impayées" onclick="ouvrirDepuisDashboard('impayees')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('impayees');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--danger-soft); color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">Factures impayées</div><div class="stat-num">${impayees.length}</div><div class="stat-subamount">${moneyDisplay(summary.impayeesMontant)} restant dû</div></div>
+      <div class="stat-card ${traiter.aFacturer?'warn':''} cliquable" role="button" tabindex="0" title="Voir les bons de commande à facturer" onclick="ouvrirDepuisDashboard('aFacturer')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('aFacturer');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-2);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.bonsCommande}</svg></span></div><div class="stat-label">À facturer</div><div class="stat-num">${traiter.aFacturer}</div><div class="stat-subamount">${moneyDisplay(traiter.aFacturerMontant)} HT</div></div>
     </div>
     <div class="dash-workrow">
       <div class="dash-workcol-main">
@@ -3007,11 +3046,11 @@ function renderDashboard(){
       <div class="dash-col">
         <div class="section-title-row"><span class="section-title" style="margin:0;">Résumé du mois</span></div>
         <div class="card">
-          <div class="summary-row"><span>Chiffre d'affaires encaissé (HT)</span><b>${moneyDisplay(summary.caMois)}</b></div>
+          <div class="summary-row cliquable" role="button" tabindex="0" title="Voir les factures réglées ce mois" onclick="ouvrirDepuisDashboard('caEncaisse')"><span>Chiffre d'affaires encaissé (HT)</span><b>${moneyDisplay(summary.caMois)}</b></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${summary.caMoisPct}%; background:var(--success);"></div></div>
-          <div class="summary-row" style="margin-top:16px;"><span>Taux de conversion devis</span><b>${summary.tauxConversion}%</b></div>
+          <div class="summary-row cliquable" style="margin-top:16px;" role="button" tabindex="0" title="Voir les devis" onclick="ouvrirDepuisDashboard('devisEnAttente')"><span>Taux de conversion devis</span><b>${summary.tauxConversion}%</b></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${summary.tauxConversion}%; background:var(--info);"></div></div>
-          <div class="summary-row" style="margin-top:16px;"><span>Taux d'encaissement</span><b>${summary.tauxEncaisse}%</b></div>
+          <div class="summary-row cliquable" style="margin-top:16px;" role="button" tabindex="0" title="Voir les règlements" onclick="ouvrirDepuisDashboard('reglements')"><span>Taux d'encaissement</span><b>${summary.tauxEncaisse}%</b></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${summary.tauxEncaisse}%; background:var(--accent);"></div></div>
         </div>
       </div>
@@ -4582,6 +4621,7 @@ function renderDevis(){
       <select style="width:auto; min-width:170px;" onchange="filterDevisLogement(this.value)">${logementFilterOptions(state.devisLogementFilter)}</select>
       <select style="width:auto; min-width:170px;" onchange="filterDevisClient(this.value)">${planningUnschedClientOptions(state.devisClientFilter)}</select>
       <select style="width:auto; min-width:190px;" onchange="filterDevisInterlocuteur(this.value)">${planningUnschedInterlocuteurOptions(state.devisInterlocuteurFilter, state.devisClientFilter)}</select>
+      <select style="width:auto; min-width:160px;" onchange="filterDevisStatut(this.value)">${devisStatutFilterOptions(state.devisStatutFilter)}</select>
     </div>`}
     <div id="formZoneDevis">${state.formOpen.devis ? devisForm() : ''}</div>
     ${state.formOpen.devis ? '' : `<div id="devisListZone">${renderDevisListHTML(list)}</div>`}
@@ -4711,6 +4751,17 @@ function searchEnterCycle(ev, type){
     el.classList.add('search-focus');
   }
 }
+/* Les statuts que porte un devis, dans l'ordre de son cycle de vie. */
+const STATUTS_DEVIS = ['brouillon', 'envoyé', 'accepté', 'refusé'];
+function devisStatutFilterOptions(courant){
+  return '<option value="">Tous les statuts</option>' + STATUTS_DEVIS
+    .map(s=>`<option value="${esc(s)}" ${s===courant?'selected':''}>${esc(s.charAt(0).toUpperCase()+s.slice(1))}</option>`).join('');
+}
+function filterDevisStatut(valeur){
+  state.devisStatutFilter = valeur;
+  const zone = document.getElementById('devisListZone');
+  if(zone) zone.innerHTML = renderDevisListHTML(state.devis.filter(d=>d.societeId===state.societeId));
+}
 function devisMatchesSearch(d, q){
   return !q || multiWordMatch(devisSearchHaystack(d), q);
 }
@@ -4745,8 +4796,10 @@ function renderDevisListHTML(list){
   const lf = state.devisLogementFilter||'';
   const clientFilter = state.devisClientFilter||'';
   const interlocuteurFilter = state.devisInterlocuteurFilter||'';
+  const sf = state.devisStatutFilter||'';
   const filtered = list.filter(d=>devisMatchesSearch(d, q) && (!cf || d.conducteur===cf) && (!lf || d.logementStatut===lf)
-    && (!clientFilter || d.client===clientFilter) && (!interlocuteurFilter || (d.interlocuteur||'')===interlocuteurFilter));
+    && (!clientFilter || d.client===clientFilter) && (!interlocuteurFilter || (d.interlocuteur||'')===interlocuteurFilter)
+    && (!sf || (d.statut||'brouillon')===sf));
   return filtered.map(d=>{
     const t = computeDocTotals(d);
     const facturesLiees = state.factures.filter(f=>f.devisId===d.id);
