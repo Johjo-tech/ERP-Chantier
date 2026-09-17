@@ -43,6 +43,11 @@ suite("Exposition anonyme", () => {
     "planning_taches",
   ];
 
+  /* Limite connue : sur une base VIDE, ce contrôle passe sans rien prouver —
+     une table fermée et une table ouverte mais vide répondent toutes deux 200
+     avec un tableau vide. Il ne vaut donc que face à une base peuplée, ce qui
+     est le cas en production. Le distinguer sans données demanderait une sonde
+     en écriture par table, avec ses colonnes propres. */
   it.each(SENSIBLES)("%s ne livre rien sans session", async (table) => {
     expect(await lignesVisibles(table)).toBeFalsy();
   });
@@ -62,6 +67,28 @@ suite("Exposition anonyme", () => {
    * puis `revoke all on table public.kv_store from anon;`
    */
   it("kv_store est ouverte aux anonymes — provisoire et assumé", async () => {
-    expect(await lignesVisibles("kv_store")).toBeTruthy();
+    /* On ÉCRIT, on ne compte pas.
+     *
+     * Compter ne dit rien : PostgREST répond 200 et un tableau vide aussi bien
+     * pour une table fermée par la RLS que pour une table ouverte mais vide.
+     * Le contrôle passait donc tant que `kv_store` portait des lignes, et
+     * tombait dès qu'on vidait la base — sans que rien n'ait changé côté
+     * droits.
+     *
+     * Écrire tranche : une création acceptée prouve l'ouverture, quel que soit
+     * le contenu. C'est aussi le risque exact que ce test surveille — « 116
+     * lignes lisibles, MODIFIABLES et EFFAÇABLES avec la seule clé anon ». */
+    const cle = `sonde-securite-${Date.now()}`;
+    const pose = await fetch(`${URL}/rest/v1/kv_store`, {
+      method: "POST",
+      headers: { apikey: CLE!, "Content-Type": "application/json" },
+      body: JSON.stringify({ key: cle, value: {} }),
+    });
+    // On efface la sonde avant d'affirmer quoi que ce soit, succès ou échec.
+    await fetch(`${URL}/rest/v1/kv_store?key=eq.${cle}`, {
+      method: "DELETE",
+      headers: { apikey: CLE! },
+    });
+    expect(pose.status).toBe(201);
   });
 });
