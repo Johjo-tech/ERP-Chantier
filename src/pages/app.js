@@ -5708,8 +5708,12 @@ async function openValidationDirecteurModal(bcId){
   document.getElementById('validationDirecteurInfo').textContent = `${b.client||''}`;
   document.getElementById('validationDirecteurCorps').innerHTML = '<div class="empty">Chargement du dossier…</div>';
   document.getElementById('validationDirecteurModal').style.display = 'flex';
-  // Rien n'est encore contrôlé : le bouton ne s'ouvre qu'après lecture du dossier
+  /* Rien n'est encore contrôlé : les boutons ne s'ouvrent qu'après lecture du
+     dossier. Les DEUX doivent être refermés — le pied vit dans le HTML statique
+     et n'est pas reconstruit d'une ouverture à l'autre, si bien que le bouton
+     de contournement restait affiché, et cliquable, sur le bon SUIVANT. */
   majBoutonValidationDirecteur(false);
+  majBoutonHorsCircuit(false);
 
   try{
     const [taches, travaux] = await Promise.all([
@@ -5724,6 +5728,9 @@ async function openValidationDirecteurModal(bcId){
     document.getElementById('validationDirecteurCorps').innerHTML =
       `<div class="empty">Dossier indisponible : ${esc(err.message||'erreur inconnue')}. La validation reste bloquée tant qu'on ne peut pas contrôler l'état des tâches.</div>`;
     majBoutonValidationDirecteur(false);
+    /* Surtout ici : sans cette ligne, un dossier illisible laissait offert le
+       contournement calculé pour le bon précédent. */
+    majBoutonHorsCircuit(false);
   }
 }
 

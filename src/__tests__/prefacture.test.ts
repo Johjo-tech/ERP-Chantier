@@ -518,3 +518,40 @@ describe("Un bon déjà chiffré", () => {
     expect(blocagesChiffrage(enCours, { horsCircuit: true })).toEqual([]);
   });
 });
+
+/**
+ * Un bon clôturé en gratuité ne revient pas par la porte de service.
+ *
+ * `bc_cloturer_gratuit` existe pour l'affaire sans suite facturable : geste
+ * commercial, erreur d'appel. La règle n'en disait rien, et la porte hors
+ * circuit refusait par LISTE NOIRE — « chiffré » et « facturé » — là où sa
+ * jumelle refuse par liste blanche. Un bon offert au client repartait donc en
+ * facturation, son drapeau de gratuité avec lui.
+ *
+ * Nommer ce qu'on autorise plutôt que ce qu'on interdit ferme aussi les états
+ * que personne n'a encore inventés.
+ */
+describe("Un bon clôturé sans suite facturable", () => {
+  const OFFERT = {
+    statutWorkflow: "cloture_gratuit",
+    taches: [],
+    travaux: [],
+    lignes: [{ type: "ligne", designation: "Dépannage offert", prixUnitaire: 240 }],
+  };
+
+  it("est refusé par le circuit", () => {
+    expect(blocagesChiffrage(OFFERT).map((b) => b.code)).toEqual(["cloture_gratuit"]);
+  });
+
+  it("est refusé AUSSI hors circuit — c'était le trou", () => {
+    expect(blocagesChiffrage(OFFERT, { horsCircuit: true }).map((b) => b.code)).toEqual([
+      "cloture_gratuit",
+    ]);
+  });
+
+  it("ne fait donc pas apparaître le bouton de contournement", () => {
+    const normal = blocagesChiffrage(OFFERT);
+    const hors = blocagesChiffrage(OFFERT, { horsCircuit: true });
+    expect(normal.length > 0 && hors.length === 0).toBe(false);
+  });
+});

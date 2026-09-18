@@ -174,7 +174,10 @@ suite("Pré-facture validée hors circuit", () => {
       p_bc_id: bcId,
     });
     expect(error).not.toBeNull();
-    expect(`${error?.message} ${error?.details ?? ""}`).toMatch(/déjà/i);
+    /* Le refus NOMME l'état rencontré. C'est ce qui permet à l'écran de montrer
+       un motif utile, et c'est la liste blanche qui le produit : elle refuse
+       tout ce qui n'est ni « en cours » ni « prêt à chiffrer ». */
+    expect(`${error?.message} ${error?.details ?? ""}`).toMatch(/chiffre/);
   });
 
   /* La clé anon part dans le bundle : la porte doit être fermée à qui n'est pas
@@ -221,6 +224,24 @@ suite("Pré-facture validée hors circuit", () => {
       );
       expect(await statutDe(bcId)).toBe("en_cours");
     });
+  });
+
+  /* La porte refusait par LISTE NOIRE — « chiffré », « facturé » — là où sa
+     jumelle refuse par liste blanche. « cloture_gratuit » n'y figurait pas : un
+     bon OFFERT au client repartait en facturation, son drapeau de gratuité avec
+     lui. Ce test tient la liste blanche en place. */
+  it("refuse un bon clôturé sans suite facturable — l'affaire offerte", async () => {
+    const bcId = await bonSansTache();
+    await queries.cloturerGratuit(bcId, "Geste commercial");
+    expect(await statutDe(bcId)).toBe("cloture_gratuit");
+
+    const { error } = await supabase.rpc("bc_chiffrage_valide_hors_circuit", {
+      p_bc_id: bcId,
+    });
+
+    expect(error).not.toBeNull();
+    expect(`${error?.message} ${error?.details ?? ""}`).toMatch(/cloture_gratuit/);
+    expect(await statutDe(bcId)).toBe("cloture_gratuit");
   });
 
   /* L'écran fait remonter le bon dans « À facturer » d'après `valideDirecteur`,

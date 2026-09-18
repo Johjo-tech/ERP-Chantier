@@ -22,6 +22,7 @@ const STATUT_TACHE_DEFAUT = "planifiee";
 const STATUT_TRAVAIL_A_CHIFFRER = "a_chiffrer";
 const STATUT_BC_FACTURE = "facture";
 const STATUT_BC_CHIFFRE = "chiffre";
+const STATUT_BC_CLOTURE_GRATUIT = "cloture_gratuit";
 const TYPE_LIGNE_DEFAUT = "ligne";
 
 /** Nombre de désignations citées avant de résumer le reste. */
@@ -53,6 +54,7 @@ export interface LigneChiffrable {
 export type CodeBlocage =
   | "deja_facture"
   | "deja_chiffre"
+  | "cloture_gratuit"
   | "aucune_tache"
   | "metiers_sans_tache"
   | "taches_non_pointees"
@@ -229,6 +231,20 @@ export function blocagesChiffrage(
      en existe dix en base, laissés par l'ancienne porte muette — affichait
      « aucune tâche n'a été planifiée » et se voyait proposer le contournement,
      qui n'aurait rien fait tout en annonçant une réussite. */
+  /* Affaire close sans suite facturable — geste commercial, erreur d'appel. La
+     règle le disait nulle part, et la porte hors circuit ne refusait que
+     « chiffré » et « facturé » : un bon OFFERT au client repartait donc en
+     facturation, son drapeau de gratuité avec lui. */
+  if (dossier.statutWorkflow === STATUT_BC_CLOTURE_GRATUIT) {
+    blocages.push({
+      code: "cloture_gratuit",
+      libelle:
+        "Ce bon de commande a été clôturé sans suite facturable : il ne peut plus être facturé.",
+      details: [],
+    });
+    return blocages;
+  }
+
   if (dossier.statutWorkflow === STATUT_BC_CHIFFRE) {
     blocages.push({
       code: "deja_chiffre",

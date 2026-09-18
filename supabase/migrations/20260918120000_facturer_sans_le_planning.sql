@@ -122,9 +122,14 @@ begin
       using errcode = '42501';
   end if;
 
-  -- Un bon déjà chiffré ou facturé ne redescend pas : le montant est engagé.
-  if v_statut in ('chiffre', 'facture') then
-    raise exception 'Ce bon de commande est déjà « % » : son chiffrage est arrêté.', v_statut
+  -- Liste BLANCHE, comme sa jumelle — et non liste noire. La première version
+  -- refusait « chiffre » et « facture » en nommant ce qu'elle interdisait :
+  -- elle laissait donc passer « cloture_gratuit », l'affaire close sans suite
+  -- facturable (geste commercial, erreur d'appel). Un bon offert au client
+  -- serait revenu en facturation par cette porte, et son drapeau de gratuité
+  -- avec lui. Nommer ce qu'on AUTORISE ferme aussi les états à venir.
+  if v_statut not in ('en_cours', 'pret_a_chiffrer') then
+    raise exception 'Ce bon de commande est « % » : il ne peut plus partir en facturation par ce chemin.', v_statut
       using errcode = 'check_violation';
   end if;
 
