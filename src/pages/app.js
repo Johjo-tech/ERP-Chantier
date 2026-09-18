@@ -4573,6 +4573,21 @@ function renderFacturesListHTML(list, vue){
       <button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')">Modifier</button>
       <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
+      ${/* L'ÉMISSION. `emettreFacture` existait, testée et exposée sur window —
+            et rien ne l'appelait : aucun bouton, aucun sélecteur de statut. Une
+            facture née d'un devis, d'un rapport ou d'une situation de travaux
+            restait donc en brouillon SANS NUMÉRO, indéfiniment. 46 en base, dont
+            13 hors jeu d'essai, la plus ancienne du 31 juillet.
+
+            Sans numéro elle ne peut être ni remise au client, ni transmise à la
+            plateforme. Le seul déblocage qui restait était d'y saisir un
+            règlement : le statut basculait, et la base numérotait — le numéro
+            légal attribué par un encaissement, hors de tout ordre chronologique.
+            C'est précisément ce que la migration de numérotation interdit, au nom
+            de l'article 242 nonies A de l'annexe II au CGI. */''}
+      ${!f.numero && !estUnAvoir && (!window.actionsFacturation || window.actionsFacturation().peutFacturer)
+        ? `<button class="btn small primary" onclick="emettreLaFacture('${jsAttr(f.id)}')" title="Attribuer son numéro définitif et la rendre transmissible">🧾 Émettre</button>`
+        : ''}
       ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${jsAttr(f.id)}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
       ${/* Le bouton absent ne s'expliquait pas : sur un brouillon — et les
             brouillons sont en TÊTE de liste, la plus récente d'abord — on
@@ -4741,6 +4756,54 @@ async function saveFacture(){
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');
   closeForm('facture');
+}
+
+/**
+ * Émet la facture : c'est ce geste qui lui donne son numéro.
+ *
+ * Le numéro naît en base, dans la transaction qui fait quitter le brouillon —
+ * `emettreFacture` ne fait que poser le statut, le déclencheur s'occupe du
+ * reste. Rien n'est calculé ici : la continuité de la série est une affaire de
+ * base, pas d'écran.
+ *
+ * On prévient de ce qui devient définitif, parce que ça l'est vraiment : une
+ * fois numérotée, la facture ne se modifie plus et ne se supprime plus — la
+ * base refuse les deux, et la correction passe par un avoir.
+ */
+async function emettreLaFacture(factureId){
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+  if(!window.emettreFacture){ showToast("L'émission n'est pas disponible."); return; }
+  if(f.numero){ showToast(`Déjà émise sous le n° ${f.numero}.`); return; }
+
+  const t = computeDocTotals(f);
+  if(!confirm(`Émettre la facture de ${esc(f.client)} pour ${moneyDisplay(t.ttc)} TTC ?\n\nElle recevra son numéro définitif. Son contenu ne pourra plus être modifié, et une correction devra passer par un avoir.`)) return;
+
+  try{
+    const emise = await window.emettreFacture(factureId);
+    await recharger('facture');
+    showToast(`Facture émise sous le n° ${emise && emise.numero ? emise.numero : '—'}.`, 'success');
+  }catch(err){
+    console.error('Émission refusée', err);
+    showToast(motifDeLaBase(err, "La facture n'a pas pu être émise."), 'danger', 7000);
+  }
+}
+
+/**
+ * Le motif que la base a donné, et non l'emballage qui le transporte.
+ *
+ * `SupabaseError` met dans `message` un libellé générique — « Failed to update
+ * factures » — et range l'explication de Postgres dans `details.message`. Montrer
+ * le premier, c'est dire à l'utilisateur qu'il s'est passé quelque chose sans
+ * dire quoi, alors que la base a écrit une phrase faite pour être lue :
+ * « Facture sans ligne : aucun numéro ne peut lui être attribué […] Créez-la au
+ * statut brouillon, ajoutez ses lignes, puis passez-la à impayée. »
+ */
+function motifDeLaBase(err, defaut){
+  if(!err) return defaut;
+  const d = err.details;
+  const deLaBase = d && (d.message || d.details || d.hint);
+  return deLaBase || err.message || defaut;
 }
 
 /**
@@ -16121,6 +16184,7 @@ Object.assign(window, {
   emailModalCopy,
   emailModalDownload,
   emailModalOpenMailClient,
+  emettreLaFacture,
   endDragAttachmentFloat,
   endResizeAttachmentFloat,
   enregistrerAnnotationPhoto,
@@ -16353,6 +16417,7 @@ Object.assign(window, {
   metiersDisplayJoin,
   metiersDisponibles,
   metiersDuBrouillon,
+  motifDeLaBase,
   moisAnnee,
   moisLabelCourt,
   monEquipeId,
