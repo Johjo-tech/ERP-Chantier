@@ -43,6 +43,9 @@ import type {
   Uuid,
 } from "../types";
 
+/** L'état d'un bon dont le montant est arrêté : plus rien à valider. */
+const STATUT_BC_CHIFFRE = "chiffre";
+
 // ============ LECTURE ============
 
 export function listTaches(societeId: Uuid) {
@@ -333,6 +336,12 @@ async function dossierChiffrageControle(
 ): Promise<BonCommande> {
   const bc = await getOne("bons_commande", bcId);
   if (!bc) throw new Error("Bon de commande introuvable.");
+
+  /* Déjà chiffré : les deux validations sont idempotentes, elles retournent
+     sans rien refaire. `blocagesChiffrage` pose désormais `deja_chiffre` dans
+     ce cas — c'est ce qu'il faut DIRE à l'écran, pas ce qu'il faut LEVER ici,
+     où le geste a simplement déjà eu lieu. */
+  if (bc.statut_workflow === STATUT_BC_CHIFFRE) return bc;
 
   const [taches, travaux, lignes] = await Promise.all([
     listTachesBonCommande(bcId),

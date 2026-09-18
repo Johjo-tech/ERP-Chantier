@@ -5768,7 +5768,17 @@ function blocagesDirecteur(b, ctx, options){
   }, options || {});
 }
 
+/* « Déjà chiffré » et « déjà facturé » ne sont pas des points à traiter : ce sont
+   des gestes accomplis. Les annoncer sous « ⚠ il reste un point à traiter »
+   disait le contraire de ce qu'ils veulent dire. */
+const BLOCAGES_ACCOMPLIS = ['deja_chiffre', 'deja_facture'];
+
 function blocagesDirecteurHTML(blocages, ctx, contournementOffert){
+  if(blocages.length && blocages.every(x=>BLOCAGES_ACCOMPLIS.includes(x.code))){
+    return `<div class="wf-banner" style="margin-bottom:10px;">
+      ${blocages.map(x=>`<div>✓ ${esc(x.libelle)}</div>`).join('')}
+    </div>`;
+  }
   if(blocages.length){
     return `<div class="wf-banner alerte" style="margin-bottom:10px;">
       <div style="font-weight:700; margin-bottom:6px;">⚠ Il reste ${blocages.length===1?'un point':'des points'} à traiter avant de valider</div>

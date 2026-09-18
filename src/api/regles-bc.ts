@@ -21,6 +21,7 @@ const STATUT_TACHE_REALISEE = "realisee";
 const STATUT_TACHE_DEFAUT = "planifiee";
 const STATUT_TRAVAIL_A_CHIFFRER = "a_chiffrer";
 const STATUT_BC_FACTURE = "facture";
+const STATUT_BC_CHIFFRE = "chiffre";
 const TYPE_LIGNE_DEFAUT = "ligne";
 
 /** Nombre de désignations citées avant de résumer le reste. */
@@ -51,6 +52,7 @@ export interface LigneChiffrable {
 
 export type CodeBlocage =
   | "deja_facture"
+  | "deja_chiffre"
   | "aucune_tache"
   | "metiers_sans_tache"
   | "taches_non_pointees"
@@ -219,6 +221,20 @@ export function blocagesChiffrage(
       details: [],
     });
     /* Les autres contrôles n'ont plus d'objet : le document est figé. */
+    return blocages;
+  }
+
+  /* Déjà chiffré, mais pas encore facturé : le montant est arrêté, il n'y a
+     plus rien à valider. Sans ce court-circuit, un bon chiffré SANS TÂCHE — il
+     en existe dix en base, laissés par l'ancienne porte muette — affichait
+     « aucune tâche n'a été planifiée » et se voyait proposer le contournement,
+     qui n'aurait rien fait tout en annonçant une réussite. */
+  if (dossier.statutWorkflow === STATUT_BC_CHIFFRE) {
+    blocages.push({
+      code: "deja_chiffre",
+      libelle: "Le chiffrage de ce bon de commande est déjà validé.",
+      details: [],
+    });
     return blocages;
   }
 

@@ -469,3 +469,52 @@ describe("Chiffrage hors circuit — ce qui tombe, et ce qui reste", () => {
     expect(blocagesChiffrage(sansPrix, { horsCircuit: true }).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Un bon déjà chiffré n'a plus rien à valider — et surtout rien à contourner.
+ *
+ * Le défaut a été trouvé dans un navigateur, pas dans une suite : sur un bon
+ * déjà au statut « chiffré », l'écran affichait « aucune tâche n'a été
+ * planifiée » et proposait « Valider sans passer par le planning ». Le clic
+ * n'aurait rien cassé — la validation est idempotente et serait revenue sans
+ * écrire — mais l'écran aurait annoncé une réussite pour un geste sans effet.
+ *
+ * `blocagesChiffrage` ne court-circuitait que sur « facturé ». Or dix bons sont
+ * « chiffrés » SANS AUCUNE TÂCHE en base : ceux que l'ancienne porte muette a
+ * laissés passer. Ils tombaient tous dans ce cas.
+ */
+describe("Un bon déjà chiffré", () => {
+  const DEJA_CHIFFRE = {
+    statutWorkflow: "chiffre",
+    taches: [],
+    travaux: [],
+    lignes: [{ type: "ligne", designation: "Dépannage", prixUnitaire: 240 }],
+  };
+
+  it("le dit, au lieu de réclamer des tâches qu'il n'aura jamais", () => {
+    const b = blocagesChiffrage(DEJA_CHIFFRE);
+    expect(b.map((x) => x.code)).toEqual(["deja_chiffre"]);
+    expect(b[0].libelle).toMatch(/déjà validé/i);
+  });
+
+  /* LA condition d'affichage du second bouton : il n'est offert que si la liste
+     hors circuit est VIDE alors que l'autre ne l'est pas. Ici les deux portent
+     le même blocage, donc la différence est nulle — et le bouton ne paraît pas. */
+  it("ne fait pas apparaître le contournement : les deux listes concordent", () => {
+    const normal = blocagesChiffrage(DEJA_CHIFFRE);
+    const horsCircuit = blocagesChiffrage(DEJA_CHIFFRE, { horsCircuit: true });
+    expect(horsCircuit.map((x) => x.code)).toEqual(["deja_chiffre"]);
+    expect(normal.length > 0 && horsCircuit.length === 0).toBe(false);
+  });
+
+  it("garde « déjà facturé » prioritaire — le document est figé, c'est plus fort", () => {
+    const facture = { ...DEJA_CHIFFRE, statutWorkflow: "facture" };
+    expect(blocagesChiffrage(facture).map((x) => x.code)).toEqual(["deja_facture"]);
+  });
+
+  it("n'écrase pas le cas d'un bon en cours, qui lui doit être contournable", () => {
+    const enCours = { ...DEJA_CHIFFRE, statutWorkflow: "en_cours" };
+    expect(blocagesChiffrage(enCours).map((x) => x.code)).toEqual(["aucune_tache"]);
+    expect(blocagesChiffrage(enCours, { horsCircuit: true })).toEqual([]);
+  });
+});
