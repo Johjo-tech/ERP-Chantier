@@ -719,7 +719,7 @@ function renderUserMenu(){
     ? `<div class="user-menu-section-title">Voir en tant que</div>` +
       [['admin','👑 Administrateur'],['secretaire','📋 Secrétaire'],['conducteur','🦺 Conducteur de travaux'],
        ['technicien','🔧 Technicien'],['sous_traitant','🏗️ Sous-traitant'],['lecture','👀 Lecture seule']]
-      .map(([id,label]) => `<button onclick="setRole('${id}')">${state.currentRole===id?'✓ ':''}${label}</button>`).join('')
+      .map(([id,label]) => `<button onclick="setRole('${jsAttr(id)}')">${state.currentRole===id?'✓ ':''}${label}</button>`).join('')
     : '';
 
   ['userMenuRoles','userMenuRolesMobile'].forEach(id=>{
@@ -790,14 +790,14 @@ function renderShell(){
   });
   renderUserMenu();
   document.getElementById('navDesktop').innerHTML = navPourRole().map(n=>`
-    <button class="nav-item ${n.id===state.tab?'active':''}" onclick="setTab('${n.id}')">
+    <button class="nav-item ${n.id===state.tab?'active':''}" onclick="setTab('${jsAttr(n.id)}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n.id]}</svg>
       <span>${n.label}</span>
     </button>`).join('');
   document.getElementById('bottomnav').innerHTML = MOBILE_NAV.map(n=>{
     const isActive = n.id==='plus' ? (state.tab==='plus'||state.tab==='parametres') : n.id===state.tab;
     return `
-    <button class="nav-item ${isActive?'active':''}" onclick="setTab('${n.id}')">
+    <button class="nav-item ${isActive?'active':''}" onclick="setTab('${jsAttr(n.id)}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n.id]}</svg>
       <span>${n.label.split(' ')[0]}</span>
     </button>`;
@@ -1219,8 +1219,8 @@ function renderYearlyComparisonSVG(yearly){
     const currLabel = `${d.fullLabel} ${currentYear}`.replace(/'/g,"\\'");
     const prevAmount = money(d.previous).replace(/'/g,"\\'");
     const currAmount = money(d.current).replace(/'/g,"\\'");
-    bars += `<rect x="${xPrev.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${(h-padT-padB).toFixed(1)}" fill="transparent" style="cursor:pointer;" onmousemove="showRevenueTooltip(event,'${prevLabel}','${prevAmount}')" onmouseleave="hideRevenueTooltip()"/>
-    <rect x="${xCurr.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${(h-padT-padB).toFixed(1)}" fill="transparent" style="cursor:pointer;" onmousemove="showRevenueTooltip(event,'${currLabel}','${currAmount}')" onmouseleave="hideRevenueTooltip()"/>
+    bars += `<rect x="${xPrev.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${(h-padT-padB).toFixed(1)}" fill="transparent" style="cursor:pointer;" onmousemove="showRevenueTooltip(event,'${jsAttr(prevLabel)}','${jsAttr(prevAmount)}')" onmouseleave="hideRevenueTooltip()"/>
+    <rect x="${xCurr.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${(h-padT-padB).toFixed(1)}" fill="transparent" style="cursor:pointer;" onmousemove="showRevenueTooltip(event,'${jsAttr(currLabel)}','${jsAttr(currAmount)}')" onmouseleave="hideRevenueTooltip()"/>
     <rect x="${xPrev.toFixed(1)}" y="${yPrev.toFixed(1)}" width="${barW.toFixed(1)}" height="${hPrev.toFixed(1)}" rx="3" fill="var(--text-dim)" opacity="0.32" pointer-events="none"/>
     <rect x="${xCurr.toFixed(1)}" y="${yCurr.toFixed(1)}" width="${barW.toFixed(1)}" height="${hCurr.toFixed(1)}" rx="3" fill="var(--accent)" pointer-events="none"/>`;
     bars += `<text x="${groupCenter.toFixed(1)}" y="${h-padB+22}" text-anchor="middle" font-size="12.5" fill="var(--text-dim)">${d.label}</text>`;
@@ -1389,8 +1389,8 @@ function salutation(){
 function tuileDashboard({ icone, libelle, valeur, sous, ton, destination, titre }){
   const classe = 'stat-card cliquable' + (ton ? ' ' + ton : '');
   return `<div class="${classe}" role="button" tabindex="0" title="${esc(titre||libelle)}"
-      onclick="ouvrirDepuisDashboard('${destination}')"
-      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('${destination}');}">
+      onclick="ouvrirDepuisDashboard('${jsAttr(destination)}')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('${jsAttr(destination)}');}">
     <div class="stat-card-top"><span class="stat-icon" style="background:var(--${ton==='danger'?'danger':ton==='warn'?'accent':'info'}-soft); color:var(--${ton==='danger'?'danger':ton==='warn'?'accent-2':'info'});">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icone}</svg></span></div>
     <div class="stat-label">${esc(libelle)}</div>
@@ -1742,7 +1742,7 @@ function globalSearchResultsHTML(q){
   return `<div class="section-title">${results.length} résultat${results.length>1?'s':''}</div>` + results.map(r=>{
     const it = r.item;
     const t = (r.type==='intervention') ? null : computeDocTotals(it);
-    return `<div class="card" id="global-result-${r.type}-${it.id}" style="cursor:pointer;" onclick="${goFns[r.type]}('${it.id}')">
+    return `<div class="card" id="global-result-${r.type}-${it.id}" style="cursor:pointer;" onclick="${goFns[r.type]}('${jsAttr(it.id)}')">
       <div class="card-row">
         <div><div class="card-title">${esc(it.client)}</div><div class="card-sub numref">${typeLabels[r.type]} · ${esc(it.numero||'')} · ${fmtDate(it.date)}</div></div>
         ${t? `<div class="amount">${moneyDisplay(t.ttc)}</div>` : `<span class="badge ${badgeClass(it.statut)}">${esc(it.statut)}</span>`}
@@ -1879,7 +1879,7 @@ function ligneRow(l,i){
           id="artCode-${i}" value="${esc(l.articleReference||'')}"
           oninput="searchArticleCode(this, ${i}); updateLigne(${i},'articleReference',this.value)"
           onkeydown="handleArticleCodeKeydown(event, ${i})"
-          onblur="setTimeout(()=>{const b=document.getElementById('artSuggest-${i}'); if(b) b.style.display='none';},180)">
+          onblur="setTimeout(()=>{const b=document.getElementById('artSuggest-${jsAttr(i)}'); if(b) b.style.display='none';},180)">
         <div id="artSuggest-${i}" class="suggest-box"></div>
       </div>
       <input type="text" value="${esc(l.designation)}" oninput="updateLigne(${i},'designation',this.value)">
@@ -3434,7 +3434,7 @@ function barreRecherche(cle, placeholder){
   const compte = compteRecherche(cle);
   return `<div class="barre-recherche">
     <input type="search" id="recherche-${cle}" value="${esc(state.recherches[cle]||'')}"
-      placeholder="${esc(placeholder)}" oninput="filtrerListe('${cle}', this.value)">
+      placeholder="${esc(placeholder)}" oninput="filtrerListe('${jsAttr(cle)}', this.value)">
     ${compte? `<span class="compteur-resultats">${compte}</span>` : ''}
   </div>`;
 }
@@ -3565,22 +3565,22 @@ function renderDevisListHTML(list){
     const facturesLiees = state.factures.filter(f=>f.devisId===d.id);
     const rapportOrigine = d.interventionId ? state.interventions.find(i=>i.id===d.interventionId) : null;
     const bonsCommandeLies = state.bonsCommande.filter(b=>b.devisId===d.id);
-    return `<div class="card" id="devis-card-${d.id}" style="cursor:pointer;" onclick="cardRowClick(event,'devis','${d.id}')"><div class="card-row">
+    return `<div class="card" id="devis-card-${d.id}" style="cursor:pointer;" onclick="cardRowClick(event,'devis','${jsAttr(d.id)}')"><div class="card-row">
       <div style="flex:1; min-width:0;"><div class="card-title">${esc(d.client)}</div><div class="card-sub"><span class="numref-lg">${esc(d.numero)}</span> · ${fmtDate(d.date)}${d.interlocuteur? ' · 👤 '+esc(d.interlocuteur):''}${d.conducteur? ' · 🦺 '+esc(d.conducteur):''}</div>${locataireCardLine(d)}
-      ${facturesLiees.length? `<div class="card-sub">Facture${facturesLiees.length>1?'s':''} liée${facturesLiees.length>1?'s':''} : ${facturesLiees.map(f=>`<a href="javascript:void(0)" onclick="goToFacture('${f.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(f.numero)}</a>`).join(', ')}</div>`:''}
-      ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
-      ${bonsCommandeLies.length? `<div class="card-sub">Bon${bonsCommandeLies.length>1?'s':''} de commande lié${bonsCommandeLies.length>1?'s':''} : ${bonsCommandeLies.map(b=>`<a href="javascript:void(0)" onclick="goToBonCommande('${b.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(b.numeroBC)}</a>`).join(', ')}</div>`:''}
+      ${facturesLiees.length? `<div class="card-sub">Facture${facturesLiees.length>1?'s':''} liée${facturesLiees.length>1?'s':''} : ${facturesLiees.map(f=>`<a href="javascript:void(0)" onclick="goToFacture('${jsAttr(f.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(f.numero)}</a>`).join(', ')}</div>`:''}
+      ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${jsAttr(rapportOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
+      ${bonsCommandeLies.length? `<div class="card-sub">Bon${bonsCommandeLies.length>1?'s':''} de commande lié${bonsCommandeLies.length>1?'s':''} : ${bonsCommandeLies.map(b=>`<a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(b.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(b.numeroBC)}</a>`).join(', ')}</div>`:''}
       </div>
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(d.logementStatut)}<span class="badge ${badgeClass(d.statut)}">${esc(d.statut)}</span></div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="editItem('devis','${d.id}')">Modifier</button>
-      <button class="btn small" onclick="dupliquerDevis('${d.id}')">Dupliquer</button>
-      <button class="btn small" onclick="printDocument('devis','${d.id}','save')">Imprimer / PDF</button>
-      <button class="btn small" onclick="envoyerDocumentEmail('devis','${d.id}')">Envoyer par email</button>
-      ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerEnFacture('${d.id}')">Transformer en facture</button>`}
-      ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${d.id}')">Créer un bon de commande</button>`}
-      <button class="btn small danger" onclick="deleteItem('devis','${d.id}')">Supprimer</button>
+      <button class="btn small" onclick="editItem('devis','${jsAttr(d.id)}')">Modifier</button>
+      <button class="btn small" onclick="dupliquerDevis('${jsAttr(d.id)}')">Dupliquer</button>
+      <button class="btn small" onclick="printDocument('devis','${jsAttr(d.id)}','save')">Imprimer / PDF</button>
+      <button class="btn small" onclick="envoyerDocumentEmail('devis','${jsAttr(d.id)}')">Envoyer par email</button>
+      ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerEnFacture('${jsAttr(d.id)}')">Transformer en facture</button>`}
+      ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${jsAttr(d.id)}')">Créer un bon de commande</button>`}
+      <button class="btn small danger" onclick="deleteItem('devis','${jsAttr(d.id)}')">Supprimer</button>
     </div></div>`;
   }).join('') || `<div class="empty">${q? 'Aucun devis ne correspond à la recherche.' : 'Aucun devis pour cette société. Créez-en un, ou dites-le à l\u2019assistant vocal.'}</div>`;
 }
@@ -4439,7 +4439,7 @@ function renderFacturesKTAHTML(bcs){
     return `<div class="card ${coche?'':''}" style="${coche? 'border-color:var(--accent);':''}">
       <div class="card-row">
         <div style="display:flex; gap:10px; flex:1; min-width:0;">
-          ${(!factureCreee && prixDefini)? `<input type="checkbox" ${coche?'checked':''} onchange="toggleSTFactureSelection('${b.id}')" style="width:19px; height:19px; margin-top:2px; flex-shrink:0; cursor:pointer;" title="Sélectionner pour une facture mensuelle regroupée">`:''}
+          ${(!factureCreee && prixDefini)? `<input type="checkbox" ${coche?'checked':''} onchange="toggleSTFactureSelection('${jsAttr(b.id)}')" style="width:19px; height:19px; margin-top:2px; flex-shrink:0; cursor:pointer;" title="Sélectionner pour une facture mensuelle regroupée">`:''}
           <div style="flex:1; min-width:0;">
             <div class="card-title">BC n° ${esc(b.numeroBC||'—')} — ${esc(b.client||'')}</div>
             ${adresse? `<div class="card-sub">📍 Chantier : ${esc(adresse)}${b.numeroLogement? ' · N° '+esc(b.numeroLogement):''}</div>`:''}
@@ -4450,7 +4450,7 @@ function renderFacturesKTAHTML(bcs){
       ${lignes.length? `<table class="lignes-table" style="background:#fff; margin-top:10px;"><thead><tr><th style="width:60%;">Détail des travaux</th><th>Qté</th><th>Unité</th></tr></thead>
       <tbody>${lignes.map(l=>`<tr><td>${esc(l.designation)}</td><td>${l.qte}</td><td>${esc(l.unite||'u')}</td></tr>`).join('')}</tbody></table>` : ''}
       <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-        ${factureCreee? `<span class="badge success">✓ Facture créée : ${esc(factureCreee.numero)}</span>` : prixDefini? `<button class="btn primary" onclick="creerFactureDepuisBCKTA('${b.id}')">➕ Récupérer ma facture pré-remplie</button>` : `<span class="card-sub">Le bouton apparaîtra dès que ${esc(societeName(state.societeId))} aura défini votre montant.</span>`}
+        ${factureCreee? `<span class="badge success">✓ Facture créée : ${esc(factureCreee.numero)}</span>` : prixDefini? `<button class="btn primary" onclick="creerFactureDepuisBCKTA('${jsAttr(b.id)}')">➕ Récupérer ma facture pré-remplie</button>` : `<span class="card-sub">Le bouton apparaîtra dès que ${esc(societeName(state.societeId))} aura défini votre montant.</span>`}
       </div>
     </div>`;
   }).join('');
@@ -4496,8 +4496,8 @@ function factureSTCardHTML(f){
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ttc)}</div><span class="badge ${badgeClass(f.statut)}" style="margin-top:5px; display:inline-block;">${esc(f.statut)}</span></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
-      ${f.statut==='impayée'? `<button class="btn small" onclick="marquerFactureSTPayee('${f.id}')">✓ Marquer payée</button>`:''}
+      <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
+      ${f.statut==='impayée'? `<button class="btn small" onclick="marquerFactureSTPayee('${jsAttr(f.id)}')">✓ Marquer payée</button>`:''}
     </div>
   </div>`;
 }
@@ -4542,11 +4542,11 @@ function renderFacturesListHTML(list, vue){
     const devisOrigine = f.devisId ? state.devis.find(d=>d.id===f.devisId) : null;
     const rapportOrigine = f.interventionId ? state.interventions.find(i=>i.id===f.interventionId) : null;
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
-    return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${f.id}')"><div class="card-row">
+    return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${jsAttr(f.id)}')"><div class="card-row">
       <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${f.numero? esc(f.numero) : 'Brouillon — non émise'}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
-      ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${devisOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
-      ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${rapportOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
-      ${rectifiee? `<div class="card-sub">Rectifie la facture : <a href="javascript:void(0)" onclick="event.stopPropagation(); goToFacture('${rectifiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rectifiee.numero)}</a>${f.motifRectification? ' · '+esc(f.motifRectification):''}</div>`:''}
+      ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${jsAttr(devisOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
+      ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${jsAttr(rapportOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
+      ${rectifiee? `<div class="card-sub">Rectifie la facture : <a href="javascript:void(0)" onclick="event.stopPropagation(); goToFacture('${jsAttr(rectifiee.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rectifiee.numero)}</a>${f.motifRectification? ' · '+esc(f.motifRectification):''}</div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="event.stopPropagation(); ouvrirBonCommandeOrigine('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;" title="${bonCommandeOrigine.pieceJointeChemin? 'Voir le bon reçu du client' : 'Aller au bon de commande'}">${esc(bonCommandeOrigine.numeroBC)}${bonCommandeOrigine.pieceJointeChemin? ' 📎':''}</a></div>`:''}
       </div>
       <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}${reg.paye > 0.004 ? `<div class="card-sub" style="margin-top:2px;">réglé ${moneyDisplay(reg.paye)}${reg.reste > 0.004? ' · reste '+moneyDisplay(reg.reste):''}</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(f.logementStatut)}${estUnAvoir
@@ -4558,19 +4558,19 @@ function renderFacturesListHTML(list, vue){
         : `<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}`}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="editItem('facture','${f.id}')">Modifier</button>
-      <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
-      <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
-      ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${f.id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
+      <button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')">Modifier</button>
+      <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
+      <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
+      ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${jsAttr(f.id)}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
       ${/* Le bouton absent ne s'expliquait pas : sur un brouillon — et les
             brouillons sont en TÊTE de liste, la plus récente d'abord — on
             cherchait un avoir qui n'était nulle part. Il reste donc visible,
             désactivé, et dit pourquoi. */''}
       ${estUnAvoir? '' : (f.numero
-        ? `<button class="btn small" onclick="etablirAvoirPour('${f.id}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
+        ? `<button class="btn small" onclick="etablirAvoirPour('${jsAttr(f.id)}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
         : `<button class="btn small" disabled title="Cette facture n'est pas émise : elle n'a pas de numéro, et se corrige directement par « Modifier ». Un avoir n'aurait rien à rectifier.">↩ Établir un avoir</button>`)}
-      ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${f.id}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
-      <button class="btn small danger" onclick="deleteItem('facture','${f.id}')">Supprimer</button>
+      ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
+      <button class="btn small danger" onclick="deleteItem('facture','${jsAttr(f.id)}')">Supprimer</button>
     </div></div>`;
   }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';
 }
@@ -4592,10 +4592,10 @@ function factureForm(){
     ${emise? `<div class="facture-verrou-banner">
       <span>🔒 ${unAvoir? 'Avoir' : 'Facture'} émis${unAvoir?'':'e'} sous le n° ${esc(e.numero)} — son contenu est définitif (art. L441-9).${unAvoir? '' : ' Une correction passe par un avoir.'}</span>
       <span style="font-weight:400;">L'encaissement s'enregistre dans l'onglet <b>Règlements</b>.</span>
-      ${unAvoir? '' : `<button type="button" class="btn small" onclick="etablirAvoirPour('${e.id}')" title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>`}
+      ${unAvoir? '' : `<button type="button" class="btn small" onclick="etablirAvoirPour('${jsAttr(e.id)}')" title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>`}
     </div>` : verrouillee? `<div class="facture-verrou-banner">
       <span>🔒 Cette facture a déjà été téléchargée ou envoyée — elle est verrouillée pour éviter une modification accidentelle.</span>
-      <button type="button" class="btn small danger" onclick="deverrouillerFacture('${e.id}')">🔓 Déverrouiller pour modifier</button>
+      <button type="button" class="btn small danger" onclick="deverrouillerFacture('${jsAttr(e.id)}')">🔓 Déverrouiller pour modifier</button>
     </div>` : ''}
     ${unAvoir && rectifieeEcran? `<div class="numref" style="margin-bottom:10px;">Rectifie la facture ${esc(rectifieeEcran.numero)} du ${fmtDate(rectifieeEcran.date)}${e.motifRectification? ' — '+esc(e.motifRectification):''}</div>`:''}
     <div style="${fige? 'pointer-events:none; opacity:.55;' : ''}">
@@ -4986,7 +4986,7 @@ function renderClientBCZoneHTML(){
   if(filtre) list = list.filter(b=>statutClientBC(b).cle===filtre);
   const ordre = { rouge:0, jaune:1, orange:2, vert:3 };
   list.sort((a,b)=> ordre[statutClientBC(a).cle]-ordre[statutClientBC(b).cle] || (a.numeroBC||'').localeCompare(b.numeroBC||''));
-  const tuile = (cle, label, n, couleur, fond)=>`<button class="client-tuile ${filtre===cle?'client-tuile-active':''}" style="--tc:${couleur}; --tf:${fond};" onclick="state.clientStatutFiltre = state.clientStatutFiltre==='${cle}'? '' : '${cle}'; setClientSearch(state.clientSearch||'');">${label}<b>${n}</b></button>`;
+  const tuile = (cle, label, n, couleur, fond)=>`<button class="client-tuile ${filtre===cle?'client-tuile-active':''}" style="--tc:${couleur}; --tf:${fond};" onclick="state.clientStatutFiltre = state.clientStatutFiltre==='${jsAttr(cle)}'? '' : '${jsAttr(cle)}'; setClientSearch(state.clientSearch||'');">${label}<b>${n}</b></button>`;
   return `
     <div class="client-tuiles">
       ${tuile('rouge','🔴 À planifier', compteurs.rouge, '#C0303C', '#FDE7E9')}
@@ -5151,9 +5151,9 @@ function bonCommandeCardHTML(b, workflowCtx){
       <div class="card-sub">${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>
       ${planningContactZoneHTML(b)}
       ${b.natureTravaux? `<div class="card-sub">🛠️ ${esc(b.natureTravaux)}</div>`:''}
-      ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="goToBonCommande('${bonCommandeOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
-      ${devisLie? `<div class="card-sub">Devis lié : <a href="javascript:void(0)" onclick="goToDevis('${devisLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisLie.numero)}</a></div>`:''}
-      ${rapportLie? `<div class="card-sub">Rapport lié : <a href="javascript:void(0)" onclick="goToIntervention('${rapportLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportLie.numero)}</a></div>`:''}
+      ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
+      ${devisLie? `<div class="card-sub">Devis lié : <a href="javascript:void(0)" onclick="goToDevis('${jsAttr(devisLie.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisLie.numero)}</a></div>`:''}
+      ${rapportLie? `<div class="card-sub">Rapport lié : <a href="javascript:void(0)" onclick="goToIntervention('${jsAttr(rapportLie.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportLie.numero)}</a></div>`:''}
       ${b.referenceChantier? `<div class="card-sub">🏗️ Chantier : ${esc(b.referenceChantier)}</div>`:''}
       ${(workflowCtx==='validation' && window.attenteAvantChiffrage && window.attenteAvantChiffrage(b))
         ? `<div class="attente-chiffrage">⏳ ${esc(window.attenteAvantChiffrage(b))}</div>` : ''}
@@ -5161,10 +5161,10 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${isSAV? (b.problemeDescription? `<div class="card-sub" style="color:var(--danger);"><span style="color:var(--danger);">⚠</span> ${esc(b.problemeDescription)}</div>`:'') : `<div class="card-sub">${b.dateReception? 'Reçu le '+fmtDate(b.dateReception):''}${b.dateFinTravaux? ' · Fin travaux : '+fmtDate(b.dateFinTravaux):''}</div>`}
       ${isSAV && b.photos && b.photos.length? `<div class="card-sub">📷 ${b.photos.length} photo${b.photos.length>1?'s':''}</div>`:''}
       ${(b.pieceJointeChemin||b.pieceJointeData)? `<div class="card-sub"><a href="javascript:void(0)" style="color:var(--accent-2); text-decoration:underline;" onclick="event.stopPropagation(); ouvrirBonDuClient('${jsAttr(b.id)}')" title="Voir le bon reçu du client">📎 ${esc(b.pieceJointeNom||'Bon du client')}</a></div>`:''}
-      ${factureLiee? `<div class="card-sub">Facture liée : <a href="javascript:void(0)" onclick="goToFacture('${factureLiee.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(factureLiee.numero)}</a></div>`:''}
-      ${savLie? `<div class="card-sub">SAV lié : <a href="javascript:void(0)" onclick="goToBonCommande('${savLie.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(savLie.numeroBC)}</a></div>`:''}
+      ${factureLiee? `<div class="card-sub">Facture liée : <a href="javascript:void(0)" onclick="goToFacture('${jsAttr(factureLiee.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(factureLiee.numero)}</a></div>`:''}
+      ${savLie? `<div class="card-sub">SAV lié : <a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(savLie.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(savLie.numeroBC)}</a></div>`:''}
       ${(b.technicienCommentaire || b.sousTraitantCommentaire || (b.technicienPhotos||[]).length || b.technicienDessin || b.pieceACommanderDetail || b.dateInterventionTerminee)? `<div class="tech-fiche-zone">
-        <button class="btn small ghost" onclick="event.stopPropagation(); toggleTechFicheOuverte('${b.id}')">📋 Fiche d'intervention du technicien ${state.techFicheOuverte===b.id?'▲':'▼'}</button>
+        <button class="btn small ghost" onclick="event.stopPropagation(); toggleTechFicheOuverte('${jsAttr(b.id)}')">📋 Fiche d'intervention du technicien ${state.techFicheOuverte===b.id?'▲':'▼'}</button>
         ${state.techFicheOuverte===b.id? `<div class="tech-fiche-detail">
           ${b.dateInterventionTerminee? `<div class="tech-fiche-commentaire" style="color:#2E9BF0; font-weight:600;">✅ Intervention terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
           ${b.technicienCommentaire? `<div class="tech-fiche-commentaire">💬 ${esc(b.technicienCommentaire)}</div>`:''}
@@ -5178,18 +5178,18 @@ function bonCommandeCardHTML(b, workflowCtx){
             que `b.lignes` et ignorait les travaux ajoutés sur le chantier : on
             pouvait chiffrer une affaire sans jamais les voir. */''}
       ${chiffrageIci? `<div class="tech-fiche-zone">
-        <button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${b.id}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>
+        <button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${jsAttr(b.id)}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>
       </div>`:''}
       ${pieceAttendueLigne(b, 'card-sub')}
       ${b.datePlanificationInitiale? `<div class="card-sub">🕓 Planifiée une première fois le ${fmtDate(b.datePlanificationInitiale)} (reportée pour attente de pièce)</div>`:''}
       ${b.dateInterventionTerminee? `<div class="card-sub" style="color:#2E9BF0; font-weight:600;">✅ Intervention terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
       ${(workflowCtx==='pieceCommande' && b.pieceACommander)? `<div class="piece-replanifier-zone">
         <label class="card-sub" style="margin:0;">Commandée le
-          <input type="date" id="dateCommandePiece_${b.id}" value="${b.pieceACommanderDateCommande||''}" onchange="updatePieceCommandeChamp('${b.id}','pieceACommanderDateCommande',this.value)">
+          <input type="date" id="dateCommandePiece_${b.id}" value="${b.pieceACommanderDateCommande||''}" onchange="updatePieceCommandeChamp('${jsAttr(b.id)}','pieceACommanderDateCommande',this.value)">
         </label>
-        <input type="text" id="fournisseurPiece_${b.id}" placeholder="Nom du fournisseur" value="${esc(b.pieceACommanderFournisseur)}" onchange="updatePieceCommandeChamp('${b.id}','pieceACommanderFournisseur',this.value)" style="min-width:160px;">
-        ${!b.pieceACommanderDateCommande? `<button class="btn small primary" onclick="marquerPieceCommandee('${b.id}')">📦 Commandé</button>`:''}
-        <button class="btn small ${b.pieceACommanderDateCommande?'primary':''}" onclick="replanifierApresPiece('${b.id}')">✓ Pièce arrivée — Renvoyer au planning</button>
+        <input type="text" id="fournisseurPiece_${b.id}" placeholder="Nom du fournisseur" value="${esc(b.pieceACommanderFournisseur)}" onchange="updatePieceCommandeChamp('${jsAttr(b.id)}','pieceACommanderFournisseur',this.value)" style="min-width:160px;">
+        ${!b.pieceACommanderDateCommande? `<button class="btn small primary" onclick="marquerPieceCommandee('${jsAttr(b.id)}')">📦 Commandé</button>`:''}
+        <button class="btn small ${b.pieceACommanderDateCommande?'primary':''}" onclick="replanifierApresPiece('${jsAttr(b.id)}')">✓ Pièce arrivée — Renvoyer au planning</button>
       </div>`:''}
       </div>
       ${b.logementStatut? `<div style="flex:0 0 auto; align-self:center; text-align:center; padding:0 6px;">${logementBadge(b.logementStatut)}</div>`:''}
@@ -5203,15 +5203,15 @@ function bonCommandeCardHTML(b, workflowCtx){
     ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
     ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="editItem('bonCommande','${b.id}')">Modifier</button>
+      <button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')">Modifier</button>
       ${/* Une fois la pré-facture validée, l'étape suivante doit sauter aux yeux :
             c'est le geste qu'on cherche, pas un bouton gris parmi cinq. */''}
       ${(factureLiee||isSAV)? '' : (b.valideDirecteur
-        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${b.id}')">🧾 Créer la facture</button>`
+        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${jsAttr(b.id)}')">🧾 Créer la facture</button>`
         : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
-      ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${b.id}')">Créer un SAV</button>`}
-      ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${b.id}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${rapportLie.id}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${b.id}')">🔗 Lier un rapport</button>`}
-      <button class="btn small danger" onclick="deleteItem('bonCommande','${b.id}')">Supprimer</button>
+      ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')">Créer un SAV</button>`}
+      ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Lier un rapport</button>`}
+      <button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')">Supprimer</button>
     </div>
     ${state.lienOuvert==='bonCommande:'+b.id? `<div style="margin-top:8px;">${lienWidgetHTML('bonCommande', b.id, b.client)}</div>`:''}
     ${(!factureLiee && !isSAV && !b.valideDirecteur && workflowCtx!=='pieceCommande')? `<div class="bc-attente-message" style="margin-top:8px;">⏳ En attente — ${!b.valideConducteur? "la validation du conducteur puis du directeur est requise" : "la validation du directeur est requise"} avant de pouvoir facturer ce bon de commande.</div>` : ''}
@@ -5347,7 +5347,7 @@ function bcWorkflowStepperHTML(b, ctx){
     `).join('')}
     <div class="bc-step-actions">
       ${ctx==='attente' && !etape2 && peutArbitrer? (etape1?
-        `<button class="btn small primary" onclick="openValidationConducteurModal('${b.id}')">✓ Valider (conducteur)</button>`
+        `<button class="btn small primary" onclick="openValidationConducteurModal('${jsAttr(b.id)}')">✓ Valider (conducteur)</button>`
         : `<div class="bc-attente-message">⏳ En attente — tous les métiers doivent être marqués comme réalisés par le technicien avant de pouvoir passer à la validation du conducteur.</div>`
       ) : ''}
       ${/* Le stepper dit où en est le dossier ; le geste, lui, a un seul bouton,
@@ -5913,7 +5913,7 @@ function majEnteteDirecteur(champ, valeur){
  */
 function referencesPrefactureHTML(ctx, b){
   const devis = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
-  const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${cle}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
+  const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${jsAttr(cle)}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
   const aLeDocument = !!b.pieceJointeChemin;
   return `<div style="display:flex; gap:6px; flex-wrap:wrap;">
     <span class="card-sub" style="align-self:center;">Consulter :</span>
@@ -6188,7 +6188,7 @@ function bcMetiersChecklistHTML(b){
   return `<div class="bc-metiers-checklist">
     <div class="card-sub" style="font-weight:700; margin-bottom:6px;">🔧 Métiers réalisés (${nbFait}/${metiers.length})${metiers.length>1? ' — tous requis pour valider':''}</div>
     ${metiers.map(m=>`<label class="bc-tache-row ${fait[m]?'is-fait':''}">
-      <input type="checkbox" ${fait[m]?'checked':''} onchange="toggleBCMetierFait('${b.id}','${jsAttr(m)}')">
+      <input type="checkbox" ${fait[m]?'checked':''} onchange="toggleBCMetierFait('${jsAttr(b.id)}','${jsAttr(m)}')">
       <span style="flex:1;">${esc(metierDisplayLabel(m))}</span>
     </label>`).join('')}
   </div>`;
@@ -6730,12 +6730,12 @@ function renderPlanning(){
         <input type="text" id="planningSearchInput" style="width:220px;" value="${esc(state.planningSearch||'')}" placeholder="Rechercher : client, n° BC, adresse…" oninput="filterPlanningList(this.value)">
       </div>
       ${(view==='attente'||view==='attenteST') ? '' : `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-left:auto;">
-        <select style="width:auto; min-width:170px;" onchange="filterPlanningAssignee('${assigneeField}',this.value)">${isSousTraitant? sousTraitantFilterOptions(af) : technicienFilterOptions(af, 'Toutes les équipes')}</select>
+        <select style="width:auto; min-width:170px;" onchange="filterPlanningAssignee('${jsAttr(assigneeField)}',this.value)">${isSousTraitant? sousTraitantFilterOptions(af) : technicienFilterOptions(af, 'Toutes les équipes')}</select>
         <select style="width:auto; min-width:160px;" onchange="filterPlanningMetier(this.value)">${metierPersoFilterOptions(state.planningMetierFilter)}</select>
         <button class="btn small" onclick="planningPrevWeek()" title="Semaine précédente">←</button>
         <input type="date" style="width:auto;" value="${firstMonday}" onchange="jumpToWeek(this.value)" title="Aller à la semaine de cette date">
         <button class="btn small" onclick="planningNextWeek()" title="Semaine suivante">→</button>
-        <button class="btn small" onclick="printPlanning('${assigneeField}')" title="Imprimer le planning de cette semaine">🖨️ Imprimer</button>
+        <button class="btn small" onclick="printPlanning('${jsAttr(assigneeField)}')" title="Imprimer le planning de cette semaine">🖨️ Imprimer</button>
       </div>`}
     </div>
     <div id="planningBodyZone">${(view==='attente'||view==='attenteST')? renderPlanningEnAttente(view==='attenteST'?'soustraitant':'technicien') : renderPlanningCalendar(assigneeField)}</div>
@@ -6851,7 +6851,7 @@ function renderWeekBlockHTML(monday, all, assigneeField, assigneeValue){
           return `<div class="planning-daycol ${isNonOuvre?'is-non-ouvre':''}" data-iso="${d.iso}">
             <div class="planning-day-head ${d.iso===todayISO()?'is-today':''}">${d.label}<br><b>${d.dayNum} ${d.month}</b>${isJourFerie(d.iso)?'<br><span style="font-size:9.5px;">Férié</span>':''}</div>
             <div class="planning-day-grid" style="height:calc(${PLANNING_HOURS.length} * ${planningRowExpr()});">
-              ${PLANNING_HOURS.map((h,idx)=>`<div class="planning-hour-row ${h===PLANNING_PAUSE_HOUR?'is-pause':''}" style="top:calc(${idx} * ${planningRowExpr()}); height:calc(${planningRowExpr()});" ondragover="allowDropHour(event)" ondragleave="this.classList.remove('drag-over')" ondrop="dropOnHour(event,'${d.iso}',${h},'${assigneeField||''}','${jsAttr(assigneeValue||'')}')"></div>`).join('')}
+              ${PLANNING_HOURS.map((h,idx)=>`<div class="planning-hour-row ${h===PLANNING_PAUSE_HOUR?'is-pause':''}" style="top:calc(${idx} * ${planningRowExpr()}); height:calc(${planningRowExpr()});" ondragover="allowDropHour(event)" ondragleave="this.classList.remove('drag-over')" ondrop="dropOnHour(event,'${jsAttr(d.iso)}',${h},'${assigneeField||''}','${jsAttr(assigneeValue||'')}')"></div>`).join('')}
               ${items.map(b=>planningScheduledCardHTML(b, d.iso, assigneeField)).join('')}
               ${(()=>{ const pIdx = PLANNING_HOURS.indexOf(PLANNING_PAUSE_HOUR); return pIdx>=0 ? `<div class="planning-pause-overlay" style="top:calc(${pIdx} * ${planningRowExpr()}); height:calc(${planningRowExpr()});"></div>` : ''; })()}
             </div>
@@ -7223,11 +7223,11 @@ function planningContactZoneHTML(b, readOnly){
     </div>`;
   }
   return `<div class="planning-contact-zone" onclick="event.stopPropagation()">
-    <button class="btn-contact btn-contact-appel" onclick="logTentativeContact('${kind}','${b.id}','appel')" title="Enregistrer une tentative d'appel (maintenant)">📞</button>
-    <button class="btn-contact btn-contact-sms" onclick="logTentativeContact('${kind}','${b.id}','sms')" title="Enregistrer un SMS envoyé (maintenant)">💬</button>
-    <button class="btn-contact btn-contact-rappel" onclick="openRappelModal('${kind}','${b.id}')" title="Programmer un rappel (ex : le locataire revient de congés)">📅</button>
-    ${b.rappelDate? `<span class="contact-tag contact-tag-rappel">🔄 Rappeler le ${fmtDate(b.rappelDate)} <button onclick="event.stopPropagation(); annulerRappel('${kind}','${b.id}')" title="Annuler le rappel">✕</button></span>`:''}
-    ${tentatives.map(t=>`<span class="contact-tag contact-tag-${t.type}">${t.type==='appel'?'📞':'💬'} ${fmtDate(t.date)} ${t.heure} <button onclick="removeTentativeContact('${kind}','${b.id}','${t.id}')" title="Retirer">✕</button></span>`).join('')}
+    <button class="btn-contact btn-contact-appel" onclick="logTentativeContact('${jsAttr(kind)}','${jsAttr(b.id)}','appel')" title="Enregistrer une tentative d'appel (maintenant)">📞</button>
+    <button class="btn-contact btn-contact-sms" onclick="logTentativeContact('${jsAttr(kind)}','${jsAttr(b.id)}','sms')" title="Enregistrer un SMS envoyé (maintenant)">💬</button>
+    <button class="btn-contact btn-contact-rappel" onclick="openRappelModal('${jsAttr(kind)}','${jsAttr(b.id)}')" title="Programmer un rappel (ex : le locataire revient de congés)">📅</button>
+    ${b.rappelDate? `<span class="contact-tag contact-tag-rappel">🔄 Rappeler le ${fmtDate(b.rappelDate)} <button onclick="event.stopPropagation(); annulerRappel('${jsAttr(kind)}','${jsAttr(b.id)}')" title="Annuler le rappel">✕</button></span>`:''}
+    ${tentatives.map(t=>`<span class="contact-tag contact-tag-${t.type}">${t.type==='appel'?'📞':'💬'} ${fmtDate(t.date)} ${t.heure} <button onclick="removeTentativeContact('${jsAttr(kind)}','${jsAttr(b.id)}','${jsAttr(t.id)}')" title="Retirer">✕</button></span>`).join('')}
   </div>`;
 }
 /* La pièce attendue, en une ligne.
@@ -7275,7 +7275,7 @@ function planningPrixSTZoneHTML(b, assigneeField){
   }
   return `<div class="planning-prix-st" onclick="event.stopPropagation()">
     💶 <input type="number" min="0" step="0.01" value="${b.montantSousTraitant!=null? b.montantSousTraitant : ''}" placeholder="Prix ST €"
-      onchange="updatePrixSousTraitant('${b.kind}','${b.id}',this.value)" title="Montant convenu avec le sous-traitant (HT) — repris sur sa facture pré-remplie"> € HT
+      onchange="updatePrixSousTraitant('${jsAttr(b.kind)}','${jsAttr(b.id)}',this.value)" title="Montant convenu avec le sous-traitant (HT) — repris sur sa facture pré-remplie"> € HT
   </div>`;
 }
 async function updatePrixSousTraitant(kind, compositeId, value){
@@ -7296,7 +7296,7 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
   const positionLiee = isLiee ? b.metiers.indexOf(b.metier)+1 : 0;
   const lienBadge = isLiee ? `<span class="planning-lien-badge" title="Ce bon de commande a ${b.metiers.length} métiers, chacun avec sa propre vignette">🔗 ${positionLiee}/${b.metiers.length}</span>` : '';
   const logementPartageBadge = b.logementPartage ? `<span class="planning-logement-badge" title="${b.logementPartage} bons de commande liés au même devis (même logement)">🏠 ${b.logementPartage}</span>` : '';
-  return `<div class="planning-card ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="true" ondragstart="dragStartBC(event,'${b.kind}','${b.id}')" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}',null)" style="${couleur? `border-right:5px solid ${esc(couleur)};` : ''}">
+  return `<div class="planning-card ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="true" ondragstart="dragStartBC(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}')" onclick="handlePlanningCardClick(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}',null)" style="${couleur? `border-right:5px solid ${esc(couleur)};` : ''}">
     <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
     ${planningContactZoneHTML(b)}
     <div class="planning-card-sub">${esc(b.numero)}</div>
@@ -7311,9 +7311,9 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
     ${b.datePlanificationInitiale? `<div class="planning-card-sub" title="Reportée pour attente de pièce">🕓 1ère planif. : ${fmtDate(b.datePlanificationInitiale)}</div>`:''}
     ${b.dateInterventionTerminee? `<div class="planning-card-sub" style="color:#2E9BF0;">✅ Terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
     ${planningPrixSTZoneHTML(b, assigneeField)}
-    <input type="date" class="planning-quick-date" onchange="quickScheduleBC('${b.kind}','${b.id}', this.value, '${assigneeField||''}', '${jsAttr(assigneeValue||'')}')" title="Choisir une date (alternative au glisser-déposer)">
+    <input type="date" class="planning-quick-date" onchange="quickScheduleBC('${jsAttr(b.kind)}','${jsAttr(b.id)}', this.value, '${assigneeField||''}', '${jsAttr(assigneeValue||'')}')" title="Choisir une date (alternative au glisser-déposer)">
     ${(b.montant!=null && !estSousTraitant())? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
-    ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a>`:''}
+    ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${jsAttr(b.kind)}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎 ${esc(b.pieceJointeNom||'Pièce jointe')}</a>`:''}
     ${savTriangle}
   </div>`;
 }
@@ -7363,13 +7363,13 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     height = `calc(${spanRows} * ${rowExpr} - 4px)`;
   }
   if(isDateSupp){
-    return `<div class="planning-card planning-card-scheduled planning-card-suppl ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="false" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}','${dayIso}')" style="top:${top}; height:${height}; ${couleurStyle}">
-      <button class="planning-unschedule" onclick="event.stopPropagation(); removeDateSupplementaire('${b.kind}','${b.id}','${dayIso}')" title="Retirer cette date">✕</button>
+    return `<div class="planning-card planning-card-scheduled planning-card-suppl ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="false" onclick="handlePlanningCardClick(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" style="top:${top}; height:${height}; ${couleurStyle}">
+      <button class="planning-unschedule" onclick="event.stopPropagation(); removeDateSupplementaire('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" title="Retirer cette date">✕</button>
       <div class="planning-card-title">${esc(b.client)}${kindBadge}<span class="planning-suppl-badge" title="Date supplémentaire ajoutée pour ce même bon de commande">📅 Suppl.</span></div>
       <div class="planning-card-sub">${esc(b.numero)}</div>
       <div class="planning-card-controls" onclick="event.stopPropagation()">
-        <input type="time" class="planning-time" value="${occSuppl.heure||'08:00'}" onchange="updateDateSupplChamp('${b.kind}','${b.id}','${dayIso}','heure',this.value)">
-        <select class="planning-duree" onchange="updateDateSupplChamp('${b.kind}','${b.id}','${dayIso}','duree',this.value)" title="Durée">
+        <input type="time" class="planning-time" value="${occSuppl.heure||'08:00'}" onchange="updateDateSupplChamp('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}','heure',this.value)">
+        <select class="planning-duree" onchange="updateDateSupplChamp('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}','duree',this.value)" title="Durée">
           ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${(occSuppl.duree||1)===n?'selected':''}>${n} h</option>`).join('')}
         </select>
       </div>
@@ -7377,23 +7377,23 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     </div>`;
   }
   if(!isOrigin && isDernierJour){
-    return `<div class="planning-card planning-card-scheduled planning-card-continuation" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}','${dayIso}')" style="top:${top}; height:${height}; ${couleurStyle}; cursor:pointer;">
+    return `<div class="planning-card planning-card-scheduled planning-card-continuation" onclick="handlePlanningCardClick(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" style="top:${top}; height:${height}; ${couleurStyle}; cursor:pointer;">
       <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
       <div class="planning-card-sub">${esc(b.numero)} · suite, dernier jour</div>
-      <input type="time" class="planning-time" value="${b.heureDernierJour||'08:00'}" onchange="updateBCHeureDernierJour('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Heure de début ce jour-là">
+      <input type="time" class="planning-time" value="${b.heureDernierJour||'08:00'}" onchange="updateBCHeureDernierJour('${jsAttr(b.kind)}','${jsAttr(b.id)}',this.value)" onclick="event.stopPropagation()" title="Heure de début ce jour-là">
       ${savTriangle}
-      <div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${b.kind}','${b.id}',true)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>
+      <div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}',true)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>
     </div>`;
   }
   if(!isOrigin){
-    return `<div class="planning-card planning-card-scheduled planning-card-continuation" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}','${dayIso}')" style="top:${top}; height:${height}; ${couleurStyle}; cursor:pointer;">
+    return `<div class="planning-card planning-card-scheduled planning-card-continuation" onclick="handlePlanningCardClick(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" style="top:${top}; height:${height}; ${couleurStyle}; cursor:pointer;">
       <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
       <div class="planning-card-sub">${esc(b.numero)} · suite</div>
       ${savTriangle}
     </div>`;
   }
-  return `<div class="planning-card planning-card-scheduled ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="true" ondragstart="dragStartBC(event,'${b.kind}','${b.id}')" onclick="handlePlanningCardClick(event,'${b.kind}','${b.id}','${dayIso}')" style="top:${top}; height:${height}; ${couleurStyle}">
-    ${estSousTraitant()? '' : `<button class="planning-unschedule" onclick="unscheduleBC('${b.kind}','${b.id}')" title="Retirer du planning">✕</button>`}
+  return `<div class="planning-card planning-card-scheduled ${bcInterventionFaite(b)?'planning-card-fait':''}" draggable="true" ondragstart="dragStartBC(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}')" onclick="handlePlanningCardClick(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" style="top:${top}; height:${height}; ${couleurStyle}">
+    ${estSousTraitant()? '' : `<button class="planning-unschedule" onclick="unscheduleBC('${jsAttr(b.kind)}','${jsAttr(b.id)}')" title="Retirer du planning">✕</button>`}
     <div class="planning-card-title">${esc(b.client)}${kindBadge}${lienBadge}${logementPartageBadge}${b.pieceACommander? `<span class="planning-piece-badge" title="Pièce à commander : ${esc(b.pieceACommanderDetail||"non précisée")}">📦</span>`:""}</div>
     ${planningContactZoneHTML(b, true)}
     <div class="planning-card-sub">${esc(b.numero)}</div>
@@ -7407,23 +7407,23 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     ${b.datePlanificationInitiale? `<div class="planning-card-sub" title="Reportée pour attente de pièce">🕓 1ère planif. : ${fmtDate(b.datePlanificationInitiale)}</div>`:''}
     ${b.dateInterventionTerminee? `<div class="planning-card-sub" style="color:#2E9BF0;">✅ Terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
     ${estSousTraitant()? `${(b.datesSupplementaires||[]).length? `<div class="planning-extra-dates">${b.datesSupplementaires.map(d=>`<span class="planning-extra-date-tag">📅 ${fmtDate(d.date)} ${d.heure||'08:00'}</span>`).join('')}</div>`:''}` : `<div class="planning-extra-dates" onclick="event.stopPropagation()">
-      ${(b.datesSupplementaires||[]).map(d=>`<span class="planning-extra-date-tag">📅 ${fmtDate(d.date)} ${d.heure||'08:00'} (${d.duree||1}h) <button onclick="removeDateSupplementaire('${b.kind}','${b.id}','${d.date}')" title="Retirer">✕</button></span>`).join('')}
-      <button class="btn small ghost" onclick="event.stopPropagation(); openAjoutDateSupplModal('${b.kind}','${b.id}')" title="Planifier ce même bon de commande sur une autre date, en plus">+ Autre date</button>
+      ${(b.datesSupplementaires||[]).map(d=>`<span class="planning-extra-date-tag">📅 ${fmtDate(d.date)} ${d.heure||'08:00'} (${d.duree||1}h) <button onclick="removeDateSupplementaire('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(d.date)}')" title="Retirer">✕</button></span>`).join('')}
+      <button class="btn small ghost" onclick="event.stopPropagation(); openAjoutDateSupplModal('${jsAttr(b.kind)}','${jsAttr(b.id)}')" title="Planifier ce même bon de commande sur une autre date, en plus">+ Autre date</button>
     </div>`}
     ${estSousTraitant()? `<div class="planning-card-controls"><span class="planning-jour-heure" style="font-size:11px;">${b.heurePlanifiee||'—'}${b.dureeHeures? ' · '+b.dureeHeures+'h':''}</span></div>` : `<div class="planning-card-controls">
-      <input type="time" class="planning-time" value="${b.heurePlanifiee||''}" onchange="updateBCHeure('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()">
-      <select class="planning-duree" onchange="updateBCDuree('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Durée">
+      <input type="time" class="planning-time" value="${b.heurePlanifiee||''}" onchange="updateBCHeure('${jsAttr(b.kind)}','${jsAttr(b.id)}',this.value)" onclick="event.stopPropagation()">
+      <select class="planning-duree" onchange="updateBCDuree('${jsAttr(b.kind)}','${jsAttr(b.id)}',this.value)" onclick="event.stopPropagation()" title="Durée">
         ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${duree===n?'selected':''}>${n} h</option>`).join('')}
       </select>
     </div>`}
-    ${estSousTraitant()? '' : `<select class="planning-technicien-select" onchange="updateBCAssignee('${b.kind}','${b.id}','${assigneeField}',this.value)" onclick="event.stopPropagation()" title="${assigneeField==='sousTraitant'?'Sous-traitant assigné':'Équipe assignée'}">${assigneeField==='sousTraitant'? sousTraitantSelectOptions(b.sousTraitant) : technicienSelectOptions(b.technicien)}</select>`}
-    ${estSousTraitant()? '' : `<input type="date" class="planning-enddate" value="${b.datePlanifieeFin||b.datePlanifiee||''}" min="${b.datePlanifiee||''}" onchange="updateBCDateFin('${b.kind}','${b.id}',this.value)" onclick="event.stopPropagation()" title="Étirer jusqu'à cette date">`}
+    ${estSousTraitant()? '' : `<select class="planning-technicien-select" onchange="updateBCAssignee('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(assigneeField)}',this.value)" onclick="event.stopPropagation()" title="${assigneeField==='sousTraitant'?'Sous-traitant assigné':'Équipe assignée'}">${assigneeField==='sousTraitant'? sousTraitantSelectOptions(b.sousTraitant) : technicienSelectOptions(b.technicien)}</select>`}
+    ${estSousTraitant()? '' : `<input type="date" class="planning-enddate" value="${b.datePlanifieeFin||b.datePlanifiee||''}" min="${b.datePlanifiee||''}" onchange="updateBCDateFin('${jsAttr(b.kind)}','${jsAttr(b.id)}',this.value)" onclick="event.stopPropagation()" title="Étirer jusqu'à cette date">`}
     ${(b.montant!=null && !estSousTraitant())? `<div class="planning-card-amount">${moneyDisplay(b.montant)}</div>` : ''}
     ${planningPrixSTZoneHTML(b, assigneeField)}
-    ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${b.kind}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎</a>`:''}
+    ${(b.pieceJointeChemin||b.pieceJointeData)? `<a href="javascript:void(0)" class="planning-card-pj" draggable="false" onclick="event.stopPropagation(); openAttachmentPreviewFor('${jsAttr(b.kind)}','${jsAttr(b.id)}')" title="Aperçu de la pièce jointe">📎</a>`:''}
     ${savTriangle}
-    ${estSousTraitant()? '' : `<button class="planning-shift-left" onclick="event.stopPropagation(); shiftBCUnJourPlusTot('${b.kind}','${b.id}')" title="Annuler l'étirement (puis déplanifier au clic suivant)">←</button>`}
-    ${estSousTraitant()? '' : `<div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${b.kind}','${b.id}',false)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>`}
+    ${estSousTraitant()? '' : `<button class="planning-shift-left" onclick="event.stopPropagation(); shiftBCUnJourPlusTot('${jsAttr(b.kind)}','${jsAttr(b.id)}')" title="Annuler l'étirement (puis déplanifier au clic suivant)">←</button>`}
+    ${estSousTraitant()? '' : `<div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCorner(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}',false)" draggable="false" title="Glisser pour ajuster la durée et/ou étendre sur d'autres jours"></div>`}
   </div>`;
 }
 let draggedItem = null;
@@ -8406,24 +8406,24 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
       const st = reglementStatutFacture(f);
       const regs = reglementsForFacture(f.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
       const payable = st.reste > 0.01;
-      return `<div class="card" ${payable? `style="cursor:pointer;" onclick="reglementCardClick(event,'${f.id}')"` : ''}>
+      return `<div class="card" ${payable? `style="cursor:pointer;" onclick="reglementCardClick(event,'${jsAttr(f.id)}')"` : ''}>
         <div class="card-row">
           <div style="display:flex; align-items:flex-start; gap:10px;">
-            ${payable? `<input type="checkbox" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;" ${selection.includes(f.id)?'checked':''} onchange="toggleReglementSelection('${f.id}')">` : `<span style="width:17px; flex-shrink:0;"></span>`}
+            ${payable? `<input type="checkbox" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;" ${selection.includes(f.id)?'checked':''} onchange="toggleReglementSelection('${jsAttr(f.id)}')">` : `<span style="width:17px; flex-shrink:0;"></span>`}
             <div><div class="card-title">${esc(f.numero)}</div><div class="card-sub">${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance):''}</div></div>
           </div>
           <div style="text-align:right;"><div class="amount">${moneyDisplay(st.ttc)}</div><span class="badge ${st.cls}" style="margin-top:5px;display:inline-block;">${st.label}</span></div>
         </div>
         <div class="card-sub" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">Réglé : ${moneyDisplay(st.paye)} · Reste : ${moneyDisplay(st.reste)} ${delaiBadgeHTML(f, st.reste)}
-          ${payable? `<button class="btn small primary" style="margin-left:auto;" onclick="event.stopPropagation(); ouvrirReglementFacture('${f.id}')">+ Règlement</button>`:''}
+          ${payable? `<button class="btn small primary" style="margin-left:auto;" onclick="event.stopPropagation(); ouvrirReglementFacture('${jsAttr(f.id)}')">+ Règlement</button>`:''}
         </div>
         ${regs.length? `<div class="card-sub" style="margin-top:10px; font-weight:600;">Historique des règlements</div>`:''}
         ${regs.map(r=>`
           <div class="card-sub" style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
             <span>${fmtDate(r.date)} · ${esc(libelleModeReglement(r.mode))}${r.reference? ' ('+esc(r.reference)+')':''}</span>
             <span class="mono" style="white-space:nowrap;">${moneyDisplay(r.montant)}
-              <button class="btn small ghost" style="padding:2px 7px; margin-left:6px;" title="Modifier ce règlement" onclick="event.stopPropagation(); editItem('reglement','${r.id}')">✎</button>
-              <button class="btn small danger" style="padding:2px 7px;" title="Supprimer ce règlement" onclick="event.stopPropagation(); deleteItem('reglement','${r.id}')">✕</button></span>
+              <button class="btn small ghost" style="padding:2px 7px; margin-left:6px;" title="Modifier ce règlement" onclick="event.stopPropagation(); editItem('reglement','${jsAttr(r.id)}')">✎</button>
+              <button class="btn small danger" style="padding:2px 7px;" title="Supprimer ce règlement" onclick="event.stopPropagation(); deleteItem('reglement','${jsAttr(r.id)}')">✕</button></span>
           </div>`).join('')}
       </div>`;
     }).join('') || listeVide('reglementFacture', 'Aucune facture pour ce client.', 'facture');
@@ -8765,25 +8765,25 @@ function renderInterventionsListHTML(list){
       const facturesLiees = state.factures.filter(f=>f.interventionId===i.id);
       const bonCommandeOrigine = i.bonCommandeId ? state.bonsCommande.find(b=>b.id===i.bonCommandeId) : null;
       return `
-      <div class="card" id="intervention-card-${i.id}" style="cursor:pointer;" onclick="cardRowClick(event,'intervention','${i.id}')"><div class="card-row">
+      <div class="card" id="intervention-card-${i.id}" style="cursor:pointer;" onclick="cardRowClick(event,'intervention','${jsAttr(i.id)}')"><div class="card-row">
         <div style="flex:1; min-width:0;"><div class="card-title">${esc(i.client)}</div>
         <div class="card-sub"><span class="numref-lg">${esc(i.numero||'')}</span> · ${fmtDate(i.date)}${i.heure? ' à '+esc(i.heure):''}${i.interlocuteur? ' · 👤 '+esc(i.interlocuteur):''}${i.conducteur? ' · 🦺 '+esc(i.conducteur):''}</div>
         <div class="card-sub">${i.photos&&i.photos.length? i.photos.length+' photo'+(i.photos.length>1?'s':'') : ''}</div>
         ${locataireCardLine(i)}
-        ${devisLies.length? `<div class="card-sub">Devis lié${devisLies.length>1?'s':''} : ${devisLies.map(d=>`<a href="javascript:void(0)" onclick="goToDevis('${d.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(d.numero)}</a>`).join(', ')}</div>`:''}
-        ${facturesLiees.length? `<div class="card-sub">Facture${facturesLiees.length>1?'s':''} liée${facturesLiees.length>1?'s':''} : ${facturesLiees.map(f=>`<a href="javascript:void(0)" onclick="goToFacture('${f.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(f.numero)}</a>`).join(', ')}</div>`:''}
-        ${bonCommandeOrigine? `<div class="card-sub">Bon de commande lié : <a href="javascript:void(0)" onclick="goToBonCommande('${bonCommandeOrigine.id}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
+        ${devisLies.length? `<div class="card-sub">Devis lié${devisLies.length>1?'s':''} : ${devisLies.map(d=>`<a href="javascript:void(0)" onclick="goToDevis('${jsAttr(d.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(d.numero)}</a>`).join(', ')}</div>`:''}
+        ${facturesLiees.length? `<div class="card-sub">Facture${facturesLiees.length>1?'s':''} liée${facturesLiees.length>1?'s':''} : ${facturesLiees.map(f=>`<a href="javascript:void(0)" onclick="goToFacture('${jsAttr(f.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(f.numero)}</a>`).join(', ')}</div>`:''}
+        ${bonCommandeOrigine? `<div class="card-sub">Bon de commande lié : <a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
         </div>
         <div style="display:flex; gap:6px; align-items:center; align-self:center; flex-shrink:0;">${logementBadge(i.logementStatut)}<span class="badge ${badgeClass(i.statut)}">${esc(i.statut)}</span></div>
       </div>
       ${i.rapport && i.rapport.constatations? `<div style="margin-top:8px; font-size:13px; color:var(--text-dim);">${esc(i.rapport.constatations)}</div>`:''}
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small" onclick="editItem('intervention','${i.id}')">Modifier</button>
-        ${devisLies.length? '' : `<button class="btn small" onclick="transformerInterventionEn('devis','${i.id}')">Transformer en devis</button>`}
-        ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerInterventionEn('facture','${i.id}')">Transformer en facture</button>`}
-        <button class="btn small" onclick="printInterventionDocument('${i.id}')">Imprimer / PDF</button>
-        ${bonCommandeOrigine? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('intervention:${i.id}')">🔗 Modifier le lien BC</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${i.id}')" title="Retirer le lien entre ce rapport et son bon de commande">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('intervention:${i.id}')">🔗 Lier un bon de commande</button>`}
-        <button class="btn small danger" onclick="deleteItem('intervention','${i.id}')">Supprimer</button>
+        <button class="btn small" onclick="editItem('intervention','${jsAttr(i.id)}')">Modifier</button>
+        ${devisLies.length? '' : `<button class="btn small" onclick="transformerInterventionEn('devis','${jsAttr(i.id)}')">Transformer en devis</button>`}
+        ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerInterventionEn('facture','${jsAttr(i.id)}')">Transformer en facture</button>`}
+        <button class="btn small" onclick="printInterventionDocument('${jsAttr(i.id)}')">Imprimer / PDF</button>
+        ${bonCommandeOrigine? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('intervention:${jsAttr(i.id)}')">🔗 Modifier le lien BC</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(i.id)}')" title="Retirer le lien entre ce rapport et son bon de commande">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('intervention:${jsAttr(i.id)}')">🔗 Lier un bon de commande</button>`}
+        <button class="btn small danger" onclick="deleteItem('intervention','${jsAttr(i.id)}')">Supprimer</button>
       </div>
       ${state.lienOuvert==='intervention:'+i.id? `<div style="margin-top:8px;" onclick="event.stopPropagation()">${lienWidgetHTML('intervention', i.id, i.client)}</div>`:''}
       </div>`;
@@ -8902,7 +8902,7 @@ function stepControlesHTML(e){
   return `
     <div class="controles-list">${items.map(c=>{
       const checked = !!(e.controles && e.controles[c.key]);
-      let row = `<label class="controle-item"><span>${esc(c.label)}</span><input type="checkbox" ${checked?'checked':''} onchange="setControle('${c.key}', this.checked); toggleAutreTexte(this,'${c.key}');"></label>`;
+      let row = `<label class="controle-item"><span>${esc(c.label)}</span><input type="checkbox" ${checked?'checked':''} onchange="setControle('${jsAttr(c.key)}', this.checked); toggleAutreTexte(this,'${jsAttr(c.key)}');"></label>`;
       if(c.key === 'autre'){
         row += `<div class="field full" id="autreTexteBox" style="display:${checked?'':'none'}; margin:-4px 0 12px;"><input type="text" value="${esc(e.controleAutreTexte)}" placeholder="Précisez le contrôle…" oninput="setEditing('controleAutreTexte', this.value)"></div>`;
       }
@@ -8940,13 +8940,13 @@ function stepPhotosHTML(e){
 }
 function photoThumbHTMLAvecCategorie(p, removeFnName){
   return `<div class="photo-thumb photo-thumb-${p.categorie||''}">
-    <img src="${p.dataUrl}" onclick="openPhotoAnnotationModal('${p.id}','photos','dataUrl')" style="cursor:pointer;" title="Cliquer pour annoter (flèche, carré)">
-    <button class="photo-remove-btn" onclick="${removeFnName}('${p.id}')">✕</button>
-    <button class="photo-duplicate-btn" onclick="dupliquerPhoto('${p.id}','photos')" title="Dupliquer cette photo">⧉</button>
+    <img src="${p.dataUrl}" onclick="openPhotoAnnotationModal('${jsAttr(p.id)}','photos','dataUrl')" style="cursor:pointer;" title="Cliquer pour annoter (flèche, carré)">
+    <button class="photo-remove-btn" onclick="${removeFnName}('${jsAttr(p.id)}')">✕</button>
+    <button class="photo-duplicate-btn" onclick="dupliquerPhoto('${jsAttr(p.id)}','photos')" title="Dupliquer cette photo">⧉</button>
     ${p.categorie? `<span class="photo-categorie-badge photo-categorie-${p.categorie}">${p.categorie==='constatation'?'Constatation':'Préconisation'}</span>`:''}
     <div class="photo-categorie-choix">
-      <button class="photo-cat-btn photo-cat-constatation" onclick="setPhotoCategorie('${p.id}','constatation','photos')" title="Marquer comme photo de constatation">🔴 Constat.</button>
-      <button class="photo-cat-btn photo-cat-preco" onclick="setPhotoCategorie('${p.id}','preconisation','photos')" title="Marquer comme photo de préconisation">🟢 Préco</button>
+      <button class="photo-cat-btn photo-cat-constatation" onclick="setPhotoCategorie('${jsAttr(p.id)}','constatation','photos')" title="Marquer comme photo de constatation">🔴 Constat.</button>
+      <button class="photo-cat-btn photo-cat-preco" onclick="setPhotoCategorie('${jsAttr(p.id)}','preconisation','photos')" title="Marquer comme photo de préconisation">🟢 Préco</button>
     </div>
   </div>`;
 }
@@ -9211,6 +9211,13 @@ function instantaneIdentite(f){
 async function marquerFactureVerrouillee(id){
   const f = state.factures.find(x=>x.id===id);
   if(!f || f.verrouillee) return;
+  /* Une facture ÉMISE est déjà figée par la base, définitivement : lui poser en
+     plus le verrou d'écran est sans objet, et l'écriture est refusée — 23001,
+     « son en-tête ne peut plus être modifié ». Imprimer une facture émise
+     laissait donc une erreur dans la console et une requête en 400, à chaque
+     fois. Le formulaire fait déjà cette distinction : `emise` l'emporte sur
+     `verrouillee`. */
+  if(f.numero) return;
   f.verrouillee = true;
   Object.assign(f, instantaneIdentite(f));
   await window.stSet('facture:'+id, f);
@@ -9615,7 +9622,7 @@ function renderReglagesNav(){
       ${REGLAGES_GROUPES.map(g=>`
         <div class="reglages-groupe">${esc(g.titre)}</div>
         ${g.items.map(o=>`
-          <button class="reglages-lien ${o.id===actif?'active':''}" onclick="setReglagesTab('${o.id}')"
+          <button class="reglages-lien ${o.id===actif?'active':''}" onclick="setReglagesTab('${jsAttr(o.id)}')"
                   ${o.id===actif?'aria-current="page"':''}>
             <span class="reglages-lien-ico" aria-hidden="true">${o.icone}</span>
             <span class="reglages-lien-texte">${esc(o.label)}<span class="reglages-lien-desc">${esc(o.desc)}</span></span>
@@ -10241,7 +10248,7 @@ function renderDocumentsLegauxSection(){
             <div class="achat-designation">${esc(d.type)}${d.fichierNom? ` · <a href="javascript:void(0)" onclick="openAttachmentPreview('${jsAttr(d.fichierData)}','${jsAttr(d.fichierNom)}')">📎 voir</a>`:''}</div>
             <div class="achat-date">${d.dateEmission? `Émis le ${fmtDate(d.dateEmission)}`:''}${d.dateExpiration? ` · expire le ${fmtDate(d.dateExpiration)}`:''}${alerte? ` <span class="badge ${j<0?'danger':'warn'}">${j<0?'EXPIRÉ':'DANS '+j+' J'}</span>`:''}</div>
           </div>
-          <button class="btn small danger" onclick="removeDocumentLegal('${d.id}')">✕</button>
+          <button class="btn small danger" onclick="removeDocumentLegal('${jsAttr(d.id)}')">✕</button>
         </div>`;
       }).join('') : '<div class="empty">Aucun document légal enregistré.</div>'}
     </div>
@@ -10421,7 +10428,7 @@ function chantierCardA4HTML(c){
   const totalHT = lignes.filter(l=>l.type!=='chapitre').reduce((s,l)=> s + (parseFloat(l.qte)||0)*(parseFloat(l.prixUnitaire)||0), 0);
   const totalFacture = lignes.filter(l=>l.type!=='chapitre').reduce((s,l)=> s + ((parseFloat(l.qte)||0)*(parseFloat(l.prixUnitaire)||0)) * ((parseFloat(l.avancementCumule)||0)/100), 0);
   const pctAvancement = totalHT>0 ? Math.round(totalFacture/totalHT*100) : 0;
-  return `<div class="chantier-a4" onclick="openChantierDetail('${c.id}')">
+  return `<div class="chantier-a4" onclick="openChantierDetail('${jsAttr(c.id)}')">
     <div class="chantier-a4-type ${c.type==='neuf'?'neuf':'rehab'}">${typeLabel}</div>
     <div class="chantier-a4-nom">${esc(c.nom)}</div>
     <div class="chantier-a4-client">${esc(c.client||'')}</div>
@@ -10632,7 +10639,7 @@ function renderChantierDetail(id){
         <button class="btn small" onclick="closeChantierDetail()">← Retour aux chantiers</button>
         <h1 style="margin:0;">${esc(c.nom)}</h1>
       </div>
-      ${state.formOpen.chantier? '' : `<button class="btn" onclick="editItem('chantier','${c.id}')">Modifier les infos</button>`}
+      ${state.formOpen.chantier? '' : `<button class="btn" onclick="editItem('chantier','${jsAttr(c.id)}')">Modifier les infos</button>`}
     </div>
     ${state.formOpen.chantier? chantierForm() : `
     <div class="chantier-hero">
@@ -10689,7 +10696,7 @@ function renderChantierDetail(id){
 function chantierInfosDiversesHTML(c){
   return `<div class="chantier-section">
     <div class="section-title">📝 Informations diverses</div>
-    <textarea id="chantierInfosDiverses_${c.id}" rows="4" placeholder="Codes d'accès, contacts utiles, remarques, particularités du chantier…" style="width:100%;" onblur="saveChantierInfosDiverses('${c.id}', this.value)">${esc(c.infosDiverses)}</textarea>
+    <textarea id="chantierInfosDiverses_${c.id}" rows="4" placeholder="Codes d'accès, contacts utiles, remarques, particularités du chantier…" style="width:100%;" onblur="saveChantierInfosDiverses('${jsAttr(c.id)}', this.value)">${esc(c.infosDiverses)}</textarea>
     <div class="chantier-subsection-title" style="display:flex; justify-content:space-between; align-items:center;">
       <span>🦺 Sécurité</span>
     </div>
@@ -10701,7 +10708,7 @@ function chantierInfosDiversesHTML(c){
     <div class="chantier-subsection-title" style="display:flex; justify-content:space-between; align-items:center; font-weight:600; font-size:12.5px;">
       <span>📋 PPSPS</span>
       <div style="display:flex; gap:8px;">
-        <button class="btn small primary" onclick="genererPPSPS('${c.id}')">📄 Générer (Word)</button>
+        <button class="btn small primary" onclick="genererPPSPS('${jsAttr(c.id)}')">📄 Générer (Word)</button>
         <label class="btn small" style="cursor:pointer;">+ Fichier${chantierFileInputHTML(c.id,'ppsps','ppsps_file_'+c.id,'.pdf,.docx,image/*')}</label>
       </div>
     </div>
@@ -10724,7 +10731,7 @@ async function saveChantierInfosDiverses(chantierId, value){
   showToast('Informations enregistrées.', 'success');
 }
 function chantierFileInputHTML(chantierId, listKey, inputId, accept){
-  return `<input type="file" id="${inputId}" accept="${accept||'*'}" style="display:none;" onchange="handleChantierFileAdd('${chantierId}','${listKey}', this.files[0]); this.value='';">`;
+  return `<input type="file" id="${inputId}" accept="${accept||'*'}" style="display:none;" onchange="handleChantierFileAdd('${jsAttr(chantierId)}','${jsAttr(listKey)}', this.files[0]); this.value='';">`;
 }
 async function handleChantierFileAdd(chantierId, listKey, file){
   if(!file) return;
@@ -10758,7 +10765,7 @@ function chantierFileListHTML(c, listKey, dlPrefix){
     <div class="chantier-file-row">
       <a href="javascript:void(0)" onclick="openAttachmentPreview('${jsAttr(f.data)}','${jsAttr(f.nom)}')">📎 ${esc(f.nom)}</a>
       <span class="card-sub">${fmtDate(f.date)}</span>
-      <button class="btn small danger" onclick="removeChantierFile('${c.id}','${listKey}','${f.id}')">✕</button>
+      <button class="btn small danger" onclick="removeChantierFile('${jsAttr(c.id)}','${jsAttr(listKey)}','${jsAttr(f.id)}')">✕</button>
     </div>`).join('');
 }
 
@@ -10768,8 +10775,8 @@ function chantierFileListEditableDateHTML(c, listKey){
   return list.map(f=>`
     <div class="chantier-file-row">
       <a href="javascript:void(0)" onclick="openAttachmentPreview('${jsAttr(f.data)}','${jsAttr(f.nom)}')">📎 ${esc(f.nom)}</a>
-      <input type="date" value="${f.date||''}" style="width:auto; font-size:11px; padding:3px 6px;" onchange="updateChantierFileDate('${c.id}','${listKey}','${f.id}', this.value)">
-      <button class="btn small danger" onclick="removeChantierFile('${c.id}','${listKey}','${f.id}')">✕</button>
+      <input type="date" value="${f.date||''}" style="width:auto; font-size:11px; padding:3px 6px;" onchange="updateChantierFileDate('${jsAttr(c.id)}','${jsAttr(listKey)}','${jsAttr(f.id)}', this.value)">
+      <button class="btn small danger" onclick="removeChantierFile('${jsAttr(c.id)}','${jsAttr(listKey)}','${jsAttr(f.id)}')">✕</button>
     </div>`).join('');
 }
 async function updateChantierFileDate(chantierId, listKey, fileId, newDate){
@@ -11002,11 +11009,11 @@ function chantierComptesRendusHTML(c){
     </div>
     ${!list.length? '<div class="empty">Aucun fichier pour l\'instant.</div>' : list.map(f=>`
       <div class="chantier-file-row ${f.vu===false?'is-unread':''}">
-        <a href="javascript:void(0)" onclick="openCompteRenduFile('${c.id}','${f.id}','${jsAttr(f.data)}','${jsAttr(f.nom)}')">
+        <a href="javascript:void(0)" onclick="openCompteRenduFile('${jsAttr(c.id)}','${jsAttr(f.id)}','${jsAttr(f.data)}','${jsAttr(f.nom)}')">
           ${f.vu===false? '<span class="unread-dot"></span>':''}📎 ${esc(f.nom)}
         </a>
         <span class="card-sub">${fmtDate(f.date)}</span>
-        <button class="btn small danger" onclick="removeChantierFile('${c.id}','comptesRendus','${f.id}')">✕</button>
+        <button class="btn small danger" onclick="removeChantierFile('${jsAttr(c.id)}','comptesRendus','${jsAttr(f.id)}')">✕</button>
       </div>`).join('')}
   </div>`;
 }
@@ -11231,7 +11238,7 @@ function chantierDpgfLignesHTML(c){
   return `<div class="chantier-section" style="grid-column:1/-1;">
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
       <span style="display:flex; align-items:center; gap:8px;">
-        <button class="btn small dpgf-toggle-btn" onclick="toggleDpgfSection('${c.id}')" title="${collapsed?'Déplier':'Replier'}">${collapsed?'+':'−'}</button>
+        <button class="btn small dpgf-toggle-btn" onclick="toggleDpgfSection('${jsAttr(c.id)}')" title="${collapsed?'Déplier':'Replier'}">${collapsed?'+':'−'}</button>
         📈 DPGF chiffré — suivi d'avancement
       </span>
       ${collapsed? `<span class="card-sub">${lignes.filter(l=>l.type!=='chapitre').length} ligne(s) — ${moneyDisplay(totalHT)} HT</span>` : `<span class="card-sub">Cochez les lignes à facturer, puis validez ci-dessous</span>`}
@@ -11243,7 +11250,7 @@ function chantierDpgfLignesHTML(c){
         <div class="card-sub">Fichier Excel (.xlsx) ou CSV — les lignes sont extraites automatiquement</div>
       </div>
       <label class="btn primary" style="cursor:pointer;">📥 Analyser un fichier
-        <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleDpgfFileAnalyse('${c.id}', this.files[0]); this.value='';">
+        <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleDpgfFileAnalyse('${jsAttr(c.id)}', this.files[0]); this.value='';">
       </label>
     </div>
     <table class="lignes-table" id="dpgfLignesTable_${c.id}">
@@ -11251,10 +11258,10 @@ function chantierDpgfLignesHTML(c){
       <tbody>${chantierDpgfLigneRowsHTML(lignes, c.id)}</tbody>
     </table>
     <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="addChantierDpgfLigne('${c.id}')">+ Ligne</button>
-      <button class="btn small" onclick="addChantierDpgfChapitre('${c.id}')">+ Chapitre</button>
-      <button class="btn small primary" onclick="saveChantierDpgfLignes('${c.id}')">Enregistrer les lignes</button>
-      <button class="btn small primary" onclick="openFacturerAvancement('${c.id}')" style="margin-left:auto;">Facturer la sélection</button>
+      <button class="btn small" onclick="addChantierDpgfLigne('${jsAttr(c.id)}')">+ Ligne</button>
+      <button class="btn small" onclick="addChantierDpgfChapitre('${jsAttr(c.id)}')">+ Chapitre</button>
+      <button class="btn small primary" onclick="saveChantierDpgfLignes('${jsAttr(c.id)}')">Enregistrer les lignes</button>
+      <button class="btn small primary" onclick="openFacturerAvancement('${jsAttr(c.id)}')" style="margin-left:auto;">Facturer la sélection</button>
     </div>
     <div class="dpgf-totals">
       <div>Total DPGF (HT) : <strong>${moneyDisplay(totalHT)}</strong></div>
@@ -11297,9 +11304,9 @@ function chantierDpgfLigneRowsHTML(lignes, chantierId){
         ${tachesPlanifiees.length? `<div class="dpgf-planif-progress" title="${dejaPlanifiee}/${qteTotale} planifié">${dejaPlanifiee}/${qteTotale}</div>
         <div class="dpgf-planif-taches">${tachesPlanifiees.map(t=>{
           const bc = state.bonsCommande.find(b=>b.id===t.bonCommandeId);
-          return bc? `<button class="btn small" onclick="ouvrirTacheDansPlanning('${bc.id}')" title="Voir dans Planning">✅ ${t.qte}</button>` : '';
+          return bc? `<button class="btn small" onclick="ouvrirTacheDansPlanning('${jsAttr(bc.id)}')" title="Voir dans Planning">✅ ${t.qte}</button>` : '';
         }).join('')}</div>` : ''}
-        ${qteTotale>0 && restante>0 ? `<button class="btn small primary" onclick="openPlanifierQteModal('${chantierId}',${i})">📅 Planifier</button>` : ''}
+        ${qteTotale>0 && restante>0 ? `<button class="btn small primary" onclick="openPlanifierQteModal('${jsAttr(chantierId)}',${i})">📅 Planifier</button>` : ''}
       </td>
       <td><button class="btn small danger" onclick="removeChantierDpgfLigne(event,${i})">✕</button></td>
     </tr>`;
@@ -11385,7 +11392,7 @@ function chantierDpgfHTML(c){
   </div>`;
 }
 function chantierFileInputHTML2(chantierId, inputId, accept, handlerName){
-  return `<input type="file" id="${inputId}" accept="${accept||'*'}" style="display:none;" onchange="${handlerName}('${chantierId}', this.files[0]); this.value='';">`;
+  return `<input type="file" id="${inputId}" accept="${accept||'*'}" style="display:none;" onchange="${handlerName}('${jsAttr(chantierId)}', this.files[0]); this.value='';">`;
 }
 async function handleDpgfFileAddAndAnalyse(chantierId, file){
   if(!file) return;
@@ -11427,7 +11434,7 @@ function chantierAchatsHTML(c){
       ${ACHAT_CATEGORIES.map(cat=>{
         const montant = totalParCategorie[cat.key];
         const pct = totalGeneral>0 ? Math.round(montant/totalGeneral*100) : 0;
-        return `<div class="achats-total-card ${filtre===cat.key?'is-active':''}" onclick="filterChantierAchats('${cat.key}')" style="--cat-color:${cat.color};">
+        return `<div class="achats-total-card ${filtre===cat.key?'is-active':''}" onclick="filterChantierAchats('${jsAttr(cat.key)}')" style="--cat-color:${cat.color};">
           <div class="achats-total-icon" style="background:${cat.color}22; color:${cat.color};">${cat.icon}</div>
           <div class="achats-total-info">
             <div class="achats-total-label">${cat.label}</div>
@@ -11440,17 +11447,17 @@ function chantierAchatsHTML(c){
     ${filtre? `<button class="btn small ghost" style="margin-bottom:10px;" onclick="filterChantierAchats('')">✕ Retirer le filtre "${achatCategorieLabel(filtre)}"</button>` : ''}
     <div class="achat-add-card">
       <div class="achat-add-row">
-        <select id="achatCategorie_${c.id}" onchange="onAchatCategorieChange('${c.id}')">
+        <select id="achatCategorie_${c.id}" onchange="onAchatCategorieChange('${jsAttr(c.id)}')">
           ${ACHAT_CATEGORIES.map(cat=>`<option value="${cat.key}">${cat.icon} ${cat.label}</option>`).join('')}
         </select>
         <input type="text" id="achatDesignation_${c.id}" placeholder="Désignation…" style="flex:1;">
         <input type="number" step="0.01" id="achatMontant_${c.id}" placeholder="Montant HT">
         <input type="date" id="achatDate_${c.id}" value="${todayISO()}">
-        <button class="btn primary" onclick="addChantierAchat('${c.id}')">+ Ajouter</button>
+        <button class="btn primary" onclick="addChantierAchat('${jsAttr(c.id)}')">+ Ajouter</button>
       </div>
       <div class="achat-salarie-zone" id="achatSalarieZone_${c.id}" style="display:none;">
-        <select id="achatSalarieId_${c.id}" onchange="onAchatSalarieHeuresChange('${c.id}')">${salarieSelectOptions()}</select>
-        <input type="number" step="0.25" id="achatHeures_${c.id}" placeholder="Heures" oninput="onAchatSalarieHeuresChange('${c.id}')">
+        <select id="achatSalarieId_${c.id}" onchange="onAchatSalarieHeuresChange('${jsAttr(c.id)}')">${salarieSelectOptions()}</select>
+        <input type="number" step="0.25" id="achatHeures_${c.id}" placeholder="Heures" oninput="onAchatSalarieHeuresChange('${jsAttr(c.id)}')">
         <span class="card-sub" id="achatSalarieCoutInfo_${c.id}"></span>
       </div>
     </div>
@@ -11466,7 +11473,7 @@ function chantierAchatsHTML(c){
             <div class="achat-date">${achatCategorieLabel(a.categorie)} · ${fmtDate(a.date)}</div>
           </div>
           <div class="achat-montant">${moneyDisplay(a.montant)}</div>
-          <button class="todo-remove" onclick="removeChantierAchat('${c.id}','${a.id}')" title="Supprimer">✕</button>
+          <button class="todo-remove" onclick="removeChantierAchat('${jsAttr(c.id)}','${jsAttr(a.id)}')" title="Supprimer">✕</button>
         </div>`;
       }).join('') : '<div class="empty">Aucun achat enregistré pour l\'instant.</div>'}
     </div>
@@ -11612,10 +11619,10 @@ function chantierFacturesHTML(c){
     ${facturesLiees.length? facturesLiees.map(f=>{
       const t = computeDocTotals(f);
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
-        <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${f.id}')">🧾 ${esc(f.numero)} — ${moneyDisplay(t.ttc)} TTC</a>
+        <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${jsAttr(f.id)}')">🧾 ${esc(f.numero)} — ${moneyDisplay(t.ttc)} TTC</a>
         <span class="badge ${f.statut==='payée'?'success':f.statut==='impayée'?'danger':'info'}">${esc(f.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('facture','${f.id}','save')">Imprimer / PDF</button>
-        <button class="btn small" onclick="envoyerDocumentEmail('facture','${f.id}')">Envoyer par email</button>
+        <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
+        <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
       </div>`;
     }).join('') : '<div class="empty">Aucune facture pour l\'instant.</div>'}
   </div>`;
@@ -11632,17 +11639,17 @@ function chantierDevisComplHTML(c){
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
       <span>📄 Devis complémentaires</span>
       <div style="display:flex; gap:8px;">
-        <button class="btn small primary" onclick="creerDevisDepuisChantier('${c.id}')">+ Nouveau devis</button>
+        <button class="btn small primary" onclick="creerDevisDepuisChantier('${jsAttr(c.id)}')">+ Nouveau devis</button>
         <label class="btn small" style="cursor:pointer;">+ Fichier${chantierFileInputHTML(c.id,'devisComplementaires','devcompl_file_'+c.id,'.pdf,image/*')}</label>
       </div>
     </div>
     ${devisLies.length? devisLies.map(d=>{
       const t = computeDocTotals(d);
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
-        <a href="javascript:void(0)" onclick="ouvrirDevisDepuisChantier('${d.id}')">📄 ${esc(d.numero)} — ${moneyDisplay(t.ht)} HT</a>
+        <a href="javascript:void(0)" onclick="ouvrirDevisDepuisChantier('${jsAttr(d.id)}')">📄 ${esc(d.numero)} — ${moneyDisplay(t.ht)} HT</a>
         <span class="badge ${d.statut==='accepté'?'success':d.statut==='refusé'?'danger':'info'}">${esc(d.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('devis','${d.id}','save')">Imprimer / PDF</button>
-        <button class="btn small" onclick="envoyerDocumentEmail('devis','${d.id}')">Envoyer par email</button>
+        <button class="btn small" onclick="printDocument('devis','${jsAttr(d.id)}','save')">Imprimer / PDF</button>
+        <button class="btn small" onclick="envoyerDocumentEmail('devis','${jsAttr(d.id)}')">Envoyer par email</button>
       </div>`;
     }).join('') : ''}
     ${chantierFileListHTML(c, 'devisComplementaires')}
@@ -11683,13 +11690,13 @@ function chantierTodoHTML(c){
       <div class="todo-progress-bar"><div class="todo-progress-fill" style="width:${pct}%;"></div></div>
     </div>` : ''}
     <div class="todo-add-row">
-      <input type="text" id="chantierTodoInput_${c.id}" placeholder="Ajouter une tâche…" onkeydown="if(event.key==='Enter') addChantierTodo('${c.id}')">
-      <button class="btn small primary" onclick="addChantierTodo('${c.id}')">+ Ajouter</button>
+      <input type="text" id="chantierTodoInput_${c.id}" placeholder="Ajouter une tâche…" onkeydown="if(event.key==='Enter') addChantierTodo('${jsAttr(c.id)}')">
+      <button class="btn small primary" onclick="addChantierTodo('${jsAttr(c.id)}')">+ Ajouter</button>
     </div>
     <div class="todo-kanban">
       ${colonnes.map(col=>{
         const items = list.filter(t=>chantierTodoStatut(t)===col.key);
-        return `<div class="todo-kanban-col" ondragover="allowDropTodoColumn(event)" ondrop="dropTodoColumn(event,'${c.id}','${col.key}')">
+        return `<div class="todo-kanban-col" ondragover="allowDropTodoColumn(event)" ondrop="dropTodoColumn(event,'${jsAttr(c.id)}','${jsAttr(col.key)}')">
           <div class="todo-kanban-col-header todo-kanban-col-${col.key}">
             <span>${col.icon} ${col.label}</span>
             <span class="todo-kanban-count">${items.length}</span>
@@ -11700,13 +11707,13 @@ function chantierTodoHTML(c){
               const initiales = salarie ? (salarie.prenom||'?')[0]+(salarie.nom||'?')[0] : '';
               const enRetard = t.dateRealisation && chantierTodoStatut(t)!=='fait' && t.dateRealisation < todayISO();
               return `
-              <div class="todo-kanban-card" draggable="true" ondragstart="dragStartTodoCard(event,'${c.id}','${t.id}')" onclick="openTodoDetail('${c.id}','${t.id}')">
+              <div class="todo-kanban-card" draggable="true" ondragstart="dragStartTodoCard(event,'${jsAttr(c.id)}','${jsAttr(t.id)}')" onclick="openTodoDetail('${jsAttr(c.id)}','${jsAttr(t.id)}')">
                 <span class="todo-kanban-card-text">${esc(t.texte)}</span>
                 ${(t.dateRealisation||salarie)? `<div class="todo-kanban-card-meta">
                   ${t.dateRealisation? `<span class="todo-meta-badge ${enRetard?'is-late':''}">📅 ${fmtDate(t.dateRealisation)}</span>`:''}
                   ${salarie? `<span class="todo-meta-badge" title="${esc(salarie.prenom)} ${esc(salarie.nom)}">👤 ${esc(initiales)}</span>`:''}
                 </div>`:''}
-                <button class="todo-remove" onclick="event.stopPropagation(); removeChantierTodo('${c.id}','${t.id}')" title="Supprimer">✕</button>
+                <button class="todo-remove" onclick="event.stopPropagation(); removeChantierTodo('${jsAttr(c.id)}','${jsAttr(t.id)}')" title="Supprimer">✕</button>
               </div>`;
             }).join('') : `<div class="todo-kanban-empty">Glissez une tâche ici</div>`}
           </div>
@@ -11842,7 +11849,7 @@ function renderMaterielListeHTML(list){
             const retourPrevu = st.pret.dureeJours!=null ? addJours(st.pret.datePret, st.pret.dureeJours) : null;
             periode = `Depuis le ${fmtDate(st.pret.datePret)}` + (retourPrevu? ` · retour prévu ${fmtDate(retourPrevu)}` : '');
           }
-          return `<tr class="vehicule-liste-row" onclick="openMaterielDetail('${m.id}')">
+          return `<tr class="vehicule-liste-row" onclick="openMaterielDetail('${jsAttr(m.id)}')">
             <td><strong>${esc(m.nom)}</strong></td>
             <td>${esc(m.categorie)||'—'}</td>
             <td>${esc(m.etatGeneral)||'—'}</td>
@@ -11921,8 +11928,8 @@ function renderMaterielDetail(id){
         <h1 style="margin:0;">${esc(m.nom)}</h1>
       </div>
       <div style="display:flex; gap:8px;">
-        <button class="btn" onclick="editItem('materiel','${m.id}')">Modifier</button>
-        <button class="btn danger" onclick="deleteMateriel('${m.id}')">Supprimer</button>
+        <button class="btn" onclick="editItem('materiel','${jsAttr(m.id)}')">Modifier</button>
+        <button class="btn danger" onclick="deleteMateriel('${jsAttr(m.id)}')">Supprimer</button>
       </div>
     </div>
     <div class="vehicule-hero">
@@ -11938,14 +11945,14 @@ function renderMaterielDetail(id){
       <div class="section-title">📦 Prêts</div>
       ${st.enPret? `<div class="facture-verrou-banner" style="background:#fff8ec; border-color:#ffe1a8; color:#8a5a00;">
         <span>🔶 Actuellement prêté à <strong>${(()=>{const sal=state.salaries.find(s=>s.id===st.pret.salarieId); return sal? esc(sal.prenom)+' '+esc(sal.nom) : 'inconnu';})()}</strong> depuis le ${fmtDate(st.pret.datePret)}${st.pret.dureeJours!=null? ` (retour prévu ${fmtDate(addJours(st.pret.datePret, st.pret.dureeJours))})`:''}</span>
-        <button class="btn small primary" onclick="marquerMaterielRendu('${m.id}','${st.pret.id}')">✓ Marquer comme rendu</button>
+        <button class="btn small primary" onclick="marquerMaterielRendu('${jsAttr(m.id)}','${jsAttr(st.pret.id)}')">✓ Marquer comme rendu</button>
       </div>` : `
       <div class="entretien-add-row">
         <select id="pretSalarieId_${m.id}">${salarieSelectOptions()}</select>
         <select id="pretEtat_${m.id}">${ETATS_MATERIEL.map(et=>`<option value="${et}" ${m.etatGeneral===et?'selected':''}>${et}</option>`).join('')}</select>
         <input type="date" id="pretDate_${m.id}" value="${todayISO()}">
         <input type="number" id="pretDuree_${m.id}" placeholder="Durée (jours)" style="width:140px;">
-        <button class="btn primary" onclick="creerPretMateriel('${m.id}')">+ Prêter</button>
+        <button class="btn primary" onclick="creerPretMateriel('${jsAttr(m.id)}')">+ Prêter</button>
       </div>`}
       <div class="achats-list" style="margin-top:14px;">
         ${(m.prets||[]).length? [...m.prets].sort((a,b)=>(b.datePret||'').localeCompare(a.datePret||'')).map(p=>{
@@ -11957,7 +11964,7 @@ function renderMaterielDetail(id){
               <div class="achat-designation">${nomEmprunteur} <span class="card-sub">— état au prêt : ${esc(p.etatAuPret)||'—'}</span></div>
               <div class="achat-date">Du ${fmtDate(p.datePret)}${p.dureeJours!=null? ` · prévu ${p.dureeJours} j`:''}${p.dateRetourReelle? ` · rendu le ${fmtDate(p.dateRetourReelle)}` : ' · en cours'}</div>
             </div>
-            <button class="btn small danger" onclick="removeMaterielPret('${m.id}','${p.id}')">✕</button>
+            <button class="btn small danger" onclick="removeMaterielPret('${jsAttr(m.id)}','${jsAttr(p.id)}')">✕</button>
           </div>`;
         }).join('') : '<div class="empty">Aucun prêt enregistré pour l\'instant.</div>'}
       </div>
@@ -12100,7 +12107,7 @@ function renderVehiculeListeHTML(list){
           const jCT = joursAvantVehicule(v.prochainCT);
           const ctAlerte = jCT!=null && jCT<=30 && !v.vendu;
           const conducteurSal = v.conducteurSalarieId ? state.salaries.find(s=>s.id===v.conducteurSalarieId) : null;
-          return `<tr class="vehicule-liste-row" onclick="openVehiculeDetail('${v.id}')">
+          return `<tr class="vehicule-liste-row" onclick="openVehiculeDetail('${jsAttr(v.id)}')">
             <td><strong>${esc(v.nom)}</strong></td>
             <td class="stats-num">${esc(v.immatriculation)||'—'}</td>
             <td>${v.typeVehicule? esc(vehiculeTypeLabel(v.typeVehicule)):'—'}</td>
@@ -12125,7 +12132,7 @@ function vehiculeCardHTML(v){
   const jCT = joursAvantVehicule(v.prochainCT);
   const ctAlerte = jCT!=null && jCT<=30 && !v.vendu;
   const conducteurSal = v.conducteurSalarieId ? state.salaries.find(s=>s.id===v.conducteurSalarieId) : null;
-  return `<div class="vehicule-card ${v.vendu?'is-vendu':''}" onclick="openVehiculeDetail('${v.id}')">
+  return `<div class="vehicule-card ${v.vendu?'is-vendu':''}" onclick="openVehiculeDetail('${jsAttr(v.id)}')">
     <div class="vehicule-card-top">
       <div class="vehicule-icon">🚐</div>
       <div style="flex:1; min-width:0;">
@@ -12170,7 +12177,7 @@ function renderVehiculeDetail(id){
         <button class="btn small" onclick="closeVehiculeDetail()">← Retour aux véhicules</button>
         <h1 style="margin:0;">${esc(v.nom)}</h1>
       </div>
-      ${state.formOpen.vehicule? '' : `<button class="btn" onclick="editItem('vehicule','${v.id}')">Modifier</button>`}
+      ${state.formOpen.vehicule? '' : `<button class="btn" onclick="editItem('vehicule','${jsAttr(v.id)}')">Modifier</button>`}
     </div>
     ${state.formOpen.vehicule? vehiculeForm() : `
     <div class="vehicule-hero">
@@ -12197,13 +12204,13 @@ function renderVehiculeDetail(id){
       <div class="chantier-section">
         <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
           <span>🛣️ Télépéage & ⛽ Carte carburant</span>
-          ${!v.vendu? `<button class="btn small danger" onclick="openVendreVehiculeModal('${v.id}')">💰 Vendre ce véhicule</button>` : ''}
+          ${!v.vendu? `<button class="btn small danger" onclick="openVendreVehiculeModal('${jsAttr(v.id)}')">💰 Vendre ce véhicule</button>` : ''}
         </div>
         <div class="vehicule-abonnement-row"><span>🛣️ Télépéage</span><strong>${esc(v.telepeageFournisseur)||'—'}</strong><span class="card-sub">${esc(v.telepeageNumero)||'Non renseigné'}${v.telepeageValidite? ' · valide jusqu\'au '+fmtDate(v.telepeageValidite):''}</span></div>
         <div class="vehicule-abonnement-row"><span>⛽ Carte carburant</span><strong>${esc(v.carteCarburantFournisseur)||'—'}</strong><span class="card-sub">${esc(v.carteCarburantNumero)||'Non renseignée'}${v.carteCarburantValidite? ' · '+esc(v.carteCarburantValidite):''}</span></div>
         ${v.vendu? `<div class="vehicule-vendu-info">
           <strong>🚗 Véhicule vendu</strong> le ${fmtDate(v.dateVente)}${v.prixVente? ' pour '+moneyDisplay(v.prixVente):''}
-          ${v.factureVenteId? `<button class="btn small" onclick="ouvrirFactureDepuisChantier('${v.factureVenteId}')">Voir la facture</button>` : ''}
+          ${v.factureVenteId? `<button class="btn small" onclick="ouvrirFactureDepuisChantier('${jsAttr(v.factureVenteId)}')">Voir la facture</button>` : ''}
         </div>` : ''}
       </div>
       <div class="chantier-section" style="grid-column:1/-1;">
@@ -12216,13 +12223,13 @@ function renderVehiculeDetail(id){
             return `<div class="facture-verrou-banner" style="background:#fff8ec; border-color:#ffe1a8; color:#8a5a00; flex-direction:column; align-items:flex-start;">
               <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:10px;">
                 <span>🔶 Actuellement prêté à <strong>${sal? esc(sal.prenom)+' '+esc(sal.nom) : 'inconnu'}</strong> depuis le ${fmtDate(st.pret.datePret)}${st.pret.dureeJours!=null? ` (retour prévu ${fmtDate(addJours(st.pret.datePret, st.pret.dureeJours))})`:''}</span>
-                ${enRetour? '' : `<button class="btn small primary" onclick="ouvrirMarquageRetour('${st.pret.id}')">✓ Marquer comme rendu</button>`}
+                ${enRetour? '' : `<button class="btn small primary" onclick="ouvrirMarquageRetour('${jsAttr(st.pret.id)}')">✓ Marquer comme rendu</button>`}
               </div>
               ${enRetour? `<div style="width:100%; margin-top:10px;">
                 <div class="card-sub" style="margin-bottom:4px; color:#8a5a00;">Cliquez sur le schéma pour marquer les <strong>nouvelles</strong> rayures/chocs constatés au retour :</div>
                 ${vehiculeSchemaHTML('retourVehSchema_'+st.pret.id, [])}
                 <div style="display:flex; gap:8px; margin-top:8px;">
-                  <button class="btn small primary" onclick="confirmerRetourVehicule('${v.id}','${st.pret.id}')">Confirmer le retour</button>
+                  <button class="btn small primary" onclick="confirmerRetourVehicule('${jsAttr(v.id)}','${jsAttr(st.pret.id)}')">Confirmer le retour</button>
                   <button class="btn small ghost" onclick="state.marquantRetourPretId=null; renderTab();">Annuler</button>
                 </div>
               </div>` : ''}
@@ -12233,7 +12240,7 @@ function renderVehiculeDetail(id){
             <select id="pretVehEtat_${v.id}">${ETATS_MATERIEL.map(et=>`<option value="${et}">${et}</option>`).join('')}</select>
             <input type="date" id="pretVehDate_${v.id}" value="${todayISO()}">
             <input type="number" id="pretVehDuree_${v.id}" placeholder="Durée (jours)" style="width:140px;">
-            <button class="btn primary" onclick="creerPretVehicule('${v.id}')">+ Prêter</button>
+            <button class="btn primary" onclick="creerPretVehicule('${jsAttr(v.id)}')">+ Prêter</button>
           </div>
           <div class="card-sub" style="margin:10px 0 4px;">Cliquez sur le schéma pour marquer l'état du véhicule au départ (rayures, chocs…) :</div>
           ${vehiculeSchemaHTML('pretVehSchema_'+v.id, [])}
@@ -12251,9 +12258,9 @@ function renderVehiculeDetail(id){
                 <div class="achat-designation">${nomEmprunteur} <span class="card-sub">— état au prêt : ${esc(p.etatAuPret)||'—'}</span></div>
                 <div class="achat-date">Du ${fmtDate(p.datePret)}${p.dureeJours!=null? ` · prévu ${p.dureeJours} j`:''}${p.dateRetourReelle? ` · rendu le ${fmtDate(p.dateRetourReelle)}` : ' · en cours'}${hasRetourMarks? ` · ⚠ ${p.schemaMarksRetour.length} nouvelle(s) marque(s) au retour`:''}</div>
               </div>
-              ${hasDepartMarks? `<button class="btn small ghost" onclick="togglePretSchema('${p.id}_depart')">📋 État au départ</button>`:''}
-              ${hasRetourMarks? `<button class="btn small ${hasRetourMarks?'danger':'ghost'}" onclick="togglePretSchema('${p.id}_retour')">⚠ État au retour</button>`:''}
-              <button class="btn small danger" onclick="removeVehiculePret('${v.id}','${p.id}')">✕</button>
+              ${hasDepartMarks? `<button class="btn small ghost" onclick="togglePretSchema('${jsAttr(p.id)}_depart')">📋 État au départ</button>`:''}
+              ${hasRetourMarks? `<button class="btn small ${hasRetourMarks?'danger':'ghost'}" onclick="togglePretSchema('${jsAttr(p.id)}_retour')">⚠ État au retour</button>`:''}
+              <button class="btn small danger" onclick="removeVehiculePret('${jsAttr(v.id)}','${jsAttr(p.id)}')">✕</button>
               ${state.pretSchemaOuvert===p.id+'_depart'? `<div style="width:100%; margin-top:10px;"><div class="card-sub" style="margin-bottom:4px;">État constaté au départ :</div>${vehiculeSchemaHTML('view_depart_'+p.id, p.schemaMarks||[], true)}</div>`:''}
               ${state.pretSchemaOuvert===p.id+'_retour'? `<div style="width:100%; margin-top:10px;"><div class="card-sub" style="margin-bottom:4px; color:#a30f22;">Nouvelles marques constatées au retour :</div>${vehiculeSchemaHTML('view_retour_'+p.id, p.schemaMarksRetour||[], true)}</div>`:''}
             </div>`;
@@ -12270,7 +12277,7 @@ function renderVehiculeDetail(id){
           <input type="number" step="0.01" id="entretienMontant_${v.id}" placeholder="Montant">
           <input type="date" id="entretienDate_${v.id}" value="${todayISO()}">
           <label class="btn" style="cursor:pointer;">📎 Facture<input type="file" id="entretienFichier_${v.id}" accept=".pdf,image/*" style="display:none;"></label>
-          <button class="btn primary" onclick="addVehiculeEntretien('${v.id}')">+ Ajouter</button>
+          <button class="btn primary" onclick="addVehiculeEntretien('${jsAttr(v.id)}')">+ Ajouter</button>
         </div>
         <div class="achats-list">
           ${(v.entretiens||[]).length? [...v.entretiens].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(en=>
@@ -12282,8 +12289,8 @@ function renderVehiculeDetail(id){
                 <div class="achat-date">${fmtDate(en.date)}</div>
               </div>
               <div class="achat-montant">${moneyDisplay(en.montant)}</div>
-              <button class="todo-remove" onclick="startEditEntretien('${en.id}')" title="Modifier">✏️</button>
-              <button class="todo-remove" onclick="removeVehiculeEntretien('${v.id}','${en.id}')" title="Supprimer">✕</button>
+              <button class="todo-remove" onclick="startEditEntretien('${jsAttr(en.id)}')" title="Modifier">✏️</button>
+              <button class="todo-remove" onclick="removeVehiculeEntretien('${jsAttr(v.id)}','${jsAttr(en.id)}')" title="Supprimer">✕</button>
             </div>`).join('') : '<div class="empty">Aucun entretien enregistré pour l\'instant.</div>'}
         </div>
       </div>
@@ -12466,7 +12473,7 @@ function entretienEditRowHTML(vehiculeId, en){
     <input type="number" id="editEntretienKilometrage_${en.id}" value="${en.kilometrage!=null?en.kilometrage:''}" placeholder="Km" style="width:110px;">
     <input type="number" step="0.01" id="editEntretienMontant_${en.id}" value="${en.montant!=null?en.montant:''}" style="width:110px;">
     <input type="date" id="editEntretienDate_${en.id}" value="${en.date||''}" style="width:150px;">
-    <button class="btn small primary" onclick="saveEditEntretien('${vehiculeId}','${en.id}')">✓</button>
+    <button class="btn small primary" onclick="saveEditEntretien('${jsAttr(vehiculeId)}','${jsAttr(en.id)}')">✓</button>
     <button class="btn small ghost" onclick="cancelEditEntretien()">✕</button>
   </div>`;
 }
@@ -12508,7 +12515,7 @@ function vehiculeSchemaHTML(schemaId, marks, readonly){
       <text x="110" y="412" text-anchor="middle" font-size="12" fill="#8a93a3">ARRIÈRE</text>
       ${currentMarks.map(m=>`<text x="${m.x}" y="${m.y}" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="800" fill="#E23535">✕</text>`).join('')}
     </svg>
-    ${readonly? '' : `<button type="button" class="btn small ghost" onclick="clearSchemaMarks('${schemaId}')" style="margin-top:6px;">Effacer les marques</button>`}
+    ${readonly? '' : `<button type="button" class="btn small ghost" onclick="clearSchemaMarks('${jsAttr(schemaId)}')" style="margin-top:6px;">Effacer les marques</button>`}
   </div>`;
 }
 function addMarkToSchema(schemaId, ev){
@@ -12654,8 +12661,8 @@ function renderEquipesRH(){
             <div class="card-sub">${(t.metiers&&t.metiers.length)? '🔧 '+t.metiers.map(esc).join(', ') : (t.metier? '🔧 '+esc(t.metier):'Aucun métier')} · ${membres.length} membre${membres.length>1?'s':''}</div>
           </div>
           <div style="display:flex; gap:8px;">
-            <button class="btn small" onclick="editItem('technicien','${t.id}')">Modifier</button>
-            <button class="btn small danger" onclick="deleteItem('technicien','${t.id}')">Supprimer</button>
+            <button class="btn small" onclick="editItem('technicien','${jsAttr(t.id)}')">Modifier</button>
+            <button class="btn small danger" onclick="deleteItem('technicien','${jsAttr(t.id)}')">Supprimer</button>
           </div>
         </div>
         <div style="margin-top:10px;">
@@ -12663,7 +12670,7 @@ function renderEquipesRH(){
             <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-top:1px solid var(--border);">
               <span style="flex:1;">${esc([s.prenom,s.nom].filter(Boolean).join(' '))}${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</span>
               ${s.profileId? '' : '<span class="card-sub" title="Sans compte, ce membre ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}
-              <button class="btn small ghost" onclick="retirerDeLEquipe('${s.id}')">Retirer</button>
+              <button class="btn small ghost" onclick="retirerDeLEquipe('${jsAttr(s.id)}')">Retirer</button>
             </div>`).join('') || '<div class="empty" style="margin:6px 0;">Aucun membre. Cette équipe ne peut rien déclarer.</div>'}
         </div>
         ${sansEquipe.length? `<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
@@ -12671,7 +12678,7 @@ function renderEquipesRH(){
             <option value="">— Ajouter un salarié —</option>
             ${sansEquipe.map(s=>`<option value="${s.id}">${esc([s.prenom,s.nom].filter(Boolean).join(' '))}</option>`).join('')}
           </select>
-          <button class="btn small" onclick="ajouterALEquipe('${t.id}')">+ Ajouter</button>
+          <button class="btn small" onclick="ajouterALEquipe('${jsAttr(t.id)}')">+ Ajouter</button>
         </div>` : ''}
       </div>`;
     }).join('') || '<div class="empty">Aucune équipe. Créez-en une pour pouvoir planifier.</div>'}
@@ -12822,9 +12829,9 @@ function renderSalarieListHTML(list){
         </div>
       </div>
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small" onclick="editItem('salarie','${s.id}')">Modifier</button>
-        <button class="btn small" onclick="ouvrirDossierRhDepuisListe('${s.id}')">📁 Dossier</button>
-        <button class="btn small danger" onclick="deleteItem('salarie','${s.id}')">Supprimer</button>
+        <button class="btn small" onclick="editItem('salarie','${jsAttr(s.id)}')">Modifier</button>
+        <button class="btn small" onclick="ouvrirDossierRhDepuisListe('${jsAttr(s.id)}')">📁 Dossier</button>
+        <button class="btn small danger" onclick="deleteItem('salarie','${jsAttr(s.id)}')">Supprimer</button>
       </div>
     </div>`;
   }).join('');
@@ -12913,10 +12920,10 @@ function documentRhRowHTML(doc){
     </span>
     ${etatDocumentRhBadge(doc)}
     ${doc.fichierChemin
-      ? `<button class="btn small ghost" onclick="ouvrirDocumentRhEcran('${doc.id}')">📎 Ouvrir</button>`
+      ? `<button class="btn small ghost" onclick="ouvrirDocumentRhEcran('${jsAttr(doc.id)}')">📎 Ouvrir</button>`
       : '<span class="card-sub" title="Ligne enregistrée sans fichier joint">sans fichier</span>'}
-    <button class="btn small" onclick="ouvrirFormDocumentRh('${doc.salarieId}','${doc.id}')">Modifier</button>
-    <button class="btn small danger" onclick="supprimerDocumentRhEcran('${doc.id}')">✕</button>
+    <button class="btn small" onclick="ouvrirFormDocumentRh('${jsAttr(doc.salarieId)}','${jsAttr(doc.id)}')">Modifier</button>
+    <button class="btn small danger" onclick="supprimerDocumentRhEcran('${jsAttr(doc.id)}')">✕</button>
   </div>`;
 }
 /* Le dossier d'un salarié : ce qu'il contient, ce qui lui manque, et de quoi
@@ -12935,7 +12942,7 @@ function dossierRhHTML(salarie){
   return `
     ${resume}
     <div style="margin-top:10px;">${docs.length? docs.map(documentRhRowHTML).join('') : '<div class="empty">Aucun document au dossier.</div>'}</div>
-    ${formIci? formDocumentRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormDocumentRh('${salarie.id}')">+ Ajouter un document</button>`}
+    ${formIci? formDocumentRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormDocumentRh('${jsAttr(salarie.id)}')">+ Ajouter un document</button>`}
   `;
 }
 function ouvrirFormDocumentRh(salarieId, docId){
@@ -13136,7 +13143,7 @@ function renderRHDocuments(){
               <td style="text-align:center;">${pastilleVisiteRh(s.id)}</td>
               <td>${autres||'—'}</td>
               <td>${bilan.complet? '<span class="badge">Complet</span>' : `<span class="badge danger">${manques? manques+' manquant'+(manques>1?'s':'') : bilan.expires.length+' expiré'+(bilan.expires.length>1?'s':'')}</span>`}</td>
-              <td><button class="btn small" onclick="ouvrirDossierRh('${s.id}')">${state.rhDocSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
+              <td><button class="btn small" onclick="ouvrirDossierRh('${jsAttr(s.id)}')">${state.rhDocSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
             </tr>`;
           }).join('') : `<tr><td colspan="${obligatoires.length+5}" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>`}
         </tbody>
@@ -13146,7 +13153,7 @@ function renderRHDocuments(){
     ${ouvert? `<div class="card" style="margin-top:20px;">
       <div class="card-row">
         <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — dossier documentaire</div>
-        <button class="btn small ghost" onclick="ouvrirDossierRh('${ouvert.s.id}')">Fermer</button>
+        <button class="btn small ghost" onclick="ouvrirDossierRh('${jsAttr(ouvert.s.id)}')">Fermer</button>
       </div>
       <div style="margin-top:10px;">${dossierRhHTML(ouvert.s)}</div>
     </div>` : ''}
@@ -13276,10 +13283,10 @@ function visiteRhRowHTML(v){
     </span>
     ${v.prochaineVisite? `<span class="card-sub">→ ${fmtDate(v.prochaineVisite)}</span>` : '<span class="card-sub">sans échéance</span>'}
     ${v.fichierChemin
-      ? `<button class="btn small ghost" onclick="ouvrirAttestationVisiteEcran('${v.id}')">📎 Attestation</button>`
+      ? `<button class="btn small ghost" onclick="ouvrirAttestationVisiteEcran('${jsAttr(v.id)}')">📎 Attestation</button>`
       : '<span class="card-sub">sans attestation</span>'}
-    <button class="btn small" onclick="ouvrirFormVisiteRh('${v.salarieId}','${v.id}')">Modifier</button>
-    <button class="btn small danger" onclick="supprimerVisiteRhEcran('${v.id}')">✕</button>
+    <button class="btn small" onclick="ouvrirFormVisiteRh('${jsAttr(v.salarieId)}','${jsAttr(v.id)}')">Modifier</button>
+    <button class="btn small danger" onclick="supprimerVisiteRhEcran('${jsAttr(v.id)}')">✕</button>
   </div>`;
 }
 /* Le registre d'un salarié : son état, son historique, et de quoi compléter.
@@ -13303,7 +13310,7 @@ function visitesMedicalesHTML(salarie){
       : (heritee
         ? `<div class="empty">Échéance reprise de l'ancienne saisie, sans visite au registre : ni type, ni avis, ni attestation. Enregistrez la prochaine visite pour repartir sur du solide.</div>`
         : '<div class="empty">Aucune visite enregistrée. Ce salarié n\'a pas de suivi médical traçable.</div>')}</div>
-    ${formIci? formVisiteRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormVisiteRh('${salarie.id}')">+ Enregistrer une visite</button>`}
+    ${formIci? formVisiteRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormVisiteRh('${jsAttr(salarie.id)}')">+ Enregistrer une visite</button>`}
   `;
 }
 function ouvrirFormVisiteRh(salarieId, visiteId){
@@ -13525,7 +13532,7 @@ function renderRHVisites(){
               <td${avis? ` style="color:${couleur}; font-weight:700;"`:''}>${avis? esc(avis.libelle) : '—'}</td>
               <td>${etatVisiteBadge(s.id)}</td>
               <td>${visites.length || '—'}</td>
-              <td><button class="btn small" onclick="ouvrirRegistreVisites('${s.id}')">${state.rhVisiteSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
+              <td><button class="btn small" onclick="ouvrirRegistreVisites('${jsAttr(s.id)}')">${state.rhVisiteSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
             </tr>`;
           }).join('') : '<tr><td colspan="8" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>'}
         </tbody>
@@ -13534,7 +13541,7 @@ function renderRHVisites(){
     ${ouvert? `<div class="card" style="margin-top:20px;">
       <div class="card-row">
         <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — suivi médical</div>
-        <button class="btn small ghost" onclick="ouvrirRegistreVisites('${ouvert.s.id}')">Fermer</button>
+        <button class="btn small ghost" onclick="ouvrirRegistreVisites('${jsAttr(ouvert.s.id)}')">Fermer</button>
       </div>
       <div style="margin-top:10px;">${visitesMedicalesHTML(ouvert.s)}</div>
     </div>` : ''}
@@ -13666,15 +13673,15 @@ function salarieForm(){
       <span>🏖️ Congés & Absences</span>
     </div>
     <div class="field-grid" style="margin-top:8px;">
-      <div class="field"><label>Solde de CP acquis (jours)</label><input type="number" step="0.5" id="sal_soldeCPInitial" value="${e.soldeCPInitial!=null?e.soldeCPInitial:''}" placeholder="Ex : 25" onchange="updateSoldeCPPreview('${e.id}')"></div>
+      <div class="field"><label>Solde de CP acquis (jours)</label><input type="number" step="0.5" id="sal_soldeCPInitial" value="${e.soldeCPInitial!=null?e.soldeCPInitial:''}" placeholder="Ex : 25" onchange="updateSoldeCPPreview('${jsAttr(e.id)}')"></div>
       <div class="field"><label>Solde restant (calculé)</label><input type="text" value="${soldeCPRestant(e).toFixed(1)} jour(s)" disabled style="background:var(--surface-2); font-weight:700;"></div>
     </div>
     <div class="entretien-add-row">
-      <select id="absType_${e.id}" onchange="onAbsTypeChange('${e.id}')">${TYPES_ABSENCE.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+      <select id="absType_${e.id}" onchange="onAbsTypeChange('${jsAttr(e.id)}')">${TYPES_ABSENCE.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
       <input type="date" id="absDebut_${e.id}" placeholder="Début">
       <input type="date" id="absFin_${e.id}" placeholder="Fin">
       <input type="text" id="absCommentaire_${e.id}" placeholder="Commentaire (optionnel)" style="flex:1; min-width:140px;">
-      <button class="btn primary" onclick="addAbsence('${e.id}')">+ Ajouter</button>
+      <button class="btn primary" onclick="addAbsence('${jsAttr(e.id)}')">+ Ajouter</button>
     </div>
     <div class="achat-salarie-zone" id="absJustificatifZone_${e.id}" style="display:none;">
       <label class="btn small" style="cursor:pointer;">📎 Joindre le document du médecin<input type="file" id="absJustificatif_${e.id}" accept=".pdf,image/*" style="display:none;"></label>
@@ -13688,7 +13695,7 @@ function salarieForm(){
             <div class="achat-designation">${esc(a.type)}${a.commentaire? ` — ${esc(a.commentaire)}`:''}${a.fichierNom? ` · <a href="javascript:void(0)" onclick="event.stopPropagation(); openAttachmentPreview('${jsAttr(a.fichierData)}','${jsAttr(a.fichierNom)}')">📎 justificatif</a>`:''}</div>
             <div class="achat-date">${fmtDate(a.dateDebut)} → ${fmtDate(a.dateFin)} · ${a.nbJours} jour(s) ouvré(s)</div>
           </div>
-          <button class="btn small danger" onclick="removeAbsence('${e.id}','${a.id}')">✕</button>
+          <button class="btn small danger" onclick="removeAbsence('${jsAttr(e.id)}','${jsAttr(a.id)}')">✕</button>
         </div>`).join('') : '<div class="empty">Aucune absence enregistrée.</div>'}
     </div>
     ` : `<div class="card-sub" style="margin-top:14px;">💡 Enregistrez d'abord la fiche pour pouvoir ajouter le contrat de travail et ses avenants.</div>`}
@@ -13782,8 +13789,8 @@ function zoneInvitationHTML(e){
     return `<div class="card-sub" style="margin-top:8px;">
       ✉ Invitation en attente pour <strong>${esc(invitation.email)}</strong>${envoyee? ` — envoyée le ${envoyee}`:''}.
       <div style="display:flex; gap:8px; margin-top:6px;">
-        <button class="btn small" onclick="renvoyerInvitationSalarie('${e.id}','${jsAttr(invitation.email)}','${jsAttr(invitation.role)}')">Renvoyer</button>
-        <button class="btn small danger" onclick="annulerInvitationSalarie('${invitation.id}')">Annuler</button>
+        <button class="btn small" onclick="renvoyerInvitationSalarie('${jsAttr(e.id)}','${jsAttr(invitation.email)}','${jsAttr(invitation.role)}')">Renvoyer</button>
+        <button class="btn small danger" onclick="annulerInvitationSalarie('${jsAttr(invitation.id)}')">Annuler</button>
       </div>
     </div>`;
   }
@@ -13796,7 +13803,7 @@ function zoneInvitationHTML(e){
       <select id="inv_role_${e.id}" style="width:auto;">
         ${ROLES_INVITATION.map(r=>`<option value="${r.code}">${esc(r.libelle)}</option>`).join('')}
       </select>
-      <button class="btn small primary" onclick="inviterSalarieEcran('${e.id}')">✉ Inviter</button>
+      <button class="btn small primary" onclick="inviterSalarieEcran('${jsAttr(e.id)}')">✉ Inviter</button>
     </div>
     ${email? '' : '<div class="card-sub" style="margin-top:6px;">Renseignez d\'abord son e-mail ci-dessous, ou saisissez-le ici.</div>'}
   </div>`;
@@ -13940,14 +13947,14 @@ const listeClientsHTML = declarerListing('client',
         <div class="card-sub" style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
           <span>👤 ${esc(i.nom)}${i.fonction? ' — '+esc(i.fonction):''}${i.telephone? ' · '+esc(i.telephone):''}${i.email? ' · '+esc(i.email):''}</span>
           <span style="display:flex; gap:6px; flex-shrink:0;">
-            <button class="btn small" style="padding:2px 8px;" title="Modifier cet interlocuteur" onclick="editItem('interlocuteur','${i.id}')">Modifier</button>
-            <button class="btn small danger" style="padding:2px 7px;" onclick="deleteItem('interlocuteur','${i.id}')">✕</button>
+            <button class="btn small" style="padding:2px 8px;" title="Modifier cet interlocuteur" onclick="editItem('interlocuteur','${jsAttr(i.id)}')">Modifier</button>
+            <button class="btn small danger" style="padding:2px 7px;" onclick="deleteItem('interlocuteur','${jsAttr(i.id)}')">✕</button>
           </span>
         </div>`).join('')}</div>`:''}
       <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small primary" onclick="editItem('client','${c.id}')">Modifier le client</button>
-        <button class="btn small" onclick="openForm('interlocuteur', {clientId:'${c.id}'})">+ Ajouter un interlocuteur</button>
-        <button class="btn small danger" onclick="deleteItem('client','${c.id}')">Supprimer le client</button>
+        <button class="btn small primary" onclick="editItem('client','${jsAttr(c.id)}')">Modifier le client</button>
+        <button class="btn small" onclick="openForm('interlocuteur', {clientId:'${jsAttr(c.id)}'})">+ Ajouter un interlocuteur</button>
+        <button class="btn small danger" onclick="deleteItem('client','${jsAttr(c.id)}')">Supprimer le client</button>
       </div>
       ${state.formOpen.interlocuteur && state.editing.clientId===c.id? interlocuteurForm(c): ''}
       </div>`;
@@ -13969,7 +13976,7 @@ function interlocuteurForm(client){
       <div class="field"><label>Email</label><input type="email" id="i_email" value="${esc(e.email)}"></div>
     </div>
     <div style="display:flex; gap:10px;">
-      <button class="btn primary" onclick="saveInterlocuteur('${client.id}')">Enregistrer</button>
+      <button class="btn primary" onclick="saveInterlocuteur('${jsAttr(client.id)}')">Enregistrer</button>
       <button class="btn ghost" onclick="closeForm('interlocuteur')">Annuler</button>
     </div>
   </div>`;
@@ -14290,8 +14297,8 @@ function champSiretHTML(idChamp, valeur, cibles){
     <label>SIRET / SIREN</label>
     <div style="display:flex; gap:8px;">
       <input type="text" id="${idChamp}" value="${esc(valeur||'')}" placeholder="14 chiffres (SIRET) ou 9 chiffres (SIREN)" inputmode="numeric"
-             onkeydown="if(event.key==='Enter'){ event.preventDefault(); chercherSiret('${idChamp}', ${cfg}); }">
-      <button type="button" class="btn" onclick='chercherSiret("${idChamp}", ${cfg})'>🔍 Rechercher</button>
+             onkeydown="if(event.key==='Enter'){ event.preventDefault(); chercherSiret('${jsAttr(idChamp)}', ${cfg}); }">
+      <button type="button" class="btn" onclick="chercherSiret('${jsAttr(idChamp)}', ${cfg})">🔍 Rechercher</button>
     </div>
     <div id="${idChamp}_res" class="suggest-box" style="position:static; margin-top:6px;"></div>
   </div>`;
@@ -14481,8 +14488,8 @@ const listeMetiersHTML = declarerListing('metierPerso',
         <div style="display:flex; align-items:center; gap:8px;"><span style="width:16px; height:16px; border-radius:4px; background:${esc(m.couleur||'#999')}; flex-shrink:0; border:1px solid rgba(0,0,0,.1);"></span><div class="card-title">${esc(m.nom)}</div></div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('metierPerso','${m.id}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('metierPerso','${m.id}')">Supprimer</button>
+        <button class="btn small" onclick="editItem('metierPerso','${jsAttr(m.id)}')">Modifier</button>
+        <button class="btn small danger" onclick="deleteItem('metierPerso','${jsAttr(m.id)}')">Supprimer</button>
       </div></div>`).join('') || listeVide('metierPerso', 'Aucun métier enregistré pour cette société.', 'métier'));
 const METIER_PALETTE = ['#FF6A1A','#F5B301','#FFD23F','#2E9E4F','#5EC26A','#0E7C66','#178A7A','#1E8FD5','#3AA9E0','#0B5FA5','#5B5FE8','#7C6FF0','#8E5CE6','#B85CD1','#D65DB1','#C77DFF','#8A6D3B','#B08D57','#5C6470'];
 function pickMetierCouleur(couleur){
@@ -14503,7 +14510,7 @@ function metierPersoForm(){
       <div class="field full">
         <label>Couleur</label>
         <input type="hidden" id="mp_couleur" value="${esc(couleurActuelle)}">
-        <div class="metier-palette">${METIER_PALETTE.map(c=>`<button type="button" class="metier-swatch ${c===couleurActuelle?'is-selected':''}" style="background:${c};" onclick="pickMetierCouleur('${c}')" title="${c}"></button>`).join('')}</div>
+        <div class="metier-palette">${METIER_PALETTE.map(c=>`<button type="button" class="metier-swatch ${c===couleurActuelle?'is-selected':''}" style="background:${c};" onclick="pickMetierCouleur('${jsAttr(c)}')" title="${c}"></button>`).join('')}</div>
       </div>
     </div>
     <div style="display:flex; gap:10px; margin-top:10px;">
@@ -14550,8 +14557,8 @@ const listeConducteursHTML = declarerListing('conducteur',
         <div><div class="card-title">${esc(c.nom)}</div>${c.telephone||c.email? `<div class="card-sub">${[c.telephone,c.email].filter(Boolean).join(' · ')}</div>`:''}${c.profileId? '' : '<div class="card-sub" title="Sans compte, son tableau de bord montre les affaires de toute la société">⚠ sans compte utilisateur</div>'}</div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('conducteur','${c.id}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('conducteur','${c.id}')">Supprimer</button>
+        <button class="btn small" onclick="editItem('conducteur','${jsAttr(c.id)}')">Modifier</button>
+        <button class="btn small danger" onclick="deleteItem('conducteur','${jsAttr(c.id)}')">Supprimer</button>
       </div></div>`).join('') || listeVide('conducteur', 'Aucun conducteur de travaux enregistré pour cette société.', 'conducteur'));
 function conducteurForm(){
   const e = state.editing;
@@ -14681,8 +14688,8 @@ const listeSousTraitantsHTML = declarerListing('sousTraitant',
         <div><div class="card-title">${esc(s.nom)}</div>${s.telephone||s.email? `<div class="card-sub">${[s.telephone,s.email].filter(Boolean).join(' · ')}</div>`:''}${(s.metiers&&s.metiers.length)? `<div class="card-sub">🔧 ${s.metiers.map(esc).join(', ')}</div>` : (s.metier? `<div class="card-sub">🔧 ${esc(s.metier)}</div>`:'')}</div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('sousTraitant','${s.id}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('sousTraitant','${s.id}')">Supprimer</button>
+        <button class="btn small" onclick="editItem('sousTraitant','${jsAttr(s.id)}')">Modifier</button>
+        <button class="btn small danger" onclick="deleteItem('sousTraitant','${jsAttr(s.id)}')">Supprimer</button>
       </div></div>`).join('') || listeVide('sousTraitant', 'Aucun sous-traitant enregistré pour cette société.', 'sous-traitant'));
 function sousTraitantForm(){
   const e = state.editing;
@@ -14710,7 +14717,7 @@ function sousTraitantForm(){
       <select id="stDocType">${TYPES_DOC_SOUSTRAITANT.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
       <input type="date" id="stDocExpiration" placeholder="Date d'expiration">
       <label class="btn small" style="cursor:pointer;">📎 Fichier<input type="file" id="stDocFichier" accept=".pdf,image/*" style="display:none;"></label>
-      <button class="btn primary" onclick="addSousTraitantDoc('${e.id}')">+ Ajouter</button>
+      <button class="btn primary" onclick="addSousTraitantDoc('${jsAttr(e.id)}')">+ Ajouter</button>
     </div>
     <div class="achats-list" style="margin-top:10px;">
       ${(e.documents||[]).length? [...e.documents].sort((a,b)=>(a.dateExpiration||'9999').localeCompare(b.dateExpiration||'9999')).map(d=>{
@@ -14722,7 +14729,7 @@ function sousTraitantForm(){
             <div class="achat-designation">${esc(d.type)}${d.fichierNom? ` · <a href="javascript:void(0)" onclick="openAttachmentPreview('${jsAttr(d.fichierData)}','${jsAttr(d.fichierNom)}')">📎 voir</a>`:''}</div>
             <div class="achat-date">${d.dateExpiration? `Expire le ${fmtDate(d.dateExpiration)}`:'Sans date d\u2019expiration'}${alerte? ` <span class="badge ${j<0?'danger':'warn'}">${j<0?'EXPIRÉ':'DANS '+j+' J'}</span>`:''}</div>
           </div>
-          <button class="btn small danger" onclick="removeSousTraitantDoc('${e.id}','${d.id}')">✕</button>
+          <button class="btn small danger" onclick="removeSousTraitantDoc('${jsAttr(e.id)}','${jsAttr(d.id)}')">✕</button>
         </div>`;
       }).join('') : '<div class="empty">Aucun document enregistré.</div>'}
     </div>
@@ -15363,10 +15370,10 @@ function catalogueListeHTML(c){
       <td class="num">${money(a.prixUnitaire)}</td>
       <td class="num">${a.tva}%</td>
       <td style="white-space:nowrap;">
-        ${peutEcrire? `<button class="btn small" onclick="ouvrirArticleCatalogue('${a.id}')">Modifier</button>
+        ${peutEcrire? `<button class="btn small" onclick="ouvrirArticleCatalogue('${jsAttr(a.id)}')">Modifier</button>
         ${a.actif
-          ? `<button class="btn small danger" onclick="retirerDuCatalogue('${a.id}')" title="Retirer du catalogue sans l'effacer : des documents citent ce code">Retirer</button>`
-          : `<button class="btn small" onclick="remettreAuCatalogue('${a.id}')">Remettre</button>`}`
+          ? `<button class="btn small danger" onclick="retirerDuCatalogue('${jsAttr(a.id)}')" title="Retirer du catalogue sans l'effacer : des documents citent ce code">Retirer</button>`
+          : `<button class="btn small" onclick="remettreAuCatalogue('${jsAttr(a.id)}')">Remettre</button>`}`
         : ''}
       </td>
     </tr>`).join('');
@@ -15633,8 +15640,8 @@ function renderDocumentsSection(){
         <span class="badge ${st.cls}">${st.label}</span>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('document','${d.id}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('document','${d.id}')">Supprimer</button>
+        <button class="btn small" onclick="editItem('document','${jsAttr(d.id)}')">Modifier</button>
+        <button class="btn small danger" onclick="deleteItem('document','${jsAttr(d.id)}')">Supprimer</button>
       </div></div>`;
     }).join('') || '<div class="empty">Aucun document enregistré pour cette société.</div>'}
   `;

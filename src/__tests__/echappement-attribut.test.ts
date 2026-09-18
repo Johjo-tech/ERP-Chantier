@@ -125,34 +125,61 @@ describe("L'ordre des remplacements", () => {
   });
 });
 
-describe("Aucune valeur n'entre dans un attribut d'événement par esc()", () => {
-  /* `esc()` est juste pour du TEXTE : il rend `'` sous la forme `&#39;`, ce que
-     le navigateur affiche comme une apostrophe. Mais dans un attribut, ce même
-     `&#39;` est DÉCODÉ avant que le JavaScript soit lu — il redevient une vraie
-     apostrophe, referme la chaîne, et livre la suite à l'exécution. Six sites
-     en souffraient : le choix de société, l'aperçu de numérotation (deux fois),
-     le renvoi d'invitation, le choix d'établissement et celui d'adresse.
+describe("Aucune valeur n'entre nue dans un attribut d'événement", () => {
+  /* LA RÈGLE GÉNÉRALE, et non plus le seul cas d'`esc()`.
 
-     `jsAttr()` est fait pour ce contexte : il échappe l'apostrophe par une
-     contre-oblique, que le décodage ne défait pas. */
-  const source = readFileSync(resolve(__dirname, "../pages/app.js"), "utf8");
+     Tout `${…}` placé dans une chaîne JavaScript d'un attribut `on*` doit passer
+     par `jsAttr()`. Deux façons d'en sortir avaient été prouvées dans Chromium :
 
-  it("ne laisse aucun esc() dans une chaîne JavaScript d'attribut", () => {
+     - par `esc()`, qui rend l'apostrophe en `&#39;` — que le navigateur décode
+       AVANT de lire le JavaScript, si bien que la chaîne se referme ;
+     - par une interpolation NUE : `handlePlanningCardClick(event,'${b.kind}',
+       '${b.id}')`. Or l'identifiant du planning vaut `${b.id}::${metierKey}`,
+       et le nom de métier est du texte libre. La charge
+       `uuid::Peinture',window.__PWN='exploite',null)//` s'exécutait — 291 sites
+       en souffraient, dont 1 212 attributs sur le seul onglet Planning.
+
+     La règle précédente ne voyait que `'${esc(` — collé. Elle laissait passer
+     `' ${esc(`, toute autre fonction, et l'interpolation nue. Celle-ci n'accepte
+     que `jsAttr`, sans regarder qui l'appelle. */
+
+  const SOURCES = [
+    ["src/pages/app.js", readFileSync(resolve(__dirname, "../pages/app.js"), "utf8")],
+    ["src/pages/index.html", readFileSync(resolve(__dirname, "../pages/index.html"), "utf8")],
+  ] as const;
+
+  /** Les attributs `on*`, à guillemets doubles COMME à apostrophes simples. */
+  const ATTRIBUTS = /\son[a-z]+=("([^"]*)"|'([^']*)')/g;
+
+  function interpolationsNues(source: string): string[] {
     const fautifs: string[] = [];
-    for (const attribut of source.matchAll(/\son[a-z]+="([^"]*)"/g)) {
-      /* Seuls comptent les `esc()` DANS une chaîne entre apostrophes : ailleurs
-         dans l'attribut — un identifiant, un nombre — il n'y a pas de chaîne à
-         refermer. */
-      if (/'\$\{esc\(/.test(attribut[1])) fautifs.push(attribut[0].slice(0, 90));
+    for (const attribut of source.matchAll(ATTRIBUTS)) {
+      const contenu = attribut[2] ?? attribut[3] ?? "";
+      /* Les chaînes JavaScript de l'attribut. Dans un attribut à apostrophes,
+         elles sont délimitées par des guillemets, et inversement. */
+      const delimiteur = attribut[2] !== undefined ? /'([^']*)'/g : /"([^"]*)"/g;
+      for (const chaine of contenu.matchAll(delimiteur)) {
+        for (const interp of chaine[1].matchAll(/\$\{([^}]*)\}/g)) {
+          if (!/^\s*jsAttr\s*\(/.test(interp[1])) {
+            fautifs.push(`${attribut[0].slice(0, 70)} → \${${interp[1].slice(0, 40)}}`);
+          }
+        }
+      }
     }
-    expect(fautifs).toEqual([]);
-  });
+    return fautifs;
+  }
 
-  it("n'en laisse pas davantage dans index.html", () => {
-    const html = readFileSync(resolve(__dirname, "../pages/index.html"), "utf8");
-    const fautifs = [...html.matchAll(/\son[a-z]+="([^"]*)"/g)]
-      .filter((a) => /'\$\{esc\(/.test(a[1]))
-      .map((a) => a[0].slice(0, 90));
-    expect(fautifs).toEqual([]);
+  for (const [nom, source] of SOURCES) {
+    it(`n'en laisse aucune dans ${nom}`, () => {
+      expect(interpolationsNues(source)).toEqual([]);
+    });
+  }
+
+  it("refuse bien une interpolation nue, quand on lui en donne une", () => {
+    /* Une garde qu'on n'a pas vue refuser ne prouve rien. */
+    expect(interpolationsNues(`<b onclick="f('\${x.id}')">`)).toHaveLength(1);
+    expect(interpolationsNues(`<b onclick="f('\${esc(x.id)}')">`)).toHaveLength(1);
+    expect(interpolationsNues(`<b onclick='f("\${x.id}")'>`)).toHaveLength(1);
+    expect(interpolationsNues(`<b onclick="f('\${jsAttr(x.id)}')">`)).toHaveLength(0);
   });
 });

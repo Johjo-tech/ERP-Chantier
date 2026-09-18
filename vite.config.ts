@@ -197,8 +197,12 @@ function gestionnairesPublies() {
          la page — `on[a-z]+="…"` puis les identifiants suivis d'une parenthèse. */
       const appeles = new Set<string>();
       for (const source of [app, html]) {
-        for (const attr of source.matchAll(/\son[a-z]+="([^"]*)"/g)) {
-          for (const m of attr[1].matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) appeles.add(m[1]);
+        /* Guillemets doubles ET apostrophes simples : la première version ne
+           voyait que les premiers, et un `onload='f()'` lui échappait — trou
+           démontré par la revalidation. */
+        for (const attr of source.matchAll(/\son[a-z]+=("([^"]*)"|'([^']*)')/g)) {
+          const contenu = attr[2] ?? attr[3] ?? "";
+          for (const m of contenu.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) appeles.add(m[1]);
         }
       }
 
@@ -227,7 +231,11 @@ function nomsPartagesResolus() {
       const poses = new Set<string>();
       for (const fichier of globSync("src/{integrations/*.ts,main.ts}", { cwd: __dirname })) {
         const code = readFileSync(resolve(__dirname, fichier), "utf8");
-        for (const m of code.matchAll(/^\s*w\.([A-Za-z_$][\w$]*)\s*=/gm)) poses.add(m[1]);
+        /* `w.x =` ET `window.x =` — le générateur des déclarations relève les
+           deux depuis que html2pdf, docx et XLSX lui avaient échappé. Ne lire
+           que la première forme ici laissait ces trois noms invisibles à la
+           garde, alors qu'ils sont bel et bien substitués sur window. */
+        for (const m of code.matchAll(/^\s*(?:w|window)\.([A-Za-z_$][\w$]*)\s*=/gm)) poses.add(m[1]);
       }
 
       const declares = new Set<string>();

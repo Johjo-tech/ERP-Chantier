@@ -50,20 +50,20 @@ jobs:
       - name: Build
         run: npm run build
 
-  # Analyse statique de la couche TypeScript — et d'elle seule.
+  # Analyse statique — et depuis cette branche, l'écran en fait PARTIE.
   #
-  # `src/pages/index.html` échappe à Semgrep pour DEUX raisons cumulées :
-  #   1. Semgrep n'extrait pas le JavaScript inline d'un fichier HTML : le code
-  #      du monolithe et ses écritures `innerHTML` lui restent invisibles.
-  #   2. Le fichier dépasse `--max-target-bytes` (1 000 000 octets par défaut) :
-  #      mesuré à 1 030 853 octets, il est écarté AVANT toute règle. `scanned` revient
-  #      vide, sans un mot dans le rapport.
+  # Ce commentaire disait jusqu'ici que `src/pages/index.html` échappait à Semgrep
+  # pour deux raisons : le JavaScript en ligne d'un fichier HTML n'est pas extrait,
+  # et le fichier dépassait `--max-target-bytes` (1 000 000 octets) de 3 %. Les deux
+  # étaient vraies. Elles ne le sont plus : l'écran vit désormais dans
+  # `src/pages/app.js`, un fichier JavaScript de plein droit.
   #
-  # Un scan vert ne dit donc rien de cet écran. Ce travail-là revient à la relecture
-  # des diffs.
+  # Mesuré sur cette branche : 126 fichiers analysés, AUCUN écarté, 0 constat.
+  # C'est la première fois que les 15 700 lignes de l'écran passent sous une règle.
   #
-  # Ne pas relever le seuil pour « couvrir » le fichier : mesuré, le scan porte alors
-  # bien index.html et ne remonte rien — une couverture de façade.
+  # Le piège reste ouvert pour l'avenir : `app.js` pèse 930 ko. Au-delà de
+  # 1 000 000 octets il serait écarté EN SILENCE, et le scan resterait vert. Un test
+  # (`src/__tests__/taille-ecran.test.ts`) refuse de laisser passer ce seuil.
   securite:
     runs-on: ubuntu-latest
     container:
