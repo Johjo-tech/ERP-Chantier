@@ -292,6 +292,27 @@ async function nextSAVNumero(societeId){
   await window.stSet(key, c);
   return 'SAV-' + c.sav;
 }
+/**
+ * La sauvegarde des données, telle que le bouton la demande.
+ *
+ * `exportAllData` existe en DEUX exemplaires : celui d'ici, qui sérialise la
+ * mémoire de l'écran, et celui de l'adaptateur, qui relit la base et prend un
+ * code de société. L'adaptateur substitue le sien sur `window` — c'est donc lui
+ * qui répond, et le bouton l'appelait sans argument : `resolveSocieteId(undefined)`
+ * levait « Société « undefined » introuvable », et la sauvegarde ne partait pas.
+ *
+ * On passe donc le code, et par une fonction nommée plutôt que depuis
+ * l'attribut : l'appel a un endroit où être lu, et l'échec un endroit où être dit.
+ */
+async function exporterMesDonnees(){
+  try{
+    await window.exportAllData(state.societeId);
+  }catch(err){
+    console.error('Export impossible', err);
+    showToast("La sauvegarde n'a pas pu être créée : " + ((err && err.message) || 'erreur inconnue'), 'danger', 6000);
+  }
+}
+
 async function exportAllData(){
   const data = {
     version: 1, exportedAt: new Date().toISOString(),
@@ -665,7 +686,7 @@ function optionsSocietesHTML(){
      pas « je n'ai accès qu'à une société » de « le sélecteur est cassé ». */
   return `<div class="user-menu-section-title">Société</div>`
     + societes.map(soc =>
-        `<button onclick="changerSociete('${esc(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
+        `<button onclick="changerSociete('${jsAttr(soc.id)}')">${soc.id===state.societeId?'✓ ':''}${esc(soc.nom)}<small style="display:block; color:var(--text-dim); font-size:10.5px;">${esc(soc.id)} · ${esc(libelleRole(soc.role))}</small></button>`
       ).join('')
     + (societes.length === 1
         ? `<div style="padding:6px 12px; color:var(--text-dim); font-size:11px; line-height:1.4;">Une seule société vous est rattachée. Pour en obtenir d'autres, un administrateur doit vous ajouter dans <b>membres_societe</b>.</div>`
@@ -9540,7 +9561,7 @@ function renderParametres(){
       <div class="card-title" style="margin-bottom:4px;">💾 Sauvegarde de vos données</div>
       <div class="card-sub" style="margin-bottom:12px;">Si vous testez régulièrement une nouvelle version de l'appli, vos données peuvent ne pas se conserver d'une version à l'autre. Exportez-les avant de changer de version, puis réimportez-les — vous ne perdrez plus rien.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn primary" onclick="window.exportAllData()">⬇ Exporter mes données</button>
+        <button class="btn primary" onclick="exporterMesDonnees()">⬇ Exporter mes données</button>
         <label class="btn" style="cursor:pointer;">⬆ Importer une sauvegarde<input type="file" accept="application/json" style="display:none;" onchange="if(this.files[0]) importAllData(this.files[0])"></label>
       </div>
     </div>
@@ -10057,8 +10078,8 @@ function tableauNumerotation(){
         const valeur = c ? c.valeur : 0;
         return `<tr>
           <td>${esc(s.label)}</td>
-          <td><input type="text" id="num_p_${esc(s.type)}" value="${esc(prefixe)}" maxlength="8" style="width:90px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${esc(s.type)}')"></td>
-          <td><input type="number" min="0" id="num_v_${esc(s.type)}" value="${valeur}" style="width:110px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${esc(s.type)}')"></td>
+          <td><input type="text" id="num_p_${esc(s.type)}" value="${esc(prefixe)}" maxlength="8" style="width:90px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${jsAttr(s.type)}')"></td>
+          <td><input type="number" min="0" id="num_v_${esc(s.type)}" value="${valeur}" style="width:110px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${jsAttr(s.type)}')"></td>
           <td><code id="num_a_${esc(s.type)}">${esc(window.apercuNumero(prefixe, valeur, annee))}</code></td>
         </tr>`;
       }).join('')}
@@ -13761,7 +13782,7 @@ function zoneInvitationHTML(e){
     return `<div class="card-sub" style="margin-top:8px;">
       ✉ Invitation en attente pour <strong>${esc(invitation.email)}</strong>${envoyee? ` — envoyée le ${envoyee}`:''}.
       <div style="display:flex; gap:8px; margin-top:6px;">
-        <button class="btn small" onclick="renvoyerInvitationSalarie('${e.id}','${jsAttr(invitation.email)}','${esc(invitation.role)}')">Renvoyer</button>
+        <button class="btn small" onclick="renvoyerInvitationSalarie('${e.id}','${jsAttr(invitation.email)}','${jsAttr(invitation.role)}')">Renvoyer</button>
         <button class="btn small danger" onclick="annulerInvitationSalarie('${invitation.id}')">Annuler</button>
       </div>
     </div>`;
@@ -14325,7 +14346,7 @@ async function chercherSiret(idChamp, cibles){
   }
   box.innerHTML = `<div class="suggest-empty">${siretResults.length} établissements ouverts — choisissez :</div>`
     + siretResults.map((r,i)=>
-        `<div class="suggest-item" onclick="choisirEtablissement(${i}, '${esc(idChamp)}')"><b>${esc(r.nom)}</b><small>${esc([r.adresse, r.codePostal, r.ville].filter(Boolean).join(' '))} · ${esc(r.siret)}</small></div>`
+        `<div class="suggest-item" onclick="choisirEtablissement(${i}, '${jsAttr(idChamp)}')"><b>${esc(r.nom)}</b><small>${esc([r.adresse, r.codePostal, r.ville].filter(Boolean).join(' '))} · ${esc(r.siret)}</small></div>`
       ).join('');
 }
 
@@ -14397,7 +14418,7 @@ function searchAdresse(input, idsCibles){
       return;
     }
     box.innerHTML = adresseResults.map((a,i)=>
-      `<div class="suggest-item" onclick="selectAdresse(${i}, '${esc(box.id)}')"><b>${esc(a.adresse)}</b><small>${esc(a.codePostal)} ${esc(a.ville)}</small></div>`
+      `<div class="suggest-item" onclick="selectAdresse(${i}, '${jsAttr(box.id)}')"><b>${esc(a.adresse)}</b><small>${esc(a.codePostal)} ${esc(a.ville)}</small></div>`
     ).join('');
   }, 350);
 }
@@ -16106,6 +16127,7 @@ Object.assign(window, {
   etatVisiteBadge,
   etatVisiteDuSalarie,
   exportAllData,
+  exporterMesDonnees,
   factureDocMetaHTML,
   factureDuReglement,
   factureForm,

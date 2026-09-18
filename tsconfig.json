@@ -1,6 +1,12 @@
 {
   "compilerOptions": {
     "target": "ES2020",
+    /* Ce projet ne compile rien : Vite s'en charge, `tsc` ne sert qu'à
+       contrôler. Sans cette ligne, le `--noEmit` ne vivait que dans le script
+       npm, et un `npx tsc -p tsconfig.json` lancé à la main émettait un `.js`
+       à côté de CHAQUE source — 117 fichiers, dont 56 `.test.js` que Vitest
+       exécutait ensuite en double. C'est arrivé. */
+    "noEmit": true,
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
@@ -16,5 +22,11 @@
     }
   },
   "include": ["src"],
-  "exclude": ["node_modules"]
+  /* Les déclarations de l'écran hérité sont EXCLUES d'ici, et c'est vital.
+     `include: ["src"]` les ramassait, si bien que l'élargissement de
+     `getElementById()` à `any` — assumé pour app.js — s'appliquait aussi à
+     `src/api` et `src/integrations` : `const n: number = el.value` y passait
+     sans une erreur. Le contrôle strict était vert parce qu'il ne contrôlait
+     plus. Elles n'appartiennent qu'à `tsconfig.ecran.json`. */
+  "exclude": ["node_modules", "src/pages/ecran-dom.d.ts", "src/pages/ecran-globaux.d.ts"]
 }

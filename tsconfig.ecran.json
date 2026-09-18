@@ -27,5 +27,10 @@
     "src/pages/app.js",
     "src/pages/ecran-globaux.d.ts",
     "src/pages/ecran-dom.d.ts"
-  ]
+  ],
+  /* `exclude` filtre `include`, et celui de `tsconfig.json` écarte précisément
+     ces deux déclarations — pour qu'elles ne relâchent pas la couche stricte.
+     Sans cette ligne, l'héritage les écarterait ici aussi, et le contrôle de
+     l'écran repasserait de 0 à 819 erreurs. */
+  "exclude": ["node_modules"]
 }

@@ -155,6 +155,69 @@ async function minifierEnGardantLesNoms(
  * ne doit jamais être appelé nu. Il s'appelle `window.<nom>(…)`, pour que la
  * substitution opère.
  */
+/**
+ * La garde des gestionnaires publiés.
+ *
+ * L'écran rend son HTML en chaînes : `onclick="maFonction()"`. Le navigateur
+ * résout ce nom sur `window` AU MOMENT DU CLIC — jamais avant. Un nom absent du
+ * bloc de publication de `app.js` ne produit donc aucune erreur de construction,
+ * aucun test rouge, aucun message : un bouton qui ne répond plus, et personne
+ * pour le dire.
+ *
+ * C'est arrivé avec « Exporter mes données », dont l'appel partait sans son
+ * argument. Ce contrôle relève tout ce que les attributs appellent et exige que
+ * chaque nom soit joignable.
+ */
+function gestionnairesPublies() {
+  /* Ce que le navigateur fournit lui-même : leur absence de `window` ne dit
+     rien, et les exiger ferait échouer le build sur du code correct. */
+  const NATIFS = new Set([
+    "getElementById", "querySelector", "querySelectorAll", "parseFloat", "parseInt",
+    "setTimeout", "setInterval", "clearTimeout", "preventDefault", "stopPropagation",
+    "replace", "remove", "focus", "blur", "alert", "confirm", "prompt", "encodeURIComponent",
+    "decodeURIComponent", "Number", "String", "Boolean", "Array", "Object", "Math", "JSON",
+    "console", "window", "document", "event", "returnValue", "click", "reload", "open",
+    /* Les mots du langage : `if(…)` dans un attribut ressemble à un appel. */
+    "if", "for", "while", "switch", "catch", "return", "typeof", "new", "function", "do",
+  ]);
+
+  return {
+    name: "gestionnaires-publies",
+    buildStart() {
+      const app = readFileSync(resolve(__dirname, "src/pages/app.js"), "utf8");
+      const html = readFileSync(resolve(__dirname, "src/pages/index.html"), "utf8");
+
+      /* Ce que le bloc `Object.assign(window, { … })` de fin de fichier publie. */
+      const bloc = app.slice(app.lastIndexOf("Object.assign(window, {"));
+      const publies = new Set(
+        [...bloc.matchAll(/^\s{2}([A-Za-z_$][\w$]*),$/gm)].map((m) => m[1]),
+      );
+
+      /* Ce que les attributs d'événement appellent, dans les gabarits comme dans
+         la page — `on[a-z]+="…"` puis les identifiants suivis d'une parenthèse. */
+      const appeles = new Set<string>();
+      for (const source of [app, html]) {
+        for (const attr of source.matchAll(/\son[a-z]+="([^"]*)"/g)) {
+          for (const m of attr[1].matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) appeles.add(m[1]);
+        }
+      }
+
+      const absents = [...appeles].filter(
+        (n) => !NATIFS.has(n) && !publies.has(n) && !/^\$\{/.test(n),
+      );
+
+      if (absents.length > 0) {
+        throw new Error(
+          `Des attributs d'événement appellent des noms que \`app.js\` ne publie ` +
+            `pas sur window : ${absents.sort().join(", ")}. Le clic resterait sans ` +
+            `effet, sans erreur et sans test rouge. Ajouter ces noms au bloc ` +
+            `Object.assign(window, { … }) en fin de fichier.`,
+        );
+      }
+    },
+  };
+}
+
 function nomsPartagesResolus() {
   return {
     name: "noms-partages-resolus",
@@ -249,7 +312,7 @@ function scriptInlineMinifie() {
 const pages = path.resolve(__dirname, "src/pages");
 
 export default defineConfig({
-  plugins: [marqueurVersion, nomsPartagesResolus(), scriptInlineMinifie()],
+  plugins: [marqueurVersion, nomsPartagesResolus(), gestionnairesPublies(), scriptInlineMinifie()],
   // Les pages servent de racine pour obtenir des URLs propres (/ et /login.html)
   root: pages,
   // `envDir` suit `root` par défaut : sans ça, Vite chercherait .env.local dans
