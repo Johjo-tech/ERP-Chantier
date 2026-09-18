@@ -21,6 +21,7 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as queries from "@/api/queries";
 import { supabase } from "@/api/client";
 import type { Uuid } from "@/api/types";
@@ -30,6 +31,22 @@ const suite = AUTH_DISPONIBLE ? describe : describe.skip;
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string;
 const CLE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+/** Les comptes de rôle viennent de `supabase/seed-tests.sql` — local seulement. */
+const MOT_DE_PASSE = "motdepasse-test";
+
+/** Une session à part : le client partagé porte celle de l'administrateur. */
+async function ouvrirSession(email: string): Promise<SupabaseClient> {
+  const client = createClient(URL, CLE_ANON, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error } = await client.auth.signInWithPassword({
+    email,
+    password: MOT_DE_PASSE,
+  });
+  if (error) throw new Error(`Connexion ${email} impossible : ${error.message}`);
+  return client;
+}
 
 /** Le motif tel que l'écran le montrera : Postgres le range dans `details`. */
 async function motifDuRefus(promesse: Promise<unknown>): Promise<string> {
@@ -176,6 +193,34 @@ suite("Pré-facture validée hors circuit", () => {
     expect(rep.status).toBeGreaterThanOrEqual(400);
     expect(await rep.text()).toMatch(/permission|denied|not exist|not find/i);
     expect(await statutDe(bcId)).toBe("en_cours");
+  });
+
+  /* « Administrateur seul » ne se prouve pas en refusant l'anonyme : il faut un
+     compte AUTHENTIFIÉ et légitime, à qui la base doit dire non quand même.
+     Les trois rôles ci-dessous existent en base locale et travaillent tous sur
+     la même société que l'administrateur des autres tests. */
+  describe.each([
+    ["secretaire@local", "secrétaire"],
+    ["conducteur@local", "conducteur"],
+    ["tech.a@local", "technicien"],
+  ])("Un compte %s", (email, intitule) => {
+    it(`est refusé : le ${intitule} ne décide pas de sauter le terrain`, async () => {
+      const bcId = await bonSansTache();
+      const client = await ouvrirSession(email);
+
+      const { error } = await client.rpc("bc_chiffrage_valide_hors_circuit", {
+        p_bc_id: bcId,
+      });
+
+      expect(error).not.toBeNull();
+      /* Le 42501 de Postgres, et non un refus de RLS sur la lecture : c'est la
+         garde de rôle DANS la fonction qu'on veut voir se déclencher. */
+      expect(error?.code).toBe("42501");
+      expect(`${error?.message} ${error?.details ?? ""}`).toMatch(
+        /administrateur/i
+      );
+      expect(await statutDe(bcId)).toBe("en_cours");
+    });
   });
 
   /* L'écran fait remonter le bon dans « À facturer » d'après `valideDirecteur`,
