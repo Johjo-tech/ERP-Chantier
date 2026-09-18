@@ -25,6 +25,9 @@
   },
   "include": [
     "src/pages/app.js",
+    /* Les types de Vite : l'écran lit `import.meta.env` pour savoir à quelle
+       base parler, comme la couche TypeScript. */
+    "src/vite-env.d.ts",
     "src/pages/ecran-globaux.d.ts",
     "src/pages/ecran-dom.d.ts"
   ],

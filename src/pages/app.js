@@ -178,8 +178,20 @@ let state = {
 };
 
 /* ---------- Stockage (Supabase) ---------- */
-const SUPABASE_URL = 'https://tjhljjuvfosmnpmzgbnl.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqaGxqanV2Zm9zbW5wbXpnYm5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMzY2MTYsImV4cCI6MjEwMDkxMjYxNn0.eNdcy1BLZesZEbrpSPfQI5I6Y08o76OJjTcKKvAXsmM';
+/* L'ADRESSE VIENT DE LA CONSTRUCTION, plus d'une constante écrite ici.
+
+   Ces deux valeurs servent au repli hérité vers `kv_store`, celui qui opère
+   quand le pont n'a pas pu se charger. Écrites en dur, elles visaient la
+   PRODUCTION — depuis n'importe quel build. Un essai local dont le pont
+   échouait écrivait donc dans la base du client, et dans `kv_store`, la seule
+   table encore ouverte en écriture à un visiteur anonyme.
+
+   L'écran est un module depuis qu'il a quitté le HTML : Vite y remplace
+   `import.meta.env`, exactement comme dans la couche TypeScript. Un build local
+   parle au local, un build de production à la production. */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY;
 const memoryStore = new Map();
 let hasRealStorage = true;
 function supabaseHeaders(extra){
