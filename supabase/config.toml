@@ -74,10 +74,22 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-# Les données réelles du projet distant, jamais versionnées (voir .gitignore),
-# puis les comptes de rôle des tests, eux versionnés — un test qui dépend d'un
-# compte fabriqué à la main n'est pas reproductible.
-sql_paths = ["./data-cloud.sql", "./seed-tests.sql"]
+# Un jeu d'essai FABRIQUÉ, puis les comptes de rôle des tests — les deux
+# versionnés, un test qui dépend d'un compte fabriqué à la main n'étant pas
+# reproductible.
+#
+# La première entrée était `./data-cloud.sql`, un dump du projet distant : les
+# bons de commande, les factures, les noms de bailleurs et les adresses
+# d'intervention d'un vrai client, sur un poste de développement. Le fichier est
+# ignoré par git précisément parce qu'il est confidentiel — mais l'ignorer ne
+# l'empêchait pas d'être chargé à chaque reconstruction de la pile locale.
+#
+# `seed-demo.sql` couvre les mêmes cas sans rien de réel : un bon à chapitres
+# PEINTURE/SOL, un chapitre « PLOMBEIRE » (faute de frappe relevée en production,
+# que la reconnaissance doit rattraper), des tâches à chaque étape du circuit, un
+# travail supplémentaire non chiffré qui doit bloquer le chiffrage, et une
+# facture émise pour que la numérotation et le gel des lignes jouent.
+sql_paths = ["./seed-demo.sql", "./seed-tests.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

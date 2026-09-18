@@ -12,3 +12,4 @@ supabase/.branches
 .apercu/
 .hawk.env.local
 .vercel
+.sauvegardes/
