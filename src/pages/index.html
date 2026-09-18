@@ -5995,6 +5995,17 @@ function rafraichirZoneFactures(){
     if(zone) zone.innerHTML = renderFacturesListHTML(facturesDeLaSociete());
     return;
   }
+  /* La vue des avoirs partage la zone et le gabarit de la liste, pas ceux des
+     dossiers : sans ce cas, filtrer depuis l'onglet Avoirs tombait dans la
+     branche des bons de commande et vidait l'écran. Et la vue se passe en
+     second argument — la liste sans lui reprend les critères de « liste », donc
+     ceux d'un autre onglet. */
+  if(vue === 'avoirs'){
+    const zone = document.getElementById('factureListZone');
+    if(zone) zone.innerHTML = renderFacturesListHTML(
+      facturesDeLaSociete().filter(f=>window.estAvoir(f.typeDocument)), 'avoirs');
+    return;
+  }
   const zone = document.getElementById('facturesWorkflowZone');
   if(zone) zone.innerHTML = renderDossiersClients(bonsDeLaVue(vue), vue);
 }
@@ -6224,31 +6235,17 @@ function setFacturesView(view){
 function factureMatchesSearch(f, q){
   return !q || multiWordMatch(factureSearchHaystack(f), q);
 }
-function filterFacturesList(value){
-  state.factureSearch = value;
-  const zone = document.getElementById('factureListZone');
-  if(zone) zone.innerHTML = renderFacturesListHTML(state.factures.filter(f=>f.societeId===state.societeId));
-}
-function filterFactureConducteur(value){
-  state.factureConducteurFilter = value;
-  const zone = document.getElementById('factureListZone');
-  if(zone) zone.innerHTML = renderFacturesListHTML(state.factures.filter(f=>f.societeId===state.societeId));
-}
-function filterFactureLogement(value){
-  state.factureLogementFilter = value;
-  const zone = document.getElementById('factureListZone');
-  if(zone) zone.innerHTML = renderFacturesListHTML(state.factures.filter(f=>f.societeId===state.societeId));
-}
-function filterFactureClient(value){
-  state.factureClientFilter = value;
-  state.factureInterlocuteurFilter = '';
-  renderTab();
-}
-function filterFactureInterlocuteur(value){
-  state.factureInterlocuteurFilter = value;
-  const zone = document.getElementById('factureListZone');
-  if(zone) zone.innerHTML = renderFacturesListHTML(state.factures.filter(f=>f.societeId===state.societeId));
-}
+/* Cinq fonctions vivaient ici en double, réécrivant celles que la section des
+   filtres déclare plus haut. En JavaScript, la dernière déclaration l'emporte :
+   ce sont ces copies-ci qui tournaient, et le correctif d'au-dessus n'avait
+   jamais rien corrigé. Elles reconstruisaient la liste depuis `state.factures`
+   sans écarter les factures émises par les sous-traitants — le défaut que
+   `facturesDeLaSociete()` avait justement été écrit pour fermer — et sans
+   passer la vue, si bien qu'une frappe dans la recherche de l'onglet Avoirs y
+   faisait réapparaître toutes les factures.
+
+   Supprimées, donc, au profit de `filterFactureCritere` + `rafraichirZoneFactures`.
+   Rien ne signalait ce doublon : ce fichier échappe au contrôle de types. */
 function renderFacturesListHTML(list, vue){
   const criteres = criteresFactures(vue || 'liste');
   const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
