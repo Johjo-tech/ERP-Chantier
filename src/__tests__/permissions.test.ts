@@ -155,6 +155,19 @@ describe("Facturation", () => {
     }
   });
 
+  /* Le contournement du planning est un droit à part, même s'il tombe
+     aujourd'hui sur le même rôle que la validation. La secrétaire chiffre et
+     émet ; sauter l'attestation du terrain engage au-delà de ça. Le miroir doit
+     refuser à tous les autres — la garde réelle restant le 42501 de
+     `bc_chiffrage_valide_hors_circuit`. */
+  it("réserve à l'administrateur la facturation hors circuit", () => {
+    expect(actionsFacturation("admin").peutFacturerHorsCircuit).toBe(true);
+    for (const role of ["conducteur", "secretaire", "technicien", "lecture"] as const) {
+      expect(actionsFacturation(role).peutFacturerHorsCircuit).toBe(false);
+    }
+    expect(actionsFacturation(null).peutFacturerHorsCircuit).toBe(false);
+  });
+
   it("laisse la secrétaire reprendre puis émettre", () => {
     const d = actionsFacturation("secretaire");
     expect(d.peutModifierPrefacture).toBe(true);
