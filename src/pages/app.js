@@ -3865,10 +3865,17 @@ function removeBCAttachment(){
   const fileInput = document.getElementById('bc_pieceJointe');
   if(fileInput) fileInput.value = '';
 }
-function transformerBonCommandeEnFacture(bcId, ignorerValidationDirecteur){
+/* Le second paramètre `ignorerValidationDirecteur` a été retiré. Il valait
+   `true` depuis le seul chemin « rapport lié à un bon », ce qui laissait
+   facturer un bon que personne n'avait validé — sans trace, sans rôle exigé,
+   et sans que son `statut_workflow` bouge d'un cran en base. Le contournement
+   existe toujours, mais il a un nom, un rôle et une ligne au journal : c'est
+   la pré-facture validée hors circuit. Un seul drapeau fait foi ici,
+   `valideDirecteur`, dérivé de l'état réel du bon. */
+function transformerBonCommandeEnFacture(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
-  if(!b.valideDirecteur && !ignorerValidationDirecteur){ showToast('La validation du directeur est requise avant de pouvoir facturer ce bon de commande.'); return; }
+  if(!b.valideDirecteur){ showToast('La validation du directeur est requise avant de pouvoir facturer ce bon de commande.'); return; }
   const dejaFacture = state.factures.find(f=>f.bonCommandeId===bcId);
   if(dejaFacture){
     showToast(`Ce bon de commande a déjà été transformé en facture (${dejaFacture.numero}). Ouvrez-la directement pour la modifier.`);
@@ -4087,11 +4094,27 @@ function transformerInterventionEn(type, interventionId){
     showToast(`Ce rapport a déjà été transformé en ${type==='devis'?'devis':'facture'} (${cible.numero}). Ouvrez-${type==='devis'?'le':'la'} directement pour ${type==='devis'?'le':'la'} modifier.`);
     return;
   }
+  /* Un rapport rattaché à un bon ne facture pas à côté de lui : il facture le
+     bon, avec son contenu chiffré. Ce chemin forçait jusqu'ici la validation du
+     directeur par un simple drapeau — le bon partait en facturation en restant
+     « en cours » en base, et rien ne disait qu'on avait sauté le circuit.
+     Il emprunte désormais la même porte que tout le monde : la pré-facture. */
   if(type==='facture' && i.bonCommandeId){
     const bcLie = state.bonsCommande.find(b=>b.id===i.bonCommandeId);
     if(bcLie){
+      if(!bcLie.valideDirecteur){
+        const droits = window.actionsFacturation ? window.actionsFacturation() : {};
+        if(!droits.peutFacturerHorsCircuit){
+          showToast('🔗 Ce rapport facture le bon de commande lié '+(bcLie.numeroBC||'')+', dont la pré-facture n\'est pas encore validée.', 'danger', 6000);
+          return;
+        }
+        showToast('🔗 Bon de commande lié '+(bcLie.numeroBC||'')+' : chiffrez-le ici, puis validez — sans passer par le planning si besoin.', 'success', 5000);
+        setTab('bonsCommande');
+        openValidationDirecteurModal(bcLie.id);
+        return;
+      }
       showToast('🔗 Facturation du bon de commande lié '+(bcLie.numeroBC||'')+' (contenu chiffré du BC).', 'success', 3000);
-      transformerBonCommandeEnFacture(bcLie.id, true);
+      transformerBonCommandeEnFacture(bcLie.id);
       return;
     }
   }
@@ -5663,6 +5686,10 @@ async function openValidationDirecteurModal(bcId){
     avecPrix: prixVisibles,
     prixVisibles,
     peutValider: droits.peutValiderPrefacture,
+    /* Le contournement du planning est un droit à part, même s'il tombe
+       aujourd'hui sur le même rôle : c'est la base qui tranche, et elle les
+       distingue par deux fonctions. */
+    peutValiderHorsCircuit: !!droits.peutFacturerHorsCircuit,
     /* Le lieu et la référence du client, saisissables ici : ils manquent sur la
        quasi-totalité des bons de la file, et c'est au moment de chiffrer qu'on
        s'en aperçoit. Copiés dans le contexte comme les lignes — l'objet du bon
@@ -5719,28 +5746,38 @@ function majBoutonValidationDirecteur(actif){
   }
 }
 
+/* Montré, jamais grisé : un bouton désactivé qu'on ne sait pas activer est pire
+   qu'un bouton absent. Il n'apparaît que lorsqu'il ferait quelque chose. */
+function majBoutonHorsCircuit(visible){
+  const btn = document.getElementById('validationDirecteurHorsCircuitBtn');
+  if(btn) btn.style.display = visible ? '' : 'none';
+}
+
 function toggleValidationDirecteurPrix(coche){
   if(!validationDirecteurCtx) return;
   validationDirecteurCtx.avecPrix = !!coche;
   renderValidationDirecteur();
 }
 
-function blocagesDirecteur(b, ctx){
+function blocagesDirecteur(b, ctx, options){
   return window.blocagesChiffrage({
     statutWorkflow: b.statutWorkflow,
     taches: ctx.taches,
     travaux: ctx.travaux,
     lignes: ctx.lignes
-  });
+  }, options || {});
 }
 
-function blocagesDirecteurHTML(blocages, ctx){
+function blocagesDirecteurHTML(blocages, ctx, contournementOffert){
   if(blocages.length){
     return `<div class="wf-banner alerte" style="margin-bottom:10px;">
       <div style="font-weight:700; margin-bottom:6px;">⚠ Il reste ${blocages.length===1?'un point':'des points'} à traiter avant de valider</div>
       <ul style="margin:0; padding-left:18px;">
         ${blocages.map(x=>`<li>${esc(x.libelle)}${x.details.length? ` <span class="card-sub">— ${esc(x.details.join(', '))}</span>`:''}</li>`).join('')}
       </ul>
+      ${/* Dire ce que fait le second bouton avant qu'il soit pressé : c'est le
+            seul endroit où l'on peut expliquer qu'il laisse une trace. */''}
+      ${contournementOffert? `<div class="card-sub" style="margin-top:8px;">Le montant, lui, est complet. Si cette affaire n'a pas de terrain à pointer, « Valider sans passer par le planning » l'envoie en facturation — et la base en garde la trace.</div>`:''}
     </div>`;
   }
   /* Chiffrer et valider sont deux droits : la secrétaire complète le dossier,
@@ -6145,10 +6182,20 @@ function rafraichirChiffrageDirecteur(){
   if(total) total.innerHTML = totalChiffrageHTML(ctx);
 
   const blocages = blocagesDirecteur(b, ctx);
+  /* La même liste, sans ce que le planning exige. Si elle est vide alors que
+     l'autre ne l'est pas, la différence EST le planning — inutile d'énumérer
+     les codes concernés ici : la règle partagée sait lesquels elle retire, et
+     les nommer une seconde fois les ferait diverger au premier ajout. */
+  const horsCircuit = blocagesDirecteur(b, ctx, {horsCircuit:true});
+  const contournementOffert = blocages.length > 0
+    && horsCircuit.length === 0
+    && !!ctx.peutValiderHorsCircuit;
+
   const zone = document.getElementById('validationDirecteurBlocages');
-  if(zone) zone.innerHTML = blocagesDirecteurHTML(blocages, ctx);
+  if(zone) zone.innerHTML = blocagesDirecteurHTML(blocages, ctx, contournementOffert);
 
   majBoutonValidationDirecteur(blocages.length === 0 && ctx.peutValider);
+  majBoutonHorsCircuit(contournementOffert);
 }
 
 /**
@@ -6252,6 +6299,41 @@ async function confirmerValidationDirecteur(){
   }catch(err){
     // Le motif vient de la base : le montrer, plutôt qu'un message générique
     console.error('Validation directeur refusée', err);
+    showToast('Prix enregistrés, mais validation refusée : ' + (err.message || 'motif inconnu'));
+  }
+}
+
+/* Le même enchaînement — enregistrer, puis valider — mais par la porte qui ne
+   demande pas de tâche. Deux fonctions et non un drapeau : c'est ce qui permet
+   à la confirmation de dire ce qu'elle engage, et à la relecture de voir en un
+   coup d'œil lequel des deux gestes a été posé. */
+async function confirmerValidationHorsCircuit(){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return;
+  if(!window.validerChiffrageHorsCircuit){ showToast("Ce geste n'est pas disponible."); return; }
+
+  const t = computeTotals(ctx.lignes || []);
+  if(!confirm(`Envoyer ce bon de commande en facturation SANS passer par le planning ?\n\n`
+    + `${b.client||''} — ${moneyDisplay(t.ttc)} TTC\n\n`
+    + `Aucune tâche n'attestera des travaux. Le bon passera directement à « À facturer ».\n`
+    + `Ce contournement est enregistré au journal de la base, avec votre nom.`)) return;
+
+  const enregistre = await enregistrerChiffrageDirecteur(true);
+  if(!enregistre){
+    showToast("Les prix n'ont pas pu être enregistrés : rien n'a été validé.");
+    return;
+  }
+
+  try{
+    await window.validerChiffrageHorsCircuit(ctx.bcId);
+    await recharger('bonCommande', 'facture');
+    closeValidationDirecteurModal();
+    renderTab();
+    showToast('Pré-facture validée hors circuit — le bon passe à « À facturer ».', 'success', 4000);
+  }catch(err){
+    console.error('Validation hors circuit refusée', err);
     showToast('Prix enregistrés, mais validation refusée : ' + (err.message || 'motif inconnu'));
   }
 }
@@ -16110,6 +16192,7 @@ Object.assign(window, {
   confirmerRetourVehicule,
   confirmerValidationConducteur,
   confirmerValidationDirecteur,
+  confirmerValidationHorsCircuit,
   conformiteRhDuSalarie,
   contexteBonCommande,
   contexteFacture,
@@ -16377,6 +16460,7 @@ Object.assign(window, {
   majApresAnnuaire,
   majArticleCatalogue,
   majBoutonValidationConducteur,
+  majBoutonHorsCircuit,
   majBoutonValidationDirecteur,
   majChronoOCR,
   majCompletudeClient,

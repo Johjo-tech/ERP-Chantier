@@ -6069,6 +6069,10 @@ export type Database = {
       }
       appliquer_invitations: { Args: { p_profile_id: string }; Returns: number }
       bc_chiffrage_valide: { Args: { p_bc_id: string }; Returns: undefined }
+      bc_chiffrage_valide_hors_circuit: {
+        Args: { p_bc_id: string }
+        Returns: undefined
+      }
       bc_cloturer_gratuit: {
         Args: { p_bc_id: string; p_motif?: string }
         Returns: undefined

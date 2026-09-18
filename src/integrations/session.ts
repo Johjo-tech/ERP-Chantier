@@ -523,6 +523,13 @@ export interface ActionsFacturation {
   peutModifierPrefacture: boolean;
   /** Émettre la facture. */
   peutFacturer: boolean;
+  /**
+   * Envoyer un bon en facturation sans que le planning en atteste.
+   *
+   * Miroir d'affichage : la garde réelle est le `42501` de
+   * `bc_chiffrage_valide_hors_circuit`. Le geste est tracé au journal.
+   */
+  peutFacturerHorsCircuit: boolean;
 }
 
 /**
@@ -536,6 +543,7 @@ export function actionsFacturation(
     peutValiderPrefacture: role === "admin",
     peutModifierPrefacture: role === "admin" || role === "secretaire",
     peutFacturer: role === "admin" || role === "secretaire",
+    peutFacturerHorsCircuit: role === "admin",
   };
 }
 
@@ -618,6 +626,9 @@ export function injecterSession() {
   w.montantImputable = montantImputable;
   w.refusImputationAvoir = refusImputationAvoir;
   w.validerChiffrage = queries.validerChiffrage;
+  /* Le même geste sans le planning. Exposée à côté de sa jumelle pour qu'on
+     voie, en lisant cette ligne, qu'il existe deux chemins et un seul rôle. */
+  w.validerChiffrageHorsCircuit = queries.validerChiffrageHorsCircuit;
   w.validerAffaireConducteur = queries.validerAffaireConducteur;
   w.emettreFacture = queries.emettreFacture;
   w.sauvegarderTerrain = queries.sauvegarderTerrain;

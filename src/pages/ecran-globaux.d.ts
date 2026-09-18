@@ -217,6 +217,7 @@ declare global {
     utilisateurCourant: any;
     validerAffaireConducteur: any;
     validerChiffrage: any;
+    validerChiffrageHorsCircuit: any;
     validerTache: any;
     ventilationTvaAffichage: any;
     verifierEntite: any;

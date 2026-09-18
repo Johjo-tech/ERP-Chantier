@@ -25,6 +25,7 @@ import {
   blocagesChiffrage,
   blocagesValidationConducteur,
   messageBlocages,
+  type OptionsChiffrage,
 } from "../regles-bc";
 import {
   STATUT_INITIAL,
@@ -34,6 +35,7 @@ import {
 } from "../regles-taches";
 import { listBonCommandeLignes } from "./bonCommande";
 import type {
+  BonCommande,
   PlanningTache,
   PlanningTacheInsert,
   PlanningTacheUpdate,
@@ -316,7 +318,19 @@ export async function passerPretAChiffrer(bcId: Uuid): Promise<void> {
  * La facture reste au geste suivant, celui de la secrétaire : la générer ici
  * ferait disparaître le bon de l'onglet « À facturer ».
  */
-export async function validerChiffrage(bcId: Uuid): Promise<void> {
+/**
+ * Le dossier relu et contrôlé — partagé par le circuit et par son contournement.
+ *
+ * Les deux chemins doivent refuser sur les mêmes motifs, à l'exception près que
+ * `horsCircuit` nomme. Les séparer ferait diverger deux listes de blocages qui
+ * ne diffèrent que d'une ligne. Renvoie le bon, déjà lu : l'appelant en a besoin
+ * pour décider de la transition, et une seconde lecture serait un aller-retour
+ * de plus.
+ */
+async function dossierChiffrageControle(
+  bcId: Uuid,
+  options: OptionsChiffrage
+): Promise<BonCommande> {
   const bc = await getOne("bons_commande", bcId);
   if (!bc) throw new Error("Bon de commande introuvable.");
 
@@ -326,17 +340,26 @@ export async function validerChiffrage(bcId: Uuid): Promise<void> {
     listBonCommandeLignes(bcId),
   ]);
 
-  const blocages = blocagesChiffrage({
-    statutWorkflow: bc.statut_workflow,
-    taches,
-    travaux,
-    lignes: lignes.map((l) => ({
-      type: l.type,
-      designation: l.designation,
-      prixUnitaire: l.prix_unitaire,
-    })),
-  });
+  const blocages = blocagesChiffrage(
+    {
+      statutWorkflow: bc.statut_workflow,
+      taches,
+      travaux,
+      lignes: lignes.map((l) => ({
+        type: l.type,
+        designation: l.designation,
+        prixUnitaire: l.prix_unitaire,
+      })),
+    },
+    options
+  );
   if (blocages.length) throw new Error(messageBlocages(blocages));
+
+  return bc;
+}
+
+export async function validerChiffrage(bcId: Uuid): Promise<void> {
+  const bc = await dossierChiffrageControle(bcId, {});
 
   /* La base impose la séquence en_cours → pret_a_chiffrer → chiffre. Le premier
      passage découle mécaniquement de l'état des tâches : on le franchit ici
@@ -352,6 +375,39 @@ export async function validerChiffrage(bcId: Uuid): Promise<void> {
   const { error } = await supabase.rpc("bc_chiffrage_valide", { p_bc_id: bcId });
   if (error) {
     throw new SupabaseError("Validation du chiffrage refusée", error.code, error);
+  }
+}
+
+/**
+ * Le même geste, mais sans que le planning en atteste — administrateur seul.
+ *
+ * Certaines affaires n'ont pas de terrain à pointer : un bon se chiffre et part
+ * en facturation. Le circuit le refusait des deux côtés — `blocagesChiffrage`
+ * à l'écran, `bc_passer_pret_a_chiffrer` en base.
+ *
+ * Le contournement existait pourtant, muet : `bc_chiffrage_valide` ne lisait pas
+ * le statut de départ et journalisait un `ancien_statut` écrit en dur. La
+ * migration `facturer_sans_le_planning` ferme ce trou et ouvre celui-ci à sa
+ * place — nommé, réservé, et lisible au journal : `en_cours → chiffre` ne se
+ * produit par aucun autre chemin.
+ *
+ * `passerPretAChiffrer` n'est volontairement PAS appelée : c'est exactement
+ * l'étape qu'on saute. Et comme `validerChiffrage`, elle ne génère pas la
+ * facture — le bon remonte dans « À facturer », où la secrétaire la crée.
+ */
+export async function validerChiffrageHorsCircuit(bcId: Uuid): Promise<void> {
+  const bc = await dossierChiffrageControle(bcId, { horsCircuit: true });
+  if (bc.statut_workflow === "chiffre") return;
+
+  const { error } = await supabase.rpc("bc_chiffrage_valide_hors_circuit", {
+    p_bc_id: bcId,
+  });
+  if (error) {
+    throw new SupabaseError(
+      "Validation hors circuit refusée",
+      error.code,
+      error
+    );
   }
 }
 

@@ -383,3 +383,89 @@ describe("Comptes rendus du terrain", () => {
     expect(comptesRendusTerrain([{ commentaire: "Fait" }])[0].heures).toBe("");
   });
 });
+
+/**
+ * Hors circuit : le planning ne dit plus rien, le montant si.
+ *
+ * Certaines affaires n'ont pas de terrain à pointer. L'administrateur peut
+ * alors envoyer le bon en facturation sans tâche — ce que la base enregistre
+ * par une transition `en_cours → chiffre` qu'aucun autre chemin ne produit.
+ *
+ * Ce qui tombe et ce qui reste n'est pas une commodité : un bon sans prix
+ * partirait en facturation à zéro, quel que soit le chemin emprunté.
+ */
+describe("Chiffrage hors circuit — ce qui tombe, et ce qui reste", () => {
+  const SANS_TERRAIN = {
+    statutWorkflow: "en_cours",
+    taches: [],
+    travaux: [],
+    lignes: [{ type: "ligne", designation: "Dépannage", prixUnitaire: 240 }],
+  };
+
+  it("refuse par le circuit un bon sans aucune tâche", () => {
+    const codes = blocagesChiffrage(SANS_TERRAIN).map((b) => b.code);
+    expect(codes).toContain("aucune_tache");
+  });
+
+  it("laisse passer ce même bon hors circuit", () => {
+    expect(blocagesChiffrage(SANS_TERRAIN, { horsCircuit: true })).toEqual([]);
+  });
+
+  it("ne lève pas non plus l'arbitrage du conducteur", () => {
+    const enAttente = {
+      ...SANS_TERRAIN,
+      taches: [{ statut: "realisee", libelle: "Plomberie — jour 1" }],
+    };
+    expect(blocagesChiffrage(enAttente).map((b) => b.code)).toContain(
+      "taches_non_validees"
+    );
+    expect(blocagesChiffrage(enAttente, { horsCircuit: true })).toEqual([]);
+  });
+
+  /* Les trois suivants sont la raison d'être du mot « hors CIRCUIT » plutôt que
+     « sans contrôle » : sauter le planning n'autorise pas à facturer n'importe
+     quoi. */
+  it("refuse toujours un bon déjà facturé", () => {
+    const codes = blocagesChiffrage(
+      { ...SANS_TERRAIN, statutWorkflow: "facture" },
+      { horsCircuit: true }
+    ).map((b) => b.code);
+    expect(codes).toEqual(["deja_facture"]);
+  });
+
+  it("refuse toujours un travail supplémentaire non chiffré", () => {
+    const codes = blocagesChiffrage(
+      { ...SANS_TERRAIN, travaux: [{ statut: "a_chiffrer", libelle: "Siphon" }] },
+      { horsCircuit: true }
+    ).map((b) => b.code);
+    expect(codes).toContain("travaux_non_chiffres");
+  });
+
+  it("refuse toujours une ligne sans prix", () => {
+    const codes = blocagesChiffrage(
+      {
+        ...SANS_TERRAIN,
+        lignes: [{ type: "ligne", designation: "Dépannage", prixUnitaire: 0 }],
+      },
+      { horsCircuit: true }
+    ).map((b) => b.code);
+    expect(codes).toContain("lignes_sans_prix");
+  });
+
+  /* L'écran décide de montrer le second bouton en comparant les deux listes :
+     si l'une est vide et l'autre non, la différence EST le planning. Ce test
+     éprouve cette comparaison, puisque c'est elle qui pilote l'affichage. */
+  it("un dossier complet ne fait apparaître aucune différence entre les deux", () => {
+    expect(blocagesChiffrage(dossierComplet())).toEqual([]);
+    expect(blocagesChiffrage(dossierComplet(), { horsCircuit: true })).toEqual([]);
+  });
+
+  it("un prix manquant bloque des deux côtés — le contournement ne s'offre pas", () => {
+    const sansPrix = {
+      ...SANS_TERRAIN,
+      lignes: [{ type: "ligne", designation: "Dépannage", prixUnitaire: null }],
+    };
+    expect(blocagesChiffrage(sansPrix).length).toBeGreaterThan(0);
+    expect(blocagesChiffrage(sansPrix, { horsCircuit: true }).length).toBeGreaterThan(0);
+  });
+});

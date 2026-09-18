@@ -190,11 +190,26 @@ export function peutValiderConducteur(
   return blocagesValidationConducteur(taches, metiersDuBon).length === 0;
 }
 
+export interface OptionsChiffrage {
+  /**
+   * Le bon part en facturation sans que le planning en atteste — le geste
+   * réservé à l'administrateur, et tracé au journal par la base.
+   *
+   * Seules les exigences que le TERRAIN porte tombent : une tâche planifiée,
+   * une tâche arbitrée. Ce qui touche au MONTANT reste exigé — un bon sans prix
+   * n'a pas à partir en facturation, quel que soit le chemin.
+   */
+  horsCircuit?: boolean;
+}
+
 /**
  * Tout ce qui empêche de valider, dans l'ordre où l'utilisateur doit le traiter :
  * inutile de lui signaler un prix manquant si le bon est déjà facturé.
  */
-export function blocagesChiffrage(dossier: DossierChiffrage): Blocage[] {
+export function blocagesChiffrage(
+  dossier: DossierChiffrage,
+  options: OptionsChiffrage = {}
+): Blocage[] {
   const blocages: Blocage[] = [];
 
   if (dossier.statutWorkflow === STATUT_BC_FACTURE) {
@@ -207,22 +222,27 @@ export function blocagesChiffrage(dossier: DossierChiffrage): Blocage[] {
     return blocages;
   }
 
-  const taches = dossier.taches ?? [];
-  if (!taches.length) {
-    blocages.push({
-      code: "aucune_tache",
-      libelle:
-        "Aucune tâche n'a été planifiée : rien n'atteste que les travaux ont été réalisés.",
-      details: [],
-    });
-  } else {
-    const enAttente = tachesNonValidees(taches);
-    if (enAttente.length) {
+  /* Hors circuit, le planning n'est plus la preuve : c'est l'administrateur qui
+     engage, et la base en garde la trace. Les deux blocages qui en découlent
+     n'auraient donc rien à refuser — les poser ferait mentir le message. */
+  if (!options.horsCircuit) {
+    const taches = dossier.taches ?? [];
+    if (!taches.length) {
       blocages.push({
-        code: "taches_non_validees",
-        libelle: `${enAttente.length} tâche(s) ne sont pas encore validées par le conducteur.`,
-        details: enAttente.map(nommerTache),
+        code: "aucune_tache",
+        libelle:
+          "Aucune tâche n'a été planifiée : rien n'atteste que les travaux ont été réalisés.",
+        details: [],
       });
+    } else {
+      const enAttente = tachesNonValidees(taches);
+      if (enAttente.length) {
+        blocages.push({
+          code: "taches_non_validees",
+          libelle: `${enAttente.length} tâche(s) ne sont pas encore validées par le conducteur.`,
+          details: enAttente.map(nommerTache),
+        });
+      }
     }
   }
 

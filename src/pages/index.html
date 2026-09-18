@@ -1668,6 +1668,12 @@ img.pf-plein-fichier{ height:auto; max-height:100%; object-fit:contain; margin:0
       <div id="validationDirecteurBlocages"></div>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <button class="btn primary" id="validationDirecteurConfirmBtn" onclick="confirmerValidationDirecteur()">✓ Valider la pré-facture</button>
+        <!-- Le contournement, quand le planning n'atteste de rien. Caché par
+             défaut : il n'apparaît que si les SEULS points en suspens sont les
+             tâches, et seulement pour un administrateur. Distinct du bouton
+             principal, jamais à sa place — c'est un autre geste, et le journal
+             de la base le distingue aussi. -->
+        <button class="btn" id="validationDirecteurHorsCircuitBtn" style="display:none;" onclick="confirmerValidationHorsCircuit()">⏭️ Valider sans passer par le planning</button>
         <button class="btn" id="validationDirecteurEnregistrerBtn" onclick="enregistrerChiffrageDirecteur()">💾 Enregistrer sans valider</button>
         <button class="btn ghost" onclick="closeValidationDirecteurModal()">Annuler</button>
       </div>
