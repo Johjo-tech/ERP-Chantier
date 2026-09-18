@@ -36,6 +36,14 @@ jobs:
       - name: Types
         run: npm run type-check
 
+      # L'écran hérité (src/pages/app.js) a sa propre configuration, plus souple :
+      # sous le `strict` du dépôt il rend 5 422 erreurs, et un contrôle que
+      # personne ne peut mettre au vert devient un voyant qu'on ignore. En mode
+      # souple il tient à zéro — et il a déjà relevé une constante que l'écran
+      # lisait sur `window` sans que personne l'y pose.
+      - name: Types de l'écran
+        run: npm run type-check:ecran
+
       - name: Tests
         run: npm run test:run
 

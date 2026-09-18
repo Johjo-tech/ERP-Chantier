@@ -1,6 +1,8 @@
 import { defineConfig, parseAst } from "vite";
 import { transform } from "esbuild";
 import path from "path";
+import { readFileSync, globSync } from "node:fs";
+import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 
 /**
@@ -136,6 +138,61 @@ async function minifierEnGardantLesNoms(
   return minifie;
 }
 
+/**
+ * La garde des noms partagés entre l'écran et le pont.
+ *
+ * `src/pages/app.js` est un MODULE : ses déclarations de premier niveau ne sont
+ * plus des globales. Tant qu'il vivait dans un <script> classique, un `stSet(…)`
+ * nu atteignait `window.stSet` — donc la version que l'adaptateur Supabase avait
+ * substituée. En module, le même appel atteint la version LOCALE, restée celle
+ * de l'ancien `kv_store`.
+ *
+ * Personne ne le voit : la page se charge, les boutons répondent, et l'écran
+ * affiche les 22 lignes du vieux magasin au lieu des 1 556 de la base. C'est
+ * arrivé une fois ; ce contrôle fait que ça ne peut plus arriver deux.
+ *
+ * La règle : un nom déclaré ici ET posé sur `window` par la couche TypeScript
+ * ne doit jamais être appelé nu. Il s'appelle `window.<nom>(…)`, pour que la
+ * substitution opère.
+ */
+function nomsPartagesResolus() {
+  return {
+    name: "noms-partages-resolus",
+    buildStart() {
+      const app = readFileSync(resolve(__dirname, "src/pages/app.js"), "utf8");
+
+      const poses = new Set<string>();
+      for (const fichier of globSync("src/{integrations/*.ts,main.ts}", { cwd: __dirname })) {
+        const code = readFileSync(resolve(__dirname, fichier), "utf8");
+        for (const m of code.matchAll(/^\s*w\.([A-Za-z_$][\w$]*)\s*=/gm)) poses.add(m[1]);
+      }
+
+      const declares = new Set<string>();
+      for (const m of app.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) declares.add(m[1]);
+      for (const m of app.matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) declares.add(m[1]);
+
+      const fautifs: string[] = [];
+      for (const nom of declares) {
+        if (!poses.has(nom)) continue;
+        // Un appel NU : ni précédé d'un point, ni la déclaration elle-même.
+        const appels = app.match(new RegExp(`(?<![.\\w$])${nom}\\s*\\(`, "g")) || [];
+        const decls = app.match(new RegExp(`^(?:async\\s+)?function\\s+${nom}\\s*\\(`, "gm")) || [];
+        if (appels.length > decls.length) fautifs.push(`${nom} (${appels.length - decls.length} appel(s) nu(s))`);
+      }
+
+      if (fautifs.length > 0) {
+        throw new Error(
+          `src/pages/app.js appelle sans préfixe des noms que la couche TypeScript ` +
+            `remplace sur window : ${fautifs.join(", ")}. En module, ces appels ` +
+            `atteignent la version locale et non celle du pont — l'écran afficherait ` +
+            `les données de l'ancien kv_store sans la moindre erreur. Écrire ` +
+            `window.<nom>(…).`,
+        );
+      }
+    },
+  };
+}
+
 function scriptInlineMinifie() {
   let cible: string | string[] | undefined;
   let journal = { info: (message: string) => console.log(message) };
@@ -192,7 +249,7 @@ function scriptInlineMinifie() {
 const pages = path.resolve(__dirname, "src/pages");
 
 export default defineConfig({
-  plugins: [marqueurVersion, scriptInlineMinifie()],
+  plugins: [marqueurVersion, nomsPartagesResolus(), scriptInlineMinifie()],
   // Les pages servent de racine pour obtenir des URLs propres (/ et /login.html)
   root: pages,
   // `envDir` suit `root` par défaut : sans ça, Vite chercherait .env.local dans
@@ -211,6 +268,17 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
     rollupOptions: {
+      /* L'écran hérité dans SON PROPRE morceau.
+         Fondu avec le reste, le moindre correctif d'interface invalidait le
+         paquet entier — 945 ko gzip à retélécharger pour une virgule, contre
+         193 ko du temps où le code vivait dans la page. Séparé, un déploiement
+         qui ne touche pas à l'écran (38 des 100 derniers commits) ne coûte plus
+         que les 29 ko du HTML. */
+      output: {
+        manualChunks(id: string) {
+          if (id.includes("src/pages/app.js")) return "ecran";
+        },
+      },
       // Sans ça, Vite ne construit que index.html et login.html est perdu
       input: {
         index: path.resolve(pages, "index.html"),

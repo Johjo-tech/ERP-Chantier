@@ -1,0 +1,31 @@
+/* Le contrôle de types de l'écran hérité — `src/pages/app.js`.
+ *
+ * Il a sa propre configuration, et c'est délibéré. Sous le `strict: true` du
+ * dépôt, ces 15 000 lignes rendent 5 422 erreurs : un contrôle que personne ne
+ * peut mettre au vert n'est pas un contrôle, c'est un voyant qu'on apprend à
+ * ignorer. En mode souple, il en reste environ quatre-vingts — celles qui
+ * disent vraiment quelque chose : un nom inconnu, un mot mal orthographié, une
+ * addition sur ce qui n'est pas un nombre.
+ *
+ * Ce fichier ne relâche donc rien sur la couche TypeScript : `tsconfig.json`
+ * reste strict et vert. Il ouvre un second contrôle, là où il n'y en avait
+ * aucun — l'angle mort qui a laissé passer une faille d'injection et cinq
+ * fonctions déclarées deux fois.
+ *
+ * Le jour où l'écran sera assaini, resserrer les vis une à une :
+ * `noImplicitAny`, puis `strictNullChecks`, plutôt que `strict` d'un coup.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/pages/app.js",
+    "src/pages/ecran-globaux.d.ts",
+    "src/pages/ecran-dom.d.ts"
+  ]
+}

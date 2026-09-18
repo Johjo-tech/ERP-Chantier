@@ -36,6 +36,7 @@ import {
   delaiPreregle,
   delaiDeLaCle,
   MODES_REGLEMENT,
+  MODE_REGLEMENT_DEFAUT,
   modeReglementRetenu,
   delaiPaiementRetenu,
   INDEMNITE_RECOUVREMENT_EUR,
@@ -662,6 +663,11 @@ export function injecterSession() {
   w.delaiPreregle = delaiPreregle;
   w.delaiDeLaCle = delaiDeLaCle;
   w.MODES_REGLEMENT = MODES_REGLEMENT;
+  /* L'écran lisait `window.MODE_REGLEMENT_DEFAUT` — que personne ne posait — et
+     retombait sur un « virement » écrit en dur. Les deux valeurs coïncidaient,
+     si bien que rien ne se voyait ; changer le défaut dans la règle aurait
+     laissé l'écran sur l'ancien. Le contrôle de types de l'écran l'a relevé. */
+  w.MODE_REGLEMENT_DEFAUT = MODE_REGLEMENT_DEFAUT;
   w.modeReglementRetenu = modeReglementRetenu;
 
   /* Les montants d'un document. L'arithmétique qui décide de ce qui est
