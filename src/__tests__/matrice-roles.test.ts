@@ -228,10 +228,21 @@ suite("Matrice des rôles", () => {
     /* Le conducteur, lui, lit la même vue et y trouve les montants : c'est
        ce qui prouve que le masquage suit le rôle et non la source. */
     it("laisse le conducteur lire les montants dans la même vue", async () => {
+      /* Demander un montant STRICTEMENT POSITIF à la base, plutôt que prendre
+         une ligne au hasard et espérer qu'elle le soit. La version précédente
+         filtrait sur « non nul » puis affirmait « > 0 » : elle ne tenait que
+         parce que le dump de production donnait un montant à presque tous les
+         bons. Sur une base propre, un bon à 0,00 € est parfaitement légitime —
+         il n'est pas encore chiffré — et la première ligne venue faisait rougir
+         un test qui ne parlait pas de cela.
+
+         Le filtre porte la question : si le masquage s'appliquait au
+         conducteur, la vue ne rendrait AUCUNE ligne et `toHaveLength(1)`
+         échouerait. C'est bien le droit de lire qui est éprouvé. */
       const { data } = await conducteur
         .from("v_bons_commande_terrain")
         .select("montant")
-        .not("montant", "is", null)
+        .gt("montant", 0)
         .limit(1);
       expect(data).toHaveLength(1);
       expect(Number(data![0].montant)).toBeGreaterThan(0);
