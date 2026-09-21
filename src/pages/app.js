@@ -5456,24 +5456,29 @@ async function marquerPieceCommandee(bcId){
   renderTab();
   showToast('📦 Pièce commandée — classée dans le dossier '+(b.pieceACommanderFournisseur||'fournisseur'), 'success', 2500);
 }
+/**
+ * La pièce est arrivée : le bon retourne dans « Non planifiés ».
+ *
+ * Le geste vit en base. Vider les champs ici ne servait à rien : `pieceACommander`,
+ * `metiersFait` et `dateOrigineFait` n'ont pas de colonne, ils se dérivent des
+ * tâches au chargement suivant. Surtout, les tâches gardaient leur date, si bien
+ * que le planning reposait une vignette sur chacune de leurs anciennes journées
+ * — le bon était à la fois « Non planifié » et encore accroché au calendrier.
+ */
 async function replanifierApresPiece(bcId){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  if(!b.datePlanificationInitiale && b.datePlanifiee) b.datePlanificationInitiale = b.datePlanifiee;
-  b.pieceACommander = false;
-  b.datePlanifiee = '';
-  b.datePlanifieeFin = '';
-  b.metiersFait = {};
-  b.dateOrigineFait = false;
-  b.dateInterventionTerminee = '';
-  const r = await window.stSet('bonCommande:'+bcId, b);
-  if(!r){ showToast(saveFailedMessage()); return; }
+  try{
+    await window.pieceRecue(bcId);
+  }catch(err){
+    console.error('Retour au planning refusé', bcId, err);
+    showToast(err && err.message ? err.message : 'Retour au planning impossible.');
+    return;
+  }
   await recharger('bonCommande');
   state.tab = 'planning';
   state.planningView = 'technicien';
   renderShell();
   renderTab();
-  showToast('Pièce arrivée — le bon de commande est de retour dans Planning (colonne "Non planifiés"), prêt à être replanifié.', 'success', 5000);
+  showToast('Pièce reçue — le bon de commande est de retour dans Planning (colonne "Non planifiés"), prêt à être replanifié.', 'success', 5000);
 }
 function bcToutesDatesDuBC(b){
   const liste = [];
@@ -6959,7 +6964,10 @@ function planningItems(){
         metier: effectiveMetier, metiers: b.metiers, metiersFait: b.metiersFait, dateOrigineFait: b.dateOrigineFait,
         // La vignette affiche l'étape du circuit : elle a besoin des validations
         valideConducteur: b.valideConducteur, valideDirecteur: b.valideDirecteur,
-        pieceACommander: b.pieceACommander, pieceACommanderDetail: b.pieceACommanderDetail, montantSousTraitant: b.montantSousTraitant,
+        pieceACommander: b.pieceACommander, pieceACommanderDetail: b.pieceACommanderDetail,
+        pieceACommanderDateCommande: b.pieceACommanderDateCommande,
+        pieceACommanderFournisseur: b.pieceACommanderFournisseur,
+        pieceRecueLe: b.pieceRecueLe, montantSousTraitant: b.montantSousTraitant,
         datePlanificationInitiale: b.datePlanificationInitiale,
         dateInterventionTerminee: b.dateInterventionTerminee,
         datesSupplementaires: b.datesSupplementaires, tentativesContact: b.tentativesContact, rappelDate: b.rappelDate,
@@ -7532,12 +7540,21 @@ function planningContactZoneHTML(b, readOnly){
    garde sa propre formulation : le nom du fournisseur ne le regarde pas. */
 function pieceAttendueLigne(b, classe){
   if(!b.pieceACommander && !b.pieceACommanderDetail) return '';
+  /* Une pièce reçue n'est plus « pas encore commandée » : la trace survit à
+     l'attente, et c'est elle qui explique le report au client comme au
+     conducteur qui reprend l'affaire des semaines plus tard. */
+  const etape = b.pieceRecueLe
+    ? 'reçue le '+fmtDate(b.pieceRecueLe)
+    : (b.pieceACommanderDateCommande
+        ? 'commandée le '+fmtDate(b.pieceACommanderDateCommande)
+        : 'pas encore commandée');
   const detail = [
     b.pieceACommanderDetail? esc(b.pieceACommanderDetail) : 'pièce non précisée',
-    b.pieceACommanderDateCommande? 'commandée le '+fmtDate(b.pieceACommanderDateCommande) : 'pas encore commandée',
+    etape,
     b.pieceACommanderFournisseur? 'chez '+esc(b.pieceACommanderFournisseur) : ''
   ].filter(Boolean).join(' — ');
-  return `<div class="${classe}" style="color:#C24E00; font-weight:600;">📦 ${detail}</div>`;
+  const couleur = b.pieceRecueLe ? '#12875A' : '#C24E00';
+  return `<div class="${classe}" style="color:${couleur}; font-weight:600;">📦 ${detail}</div>`;
 }
 async function logTentativeContact(kind, id, type){
   const resolved = resolvePlanningItem(kind, id);
@@ -8328,7 +8345,14 @@ async function updateDateSupplChamp(kind, id, dateVal, champ, value){
 function dragStartBC(ev, kind, id){
   if(state.currentRole==='technicien' || estSousTraitant()){ ev.preventDefault(); return; }
   const resolved = resolvePlanningItem(kind, id);
-  if(resolved && bcInterventionFaite(resolved.bc)){ ev.preventDefault(); return; }
+  /* Une affaire terminée ne se DÉPLACE pas. Mais une affaire sans date n'est
+     pas sur le calendrier : l'y poser n'est pas la déplacer. Sans cette nuance,
+     un bon revenu de « Pièces en commande » dont le technicien avait pointé sa
+     journée restait bloqué dans « Non planifiés », impossible à replanifier —
+     un cul-de-sac, puisque `metiersFait` se dérive des tâches et reste vrai. */
+  if(resolved
+     && schedField(resolved.bc, resolved.metierKey, 'datePlanifiee')
+     && bcInterventionFaite(resolved.bc)){ ev.preventDefault(); return; }
   draggedItem = {kind, id};
   ev.dataTransfer.effectAllowed = 'move';
   try{ ev.dataTransfer.setData('text/plain', kind+':'+id); }catch(e){}
