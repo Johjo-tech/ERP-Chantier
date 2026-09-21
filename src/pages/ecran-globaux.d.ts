@@ -149,6 +149,7 @@ declare global {
     montantLigneHt: any;
     montantLigneTtc: any;
     montantPropose: any;
+    montantsParMetier: any;
     motifLectureSeule: any;
     multiWordMatch: any;
     nextNumero: any;

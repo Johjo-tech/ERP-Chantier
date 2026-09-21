@@ -6162,9 +6162,16 @@ function chiffrageDirecteurHTML(ctx){
      total et le pied sont redessinés — jamais les champs, sinon la saisie
      perdrait le focus à chaque caractère. Ajouter ou retirer une ligne, en
      revanche, refait le tableau : la structure a changé. */
+  /* Le métier courant suit le dernier chapitre rencontré : c'est lui que
+     chaque ligne hérite, et c'est la règle que le planning lit déjà. */
+  let chapitreCourant = '', metierChoisiCourant = undefined;
   const rows = lignes.map(({l,i})=>{
     const type = l.type || 'ligne';
     const manquant = type === 'ligne' && !(parseFloat(l.prixUnitaire) > 0);
+    if(type === 'chapitre'){
+      chapitreCourant = l.designation || '';
+      metierChoisiCourant = l.metier;
+    }
     if(type !== 'ligne'){
       /* Un chapitre et un commentaire ne se saisissent pas dans le même champ
          gris : on doit voir ce qu'on construit. Le champ porte donc l'allure
@@ -6172,15 +6179,24 @@ function chiffrageDirecteurHTML(ctx){
       const allure = type==='chapitre'
         ? 'font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#C24E00;'
         : 'font-style:italic; color:#6B7686;';
+      /* Le métier se choisit SUR LE CHAPITRE, jamais sur la ligne : c'est là
+         qu'il vit, et `regles-metiers` fait autorité. Lui ouvrir un second
+         point de saisie créerait une seconde vérité. */
       return `<tr class="dnd-row ${type==='chapitre'?'p-chapitre':'p-comment'}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
-        <td colspan="3"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
+        <td class="pf-col-metier">${type==='chapitre'? metierPrefactureHTML(l, i) : ''}</td>
+        <td colspan="4"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
         <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
       </tr>`;
     }
+    const vu = window.metierAffiche({ type:'chapitre', designation: chapitreCourant, metier: metierChoisiCourant }, metiersDisponibles());
     return `<tr class="dnd-row ${manquant?'p-sans-prix':''}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
+      ${/* Le métier de la ligne est celui de son chapitre : affiché, jamais
+            saisi ici — deux points de saisie feraient deux vérités. */''}
+      <td class="pf-col-metier card-sub" title="Métier du chapitre auquel cette ligne appartient">${vu.valeur? esc(vu.valeur) : '<span style="opacity:.5;">—</span>'}</td>
+      <td class="pf-col-code"><input type="text" value="${esc(l.articleReference||'')}" placeholder="Code" style="width:100%;" title="Code article du catalogue" oninput="majLigneDirecteur(${i},'articleReference',this.value)"></td>
       <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:70px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:52px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:66px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:46px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
       <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
     </tr>`;
   }).join('');
@@ -6190,9 +6206,11 @@ function chiffrageDirecteurHTML(ctx){
   const travaux = (ctx.travaux||[]).map(t=>{
     const manquant = t.statut !== 'chiffre';
     return `<tr class="${manquant?'p-sans-prix':''}">
+      <td class="pf-col-metier card-sub">${esc(t.metier||'')}</td>
+      <td class="pf-col-code"></td>
       <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartTravail(event, '${jsAttr(t.id)}')" title="Glisser dans une ligne du bon pour l'y intégrer">⠿</span><span>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></span></div></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:70px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:52px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:100px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:66px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:46px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
       <td></td>
     </tr>`;
   }).join('');
@@ -6201,13 +6219,21 @@ function chiffrageDirecteurHTML(ctx){
      glisser-déposer adresse. Les travaux supplémentaires sont dans un autre,
      et ne se réordonnent pas — ils viennent d'une table à part, avec leur
      propre circuit, et leur ordre n'a pas de sens sur le document. */
-  return `<table class="lignes-table" style="margin-top:8px;">
-    <thead><tr><th style="width:44%;">Désignation</th><th class="num">Qté / unité</th><th class="num">Prix U. HT</th><th></th></tr></thead>
+  return `<table class="lignes-table pf-table" style="margin-top:8px;">
+    <thead><tr>
+      <th class="pf-col-metier">Métier</th>
+      <th class="pf-col-code">Code</th>
+      <th>Désignation</th>
+      <th class="num">Qté / unité</th>
+      <th class="num">Prix U. HT</th>
+      <th></th>
+    </tr></thead>
     <tbody id="validationDirecteurLignes">
-      ${rows || `<tr><td colspan="4" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
+      ${rows || `<tr><td colspan="6" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
     </tbody>
-    ${travaux? `<tbody><tr class="p-chapitre"><td colspan="4">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}</tbody>`:''}
+    ${travaux? `<tbody><tr class="p-chapitre"><td colspan="6">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}</tbody>`:''}
   </table>
+  <div id="validationDirecteurParMetier">${sousTotauxMetiersHTML(ctx)}</div>
   <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
     <button type="button" class="btn small" onclick="ajouterLigneDirecteur('ligne')">+ Ligne</button>
     <button type="button" class="btn small" onclick="ajouterLigneDirecteur('chapitre')">+ Chapitre</button>
@@ -6217,13 +6243,36 @@ function chiffrageDirecteurHTML(ctx){
 }
 
 /** Une valeur change : l'aperçu et le total suivent, les champs ne bougent pas. */
+/**
+ * Écrit un champ d'une ligne de pré-facture.
+ *
+ * Le jumeau de `updateLigne`, et il en porte le même piège : tout ce qui
+ * n'est pas déclaré texte part dans `parseFloat`. « PLB-001 » y devenait 0 à
+ * la frappe, et « PEINTURE » aussi — le champ se ressaisissait, s'affichait,
+ * et se vidait au premier caractère. C'est exactement le défaut que
+ * `updateLigne` avait, corrigé là et jamais ici parce que ce tableau ne
+ * portait alors ni code article ni métier.
+ */
 function majLigneDirecteur(index, champ, valeur){
   if(!validationDirecteurCtx) return;
   const ligne = validationDirecteurCtx.lignes[index];
   if(!ligne) return;
-  ligne[champ] = (champ === 'designation' || champ === 'unite')
-    ? valeur
-    : (parseFloat(String(valeur).replace(',', '.')) || 0);
+
+  if(champ === 'metier'){
+    /* « — Déduit du titre — » n'est pas un métier vide, c'est le RETRAIT du
+       choix : on efface la clé. La chaîne vide ne convient pas — la base ne
+       la distingue pas d'un NULL, et la déduction sur le titre ne reprendrait
+       jamais la main. La sentinelle `(aucun)` reste, elle, un refus délibéré. */
+    if(valeur === '') delete ligne.metier;
+    else ligne.metier = valeur;
+    /* Le métier commande le regroupement : la table ET les sous-totaux
+       changent, pas seulement le total. */
+    renderValidationDirecteur();
+    return;
+  }
+
+  const texte = champ === 'designation' || champ === 'unite' || champ === 'articleReference';
+  ligne[champ] = texte ? valeur : (parseFloat(String(valeur).replace(',', '.')) || 0);
   rafraichirChiffrageDirecteur();
 }
 
@@ -6266,6 +6315,56 @@ function comptesRendusHTML(ctx){
       ${r.croquis? `<img src="${esc(r.croquis)}" alt="Croquis du technicien" style="margin-top:8px; max-width:220px; border-radius:8px; border:1px solid #E4E8EE;">`:''}
     </div>
   </div>`).join('');
+}
+
+/**
+ * Le métier d'un chapitre, tel qu'on le choisit dans la pré-facture.
+ *
+ * Même sélecteur que dans le tableau des lignes d'un document, et pour la
+ * même raison : la précédence « choisi l'emporte sur le titre » vit dans
+ * `regles-metiers`, que l'écran ET le planning doivent lire. Deux sélecteurs
+ * qui la rejoueraient chacun de leur côté finiraient par ne plus s'accorder.
+ */
+function metierPrefactureHTML(l, i){
+  const vu = window.metierAffiche(l, metiersDisponibles());
+  const classes = ['chapitre-metier'];
+  if(vu.devine) classes.push('est-deduit');
+  if(vu.certitude === 'approchant') classes.push('est-approchant');
+  const titre = vu.devine
+    ? (vu.valeur ? 'Lu sur le titre du chapitre — choisissez pour le figer' : 'Aucun métier reconnu dans ce titre')
+    : 'Métier choisi pour ce chapitre';
+  return `<select class="${classes.join(' ')}" title="${esc(titre)}" onchange="majLigneDirecteur(${i},'metier',this.value)">${metierChapitreOptions(vu.valeur)}</select>`;
+}
+
+/**
+ * Ce que chaque métier pèse dans la pré-facture.
+ *
+ * C'est par corps d'état qu'on vérifie qu'un chiffrage tient, pas ligne à
+ * ligne : le directeur engage un montant par métier. Ce total n'apparaissait
+ * nulle part — il fallait additionner de tête les sous-totaux de chapitre, et
+ * deux chapitres du même métier comptaient séparément.
+ *
+ * L'arithmétique vient de `montantLigneHt`, la même que les totaux du
+ * document : deux formules pour un même montant divergent d'un centime.
+ */
+function sousTotauxMetiersHTML(ctx){
+  const groupes = window.montantsParMetier(ctx.lignes||[], metiersDisponibles(), window.montantLigneHt);
+  if(groupes.length < 2) return '';
+
+  const total = groupes.reduce((s,g)=> s + g.montantHt, 0);
+  return `<div class="pf-sous-totaux">
+    <div class="section-title" style="margin:14px 0 6px;">Sous-total par métier</div>
+    <table class="lignes-table">
+      ${groupes.map(g=>`<tr>
+        <td>${g.metier
+          ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent-2);">${esc(g.metier)}</span>`
+          : '<span class="card-sub">Hors chapitre nommé</span>'}</td>
+        <td class="card-sub">${g.nbLignes} ligne${g.nbLignes>1?'s':''}</td>
+        <td class="num mono" style="font-weight:600;">${moneyDisplay(g.montantHt)} HT</td>
+      </tr>`).join('')}
+      <tr><td colspan="2" style="font-weight:700;">Total HT</td><td class="num mono" style="font-weight:700;">${moneyDisplay(total)}</td></tr>
+    </table>
+  </div>`;
 }
 
 function renderValidationDirecteur(){
@@ -6536,6 +6635,12 @@ function rafraichirChiffrageDirecteur(){
 
   const total = document.getElementById('validationDirecteurTotal');
   if(total) total.innerHTML = totalChiffrageHTML(ctx);
+
+  /* Les sous-totaux par métier suivent la frappe comme le total : laissés en
+     arrière, ils annonceraient un chiffrage d'il y a trois caractères. La
+     zone est redessinée seule — refaire le tableau ferait perdre le focus. */
+  const parMetier = document.getElementById('validationDirecteurParMetier');
+  if(parMetier) parMetier.innerHTML = sousTotauxMetiersHTML(ctx);
 
   const blocages = blocagesDirecteur(b, ctx);
   /* La même liste, sans ce que le planning exige. Si elle est vide alors que
@@ -16572,35 +16677,6 @@ async function remettreAuCatalogue(id){
 
 
 /* ---------- Documents de la société (Kbis, URSSAF, assurance…) ---------- */
-function docStatus(dateValidite){
-  if(!dateValidite) return {label:'Non renseigné', cls:'gray'};
-  if(dateValidite < todayISO()) return {label:'Expiré', cls:'danger'};
-  return {label:'À jour', cls:'success'};
-}
-function documentForm(){
-  const e = state.editing;
-  return `
-  <div class="form-panel">
-    <h3>${e.id?'Modifier le document':'Nouveau document'}</h3>
-    <div class="field-grid">
-      <div class="field full"><label>Nom du document</label><input type="text" id="doc_nom" list="docTypesList" value="${esc(e.nom)}" placeholder="Kbis, Attestation URSSAF, Assurance décennale…"></div>
-      <datalist id="docTypesList">
-        <option value="Kbis">
-        <option value="Attestation URSSAF (vigilance)">
-        <option value="Assurance décennale">
-        <option value="Assurance RC Pro">
-        <option value="Attestation fiscale">
-        <option value="RIB">
-      </datalist>
-      <div class="field"><label>Date de validité</label><input type="date" id="doc_date" value="${e.dateValidite||''}"></div>
-      <div class="field full"><label>Notes</label><input type="text" id="doc_notes" value="${esc(e.notes)}"></div>
-    </div>
-    <div style="display:flex; gap:10px;">
-      <button class="btn primary" onclick="saveDocument()">Enregistrer</button>
-      <button class="btn ghost" onclick="closeForm('document')">Annuler</button>
-    </div>
-  </div>`;
-}
 /**
  * La valeur d'un champ qui n'existe que sur certains formulaires.
  *
@@ -17012,8 +17088,6 @@ Object.assign(window, {
   devisSelectOptions,
   devisStatutFilterOptions,
   distancePointSegment,
-  docStatus,
-  documentForm,
   documentImprimable,
   documentRhRowHTML,
   documentsDuSalarie,
@@ -17290,7 +17364,9 @@ Object.assign(window, {
   metierPersoSelectOptions,
   metiersDisplayJoin,
   metiersDisponibles,
+  metierPrefactureHTML,
   metiersOrdonnes,
+  sousTotauxMetiersHTML,
   metiersDuBrouillon,
   motifDeLaBase,
   moisAnnee,

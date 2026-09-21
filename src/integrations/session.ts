@@ -196,6 +196,7 @@ import {
   refBonCommandeClient,
 } from "@/api/regles-bc";
 import {
+  montantsParMetier,
   METIER_AUCUN,
   memeMetier,
   metierAffiche,
@@ -724,6 +725,8 @@ export function injecterSession() {
   w.montantLigneTtc = montantLigneTtc;
   w.ventilationTvaAffichage = ventilationTvaAffichage;
   w.sousTotauxChapitres = sousTotauxChapitres;
+  /* Ce que chaque métier pèse : la pré-facture s'y vérifie par corps d'état. */
+  w.montantsParMetier = montantsParMetier;
   w.formaterTaux = formaterTaux;
   w.soldeAPayer = soldeAPayer;
 

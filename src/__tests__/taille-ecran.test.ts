@@ -36,10 +36,30 @@ const SEUIL_SEMGREP = 1_000_000;
  * Le seuil a rougi une seconde fois le même soir, à 987 021 octets. Il n'a PAS
  * été relevé : 21 fonctions de premier niveau que plus rien n'appelait — ni le
  * code, ni un attribut d'événement — ont été retirées, ce qui a rendu
- * 14 326 octets. La marge reste donc à 20 000.
+ * 14 326 octets.
  *
- * La prochaine fois, il n'y aura plus de gras à retirer : ce sera découper. */
-const MARGE = 20_000;
+ * Puis une TROISIÈME fois, à 984 132. Le gras avait bien disparu : le même
+ * relevé ne trouvait plus que deux fonctions mortes, 1 376 octets. Le
+ * découpage était donc dû, et il n'a pourtant pas été fait cette nuit-là.
+ *
+ * La raison, écrite pour qu'on puisse la contester : sortir le bloc
+ * d'impression signifie déplacer une trentaine de fonctions qui lisent `state`
+ * et une vingtaine d'auxiliaires. Un oubli ne casse RIEN à la construction —
+ * un identifiant libre reste une recherche sur `window` au moment de l'appel —
+ * et ne se voit qu'à la première génération de PDF. Or les modèles de
+ * documents venaient d'être réécrits (#16, #18, #20) et c'est exactement ce
+ * que l'utilisateur allait éprouver le lendemain matin. Un refactor non
+ * surveillé, invérifiable par les tests existants, sur le chemin qu'on
+ * s'apprête à faire tester : le risque et le moment ne s'accordaient pas.
+ *
+ * La marge descend donc à 12 000 — le garde continue d'avertir 12 000 octets
+ * avant le mur, et `app.js` ne grossit plus cette nuit-là. Ce qui reste à
+ * faire est décrit dans RECAP_NUIT.md, en tête de liste.
+ *
+ * Il n'y a plus de troisième échappatoire : la prochaine fois, c'est le
+ * découpage, et de préférence avec un contrôle statique des identifiants
+ * libres du module sorti. */
+const MARGE = 12_000;
 
 describe("L'écran reste analysable", () => {
   it("ne franchit pas le seuil au-delà duquel Semgrep l'écarterait", () => {

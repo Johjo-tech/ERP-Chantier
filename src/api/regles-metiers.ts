@@ -491,3 +491,66 @@ export function travauxDeLaCarte(
 
   return blocs;
 }
+
+/** Ce qu'un métier pèse dans un document, et par combien de lignes. */
+export interface MontantDunMetier {
+  /** `null` : les lignes qui ne relèvent d'aucun chapitre nommé. */
+  metier: string | null;
+  montantHt: number;
+  nbLignes: number;
+}
+
+/**
+ * Ce que chaque métier pèse dans un document.
+ *
+ * La pré-facture engage un montant par corps d'état : c'est par métier qu'on
+ * vérifie qu'un chiffrage tient, pas ligne à ligne. Le total n'apparaissait
+ * nulle part — il fallait additionner de tête les sous-totaux de chapitre, et
+ * deux chapitres du même métier comptaient séparément.
+ *
+ * Le montant est FOURNI par l'appelant plutôt que calculé ici : ce module est
+ * une feuille, il n'importe que des types, et `montantLigneHt` vit dans
+ * `regles-totaux`. Deux feuilles ne s'importent pas l'une l'autre — mais deux
+ * arithmétiques pour un même montant finiraient par diverger d'un centime,
+ * d'où la fonction passée en argument plutôt qu'une formule recopiée.
+ *
+ * Les groupes sortent dans l'ordre d'apparition : c'est celui du document, et
+ * celui qu'on relit.
+ */
+export function montantsParMetier(
+  lignes: LigneTravail[] | null | undefined,
+  connus: (string | null | undefined)[],
+  montantDe: (ligne: LigneTravail) => number
+): MontantDunMetier[] {
+  const groupes: MontantDunMetier[] = [];
+
+  const groupe = (metier: string | null): MontantDunMetier => {
+    const existant = metier
+      ? groupes.find((g) => g.metier !== null && memeMetier(g.metier, metier))
+      : groupes.find((g) => g.metier === null);
+    if (existant) return existant;
+    const neuf: MontantDunMetier = { metier, montantHt: 0, nbLignes: 0 };
+    groupes.push(neuf);
+    return neuf;
+  };
+
+  let metierCourant: string | null = null;
+
+  for (const ligne of lignes ?? []) {
+    const type = (ligne.type ?? "ligne").trim() || "ligne";
+
+    if (type === "chapitre") {
+      metierCourant = metierDeLaLigne(ligne, connus)?.metier ?? null;
+      continue;
+    }
+    /* Un commentaire ne porte pas de montant : le compter gonflerait le
+       nombre de lignes d'un métier sans rien ajouter à son total. */
+    if (type === "commentaire") continue;
+
+    const cible = groupe(metierCourant);
+    cible.montantHt = Math.round((cible.montantHt + montantDe(ligne)) * 100) / 100;
+    cible.nbLignes += 1;
+  }
+
+  return groupes;
+}
