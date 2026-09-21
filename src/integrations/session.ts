@@ -67,6 +67,7 @@ import {
   refusAvoir,
   refusImputationAvoir,
   resteAImputer,
+  statutImputation,
   signeDocument,
   totauxSignes,
 } from "@/api/regles-avoir";
@@ -622,6 +623,10 @@ export function injecterSession() {
   /* L'imputation : un avoir éteint une créance, il ne s'encaisse pas. */
   w.imputerAvoir = imputerAvoirSurFacture;
   w.resteAImputer = resteAImputer;
+  /* L'état d'un avoir dans SA langue. La liste des règlements le mesurait avec
+     la règle des factures, et annonçait « réglée » sur un avoir entièrement
+     disponible. */
+  w.statutImputation = statutImputation;
   w.avoirDisponible = avoirDisponible;
   w.montantImputable = montantImputable;
   w.refusImputationAvoir = refusImputationAvoir;

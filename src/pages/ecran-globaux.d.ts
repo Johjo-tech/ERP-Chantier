@@ -191,6 +191,7 @@ declare global {
     stListKeys: any;
     stSet: any;
     statutEnBase: any;
+    statutImputation: any;
     statutReglement: any;
     supprimerDocumentRh: any;
     supprimerTravailSupplementaire: any;

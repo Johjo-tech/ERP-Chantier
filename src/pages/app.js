@@ -5030,6 +5030,15 @@ async function confirmerImputation(){
   }
 }
 function reglementStatutFacture(f){
+  /* Un avoir ne se règle pas, il s'impute — et il faut le mesurer avec SA règle.
+     Mesuré avec celle des factures, `resteAPayer` calculait -682, le ramenait à
+     0, et l'écran annonçait « RÉGLÉE, reste 0,00 € » sur un avoir dont la
+     totalité restait disponible. Il affirmait l'inverse de la vérité, et
+     cachait le seul geste qui restait à faire. */
+  if(window.estAvoir && window.estAvoir(f.typeDocument) && window.statutImputation){
+    const a = window.statutImputation(computeDocTotals(f).ttc, reglementsForFacture(f.id));
+    return { cle:a.cle, label:a.label, cls:a.classe, paye:a.impute, reste:a.reste, ttc:a.ttc, avoir:true };
+  }
   const st = window.statutReglement(computeDocTotals(f).ttc, reglementsForFacture(f.id));
   /* `cls` reste le nom historique de la classe de badge ; `cle` est ce sur quoi
      le code compare désormais — comparer des libellés casse au premier
@@ -8527,6 +8536,9 @@ const listeDossiersReglementsHTML = declarerListing('reglementClient',
       let totalDu = 0, enRetard = false;
       facturesDuClient.forEach(f=>{
         const st = reglementStatutFacture(f);
+        /* Le reste d'un avoir est un crédit, pas une dette : l'ajouter au total
+           dû ferait grossir la créance du montant même qui l'éteint. */
+        if(st.avoir) return;
         totalDu += st.reste;
         if(st.reste>0.01 && (joursDepuisEcheance(f)||0) > 0) enRetard = true;
       });
@@ -8582,7 +8594,10 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
     return list.map(f=>{
       const st = reglementStatutFacture(f);
       const regs = reglementsForFacture(f.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-      const payable = st.reste > 0.01;
+      /* « Payable » veut dire « on peut y poser un encaissement ». Un avoir a un
+         reste, mais ce reste est un CRÉDIT à donner : ni case à cocher, ni
+         bouton « + Règlement », ni retard — on ne réclame pas un avoir. */
+      const payable = st.reste > 0.01 && !st.avoir;
       return `<div class="card" ${payable? `style="cursor:pointer;" onclick="reglementCardClick(event,'${jsAttr(f.id)}')"` : ''}>
         <div class="card-row">
           <div style="display:flex; align-items:flex-start; gap:10px;">
@@ -8591,7 +8606,13 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
           </div>
           <div style="text-align:right;"><div class="amount">${moneyDisplay(st.ttc)}</div><span class="badge ${st.cls}" style="margin-top:5px;display:inline-block;">${st.label}</span></div>
         </div>
-        <div class="card-sub" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">Réglé : ${moneyDisplay(st.paye)} · Reste : ${moneyDisplay(st.reste)} ${delaiBadgeHTML(f, st.reste)}
+        <div class="card-sub" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">${st.avoir
+            ? `Imputé : ${moneyDisplay(st.paye)} · <strong>Disponible : ${moneyDisplay(st.reste)}</strong>`
+            : `Réglé : ${moneyDisplay(st.paye)} · Reste : ${moneyDisplay(st.reste)} ${delaiBadgeHTML(f, st.reste)}`}
+          ${/* Le geste à l'endroit où on le cherche. Il n'existait que sur la
+                carte de la liste des factures : dans cet écran-ci, où la facture
+                et l'avoir se font face, rien ne permettait de les rapprocher. */''}
+          ${(!st.avoir && peutReglerParAvoir(f))? `<button class="btn small" style="${payable?'':'margin-left:auto;'}" onclick="event.stopPropagation(); reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>`:''}
           ${payable? `<button class="btn small primary" style="margin-left:auto;" onclick="event.stopPropagation(); ouvrirReglementFacture('${jsAttr(f.id)}')">+ Règlement</button>`:''}
         </div>
         ${regs.length? `<div class="card-sub" style="margin-top:10px; font-weight:600;">Historique des règlements</div>`:''}

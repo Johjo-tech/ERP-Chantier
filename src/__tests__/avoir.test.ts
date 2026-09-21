@@ -20,6 +20,7 @@ import {
   resteAImputer,
   signeDocument,
   totauxSignes,
+  statutImputation,
 } from "@/api/regles-avoir";
 import { totauxDocument } from "@/api/regles-totaux";
 import { chargeEN16931 } from "@/api/regles-en16931";
@@ -248,5 +249,65 @@ describe("Ce qui refuse une imputation", () => {
   it("refuse un montant nul ou négatif", () => {
     expect(refusImputationAvoir({ ...bon, montant: 0 })).toMatch(/supérieur à 0/);
     expect(refusImputationAvoir({ ...bon, montant: -100 })).toMatch(/supérieur à 0/);
+  });
+});
+
+/**
+ * L'état d'un avoir, dit dans SA langue.
+ *
+ * Le défaut a été signalé sur capture d'écran : un avoir de 682 €, dont rien
+ * n'avait été imputé, s'affichait « RÉGLÉE — Reste : 0,00 € » dans la liste des
+ * règlements, à côté de sa facture restée impayée du même montant. L'écran
+ * n'annonçait pas une approximation : il affirmait l'inverse de la vérité, et
+ * cachait du même coup le seul geste qui restait à faire.
+ *
+ * La cause : la liste mesurait l'avoir avec `resteAPayer`, la règle des
+ * factures. Sur un TTC de −682, elle calcule −682 puis le ramène à 0 — donc
+ * « plus rien à devoir », donc « réglée ».
+ */
+describe("Statut d'un avoir — il s'impute, il ne se règle pas", () => {
+  it("annonce disponible tant que rien n'en a été pris", () => {
+    const st = statutImputation(-682, []);
+    expect(st.cle).toBe("disponible");
+    expect(st.label).toBe("Disponible");
+    expect(st.reste).toBe(682);
+    expect(st.impute).toBe(0);
+  });
+
+  /* LE défaut, tenu par un test : la règle des factures rendait 0 ici. */
+  it("ne rend JAMAIS zéro sur un avoir intact — c'était le mensonge", () => {
+    expect(statutImputation(-682, []).reste).toBe(682);
+    expect(statutImputation(-682, null).reste).toBe(682);
+    expect(statutImputation(-682, undefined).reste).toBe(682);
+  });
+
+  it("suit une imputation partielle", () => {
+    const st = statutImputation(-682, [{ montant: 200 }]);
+    expect(st.cle).toBe("partiellement_impute");
+    expect(st.impute).toBe(200);
+    expect(st.reste).toBe(482);
+  });
+
+  it("se dit imputé une fois épuisé", () => {
+    const st = statutImputation(-682, [{ montant: 682 }]);
+    expect(st.cle).toBe("impute");
+    expect(st.label).toBe("Imputé");
+    expect(st.reste).toBe(0);
+    expect(st.impute).toBe(682);
+  });
+
+  it("accepte le TTC dans les deux sens — c'est le type qui dit le signe", () => {
+    expect(statutImputation(682, []).reste).toBe(statutImputation(-682, []).reste);
+  });
+
+  it("garde le TTC signé pour l'affichage du montant", () => {
+    expect(statutImputation(-682, []).ttc).toBe(-682);
+  });
+
+  /* Un avoir à zéro n'a rien à donner : il doit sortir « imputé » plutôt que
+     de rester « disponible » pour toujours — même raisonnement que la facture
+     à zéro, qui sort « réglée ». */
+  it("classe un avoir à zéro comme imputé, et non comme disponible", () => {
+    expect(statutImputation(0, []).cle).toBe("impute");
   });
 });

@@ -143,6 +143,55 @@ export function resteAImputer(
   return reste < EPSILON ? 0 : reste;
 }
 
+export interface StatutImputation {
+  cle: "disponible" | "partiellement_impute" | "impute";
+  label: string;
+  classe: string;
+  impute: number;
+  reste: number;
+  ttc: number;
+}
+
+/**
+ * L'état d'un avoir, dit dans SA langue.
+ *
+ * Jumelle de `statutReglement`, et elle manquait. La liste des règlements
+ * mesurait les avoirs avec la règle des factures : sur un avoir de −682 €,
+ * `resteAPayer` calcule −682, le ramène à 0, et l'écran annonçait « RÉGLÉE,
+ * reste 0,00 € » — sur un avoir dont l'intégralité restait à imputer. Il ne
+ * mentait pas un peu : il affirmait l'inverse de la vérité, et cachait du même
+ * coup le seul geste qui restait à faire.
+ *
+ * Un avoir ne se règle pas, il s'impute. D'où un vocabulaire à lui : il est
+ * « disponible » tant que rien n'en a été pris, « imputé » quand il est épuisé.
+ */
+export function statutImputation(
+  ttcAvoir: unknown,
+  reglements: ReglementMontantAvoir[] | null | undefined
+): StatutImputation {
+  const credit = Math.abs(centimes(nombre(ttcAvoir)));
+  const reste = resteAImputer(ttcAvoir, reglements);
+  const impute = centimes(credit - reste);
+  const ttc = centimes(nombre(ttcAvoir));
+
+  /* Le reste d'abord, comme pour une facture : un avoir à zéro n'a rien à
+     donner et doit sortir « imputé », plutôt que d'attendre pour toujours. */
+  if (reste < EPSILON) {
+    return { cle: "impute", label: "Imputé", classe: "success", impute, reste, ttc };
+  }
+  if (impute < EPSILON) {
+    return { cle: "disponible", label: "Disponible", classe: "info", impute, reste, ttc };
+  }
+  return {
+    cle: "partiellement_impute",
+    label: "Partiellement imputé",
+    classe: "warn",
+    impute,
+    reste,
+    ttc,
+  };
+}
+
 /** L'avoir a-t-il encore quelque chose à donner ? */
 export function avoirDisponible(
   ttcAvoir: unknown,
