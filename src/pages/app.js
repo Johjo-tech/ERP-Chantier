@@ -2213,6 +2213,11 @@ function applyDevisMontant(devisId){
     const toggleBtn = document.querySelector('[onclick="toggleBCLignesZone()"]');
     if(toggleBtn) toggleBtn.textContent = '▲ Masquer';
     refreshRemiseUI();
+    /* Les chapitres du devis viennent d'arriver : c'est maintenant qu'ils
+       disent leur métier. `refreshBCMontantFields` plus haut a tourné sur les
+       lignes d'avant la reprise — le bon héritait des travaux du devis sans
+       hériter de ses métiers, et il fallait les recocher un à un. */
+    appliquerMetiersDesChapitres();
   }
 }
 function metierSelectOptions(current){
@@ -2482,9 +2487,35 @@ function locataireCardLine(item){
   }
   return '';
 }
+/**
+ * Le métier d'un chapitre, tel qu'il se montre et se corrige.
+ *
+ * Tant que personne n'a tranché, il est **lu** sur le titre et paraît en
+ * retrait : une déduction fausse doit se voir avant d'engager une venue
+ * d'équipe, puisqu'une tâche vaut bon × métier × jour. Dès qu'on choisit, il
+ * s'affirme — et le titre ne le défait plus.
+ *
+ * Le select tient dans la même cellule que le titre, et non dans la colonne
+ * libre à droite : celle-ci est sous l'en-tête « Total TTC », ce qui
+ * l'étiquetterait faussement pour qui lit le tableau autrement qu'à l'œil.
+ */
+function chapitreMetierHTML(l, i){
+  const vu = window.metierAffiche
+    ? window.metierAffiche(l, metiersDisponibles())
+    : { valeur: '', devine: true, certitude: null };
+  const classes = ['chapitre-metier'];
+  if(vu.devine) classes.push('est-deduit');
+  if(vu.certitude === 'approchant') classes.push('est-approchant');
+  const titre = vu.devine
+    ? (vu.valeur
+        ? `Lu sur le titre du chapitre — choisissez pour le figer`
+        : `Aucun métier reconnu dans ce titre`)
+    : 'Métier choisi pour ce chapitre';
+  return `<select class="${classes.join(' ')}" title="${esc(titre)}" onchange="updateLigne(${i},'metier',this.value,this)">${metierChapitreOptions(vu.valeur)}</select>`;
+}
 function chapitreRow(l,i,total){
   return `<tr class="row-chapitre dnd-row" ondragover="dragOverLigne(event)" ondrop="dropLigne(event, ${i})">
-    <td colspan="5"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><input type="text" class="chapitre-input" value="${esc(l.designation)}" placeholder="Titre du chapitre (ex. Plomberie, Main d'œuvre…)" oninput="updateLigne(${i},'designation',this.value)"></div></td>
+    <td colspan="5"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><input type="text" class="chapitre-input" value="${esc(l.designation)}" placeholder="Titre du chapitre (ex. Plomberie, Main d'œuvre…)" oninput="updateLigne(${i},'designation',this.value)">${chapitreMetierHTML(l, i)}</div></td>
     <td class="mono" id="chapTotal-${i}" style="text-align:right; font-weight:700; white-space:nowrap;">${total!=null? money(total)+' HT' : ''}</td>
     <td></td>
     <td><button class="btn small danger" onclick="removeLigne(${i})">✕</button></td>
@@ -2656,6 +2687,9 @@ function toggleBCLignesZone(){
   zone.style.display = ouverte ? 'none' : 'block';
 }
 function addLigne(){ state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
+/* Pas de `metier` dans ce littéral, et ce n'est pas un oubli : l'absence de la
+   clé **est** l'état « à déduire du titre ». L'y ajouter par symétrie avec les
+   autres champs figerait un choix vide et la présélection ne parlerait plus. */
 function addChapitre(){ state.editing.lignes.push({type:'chapitre', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function addCommentaire(){ state.editing.lignes.push({type:'commentaire', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function removeLigne(i){ state.editing.lignes.splice(i,1); if(!state.editing.lignes.length) state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
@@ -2780,13 +2814,32 @@ function dropLigne(ev, targetIndex, zone){
   zoneDndCourante = null;
   zoneDef.apres();
 }
-function updateLigne(i,field,val){
+function updateLigne(i,field,val,el){
   /* `articleReference` manquait à cette liste : son code partait donc dans le
      `parseFloat` de la branche numérique, et « PLB-001 » devenait 0 à la
      frappe. Le champ se ressaisissait, s'affichait, et se vidait au premier
-     caractère. */
+     caractère. `metier` tomberait dans le même piège — « PEINTURE » vaudrait 0. */
   const texteFields = field==='designation' || field==='commentaire' || field==='unite'
-    || field==='articleReference';
+    || field==='articleReference' || field==='metier';
+
+  if(field==='metier'){
+    /* « — Déduit du titre — » n'est pas un métier vide : c'est le retrait du
+       choix. On efface la clé, faute de quoi la ligne porterait une valeur que
+       la base ne distingue pas d'un `NULL` — et la déduction, elle, ne
+       reprendrait jamais la main. */
+    if(val === '') delete state.editing.lignes[i].metier;
+    else state.editing.lignes[i].metier = val;
+    /* Le style dit d'où vient la valeur : déduite, ou tranchée. On le retouche
+       en place — reconstruire le tableau refermerait la liste déroulante que
+       l'utilisateur vient d'utiliser. */
+    if(el){
+      el.classList.toggle('est-deduit', val === '');
+      if(val !== '') el.classList.remove('est-approchant');
+    }
+    appliquerMetiersDesChapitres();
+    return;
+  }
+
   state.editing.lignes[i][field] = texteFields ? val : (parseFloat(val)||0);
   if(texteFields){
     /* Le titre d'un chapitre porte le métier : le relire à la frappe évite de
@@ -15332,6 +15385,36 @@ function metiersDisponibles(){
     bcMetiersDuBC(b).forEach(m=>{ if(m) employes.push(m); });
   });
   return window.referentielMetiers ? window.referentielMetiers(declares, employes) : declares;
+}
+
+/**
+ * Les métiers proposés sur un chapitre.
+ *
+ * Trois sens tiennent dans cette liste : laisser le titre décider, dire qu'il
+ * n'y a aucun métier, ou en nommer un. Les deux premiers ne sont pas la même
+ * chose — un chapitre qu'on n'a pas encore tranché doit continuer de suivre son
+ * titre, un chapitre « ARTICLE BPU » ne désigne personne et c'est définitif.
+ *
+ * `metierPersoSelectOptions` ne convenait pas : elle ne connaît que les métiers
+ * déclarés aux Réglages. Chez KTA, PLOMBERIE (49 bons) et ETANCHEITE (47) n'y
+ * sont pas — la moitié du référentiel réel en serait absente, et c'est le
+ * défaut même que `metiersDisponibles()` a été écrit pour corriger.
+ *
+ * Un métier hérité, retiré des Réglages depuis, reste sélectionnable : même
+ * raison que dans `uniteOptions`, rouvrir un vieux document ne doit pas le
+ * changer en silence.
+ */
+function metierChapitreOptions(current){
+  const choisi = (current||'').trim();
+  const aucun = window.METIER_AUCUN || '(aucun)';
+  const meme = (a,b)=> window.memeMetier ? window.memeMetier(a,b) : a===b;
+
+  const noms = metiersDisponibles();
+  if(choisi && !meme(choisi, aucun) && !noms.some(n=>meme(n, choisi))) noms.unshift(choisi);
+
+  return `<option value="" ${choisi===''?'selected':''}>— Déduit du titre —</option>`
+    + `<option value="${esc(aucun)}" ${meme(choisi, aucun)?'selected':''}>— Aucun métier —</option>`
+    + noms.map(n=>`<option value="${esc(n)}" ${meme(n, choisi)?'selected':''}>${esc(n)}</option>`).join('');
 }
 
 /**

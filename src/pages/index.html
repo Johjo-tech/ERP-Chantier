@@ -970,6 +970,17 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 .totals-box b{font-family:'JetBrains Mono',monospace;}
 .row-chapitre td{padding-top:14px;}
 .row-chapitre .chapitre-input{background:var(--accent-soft); border:1px solid var(--accent); color:var(--accent-2); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:13.5px;}
+/* Le titre prend la place qui reste : le métier se pose à côté sans le serrer. */
+.row-chapitre .chapitre-input{flex:1; min-width:0;}
+/* Un métier tranché s'affirme ; un métier seulement LU sur le titre reste en
+   retrait — même distinction que `.metier-checkbox-item.est-deduit`, et pour la
+   même raison : une déduction fausse doit se discerner d'un choix avant
+   d'engager une venue d'équipe. */
+.row-chapitre .chapitre-metier{flex:0 0 auto; width:auto; max-width:190px; font-size:12.5px; font-weight:600;}
+.row-chapitre .chapitre-metier.est-deduit{font-weight:400; font-style:italic; color:var(--text-dim); border-style:dashed;}
+/* Reconnaissance par distance d'édition : la plus permissive des trois, donc la
+   seule qui mérite d'attirer l'œil. */
+.row-chapitre .chapitre-metier.est-approchant{color:var(--warning, #B8860B); border-color:var(--warning, #B8860B);}
 .row-commentaire .commentaire-input{background:transparent; border:1px dashed var(--border); color:var(--text-dim); font-style:italic; font-size:13.5px; min-height:44px; padding:7px 9px;}
 .drag-handle{flex-shrink:0; cursor:grab; color:var(--text-dim); font-size:15px; padding:0 2px; user-select:none; touch-action:none;}
 .drag-handle:active{cursor:grabbing;}
