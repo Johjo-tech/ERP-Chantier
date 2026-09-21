@@ -65,6 +65,15 @@ import {
   verrouFacture,
 } from "@/api/regles-verrouillage";
 import {
+  CRITERES_REGLEMENTS_VIDES,
+  criteresDepuisRequete,
+  criteresReglementsActifs,
+  criteresVersRequete,
+  estRapproche,
+  filtrerReglements,
+  totalReglements,
+} from "@/api/regles-filtres-reglements";
+import {
   avoirDisponible,
   estAvoir,
   libelleDocument,
@@ -738,6 +747,16 @@ export function injecterSession() {
   w.verrouFacture = verrouFacture;
   w.verrouBonCommande = verrouBonCommande;
   w.bonEstFacture = bonEstFacture;
+
+  /* Les filtres de l'écran des règlements. Le total suit la liste affichée :
+     les deux sortent de la même fonction, ils ne peuvent pas diverger. */
+  w.CRITERES_REGLEMENTS_VIDES = CRITERES_REGLEMENTS_VIDES;
+  w.filtrerReglements = filtrerReglements;
+  w.totalReglements = totalReglements;
+  w.criteresReglementsActifs = criteresReglementsActifs;
+  w.criteresVersRequete = criteresVersRequete;
+  w.criteresDepuisRequete = criteresDepuisRequete;
+  w.estRapproche = estRapproche;
 
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;

@@ -155,7 +155,7 @@ function heureOptions(current){
 }
 
 let state = {
-  societeId: 'kta', tab: 'dashboard', plusTab: 'clients', reglagesTab: 'organisation', currentRole: null, devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
+  societeId: 'kta', tab: 'dashboard', plusTab: 'clients', reglagesTab: 'organisation', currentRole: null, devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, reglementsVue: 'clients', reglementFiltres: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
   devisConducteurFilter: '', devisStatutFilter: '', factureConducteurFilter: '',
   factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
   factureMetierFilter: '', factureReglementFilter: '',
@@ -8934,10 +8934,165 @@ function renderReglements(embedded){
   if(state.reglementsClient){
     return renderReglementsClientDetail(state.reglementsClient, factures);
   }
+  const vue = state.reglementsVue === 'tous' ? 'tous' : 'clients';
   return `
     ${embedded? '' : '<div class="page-head"><h1>Règlements</h1></div>'}
-    ${barreRecherche('reglementClient', 'Rechercher : client, n° de facture…')}
-    <div id="liste-reglementClient">${listeDossiersReglementsHTML()}</div>
+    <div class="plus-subnav" style="margin-bottom:14px;">
+      <button class="plus-subnav-btn ${vue==='clients'?'active':''}" onclick="setReglementsVue('clients')">Par client</button>
+      <button class="plus-subnav-btn ${vue==='tous'?'active':''}" onclick="setReglementsVue('tous')">Tous les règlements</button>
+    </div>
+    ${vue==='tous' ? renderTousLesReglements() : `
+      ${barreRecherche('reglementClient', 'Rechercher : client, n° de facture…')}
+      <div id="liste-reglementClient">${listeDossiersReglementsHTML()}</div>`}
+  `;
+}
+
+function setReglementsVue(vue){
+  state.reglementsVue = vue;
+  renderTab();
+}
+
+/* ---------- Tous les règlements, filtrés ----------
+ * Les règlements ne se consultaient que dossier par dossier : répondre à
+ * « combien avons-nous encaissé par chèque en août sur ce chantier ? »
+ * demandait d'ouvrir chaque client l'un après l'autre.
+ *
+ * Le filtrage et le total vivent dans `regles-filtres-reglements.ts` : le
+ * total sort de la MÊME liste que celle qu'on affiche, il ne peut donc pas
+ * annoncer autre chose que ce qu'on voit.
+ */
+function filtresReglements(){
+  if(!state.reglementFiltres) state.reglementFiltres = { ...window.CRITERES_REGLEMENTS_VIDES };
+  return state.reglementFiltres;
+}
+
+/** Les règlements de la société, par la facture qu'ils soldent. */
+function reglementsDeLaSociete(){
+  const visibles = new Set(facturesDesReglements().map(f=>f.id));
+  return state.reglements
+    .filter(r=>visibles.has(r.factureId))
+    .sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+}
+
+function factureDuReglementParId(factureId){
+  return state.factures.find(f=>f.id===factureId) || null;
+}
+
+function reglementsFiltres(){
+  return window.filtrerReglements(reglementsDeLaSociete(), factureDuReglementParId, filtresReglements());
+}
+
+function majFiltreReglement(cle, valeur){
+  filtresReglements()[cle] = valeur;
+  ecrireFiltresReglementsDansURL();
+  renderTab();
+}
+
+function reinitialiserFiltresReglements(){
+  state.reglementFiltres = { ...window.CRITERES_REGLEMENTS_VIDES };
+  ecrireFiltresReglementsDansURL();
+  renderTab();
+}
+
+/* L'adresse porte les critères : un filtre trouvé se transmet en copiant le
+   lien, et le bouton Précédent le défait. `replaceState` et non `pushState` —
+   chaque frappe dans une date créerait sinon une entrée d'historique. */
+function ecrireFiltresReglementsDansURL(){
+  const requete = window.criteresVersRequete(filtresReglements());
+  history.replaceState(etatNavigation(), '', '#factures/reglements' + requete);
+}
+
+/** Relit les critères que l'adresse porte, au démarrage. */
+function lireFiltresReglementsDepuisURL(){
+  const hash = location.hash || '';
+  if(!hash.startsWith('#factures/reglements')) return false;
+  const i = hash.indexOf('?');
+  if(i < 0) return false;
+  const criteres = window.criteresDepuisRequete(hash.slice(i));
+  if(!window.criteresReglementsActifs(criteres)) return false;
+  state.reglementFiltres = criteres;
+  state.reglementsVue = 'tous';
+  return true;
+}
+
+function optionsClientsReglements(courant){
+  const noms = [...new Set(facturesDesReglements().map(f=>f.client).filter(Boolean))].sort();
+  return ['<option value="">Tous les clients</option>']
+    .concat(noms.map(n=>`<option value="${esc(n)}" ${n===courant?'selected':''}>${esc(n)}</option>`)).join('');
+}
+
+function optionsChantiersReglements(courant){
+  const ids = [...new Set(facturesDesReglements().map(f=>f.chantierId).filter(Boolean))];
+  const chantiers = ids
+    .map(id=>state.chantiers.find(c=>c.id===id))
+    .filter(Boolean)
+    .sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  return ['<option value="">Tous les chantiers</option>']
+    .concat(chantiers.map(c=>`<option value="${esc(c.id)}" ${c.id===courant?'selected':''}>${esc(c.nom)}</option>`)).join('');
+}
+
+function optionsModesReglements(courant){
+  /* « Avoir » n'est pas un mode de saisie — c'est le pont écrit par une
+     imputation — mais c'est bien une façon dont une facture s'éteint, et on
+     doit pouvoir la retrouver. */
+  const modes = [...(window.MODES_REGLEMENT||[]), {code:'avoir', libelle:'Avoir'}];
+  return ['<option value="">Tous les modes</option>']
+    .concat(modes.map(m=>`<option value="${esc(m.code)}" ${m.code===courant?'selected':''}>${esc(m.libelle)}</option>`)).join('');
+}
+
+function barreFiltresReglements(){
+  const f = filtresReglements();
+  return `<div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
+    <label class="card-sub" style="margin:0;">Du <input type="date" style="width:auto;" value="${esc(f.du)}" onchange="majFiltreReglement('du', this.value)"></label>
+    <label class="card-sub" style="margin:0;">au <input type="date" style="width:auto;" value="${esc(f.au)}" onchange="majFiltreReglement('au', this.value)"></label>
+    <select style="width:auto; min-width:180px;" onchange="majFiltreReglement('client', this.value)">${optionsClientsReglements(f.client)}</select>
+    <select style="width:auto; min-width:160px;" onchange="majFiltreReglement('mode', this.value)">${optionsModesReglements(f.mode)}</select>
+    <select style="width:auto; min-width:200px;" onchange="majFiltreReglement('chantier', this.value)">${optionsChantiersReglements(f.chantier)}</select>
+    ${/* Le schéma ne porte aucun pointage bancaire : ce filtre lit la présence
+          d'une référence, et le dit plutôt que de prétendre le contraire. */''}
+    <select style="width:auto; min-width:230px;" onchange="majFiltreReglement('rapprochement', this.value)" title="Le rapprochement se lit sur la référence saisie : numéro de chèque, référence de virement…">
+      ${[['','Rapproché ou non'],['rapproche','Rapproché (référence saisie)'],['non_rapproche','Non rapproché (sans référence)']]
+        .map(([k,l])=>`<option value="${k}" ${k===f.rapprochement?'selected':''}>${l}</option>`).join('')}
+    </select>
+    ${window.criteresReglementsActifs(f)? `<button class="btn small ghost" onclick="reinitialiserFiltresReglements()" title="Tout réafficher">✕ Effacer</button>` : ''}
+  </div>`;
+}
+
+function renderTousLesReglements(){
+  const list = reglementsFiltres();
+  const total = window.totalReglements(list);
+  const tous = reglementsDeLaSociete().length;
+  return `
+    ${barreFiltresReglements()}
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;">
+      <div><div class="card-title">${list.length} règlement${list.length>1?'s':''}${list.length<tous? ` <span class="card-sub" style="font-weight:400;">sur ${tous}</span>`:''}</div>
+      <div class="card-sub">Total des règlements affichés</div></div>
+      <div class="amount">${moneyDisplay(total)}</div>
+    </div>
+    ${list.length? list.map(r=>{
+      const f = factureDuReglementParId(r.factureId);
+      const chantier = f && f.chantierId ? state.chantiers.find(c=>c.id===f.chantierId) : null;
+      return `<div class="card">
+        <div class="card-row">
+          <div style="flex:1; min-width:0;">
+            <div class="card-title">${esc(f? f.client : '— client inconnu —')}</div>
+            <div class="card-sub"><span class="numref-lg">${esc(f? (f.numero||'Brouillon') : '—')}</span> · ${fmtDate(r.date)} · ${esc(libelleModeReglement(r.mode))}${r.reference? ' · réf. '+esc(r.reference):''}</div>
+            ${chantier? `<div class="card-sub">🏗️ ${esc(chantier.nom)}</div>`:''}
+          </div>
+          <div style="text-align:right; flex-shrink:0;">
+            <div class="amount">${moneyDisplay(r.montant)}</div>
+            <div style="margin-top:5px;">${window.estRapproche(r)
+              ? '<span class="badge success" title="Une référence est saisie">Rapproché</span>'
+              : '<span class="badge warn" title="Aucune référence saisie">Non rapproché</span>'}</div>
+          </div>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+          ${f? `<button class="btn small" onclick="openReglementsClient('${jsAttr(f.client)}')">Ouvrir le dossier</button>`:''}
+          <button class="btn small ghost" onclick="editItem('reglement','${jsAttr(r.id)}')">✎ Modifier</button>
+          <button class="btn small danger" onclick="deleteItem('reglement','${jsAttr(r.id)}')">Supprimer</button>
+        </div>
+      </div>`;
+    }).join('') : `<div class="empty">Aucun règlement ne répond à ces filtres.</div>`}
   `;
 }
 
@@ -16467,6 +16622,14 @@ async function saveDocument(){
      démarrage, au lieu de la moitié. */
   // Entrée initiale : sans elle, le premier « Précédent » quitte l'application
   pousserHistorique(true);
+  /* Un lien de filtres partagé doit rouvrir ce qu'il décrit. On le relit APRÈS
+     l'entrée initiale, qui réécrit l'adresse — sinon la requête serait effacée
+     avant d'avoir servi. */
+  if(lireFiltresReglementsDepuisURL() && navPourRole().some(n=>n.id==='factures')){
+    state.tab = 'factures';
+    state.facturesView = 'reglements';
+    ecrireFiltresReglementsDansURL();
+  }
   renderShell();
   // La préférence d'affichage du menu, relue à l'ouverture de la session.
   appliquerEpinglageMenu();
@@ -16604,6 +16767,7 @@ Object.assign(window, {
   bandeauTacheHTML,
   barreFiltresFactures,
   barreRecherche,
+  barreFiltresReglements,
   basculerReferencePrefacture,
   bcAProbleme,
   bcFacturesKTA,
@@ -17056,6 +17220,7 @@ Object.assign(window, {
   marquerMaterielRendu,
   marquerNotifsCocheesFaites,
   marquerPieceCommandee,
+  majFiltreReglement,
   materielForm,
   materielStatut,
   maybeMarkFacturePayee,
@@ -17249,8 +17414,18 @@ Object.assign(window, {
   reglementForm,
   reglementStatutFacture,
   reglementsForFacture,
+  reglementsFiltres,
+  reglementsDeLaSociete,
+  factureDuReglementParId,
+  filtresReglements,
+  optionsClientsReglements,
+  optionsChantiersReglements,
+  optionsModesReglements,
+  lireFiltresReglementsDepuisURL,
+  ecrireFiltresReglementsDansURL,
   reglerParAvoir,
   reinitialiserFiltresFactures,
+  reinitialiserFiltresReglements,
   relancerCatalogue,
   relancerLectureBC,
   relativeTime,
@@ -17346,6 +17521,7 @@ Object.assign(window, {
   renderStatsRetardHTML,
   renderStatsTauxHTML,
   renderTab,
+  renderTousLesReglements,
   renderTechModalPhotos,
   renderTopClientsHTML,
   renderTravauxSupplementairesListe,
@@ -17435,6 +17611,7 @@ Object.assign(window, {
   setSchedField,
   setStatsPeriode,
   setTab,
+  setReglementsVue,
   setVehiculeTva,
   setVehiculeVue,
   setupAnnotationDrawing,

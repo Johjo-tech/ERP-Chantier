@@ -10,6 +10,7 @@ declare global {
     ACCENT_DEFAUT: any;
     AVIS_APTITUDE: any;
     CADRES_FACTURATION: any;
+    CRITERES_REGLEMENTS_VIDES: any;
     DELAIS_PREREGLES: any;
     INDEMNITE_RECOUVREMENT_EUR: any;
     LIBELLES_SEUILS: any;
@@ -69,6 +70,9 @@ declare global {
     comptesRendusTerrain: any;
     correspond: any;
     correspondFiche: any;
+    criteresDepuisRequete: any;
+    criteresReglementsActifs: any;
+    criteresVersRequete: any;
     dansLaPeriode: any;
     dateDocument: any;
     dateEcheance: any;
@@ -86,6 +90,7 @@ declare global {
     emettreFacture: any;
     enregistrerArticle: any;
     estAvoir: any;
+    estRapproche: any;
     estSociete: any;
     etablirAvoir: any;
     etapeValidation: any;
@@ -100,6 +105,7 @@ declare global {
     extraireBonCommande: any;
     famillesCatalogue: any;
     filtrerDocuments: any;
+    filtrerReglements: any;
     formaterDuree: any;
     formaterTaux: any;
     fusionnerReglages: any;
@@ -207,6 +213,7 @@ declare global {
     texteDocument: any;
     texteFiche: any;
     totalRegle: any;
+    totalReglements: any;
     totauxDocument: any;
     totauxSignes: any;
     transmettreFacture: any;
