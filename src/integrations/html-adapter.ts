@@ -425,7 +425,9 @@ async function rattacherClient(
 
   const { data, error } = await dyn()
     .from("clients")
-    .select("id, siret, siren, tva_intracom, pays_code, code_service, code_routage, reference_acheteur")
+    .select(
+      "id, siret, siren, tva_intracom, pays_code, code_service, code_routage, reference_acheteur, cadre_facturation"
+    )
     .eq("societe_id", societeId)
     .eq("nom", nom)
     .limit(1)
@@ -443,6 +445,17 @@ async function rattacherClient(
   poser("client_pays_code", c.pays_code);
   poser("client_code_service", c.code_service);
   poser("client_code_routage", c.code_routage);
+  /* Le cadre décide du CANAL — plateforme ou e-reporting — et il se fige comme
+     le reste de l'identité : une facture dit ce que l'acheteur était le jour de
+     son émission. Il manquait à cette liste, si bien que `factures.cadre_facturation`
+     gardait son défaut « entreprise française » sur TOUTES les factures, y
+     compris celles d'un particulier.
+
+     Sans préfixe `client_`, contrairement à ses sept voisines : la colonne
+     s'appelle `cadre_facturation` des deux côtés. Se tromper ici ne casserait
+     rien de visible — `poser()` ignore en silence une colonne absente, et le
+     défaut de la base reprendrait la main. */
+  poser("cadre_facturation", c.cadre_facturation);
 }
 
 async function versDb(

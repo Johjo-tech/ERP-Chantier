@@ -20,9 +20,11 @@
 import {
   INDEMNITE_RECOUVREMENT_EUR,
   PAYS_DEFAUT,
+  relveDeLaFactureElectronique,
   SCHEMA_IMMATRICULATION_LEGALE,
   SCHEMA_SIREN,
   SCHEMA_SIRET,
+  type CadreFacturation,
 } from "./regles-efacture";
 
 /**
@@ -94,6 +96,14 @@ export interface EntiteEN16931 {
   paysCode?: string | null;
   adresseElectroniqueSchema?: string | null;
   adresseElectroniqueValeur?: string | null;
+  /**
+   * Le canal auquel ce destinataire appartient.
+   *
+   * Absent, il vaut « entreprise française » — le défaut du dépôt. C'est ce qui
+   * rend ce champ ajoutable sans rien casser : tout appelant qui l'ignore
+   * continue d'être jugé comme avant.
+   */
+  cadreFacturation?: CadreFacturation | null;
 }
 
 export interface LigneEN16931 {
@@ -179,12 +189,22 @@ export function manquesPourEmettre(
   );
   exiger(!!emetteur.nom, "BT-27", "emetteur.nom", "Le nom légal de l'émetteur est obligatoire.");
   exiger(!!destinataire.nom, "BT-44", "client.nom", "Le nom du client est obligatoire.");
-  exiger(
-    !!(destinataire.adresseElectroniqueValeur || destinataire.siret || destinataire.siren),
-    "BT-49",
-    "client.adresseElectronique",
-    "Le client doit être joignable : adresse électronique, SIRET ou SIREN."
-  );
+  /* BT-49 n'a de sens que si la facture emprunte une plateforme. Un particulier
+     n'a ni adresse électronique, ni SIRET, ni SIREN — et le formulaire ne lui
+     propose même pas de les saisir, `sectionsEfactureVisibles` masquant le bloc
+     immatriculation en B2C. Le réclamer était donc un reproche que personne ne
+     pouvait satisfaire, répété à chaque impression.
+     La règle est celle de `regles-efacture`, partagée, et non un test réécrit
+     ici — sans quoi les deux finiraient par diverger, ce qui est précisément ce
+     qui vient d'arriver. */
+  if (relveDeLaFactureElectronique(destinataire.cadreFacturation)) {
+    exiger(
+      !!(destinataire.adresseElectroniqueValeur || destinataire.siret || destinataire.siren),
+      "BT-49",
+      "client.adresseElectronique",
+      "Le client doit être joignable : adresse électronique, SIRET ou SIREN."
+    );
+  }
   exiger(
     !!(destinataire.paysCode || PAYS_DEFAUT),
     "BT-55",

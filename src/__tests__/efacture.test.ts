@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  adresseElectroniqueParDefaut,
+  CADRES_FACTURATION,adresseElectroniqueParDefaut,
   analyserTvaIntracom,
   cadreSuggere,
   champsAttendus,
@@ -32,6 +32,7 @@ import {
   siretValide,
   tvaIntracomFr,
   verifierEntite,
+  relveDeLaFactureElectronique,
 } from "@/api/regles-efacture";
 
 /** JL CONSEIL-SI, client réel du dépôt. */
@@ -369,5 +370,43 @@ describe("Mentions du document", () => {
     expect(l.some((x) => x.startsWith("SIREN"))).toBe(false);
     expect(l.some((x) => x.startsWith("Capital"))).toBe(true);
     expect(l).toContain("RCS Grenoble 840320014");
+  });
+});
+
+/**
+ * Quels cadres passent par une plateforme.
+ *
+ * Cette règle manquait, et son absence a coûté cher : `champsAttendus` dispensait
+ * le particulier de SIRET et d'adresse électronique pendant que
+ * `manquesPourEmettre` les lui réclamait, chacune ignorant l'autre. Les deux
+ * étaient tenues par un test, et les deux tests passaient.
+ */
+describe("Le canal : facture électronique ou e-reporting", () => {
+  it("fait passer par une plateforme l'entreprise française et le secteur public", () => {
+    expect(relveDeLaFactureElectronique("B2B_national")).toBe(true);
+    expect(relveDeLaFactureElectronique("B2G")).toBe(true);
+  });
+
+  /* Ce que dit déjà l'aide de chaque cadre, mot pour mot : « Hors facture
+     électronique : relève de l'e-reporting. » */
+  it("en dispense le particulier et l'entreprise étrangère", () => {
+    expect(relveDeLaFactureElectronique("B2C")).toBe(false);
+    expect(relveDeLaFactureElectronique("B2B_international")).toBe(false);
+  });
+
+  it("traite un cadre absent comme une entreprise française", () => {
+    expect(relveDeLaFactureElectronique(null)).toBe(true);
+    expect(relveDeLaFactureElectronique(undefined)).toBe(true);
+  });
+
+  /* La règle et le formulaire doivent désigner le MÊME ensemble : le bloc
+     « e-facture » ne s'affiche que là où BT-49 est exigé. Les faire diverger
+     rouvrirait exactement la faille qu'on vient de fermer. */
+  it("désigne le même ensemble que le bloc « e-facture » du formulaire", () => {
+    for (const { code } of CADRES_FACTURATION) {
+      expect(sectionsEfactureVisibles(code).includes("efacture")).toBe(
+        relveDeLaFactureElectronique(code)
+      );
+    }
   });
 });

@@ -83,6 +83,7 @@ function versDestinataire(
     adresse: string | null; code_postal: string | null; ville: string | null;
     pays_code: string | null; adresse_electronique_schema: string | null;
     adresse_electronique_valeur: string | null; reference_acheteur: string | null;
+    cadre_facturation?: string | null;
   } | null
 ): EntiteEN16931 {
   /* BT-50 / BT-52 / BT-53 : la voie, la commune et le code postal se
@@ -107,6 +108,19 @@ function versDestinataire(
     paysCode: facture.facturation_pays_code ?? facture.client_pays_code ?? client?.pays_code ?? null,
     adresseElectroniqueSchema: client?.adresse_electronique_schema ?? null,
     adresseElectroniqueValeur: client?.adresse_electronique_valeur ?? null,
+    /* La FICHE d'abord, contrairement aux champs ci-dessus qui prennent la
+       facture en premier. `factures.cadre_facturation` est NOT NULL DEFAULT
+       'B2B_national' : elle ne distingue pas « enregistré comme entreprise » de
+       « jamais renseigné », et vaut donc « entreprise » sur toutes les factures
+       antérieures au jour où on s'est mis à l'écrire. La fiche client est la
+       seule source qui dise la vérité aujourd'hui.
+       Contrepartie assumée : un client devenu entreprise après coup ferait
+       basculer ses anciennes factures. C'est étroit, et sans commune mesure avec
+       le fait de réclamer un SIRET à tous les ménages. */
+    cadreFacturation:
+      (client?.cadre_facturation as EntiteEN16931["cadreFacturation"]) ??
+      (facture.cadre_facturation as EntiteEN16931["cadreFacturation"]) ??
+      null,
   };
 }
 
@@ -142,7 +156,7 @@ export async function preparerEmission(factureId: Uuid): Promise<DossierEmission
     const { data } = await supabase
       .from("clients")
       .select(
-        "nom, siren, siret, tva_intracom, adresse, code_postal, ville, pays_code, adresse_electronique_schema, adresse_electronique_valeur, reference_acheteur, delai_paiement_jours, delai_paiement_mode"
+        "nom, siren, siret, tva_intracom, adresse, code_postal, ville, pays_code, adresse_electronique_schema, adresse_electronique_valeur, reference_acheteur, delai_paiement_jours, delai_paiement_mode, cadre_facturation"
       )
       .eq("id", facture.client_id)
       .maybeSingle();

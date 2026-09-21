@@ -49,6 +49,7 @@ import {
   REGIMES_TVA,
   sansTva,
   SCHEMAS_ADRESSE_ELECTRONIQUE,
+  relveDeLaFactureElectronique,
   sectionsEfactureVisibles,
   sirenDuSiret,
   siretValide,
@@ -739,6 +740,9 @@ export function injecterSession() {
   w.adresseElectroniqueParDefaut = adresseElectroniqueParDefaut;
   w.cadreSuggere = cadreSuggere;
   w.sectionsEfactureVisibles = sectionsEfactureVisibles;
+  /* Quels cadres passent par une plateforme. La même règle décide du bloc du
+     formulaire, de l'exigence BT-49 et du bouton « Transmettre ». */
+  w.relveDeLaFactureElectronique = relveDeLaFactureElectronique;
   w.CADRES_FACTURATION = CADRES_FACTURATION;
   w.SCHEMAS_ADRESSE_ELECTRONIQUE = SCHEMAS_ADRESSE_ELECTRONIQUE;
   w.REGIMES_TVA = REGIMES_TVA;

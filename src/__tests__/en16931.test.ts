@@ -291,11 +291,75 @@ describe("Ce qui empêche d'émettre", () => {
     expect(m.map((x) => x.code)).toContain("BR-FR-10");
   });
 
-  it("refuse un client qu'on ne sait pas joindre", () => {
+  /* Le cadre est désormais NOMMÉ, et ce n'est pas une précision cosmétique :
+     cette fiche — un nom, un pays, rien d'autre — est exactement celle d'un
+     particulier. Sans le cadre, ce test affirmait qu'on refuse un ménage, pendant
+     qu'`efacture.test.ts` affirmait dans la même suite qu'un ménage complet ne
+     manque de rien. Les deux passaient. */
+  it("refuse une ENTREPRISE qu'on ne sait pas joindre", () => {
     const m = manquesPourEmettre(
       FACTURE,
       EMETTEUR,
-      { nom: "CLIENT SANS RIEN", paysCode: "FR" },
+      { nom: "CLIENT SANS RIEN", paysCode: "FR", cadreFacturation: "B2B_national" },
+      LIGNES
+    );
+    expect(m.map((x) => x.code)).toContain("BT-49");
+  });
+
+  /* Le cadre absent vaut « entreprise française » — le défaut du dépôt. Sans ce
+     contrôle, on pourrait relâcher BT-49 pour tout le monde en croyant n'avoir
+     relâché que le B2C. */
+  it("refuse aussi quand le cadre n'est pas renseigné — le défaut est B2B", () => {
+    const m = manquesPourEmettre(
+      FACTURE,
+      EMETTEUR,
+      { nom: "CLIENT SANS CADRE", paysCode: "FR" },
+      LIGNES
+    );
+    expect(m.map((x) => x.code)).toContain("BT-49");
+  });
+
+  /* LE défaut corrigé. Un particulier n'a ni adresse électronique, ni SIRET, ni
+     SIREN — et le formulaire ne lui propose pas de les saisir,
+     `sectionsEfactureVisibles("B2C")` masquant le bloc immatriculation. Le
+     reproche était donc insatisfiable, et répété à chaque impression. */
+  it("ne réclame RIEN à un particulier : le B2C relève de l'e-reporting", () => {
+    const m = manquesPourEmettre(
+      FACTURE,
+      EMETTEUR,
+      {
+        nom: "Dupont",
+        paysCode: "FR",
+        cadreFacturation: "B2C",
+        adresse: "3 rue des Lilas",
+        codePostal: "38000",
+        ville: "Grenoble",
+      },
+      LIGNES
+    );
+    expect(m.map((x) => x.code)).not.toContain("BT-49");
+    expect(m).toEqual([]);
+  });
+
+  /* Une entreprise étrangère relève elle aussi de l'e-reporting : son aide le
+     dit — « Hors facture électronique ». Elle doit suivre le même sort, sinon on
+     aurait corrigé un cas particulier au lieu d'une règle. */
+  it("ne réclame rien non plus à une entreprise étrangère", () => {
+    const m = manquesPourEmettre(
+      FACTURE,
+      EMETTEUR,
+      { nom: "BAUHAUS GMBH", paysCode: "DE", cadreFacturation: "B2B_international" },
+      LIGNES
+    );
+    expect(m.map((x) => x.code)).not.toContain("BT-49");
+  });
+
+  /* Le secteur public passe par Chorus Pro : l'identifiant reste exigé. */
+  it("continue d'exiger l'identifiant d'une administration", () => {
+    const m = manquesPourEmettre(
+      FACTURE,
+      EMETTEUR,
+      { nom: "COMMUNE DE GRENOBLE", paysCode: "FR", cadreFacturation: "B2G" },
       LIGNES
     );
     expect(m.map((x) => x.code)).toContain("BT-49");

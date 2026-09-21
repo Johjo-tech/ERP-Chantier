@@ -261,6 +261,26 @@ function showToast(msg, type, duration){
  *
  * Il mentionnait de surcroît un aperçu qui ne veut rien dire pour le client.
  */
+/**
+ * Le cadre de facturation d'un document — la fiche d'abord, le document ensuite.
+ *
+ * Même ordre que `versDestinataire` côté serveur, et pour la même raison :
+ * `factures.cadre_facturation` est NOT NULL avec un défaut, donc elle vaut
+ * « entreprise française » sur toute facture antérieure au jour où on s'est mis
+ * à l'écrire. La fiche client est la seule source qui dise la vérité.
+ */
+function cadreDuDocument(doc){
+  if(!doc) return null;
+  const fiche = state.clients.find(c=>c.societeId===doc.societeId && c.nom===doc.client);
+  return (fiche && fiche.cadreFacturation) || doc.cadreFacturation || null;
+}
+
+/** Ce document emprunte-t-il une plateforme, ou relève-t-il de l'e-reporting ? */
+function passeParUnePlateforme(doc){
+  return !window.relveDeLaFactureElectronique
+    || window.relveDeLaFactureElectronique(cadreDuDocument(doc));
+}
+
 function saveFailedMessage(){
   const motif = window.dernierRefus && window.dernierRefus();
   if(motif) return "Enregistrement refusé : " + motif;
@@ -3130,7 +3150,11 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
     if(factureId && window.pdfFacturX){
       const r = await window.pdfFacturX(blob, factureId);
       blob = r.fichier;
-      if(!r.structuree && r.manques.length){
+      /* Et seulement si le document RELÈVE de la facture électronique. Pour un
+         particulier, le PDF simple n'est pas un pis-aller : c'est le document
+         normal. Le signaler revenait à reprocher l'absence d'un SIRET que le
+         formulaire ne propose même pas de saisir — à chaque impression. */
+      if(!r.structuree && r.manques.length && passeParUnePlateforme(state.factures.find(x=>x.id===factureId))){
         showToast(`PDF simple : ${r.manques[0]}`);
       }
     }
@@ -4685,7 +4709,12 @@ function renderFacturesListHTML(list, vue){
       ${!f.numero && !estUnAvoir && (!window.actionsFacturation || window.actionsFacturation().peutFacturer)
         ? `<button class="btn small primary" onclick="emettreLaFacture('${jsAttr(f.id)}')" title="Attribuer son numéro définitif et la rendre transmissible">🧾 Émettre</button>`
         : ''}
-      ${f.numero? `<button class="btn small" onclick="transmettreALaPlateforme('${jsAttr(f.id)}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
+      ${/* Pas de dépôt pour un particulier ni pour une entreprise étrangère :
+            ces opérations relèvent de l'e-reporting et n'ont rien à faire sur
+            une plateforme. Le bouton s'affichait dès que la facture avait un
+            numéro, ouvrait une confirmation alarmante sur l'irréversibilité,
+            puis refusait à tous les coups. */''}
+      ${(f.numero && passeParUnePlateforme(f))? `<button class="btn small" onclick="transmettreALaPlateforme('${jsAttr(f.id)}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
       ${/* Le bouton absent ne s'expliquait pas : sur un brouillon — et les
             brouillons sont en TÊTE de liste, la plus récente d'abord — on
             cherchait un avoir qui n'était nulle part. Il reste donc visible,

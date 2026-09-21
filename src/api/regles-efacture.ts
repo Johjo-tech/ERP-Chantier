@@ -341,6 +341,29 @@ export function champsAttendus(
   }
 }
 
+/**
+ * Ce cadre passe-t-il par une facture ÉLECTRONIQUE ?
+ *
+ * Deux canaux, et il ne faut pas les confondre. La facture électronique
+ * proprement dite transite par une plateforme et exige d'identifier
+ * l'acheteur — c'est le B2B national et le secteur public. Le reste — un
+ * particulier, une entreprise étrangère — relève de l'**e-reporting** :
+ * l'opération se déclare en agrégé, la facture ne passe par aucune plateforme.
+ *
+ * Le dépôt le disait déjà, mot pour mot, dans l'aide du cadre B2C : « Hors
+ * facture électronique : relève de l'e-reporting. » Il le disait, mais aucun
+ * code ne le lisait : `manquesPourEmettre` réclamait l'adresse électronique de
+ * TOUT le monde, y compris de ménages à qui le formulaire ne propose même pas
+ * de la saisir. Cette fonction donne un nom à la distinction pour que les deux
+ * bouts de la chaîne s'y réfèrent au lieu de la deviner chacun de son côté.
+ */
+export function relveDeLaFactureElectronique(
+  cadre: CadreFacturation | null | undefined
+): boolean {
+  const c = cadre ?? CADRE_DEFAUT;
+  return c === "B2B_national" || c === "B2G";
+}
+
 /** Blocs du formulaire à afficher pour ce cadre. */
 export function sectionsEfactureVisibles(
   cadre: CadreFacturation | null | undefined
@@ -349,7 +372,9 @@ export function sectionsEfactureVisibles(
   const sections = ["identite", "adresse", "contact"];
 
   if (c !== "B2C") sections.push("immatriculation");
-  if (c === "B2B_national" || c === "B2G") sections.push("efacture");
+  /* Le bloc « e-facture » et l'exigence de BT-49 désignent le même ensemble de
+     cadres : une seule règle les décide désormais. */
+  if (relveDeLaFactureElectronique(c)) sections.push("efacture");
   if (c === "B2G") sections.push("marche");
   if (c === "B2B_international") sections.push("pays");
 

@@ -172,6 +172,7 @@ declare global {
     refusReglement: any;
     regimeSuivi: any;
     reglerCompteur: any;
+    relveDeLaFactureElectronique: any;
     resteAImputer: any;
     resteAPayer: any;
     retirerArticle: any;
