@@ -93,4 +93,35 @@ describe("Le verrou d'un bon de commande", () => {
     expect(v?.libelle).toContain("FAC-2026-000042");
     expect(v?.libelle).toContain("FAC-2026-000043");
   });
+
+  it("dit `facturé` dès qu'un verrou existe, et seulement alors", () => {
+    expect(bonEstFacture([{ numero: "FAC-2026-000042" }])).toBe(true);
+    expect(bonEstFacture([{ numero: "  " }])).toBe(false);
+  });
+});
+
+/**
+ * Le miroir doit refléter ce que la base oppose.
+ *
+ * Essai à blanc sur la production, le 21/09/2026, migration
+ * `20260921150000_le_bon_facture_ne_bouge_plus` appliquée dans une
+ * transaction annulée, sur le bon `37e0457f` que la facture FAC-2026-000011
+ * suit :
+ *
+ *   statut_workflow + notes  → ACCEPTÉ   (liste blanche)
+ *   conducteur               → ACCEPTÉ   (propagation d'un renommage)
+ *   montant                  → REFUSÉ    restrict_violation
+ *   delete                   → REFUSÉ    restrict_violation
+ *
+ * Ce test-ci garde la phrase : si elle change ici sans changer là-bas, deux
+ * messages diraient la même chose différemment.
+ */
+describe("Le message du verrou est celui de la base", () => {
+  it("reprend mot pour mot l'ouverture du déclencheur SQL", () => {
+    const v = verrouBonCommande([{ numero: "FAC-2026-000011" }]);
+
+    expect(v?.libelle).toMatch(
+      /^Ce bon de commande est facturé \(FAC-2026-000011\) : son contenu ne peut plus changer/
+    );
+  });
 });

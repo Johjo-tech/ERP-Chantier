@@ -5446,9 +5446,18 @@ function renderBonsCommandeListHTML(list){
   });
   return filtered.map(item => bonCommandeCardHTML(item.data, false)).join('') || '<div class="empty">Aucun bon de commande ni SAV pour cette société.</div>';
 }
+/** Toutes les factures nées de ce bon — un bon peut en porter plusieurs. */
+function facturesDuBonCommande(bcId){
+  return state.factures.filter(f=>f.bonCommandeId===bcId);
+}
+/** Le verrou du bon : posé par la première facture ÉMISE qui en découle. */
+function verrouDuBonCommande(bcId){
+  return window.verrouBonCommande(facturesDuBonCommande(bcId));
+}
 function bonCommandeCardHTML(b, workflowCtx){
     const isSAV = !!b.bonCommandeId;
     const factureLiee = state.factures.find(f=>f.bonCommandeId===b.id);
+    const verrou = verrouDuBonCommande(b.id);
     const savLie = state.bonsCommande.find(x=>x.bonCommandeId===b.id);
     const bonCommandeOrigine = b.bonCommandeId ? state.bonsCommande.find(x=>x.id===b.bonCommandeId) : null;
     const devisLie = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
@@ -5463,7 +5472,7 @@ function bonCommandeCardHTML(b, workflowCtx){
       && (!window.affichePrix || window.affichePrix());
     return `<div class="card" id="bonCommande-card-${b.id}">
       <div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.interlocuteur? ' · 👤 '+esc(b.interlocuteur):''}${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}${(b.metiers&&b.metiers.length)||b.metier? ' · 🔧 '+esc(metiersDisplayJoin(b)):''}</div>
+      <div style="flex:1; min-width:0;"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}${verrou? ` <span class="badge success" style="margin-left:6px;" title="${esc(verrou.libelle)}">🔒 Facturé</span>`:''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.interlocuteur? ' · 👤 '+esc(b.interlocuteur):''}${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}${(b.metiers&&b.metiers.length)||b.metier? ' · 🔧 '+esc(metiersDisplayJoin(b)):''}</div>
       <div class="card-sub">${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>
       ${planningContactZoneHTML(b)}
       ${b.natureTravaux? `<div class="card-sub">🛠️ ${esc(b.natureTravaux)}</div>`:''}
@@ -5519,7 +5528,11 @@ function bonCommandeCardHTML(b, workflowCtx){
     ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
     ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')">Modifier</button>
+      ${/* « Modifier » sur un bon déjà facturé laissait réécrire des travaux
+            que le client tient déjà par écrit, sur une facture définitive. */''}
+      ${verrou
+        ? `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="${esc(verrou.libelle)}">👁 Consulter</button>`
+        : `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')">Modifier</button>`}
       ${/* Une fois la pré-facture validée, l'étape suivante doit sauter aux yeux :
             c'est le geste qu'on cherche, pas un bouton gris parmi cinq. */''}
       ${(factureLiee||isSAV)? '' : (b.valideDirecteur
@@ -5527,7 +5540,9 @@ function bonCommandeCardHTML(b, workflowCtx){
         : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
       ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')">Créer un SAV</button>`}
       ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Lier un rapport</button>`}
-      <button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')">Supprimer</button>
+      ${verrou
+        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
+        : `<button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')">Supprimer</button>`}
     </div>
     ${state.lienOuvert==='bonCommande:'+b.id? `<div style="margin-top:8px;">${lienWidgetHTML('bonCommande', b.id, b.client)}</div>`:''}
     ${(!factureLiee && !isSAV && !b.valideDirecteur && workflowCtx!=='pieceCommande')? `<div class="bc-attente-message" style="margin-top:8px;">⏳ En attente — ${!b.valideConducteur? "la validation du conducteur puis du directeur est requise" : "la validation du directeur est requise"} avant de pouvoir facturer ce bon de commande.</div>` : ''}
@@ -6635,9 +6650,12 @@ function bonCommandeForm(){
   const sansBC = !!e.sansBC;
   const enAttenteBC = !!e.enAttenteBC;
   const isSAV = !!e.bonCommandeId;
+  const verrou = e.id ? verrouDuBonCommande(e.id) : null;
   return `
   <div class="form-panel form-panel-v2">
-    <h3>${isSAV? (e.id? 'Modifier le SAV' : 'Nouveau SAV') : (e.id? 'Modifier le bon de commande' : 'Nouveau bon de commande')}</h3>
+    <h3>${verrou? 'Consulter le bon de commande' : (isSAV? (e.id? 'Modifier le SAV' : 'Nouveau SAV') : (e.id? 'Modifier le bon de commande' : 'Nouveau bon de commande'))}</h3>
+    ${verrou? `<div class="facture-verrou-banner"><span>🔒 ${esc(verrou.libelle)}</span></div>` : ''}
+    <div style="${verrou? 'pointer-events:none; opacity:.55;' : ''}">
     ${(isSAV || e.id)? '' : `<div class="ocr-zone" style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2); border-radius:10px; background:rgba(var(--accent-rgb), .06);">
       <label class="btn primary" style="cursor:pointer;">📄 Lire un bon de commande (PDF ou photo)
         <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="lireBonCommande(this.files[0], this)">
@@ -6743,9 +6761,12 @@ function bonCommandeForm(){
         <div class="totals-box" id="bcTotalsBoxContent" style="margin-top:10px;">${totalsBoxInnerHTML(computeTotalsAvecRemise(e.lignes||[], 0))}</div>
       </div>
     </div>
+    </div>
     <div class="form-actions-sticky">
-      <button class="btn primary" onclick="saveBonCommande()">Enregistrer${isSAV? ' le SAV' : ' le bon de commande'}</button>
-      <button class="btn ghost" onclick="closeForm('bonCommande')">Annuler</button>
+      ${verrou
+        ? `<button class="btn ghost" onclick="closeForm('bonCommande')">Fermer</button>`
+        : `<button class="btn primary" onclick="saveBonCommande()">Enregistrer${isSAV? ' le SAV' : ' le bon de commande'}</button>
+           <button class="btn ghost" onclick="closeForm('bonCommande')">Annuler</button>`}
     </div>
   </div>`;
 }
@@ -6755,6 +6776,9 @@ async function saveBonCommande(){
   bcSaveInProgress = true;
   try{
   const e = state.editing;
+  /* Le même refus que le déclencheur `bc_facture_fige`, mais avant le voyage. */
+  const verrou = e.id ? verrouDuBonCommande(e.id) : null;
+  if(verrou){ showToast(verrou.libelle, 'danger', 7000); bcSaveInProgress = false; return; }
   const client = document.getElementById('bc_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); bcSaveInProgress = false; return; }
   /* La règle vit dans `regles-bc.ts`, pas ici : la couche `queries` s'en sert
