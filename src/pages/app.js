@@ -10641,6 +10641,8 @@ function appliquerPalette(p){
     r.setProperty('--secondaire', p.secondaire);
     r.setProperty('--secondaire-soft', p.secondaireClair);
     r.setProperty('--sur-secondaire', p.surSecondaire);
+    const [sr, sv, sb] = [1, 3, 5].map(i => parseInt(p.secondaire.slice(i, i + 2), 16));
+    r.setProperty('--secondaire-rgb', `${sr}, ${sv}, ${sb}`);
   }
   /* Les halos et anneaux de focus étaient sept opacités d'un orange figé : ils
      seraient restés orange pendant que le reste virait. Les composantes

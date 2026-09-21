@@ -27,6 +27,7 @@
   --secondaire:#182233;
   --secondaire-soft:#EEF0F4;
   --sur-secondaire:#FFFFFF;
+  --secondaire-rgb:24, 34, 51;
   --danger:#D9363E;
   --danger-soft:#FBE7E8;
   --success:#12875A;
@@ -1149,7 +1150,29 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-label{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin-bottom:1.5mm; }
 .p-name{ font-size:11pt; font-weight:700; margin-bottom:1mm; }
 .p-line{ font-size:9.5pt; color:#3A4454; line-height:1.5; }
-.p-locataire{ margin-top:3mm; background:#F1F3F7; border-left:2.5px solid var(--accent); padding:2.5mm 3mm; }
+/* ---------- Les encadrés des documents, décrits UNE fois ----------
+   Blocs client, cartouches, encadré de notes, bloc des totaux : tous
+   portaient leur propre gris plein, posé à la main et jamais accordé à la
+   couleur de la société. Un fond plein alourdit la page et mange l'encre à
+   l'impression ; une teinte à 10 % de la couleur dominante suffit à délimiter
+   et laisse le papier respirer.
+
+   `rgba(var(--accent-rgb), …)` plutôt que `color-mix` : les composantes sont
+   déjà publiées pour les halos de l'interface, la syntaxe est comprise partout,
+   et html2canvas la rend sans surprise. */
+.p-encadre{
+  background:rgba(var(--accent-rgb), .10);
+  border:.35mm solid rgba(var(--accent-rgb), .30);
+  border-radius:1.5mm;
+  padding:2.5mm 3mm;
+}
+.p-encadre-2{
+  background:rgba(var(--secondaire-rgb), .08);
+  border:.35mm solid rgba(var(--secondaire-rgb), .22);
+  border-radius:1.5mm;
+  padding:2.5mm 3mm;
+}
+.p-locataire{ margin-top:3mm; background:rgba(var(--accent-rgb), .10); border:.35mm solid rgba(var(--accent-rgb), .30); border-left:1mm solid var(--accent); border-radius:1.5mm; padding:2.5mm 3mm; }
 .p-lignes{ margin-top:7mm; }
 /* L'en-tête du tableau porte la SECONDE couleur de la société : c'est la
    bande la plus visible du document après le filet de titre, et elle était
@@ -1162,12 +1185,17 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* Le commentaire et le chapitre racontent : ils restent à gauche même si le
    tableau devait un jour être aligné autrement. */
 .p-lignes .p-comment td, .p-lignes .p-chapitre td{ text-align:left; }
-.p-lignes td{ font-size:9.5pt; padding:2.3mm 2mm; border-bottom:.5px solid #EEF0F4; vertical-align:top; }
+/* Le rembourrage vertical passe de 2,3 mm à 1,1 mm — environ 4 px — et
+   l'interligne se resserre : sept lignes tenaient sur une page, il en tient
+   maintenant le double, sans que la lisibilité en souffre. C'est le réglage
+   qui fait le plus de différence sur un devis de chantier, où les lignes se
+   comptent par dizaines. */
+.p-lignes td{ font-size:9.5pt; padding:1.1mm 2mm; line-height:1.25; border-bottom:.5px solid #EEF0F4; vertical-align:top; }
 .p-lignes tr{ break-inside:avoid; page-break-inside:avoid; }
 .p-totals, .p-notes, .p-sign, .p-locataire{ break-inside:avoid; page-break-inside:avoid; }
-.p-chapitre td{ padding-top:5mm; font-weight:700; font-size:9.5pt; color:var(--accent-2); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--accent-soft); }
+.p-chapitre td{ padding-top:3mm; padding-bottom:1mm; font-weight:700; font-size:9.5pt; color:var(--accent-2); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--accent-soft); }
 .p-comment td{ font-style:italic; color:#6B7686; font-size:9pt; border-bottom:none; }
-.p-subtotal td{ font-size:8.5pt; color:#6B7686; padding-top:1mm; padding-bottom:4mm; border-bottom:none; }
+.p-subtotal td{ font-size:8.5pt; color:#6B7686; padding-top:.8mm; padding-bottom:2.5mm; border-bottom:none; }
 /* Ce que le technicien ou le conducteur a ajouté pendant le chantier : le
    directeur doit le distinguer de ce qui était commandé au départ. */
 .p-ajout td{ background:#FFF7E8; }
@@ -1185,19 +1213,23 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-logo{ max-height:18mm; max-width:55mm; display:block; margin-bottom:2.5mm; }
 /* Conditions de règlement et mentions du code de commerce, en pied de facture. */
 .p-conditions{ width:100%; margin-top:6mm; break-inside:avoid; page-break-inside:avoid; }
-.p-conditions td{ width:50%; vertical-align:top; font-size:8.5pt; color:#3C4757; padding-right:6mm; }
+.p-conditions td{ width:50%; vertical-align:top; font-size:8.5pt; color:#3C4757; padding:2mm 6mm 2mm 3mm; background:rgba(var(--secondaire-rgb), .06); }
+.p-conditions td:first-child{ border-radius:1.5mm 0 0 1.5mm; }
+.p-conditions td:last-child{ border-radius:0 1.5mm 1.5mm 0; padding-right:3mm; }
 .p-conditions b{ display:block; font-size:8pt; text-transform:uppercase; letter-spacing:.4px; color:#6B7686; margin-bottom:1mm; }
 .p-mentions{ margin-top:5mm; padding-top:2.5mm; border-top:.5px solid #E2E6ED; font-size:7.8pt; color:#6B7686; line-height:1.45; break-inside:avoid; page-break-inside:avoid; }
 .p-mentions .p-label{ margin-bottom:1mm; }
-.p-totals{ width:65mm; margin-left:auto; margin-top:5mm; }
-.p-totals td{ padding:1.6mm 0; font-size:9.5pt; }
+/* Le bloc des totaux devient un encadré, comme les autres : c'est la zone
+   qu'on cherche d'abord, et rien ne la délimitait. */
+.p-totals{ width:68mm; margin-left:auto; margin-top:5mm; background:rgba(var(--accent-rgb), .10); border:.35mm solid rgba(var(--accent-rgb), .30); border-radius:1.5mm; border-collapse:separate; padding:2mm 3mm; }
+.p-totals td{ padding:1.1mm 0; font-size:9.5pt; }
 .p-totals td.label{ color:#6B7686; }
 .p-totals td.val{ text-align:right; font-family:'JetBrains Mono',monospace; }
 /* Le total TTC dans la couleur dominante, en gras : c'est le chiffre qu'on
    cherche en prenant le document, et il se confondait avec les sous-totaux.
    Ceux-ci gardent l'encre du texte — les distinguer est tout l'objet. */
 .p-totals tr.grand td{ border-top:1.5px solid var(--accent); padding-top:3mm; font-size:12.5pt; font-weight:700; color:var(--accent-2); }
-.p-notes{ margin-top:9mm; font-size:9pt; background:#F8F9FB; border:1px solid #E2E6ED; border-radius:2mm; padding:3.5mm 4mm; }
+.p-notes{ margin-top:9mm; font-size:9pt; background:rgba(var(--secondaire-rgb), .08); border:.35mm solid rgba(var(--secondaire-rgb), .22); border-radius:2mm; padding:3.5mm 4mm; }
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
 .p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
@@ -1235,7 +1267,11 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    sont touchés, jamais les corps de texte — un document resserré doit rester
    le même document. */
 #printArea.pdf-serre .p-lignes{ margin-top:3mm; }
-#printArea.pdf-serre .p-lignes td{ padding-top:1.4mm; padding-bottom:1.4mm; }
+#printArea.pdf-serre .p-lignes td{ padding-top:.6mm; padding-bottom:.6mm; line-height:1.15; }
+#printArea.pdf-serre .p-chapitre td{ padding-top:2mm; padding-bottom:.6mm; }
+#printArea.pdf-serre .p-subtotal td{ padding-top:.5mm; padding-bottom:1.5mm; }
+#printArea.pdf-serre .p-conditions td{ padding-top:1.2mm; padding-bottom:1.2mm; }
+#printArea.pdf-serre .p-totals td{ padding-top:.7mm; padding-bottom:.7mm; }
 #printArea.pdf-serre .p-totals{ margin-top:2mm; }
 #printArea.pdf-serre .p-conditions{ margin-top:3mm; }
 #printArea.pdf-serre .p-mentions{ margin-top:2mm; padding-top:1.5mm; }
@@ -1255,7 +1291,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   /* Les fonds colorés sont de l'information, pas de la décoration : sans ce
      réglage le navigateur les efface à l'impression, et l'en-tête du tableau
      ressort blanc sur blanc. */
-  .p-lignes th, .p-print-grid th, .p-encadre{
+  .p-lignes th, .p-print-grid th, .p-encadre, .p-encadre-2,
+  .p-locataire, .p-notes, .p-totals, .p-conditions td{
     -webkit-print-color-adjust:exact; print-color-adjust:exact;
   }
 }
