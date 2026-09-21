@@ -8977,6 +8977,68 @@ const listeDossiersReglementsHTML = declarerListing('reglementClient',
      factures, taper « FAC-2026-0412 » ici ne ramènerait rien. */
   d => d.factures.map(f=>f.numero).filter(Boolean));
 
+/**
+ * La sélection décrit-elle un lettrage — une facture en face d'un avoir ?
+ *
+ * Exactement deux pièces, une de chaque sorte, toutes deux avec un reste. Le
+ * même client est acquis : cet écran ne montre qu'un dossier à la fois. Au-delà
+ * de deux, on ne devine pas quel crédit va sur quelle créance — c'est une
+ * décision comptable, pas une répartition automatique.
+ *
+ * Le montant proposé est le plus petit des deux restes : jamais plus que ce
+ * que l'avoir porte, jamais plus que ce que la facture doit. C'est la même
+ * règle que la saisie unitaire, empruntée et non refaite.
+ */
+function lettrageDeLaSelection(list, selection){
+  if(!selection || selection.length !== 2) return null;
+  const pieces = selection.map(id=>list.find(f=>f.id===id)).filter(Boolean);
+  if(pieces.length !== 2) return null;
+
+  const avoir = pieces.find(f=>window.estAvoir(f.typeDocument));
+  const facture = pieces.find(f=>!window.estAvoir(f.typeDocument));
+  if(!avoir || !facture) return null;
+  if(!facture.numero) return null;
+
+  const resteA = resteDeLAvoir(avoir);
+  const resteF = resteDeLaFacture(facture, null);
+  const montant = window.montantImputable(resteF, resteA);
+  if(montant <= 0.004) return null;
+
+  return { avoir, facture, montant };
+}
+
+/**
+ * Lettre l'avoir coché avec la facture cochée.
+ *
+ * On repasse par `refusImputationAvoir` à travers `imputerAvoir` : la règle
+ * qui a construit la proposition est la même que celle qui l'accepte, et un
+ * avoir déjà consommé entre-temps se fait refuser là plutôt qu'ici.
+ */
+async function lettrerSelection(){
+  const list = facturesDuClientReglements();
+  const l = lettrageDeLaSelection(list, state.reglementSelection || []);
+  if(!l){ showToast("Cochez une facture et un avoir du même client."); return; }
+  if(!window.imputerAvoir){ showToast("L'imputation n'est pas disponible."); return; }
+
+  if(!confirm(`Lettrer l'avoir ${l.avoir.numero} avec la facture ${l.facture.numero} pour ${moneyDisplay(l.montant)} ?`)) return;
+
+  try{
+    await window.imputerAvoir(l.avoir.id, l.facture.id, l.montant);
+    await recharger('reglement', 'facture');
+    /* Les deux côtés : la facture passe à « payée » ou « partiellement », et
+       l'avoir cesse d'être disponible. Sans cette remise à jour, les compteurs
+       continueraient d'annoncer une créance éteinte. */
+    await syncFactureStatut(l.facture.id);
+    await syncFactureStatut(l.avoir.id);
+    state.reglementSelection = [];
+    renderTab();
+    showToast(`Avoir ${l.avoir.numero} lettré pour ${moneyDisplay(l.montant)}.`, 'success', 4000);
+  }catch(err){
+    console.error('Lettrage refusé', err);
+    showToast((err && err.message) || "Le lettrage n'a pas pu être enregistré.", 'danger', 7000);
+  }
+}
+
 function openReglementsClient(nom){ state.reglementsClient = nom; state.reglementSelection = []; renderTab(); }
 function closeReglementsClient(){ state.reglementsClient = null; state.reglementSelection = []; renderTab(); }
 /** Les factures d'un client, les plus récentes d'abord. */
@@ -8994,8 +9056,12 @@ function renderReglementsClientDetail(nom, allFactures){
      rien, et la barre du bas doit continuer d'annoncer le bon montant. */
   const totalSelection = list.reduce((somme, f)=>{
     const st = reglementStatutFacture(f);
+    /* Le reste d'un avoir est un CRÉDIT : l'ajouter au total à encaisser
+       gonflerait la somme du montant même qui l'éteint. */
+    if(st.avoir) return somme;
     return somme + (st.reste > 0.01 && selection.includes(f.id) ? st.reste : 0);
   }, 0);
+  const lettrage = lettrageDeLaSelection(list, selection);
   return `
     <div class="page-head"><h1>${esc(nom)}</h1><button class="btn" onclick="closeReglementsClient()">← Retour</button></div>
     ${barreRecherche('reglementFacture', 'Rechercher : n° de facture, montant, mode, référence…')}
@@ -9003,8 +9069,12 @@ function renderReglementsClientDetail(nom, allFactures){
     <div id="liste-reglementFacture">${listeFacturesReglementsHTML()}</div>
     ${selection.length? `
     <div class="reglement-bulk-bar">
-      <span>${selection.length} facture${selection.length>1?'s':''} sélectionnée${selection.length>1?'s':''} — Total : <b>${moneyDisplay(totalSelection)}</b></span>
-      <button class="btn primary" onclick="openBulkReglementForm()">Règlement</button>
+      <span>${lettrage
+        ? `Avoir ${esc(lettrage.avoir.numero)} en face de la facture ${esc(lettrage.facture.numero)} — <b>${moneyDisplay(lettrage.montant)}</b> à lettrer`
+        : `${selection.length} facture${selection.length>1?'s':''} sélectionnée${selection.length>1?'s':''} — Total : <b>${moneyDisplay(totalSelection)}</b>`}</span>
+      ${lettrage
+        ? `<button class="btn primary" onclick="lettrerSelection()" title="Solder la facture avec cet avoir">🔗 Lettrer</button>`
+        : `<button class="btn primary" onclick="openBulkReglementForm()" ${totalSelection>0.01? '' : 'disabled title="Sélectionnez au moins une facture à encaisser"'}>Règlement</button>`}
     </div>` : ''}
     ${state.formOpen.reglementBulk? renderBulkReglementModal(selection, list) : ''}
   `;
@@ -9021,10 +9091,15 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
          reste, mais ce reste est un CRÉDIT à donner : ni case à cocher, ni
          bouton « + Règlement », ni retard — on ne réclame pas un avoir. */
       const payable = st.reste > 0.01 && !st.avoir;
+      /* L'avoir se coche aussi, désormais : c'est ce qui permet de le mettre
+         en face d'une facture et de lettrer les deux d'un geste. Il reste
+         sans « + Règlement » — on ne l'encaisse pas, on l'impute. */
+      const lettrable = st.reste > 0.01 && st.avoir;
+      const cochable = payable || lettrable;
       return `<div class="card" ${payable? `style="cursor:pointer;" onclick="reglementCardClick(event,'${jsAttr(f.id)}')"` : ''}>
         <div class="card-row">
           <div style="display:flex; align-items:flex-start; gap:10px;">
-            ${payable? `<input type="checkbox" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;" ${selection.includes(f.id)?'checked':''} onchange="toggleReglementSelection('${jsAttr(f.id)}')">` : `<span style="width:17px; flex-shrink:0;"></span>`}
+            ${cochable? `<input type="checkbox" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;" ${selection.includes(f.id)?'checked':''} onchange="toggleReglementSelection('${jsAttr(f.id)}')" title="${lettrable? 'Cocher cet avoir et une facture pour les lettrer' : 'Cocher pour un règlement groupé'}">` : `<span style="width:17px; flex-shrink:0;"></span>`}
             <div><div class="card-title">${esc(f.numero)}</div><div class="card-sub">${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance):''}</div></div>
           </div>
           <div style="text-align:right;"><div class="amount">${moneyDisplay(st.ttc)}</div><span class="badge ${st.cls}" style="margin-top:5px;display:inline-block;">${st.label}</span></div>
@@ -16938,6 +17013,8 @@ Object.assign(window, {
   listePiecesCommandeHTML,
   listeSousTraitantsHTML,
   listeVehiculesHTML,
+  lettrageDeLaSelection,
+  lettrerSelection,
   listeVide,
   loadAll,
   loadPrefix,
