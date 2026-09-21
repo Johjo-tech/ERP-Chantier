@@ -1764,7 +1764,24 @@ function montantsCherchables(doc){
   return [money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)];
 }
 function devisSearchHaystack(d){ return window.texteDocument(d, montantsCherchables(d)); }
-function factureSearchHaystack(f){ return window.texteDocument(f, montantsCherchables(f)); }
+/**
+ * Les numéros de bon de commande que porte une facture.
+ *
+ * Deux références distinctes, et la comptabilité cherche par les deux :
+ *
+ *  - `refBonCommandeClient`, le numéro que le CLIENT a donné à sa commande.
+ *    Il est sur la facture, il n'était cherché nulle part ;
+ *  - le `numeroBC` du bon d'où la facture est née. Il ne vit pas sur la
+ *    facture mais sur le bon, au bout de `bonCommandeId` — une recherche qui
+ *    ne lit que la facture ne pouvait donc pas le trouver.
+ */
+function numerosBCdeLaFacture(f){
+  const bon = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
+  return [f.refBonCommandeClient, bon && bon.numeroBC, bon && bon.numeroInterne].filter(Boolean);
+}
+function factureSearchHaystack(f){
+  return window.texteDocument(f, [...montantsCherchables(f), ...numerosBCdeLaFacture(f)]);
+}
 function interventionSearchHaystack(i){
   const metierLabel = (METIERS.find(m=>m.value===i.typePanne)||{}).label || '';
   return window.texteDocument(i, [metierLabel]);
@@ -4798,13 +4815,14 @@ function renderFacturesListHTML(list, vue){
        moitié se lisait « impayée » sans qu'on sache qu'un acompte était tombé. */
     const reg = reglementStatutFacture(f);
     const verrou = window.verrouFacture(f);
+    const numerosBC = numerosBCdeLaFacture(f);
     const estUnAvoir = window.estAvoir(f.typeDocument);
     const rectifiee = f.factureRectifieeId ? state.factures.find(x=>x.id===f.factureRectifieeId) : null;
     const devisOrigine = f.devisId ? state.devis.find(d=>d.id===f.devisId) : null;
     const rapportOrigine = f.interventionId ? state.interventions.find(i=>i.id===f.interventionId) : null;
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
     return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${jsAttr(f.id)}')"><div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${f.numero? esc(f.numero) : 'Brouillon — non émise'}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}</div>${locataireCardLine(f)}
+      <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${f.numero? esc(f.numero) : 'Brouillon — non émise'}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}${numerosBC.length? ' · 📋 N° BC '+esc(numerosBC.join(' / ')):''}</div>${locataireCardLine(f)}
       ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${jsAttr(devisOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${jsAttr(rapportOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
       ${rectifiee? `<div class="card-sub">Rectifie la facture : <a href="javascript:void(0)" onclick="event.stopPropagation(); goToFacture('${jsAttr(rectifiee.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rectifiee.numero)}</a>${f.motifRectification? ' · '+esc(f.motifRectification):''}</div>`:''}
@@ -16987,6 +17005,7 @@ Object.assign(window, {
   money,
   moneyDisplay,
   montantsCherchables,
+  numerosBCdeLaFacture,
   monthsForPeriod,
   motifAvoirSaisi,
   multiWordMatch,
