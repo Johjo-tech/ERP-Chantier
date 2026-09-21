@@ -103,7 +103,7 @@ suite("Pas de numéro sans ligne", () => {
       .single();
 
     expect(error).toBeNull();
-    expect(emise?.numero).toMatch(/^FAC-\d{4}-\d{4}$/);
+    expect(emise?.numero).toMatch(/^FAC-\d{4}-\d{6}$/);
   });
 
   /* Un commentaire n'est pas une prestation : une facture qui n'en porte que
@@ -146,7 +146,7 @@ suite("Pas de numéro sans ligne", () => {
     expect(enregistre, "le pont a refusé l'enregistrement").toBe(true);
 
     const relue = (await stGet(cle)) as { numero?: string | null } | null;
-    expect(relue?.numero).toMatch(/^FAC-\d{4}-\d{4}$/);
+    expect(relue?.numero).toMatch(/^FAC-\d{4}-\d{6}$/);
   });
 });
 

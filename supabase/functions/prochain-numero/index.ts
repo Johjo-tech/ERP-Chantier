@@ -82,7 +82,8 @@ serve(async (req) => {
       sav: "SAV",
     };
     const typeCode = typeCodes[type] || type.toUpperCase();
-    const numero = `${typeCode}-${year}-${String(newCount).padStart(4, "0")}`;
+    // Six chiffres, comme `numero_suivant_interne` en base.
+    const numero = `${typeCode}-${year}-${String(newCount).padStart(6, "0")}`;
 
     return new Response(JSON.stringify({ numero }), {
       headers: { "Content-Type": "application/json" },

@@ -146,9 +146,15 @@ export async function reglerCompteur(
   return data;
 }
 
-/** Le prochain numéro tel qu'il sera attribué, pour l'aperçu des réglages. */
+/**
+ * Le prochain numéro tel qu'il sera attribué, pour l'aperçu des réglages.
+ *
+ * Miroir de `numero_suivant_interne` en base, qui fait seule autorité : six
+ * chiffres. Les deux doivent bouger ensemble — un aperçu qui annonce une
+ * largeur et une base qui en attribue une autre est pire que pas d'aperçu.
+ */
 export function apercuNumero(prefixe: string, valeur: number, annee: number): string {
-  return `${prefixe.trim() || "DOC"}-${annee}-${String(valeur + 1).padStart(4, "0")}`;
+  return `${prefixe.trim() || "DOC"}-${annee}-${String(valeur + 1).padStart(6, "0")}`;
 }
 
 // ============ MÉTIERS ============

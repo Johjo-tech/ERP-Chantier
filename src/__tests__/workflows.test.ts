@@ -271,21 +271,21 @@ suite("Numérotation configurable", () => {
   });
 
   it("calcule l'aperçu du prochain numéro", () => {
-    expect(queries.apercuNumero("DEV", 41, 2026)).toBe("DEV-2026-0042");
+    expect(queries.apercuNumero("DEV", 41, 2026)).toBe("DEV-2026-000042");
     // Un préfixe vide ne doit pas produire « -2026-0001 »
-    expect(queries.apercuNumero("  ", 0, 2026)).toBe("DOC-2026-0001");
+    expect(queries.apercuNumero("  ", 0, 2026)).toBe("DOC-2026-000001");
   });
 
   it("applique le préfixe et le point de départ réglés", async () => {
     await queries.reglerCompteur(societeId, SERIE, "ZQX", 500);
 
     const numero = await getNextNumero(societeId, SERIE);
-    expect(numero).toBe(`ZQX-${new Date().getFullYear()}-0501`);
+    expect(numero).toBe(`ZQX-${new Date().getFullYear()}-000501`);
   });
 
   it("poursuit la série au numéro suivant", async () => {
     const numero = await getNextNumero(societeId, SERIE);
-    expect(numero).toBe(`ZQX-${new Date().getFullYear()}-0502`);
+    expect(numero).toBe(`ZQX-${new Date().getFullYear()}-000502`);
   });
 
   it("refuse un point de départ négatif", async () => {

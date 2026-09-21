@@ -49,11 +49,11 @@ suite("Numéro interne des bons de commande", () => {
       date: aujourdhui,
     });
 
-    expect(bc.numero_interne).toMatch(/^BC-\d{4}-\d{4}$/);
+    expect(bc.numero_interne).toMatch(/^BC-\d{4}-\d{6}$/);
     /* Le rang exact n'est pas prévisible : d'autres suites créent des bons sur
        la même base et s'intercalent légitimement. Ce qui doit tenir, c'est que
        le numéro vient du compteur et l'a fait avancer. */
-    expect(Number(bc.numero_interne!.slice(-4))).toBeGreaterThan(avant);
+    expect(Number(bc.numero_interne!.slice(-6))).toBeGreaterThan(avant);
     expect(await compteurBC(societeId, annee)).toBeGreaterThanOrEqual(avant + 1);
   });
 
@@ -102,7 +102,7 @@ suite("Numéro interne des bons de commande", () => {
     });
     const sav = await queries.createSAV(societeId, origine.id, "Fuite persistante");
 
-    expect(sav.numero_interne).toMatch(/^BC-\d{4}-\d{4}$/);
+    expect(sav.numero_interne).toMatch(/^BC-\d{4}-\d{6}$/);
     expect(sav.numero_interne).not.toBe(origine.numero_interne);
   });
 

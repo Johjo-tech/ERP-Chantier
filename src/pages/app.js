@@ -294,7 +294,10 @@ async function nextNumero(societeId, type){
   await window.stSet(key, c);
   const year = new Date().getFullYear();
   const codes = {devis:'DEV', facture:'FAC', intervention:'RAP', bonCommande:'BC'};
-  return `${codes[type]}-${year}-${String(c[type]).padStart(4,'0')}`;
+  /* Six chiffres, comme `numero_suivant_interne` en base. Ce repli n'attribue
+     plus rien depuis la fermeture de `kv_store`, mais un numéro d'une autre
+     largeur serait un faux indice le jour où quelqu'un en retrouverait un. */
+  return `${codes[type]}-${year}-${String(c[type]).padStart(6,'0')}`;
 }
 async function nextSAVNumero(societeId){
   const key = 'counters:' + societeId;

@@ -85,7 +85,7 @@ suite("Numérotation des factures", () => {
     const avant = await compteurFacture(societeId, annee);
 
     const emise = await queries.emettreFacture(brouillon.id);
-    expect(emise.numero).toMatch(/^FAC-\d{4}-\d{4}$/);
+    expect(emise.numero).toMatch(/^FAC-\d{4}-\d{6}$/);
     expect(sequence(emise.numero!)).toBe(avant + 1);
 
     // Réémettre est refusé : la référence est déjà partie chez le client.
@@ -101,7 +101,7 @@ suite("Numérotation des factures", () => {
       date: aujourdhui,
       statut: "impayée",
     }, LIGNES_MINIMALES);
-    expect(facture.numero).toMatch(/^FAC-\d{4}-\d{4}$/);
+    expect(facture.numero).toMatch(/^FAC-\d{4}-\d{6}$/);
     expect(facture.statut).toBe("impayée");
   });
 
@@ -245,7 +245,7 @@ suite("Numérotation des factures", () => {
         p_type: "devis",
       });
       expect(error).toBeNull();
-      expect(data).toMatch(/^DEV-\d{4}-\d{4}$/);
+      expect(data).toMatch(/^DEV-\d{4}-\d{6}$/);
     });
 
     it("ne laisse pas atteindre le compteur interne", async () => {
