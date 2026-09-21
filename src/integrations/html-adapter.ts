@@ -28,6 +28,7 @@ import {
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import { montantLigneHt } from "@/api/regles-totaux";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
+import { cibleAPoserLaPiece, ciblesALeverLaPiece } from "@/api/regles-taches";
 import { fusionnerReglages } from "./reglages";
 import { supprimerPieceJointe, televerserPieceJointeBC } from "./pieces-jointes";
 import * as queries from "@/api/queries";
@@ -358,6 +359,7 @@ const CHAMPS_TRADUITS = new Set([
   "piece_a_commander_detail",
   "piece_a_commander_fournisseur",
   "piece_a_commander_date_commande",
+  "piece_recue_le",
   "technicien_commentaire",
   "technicien_dessin",
   "metiers_fait",
@@ -728,7 +730,7 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
  *   valideDirecteur    ⟷  statut_workflow vaut « chiffre » ou « facture »
  */
 
-interface TacheBC {
+export interface TacheBC {
   id: Uuid;
   bon_commande_id: Uuid | null;
   metier: string | null;
@@ -741,8 +743,40 @@ interface TacheBC {
   piece_description: string | null;
   piece_fournisseur: string | null;
   piece_date_commande: string | null;
+  piece_recue_le: string | null;
   sous_traitant_id: Uuid | null;
   date_tache: string | null;
+}
+
+/**
+ * L'état de la pièce, vu du bon.
+ *
+ * Le drapeau dit l'ATTENTE — il suffit qu'une tâche le porte pour que le bon
+ * entier soit en commande. La description, le fournisseur et les dates disent
+ * l'HISTOIRE, et lui survivent : les lire sur la seule tâche encore en attente
+ * faisait disparaître de l'écran, à la seconde où la pièce arrivait, tout ce
+ * qui expliquait les semaines de report.
+ *
+ * Fonction pure, exportée pour être éprouvée sans base.
+ */
+export function etatPieceDuBon(taches: TacheBC[]): {
+  pieceACommander: boolean;
+  pieceACommanderDetail: string;
+  pieceACommanderFournisseur: string;
+  pieceACommanderDateCommande: string;
+  pieceRecueLe: string;
+} {
+  const enAttente = taches.find((t) => t.piece_a_commander);
+  const trace =
+    enAttente ?? taches.find((t) => t.piece_description || t.piece_recue_le);
+
+  return {
+    pieceACommander: !!enAttente,
+    pieceACommanderDetail: trace?.piece_description ?? "",
+    pieceACommanderFournisseur: trace?.piece_fournisseur ?? "",
+    pieceACommanderDateCommande: trace?.piece_date_commande ?? "",
+    pieceRecueLe: trace?.piece_recue_le ?? "",
+  };
 }
 
 /** Noms des sous-traitants, indexés par uuid. L'app les désigne par leur nom. */
@@ -852,7 +886,7 @@ function equipeDuMetier(
 const CHAMPS_TACHE =
   "id, bon_commande_id, metier, statut, validee_le, realisee_le, commentaire," +
   " croquis, piece_a_commander, piece_description, piece_fournisseur," +
-  " piece_date_commande, sous_traitant_id, technicien_id, date_tache";
+  " piece_date_commande, piece_recue_le, sous_traitant_id, technicien_id, date_tache";
 
 /** Complète les bons de commande chargés avec l'état réel du circuit. */
 async function reconstituerWorkflow(
@@ -917,11 +951,7 @@ async function reconstituerWorkflow(
 
     /* Constats du terrain : l'app les porte sur le bon, la base sur la tâche.
        Une pièce signalée sur n'importe quelle tâche concerne le bon entier. */
-    const avecPiece = taches.find((t) => t.piece_a_commander);
-    bc.pieceACommander = !!avecPiece;
-    bc.pieceACommanderDetail = avecPiece?.piece_description ?? "";
-    bc.pieceACommanderFournisseur = avecPiece?.piece_fournisseur ?? "";
-    bc.pieceACommanderDateCommande = avecPiece?.piece_date_commande ?? "";
+    Object.assign(bc, etatPieceDuBon(taches));
 
     const avecCommentaire = taches.find((t) => t.commentaire);
     bc.technicienCommentaire = avecCommentaire?.commentaire ?? "";
@@ -934,23 +964,43 @@ async function reconstituerWorkflow(
       : "";
 
     /* Une date supplémentaire est une tâche de plus sur une autre journée. */
-    const dateOrigine = bc.datePlanifiee as string | undefined;
-    const autresDates = [
-      ...new Set(
-        taches
-          .map((t) => t.date_tache)
-          .filter((d): d is string => !!d && d !== dateOrigine)
-      ),
-    ].sort();
-    bc.datesSupplementaires = autresDates.map((date) => ({
-      date,
-      heure: "08:00",
-      duree: 1,
-      fait: taches
-        .filter((t) => t.date_tache === date)
-        .every((t) => t.statut === "realisee" || t.statut === "validee"),
-    }));
+    bc.datesSupplementaires = datesSupplementairesDuBon(
+      taches,
+      bc.datePlanifiee as string | undefined
+    );
   }
+}
+
+/**
+ * Les journées du bon qui ne sont pas celle de son rendez-vous principal.
+ *
+ * Une tâche SANS date n'en est pas une : elle attend d'être replanifiée, après
+ * un « pièce arrivée » qui a fait tomber le rendez-vous. La compter aurait
+ * remis une vignette sur le calendrier, et le bon serait resté à la fois
+ * « Non planifié » et accroché à ses anciennes journées.
+ *
+ * Fonction pure, exportée pour être éprouvée sans base.
+ */
+export function datesSupplementairesDuBon(
+  taches: TacheBC[],
+  dateOrigine: string | undefined | null
+): { date: string; heure: string; duree: number; fait: boolean }[] {
+  const autresDates = [
+    ...new Set(
+      taches
+        .map((t) => t.date_tache)
+        .filter((d): d is string => !!d && d !== (dateOrigine || undefined))
+    ),
+  ].sort();
+
+  return autresDates.map((date) => ({
+    date,
+    heure: "08:00",
+    duree: 1,
+    fait: taches
+      .filter((t) => t.date_tache === date)
+      .every((t) => t.statut === "realisee" || t.statut === "validee"),
+  }));
 }
 
 /**
@@ -1034,13 +1084,21 @@ async function appliquerWorkflow(
     .map((d) => d.date)
     .filter((d) => d && !datesAvant.has(d));
 
+  /* Un bon qui repasse de « non planifié » à « planifié » peut traîner des
+     tâches dé-datées, laissées par « pièce arrivée » : elles attendent ce
+     rendez-vous. Sans ce drapeau, le garde-fou ci-dessous sortirait avant de
+     les avoir vues, puisque poser une vignette sur le calendrier ne coche
+     aucun métier et ne déclare aucune équipe. */
+  const bonReplanifie = !avant.datePlanifiee && !!valeur.datePlanifiee;
+
   if (
     !metiersCoches.length &&
     !dateFranchie &&
     !terrainModifie &&
     !stModifie &&
     !equipeDeclaree &&
-    !datesAjoutees.length
+    !datesAjoutees.length &&
+    !bonReplanifie
   ) {
     return;
   }
@@ -1050,8 +1108,13 @@ async function appliquerWorkflow(
      pas de colonne et étant lui-même dérivé des tâches. */
   const { data, error } = await dyn()
     .from("planning_taches")
-    .select("id, metier, statut, date_tache, technicien_id")
-    .eq("bon_commande_id", bcUuid);
+    .select("id, metier, statut, date_tache, technicien_id, piece_a_commander")
+    .eq("bon_commande_id", bcUuid)
+    /* Sans tri, PostgREST rend les lignes dans l'ordre qui l'arrange : la
+       « première tâche » désignait donc une tâche différente d'un appel à
+       l'autre, et le constat du terrain atterrissait au hasard. */
+    .order("date_tache", { ascending: true, nullsFirst: false })
+    .order("cree_le", { ascending: true });
 
   if (error) {
     console.error("Circuit de validation : lecture des tâches impossible", error);
@@ -1063,6 +1126,7 @@ async function appliquerWorkflow(
     statut: string | null;
     date_tache: string | null;
     technicien_id: Uuid | null;
+    piece_a_commander: boolean | null;
   }[];
 
   /* L'app historique ne crée pas de tâche : elle coche un métier sur le bon.
@@ -1095,6 +1159,7 @@ async function appliquerWorkflow(
       statut: creee.statut,
       date_tache: date,
       technicien_id: (creee.technicien_id as Uuid | null) ?? null,
+      piece_a_commander: false,
     });
     return creee.id;
   }
@@ -1134,30 +1199,54 @@ async function appliquerWorkflow(
       }
     }
 
-    /* Les constats vont sur la tâche du bon. La pièce est signalée pour
-       l'ensemble : on la porte sur la première tâche, qui suffit à la faire
-       remonter dans « Pièces en commande ». */
+    /* Poser une pièce et la lever ne visent pas la même cible.
+
+       POSER concerne une tâche : celle où le technicien se trouve. LEVER
+       concerne le bon entier, parce que la lecture répond « pièce en commande »
+       dès qu'UNE tâche porte le drapeau. Une levée écrite sur la seule première
+       tâche laissait donc le bon dans « Pièces en commande » avec son badge, et
+       le même écart faisait atterrir « commandée le… » sur une autre tâche que
+       la porteuse — la date ne se relisait jamais. La symétrie serait ici une
+       faute de raisonnement. */
     if (terrainModifie) {
-      const cible =
+      if (valeur.pieceACommander) {
+        const cible =
+          cibleAPoserLaPiece(taches) ??
+          (await tachePourMetier(
+            (valeur.metiers as string[])?.[0] ?? (valeur.metier as string) ?? null
+          ));
+        if (cible) {
+          await queries.updateTache(cible, {
+            piece_a_commander: true,
+            piece_description: (valeur.pieceACommanderDetail as string) || null,
+            piece_fournisseur: (valeur.pieceACommanderFournisseur as string) || null,
+            piece_date_commande:
+              (valeur.pieceACommanderDateCommande as string) || null,
+          });
+        }
+      } else {
+        for (const id of ciblesALeverLaPiece(taches)) {
+          await queries.updateTache(id, {
+            piece_a_commander: false,
+            piece_recue_le: new Date().toISOString(),
+          });
+        }
+      }
+
+      /* Le commentaire et le croquis restent au terrain : une seule tâche, et
+         désormais toujours la même, la requête étant triée. */
+      const cibleConstats =
         taches[0]?.id ??
         (await tachePourMetier(
           (valeur.metiers as string[])?.[0] ?? (valeur.metier as string) ?? null
         ));
-
-      if (cible) {
-        const maj: Record<string, unknown> = {
-          piece_a_commander: !!valeur.pieceACommander,
-          piece_description: (valeur.pieceACommanderDetail as string) || null,
-          piece_fournisseur: (valeur.pieceACommanderFournisseur as string) || null,
-          piece_date_commande:
-            (valeur.pieceACommanderDateCommande as string) || null,
-        };
+      if (cibleConstats) {
+        const maj: Record<string, unknown> = {};
         const commentaire = valeur.technicienCommentaire as string | undefined;
         if (commentaire !== undefined) maj.commentaire = commentaire || null;
         const croquis = valeur.technicienDessin as string | null | undefined;
         if (croquis !== undefined) maj.croquis = croquis || null;
-
-        await queries.updateTache(cible, maj);
+        if (Object.keys(maj).length) await queries.updateTache(cibleConstats, maj);
       }
     }
 
@@ -1197,6 +1286,25 @@ async function appliquerWorkflow(
         if ((tache.technicien_id ?? null) === (voulue ?? null)) continue;
         await queries.updateTache(tache.id, { technicien_id: voulue });
         tache.technicien_id = voulue;
+      }
+    }
+
+    /* Une tâche sans date attend un rendez-vous : quand le bon en reçoit un,
+       c'est elle qui le prend.
+
+       Sans cela, `tachesAcreer` — qui compare des couples (jour, métier) — ne
+       la reconnaîtrait pas et lui créerait une jumelle, laissant traîner la
+       tâche dé-datée par « pièce arrivée » avec son constat et son croquis. */
+    const dateDuBon = (valeur.datePlanifiee as string) || "";
+    if (dateDuBon) {
+      const parMetier = (valeur.scheduleParMetier ?? {}) as Record<
+        string,
+        { datePlanifiee?: string } | undefined
+      >;
+      for (const tache of taches.filter((t) => !t.date_tache)) {
+        const date = parMetier[tache.metier ?? ""]?.datePlanifiee || dateDuBon;
+        await queries.updateTache(tache.id, { date_tache: date });
+        tache.date_tache = date;
       }
     }
 
