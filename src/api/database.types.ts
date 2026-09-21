@@ -115,6 +115,7 @@ export type Database = {
           cree_le: string
           designation: string
           id: string
+          metier: string | null
           montant_ht: number | null
           position: number
           prix_unitaire: number
@@ -132,6 +133,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          metier?: string | null
           montant_ht?: number | null
           position?: number
           prix_unitaire?: number
@@ -149,6 +151,7 @@ export type Database = {
           cree_le?: string
           designation?: string
           id?: string
+          metier?: string | null
           montant_ht?: number | null
           position?: number
           prix_unitaire?: number
@@ -1479,6 +1482,7 @@ export type Database = {
           designation: string
           devis_id: string
           id: string
+          metier: string | null
           montant_ht: number | null
           position: number
           prix_unitaire: number
@@ -1496,6 +1500,7 @@ export type Database = {
           designation?: string
           devis_id: string
           id?: string
+          metier?: string | null
           montant_ht?: number | null
           position?: number
           prix_unitaire?: number
@@ -1513,6 +1518,7 @@ export type Database = {
           designation?: string
           devis_id?: string
           id?: string
+          metier?: string | null
           montant_ht?: number | null
           position?: number
           prix_unitaire?: number
@@ -1781,6 +1787,7 @@ export type Database = {
           designation: string
           facture_id: string
           id: string
+          metier: string | null
           montant_ht: number | null
           position: number
           prix_unitaire: number
@@ -1799,6 +1806,7 @@ export type Database = {
           designation?: string
           facture_id: string
           id?: string
+          metier?: string | null
           montant_ht?: number | null
           position?: number
           prix_unitaire?: number
@@ -1817,6 +1825,7 @@ export type Database = {
           designation?: string
           facture_id?: string
           id?: string
+          metier?: string | null
           montant_ht?: number | null
           position?: number
           prix_unitaire?: number
@@ -5428,6 +5437,8 @@ export type Database = {
           cree_le: string | null
           designation: string | null
           id: string | null
+          metier: string | null
+          montant_ht: number | null
           position: number | null
           prix_unitaire: number | null
           quantite: number | null
@@ -5444,6 +5455,8 @@ export type Database = {
           cree_le?: string | null
           designation?: string | null
           id?: string | null
+          metier?: string | null
+          montant_ht?: never
           position?: number | null
           prix_unitaire?: never
           quantite?: number | null
@@ -5460,6 +5473,8 @@ export type Database = {
           cree_le?: string | null
           designation?: string | null
           id?: string | null
+          metier?: string | null
+          montant_ht?: never
           position?: number | null
           prix_unitaire?: never
           quantite?: number | null
