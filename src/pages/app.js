@@ -13662,7 +13662,6 @@ function renderSalarieListHTML(list){
   return list.map(s=>{
     const habilitationsAlerte = habilitationsDuSalarie(s.id).filter(h=>{ const j=joursAvant(h.dateExpiration); return j!=null && j<=30; });
     const carteBtpAlerte = alerteEcheance(s.carteBtpValidite);
-    const visiteAlerte = alerteEcheance(s.visiteMedicaleProchaine);
     const today = todayISO();
     const absenceEnCours = (s.absences||[]).find(a=>a.dateDebut<=today && a.dateFin>=today);
     /* Tant que les dossiers ne sont pas revenus, pas de badge : afficher
@@ -13672,7 +13671,7 @@ function renderSalarieListHTML(list){
     return `<div class="card">
       <div class="card-row">
         <div style="flex:1; min-width:0;">
-          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte||visiteAlerte? '<span class="badge warn" style="margin-left:6px;">⚠ à vérifier</span>':''}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc([...dossier.manquants.map(t=>t.libelle), dossier.manqueMedical? 'Suivi médical' : ''].filter(Boolean).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}${s.profileId? '' : '<span class="badge warn" style="margin-left:6px;" title="Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}</div>
+          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte? `<span class="badge warn" style="margin-left:6px;" title="${esc([carteBtpAlerte? 'Carte BTP' : '', habilitationsAlerte.length? `${habilitationsAlerte.length} habilitation(s)` : ''].filter(Boolean).join(', '))}">⚠ à vérifier</span>`:''}${badgeVisiteMedicaleListe(s.id)}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc([...dossier.manquants.map(t=>t.libelle), dossier.manqueMedical? 'Suivi médical' : ''].filter(Boolean).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}${s.profileId? '' : '<span class="badge warn" style="margin-left:6px;" title="Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}</div>
           <div class="card-sub">${esc(s.poste||'')}${s.typeContrat? ' · '+esc(s.typeContrat):''}${s.technicienId? ' · 🔧 équipe liée':''}</div>
           <div class="card-sub">${s.telephone? '📞 '+esc(s.telephone):''}${s.email? ' · ✉ '+esc(s.email):''}</div>
         </div>
@@ -14114,6 +14113,37 @@ function etatVisiteBadge(salarieId){
   if(info.etat === 'aJour') return `<span class="card-sub">Prochaine le ${fmtDate(echeance)}</span>`;
   return `<span class="badge danger" title="Aucune échéance connue : rien ne préviendra">Aucun suivi</span>`;
 }
+/**
+ * Le suivi médical, dit en un coup d'œil dans la liste des collaborateurs.
+ *
+ * L'information existait — deux dates sur la fiche, un registre complet plus
+ * bas — mais la liste n'en montrait rien : un « ⚠ à vérifier » générique,
+ * partagé avec la carte BTP et les habilitations, qui n'apprenait pas ce qui
+ * n'allait pas. Or c'est en parcourant la liste qu'on décide qui convoquer.
+ *
+ * Quatre états et non trois : « aucun suivi » n'est pas « à jour ». Un salarié
+ * dont on ignore l'échéance vaut, pour l'inspection du travail, un salarié non
+ * suivi — et c'est le cas le plus fréquent en pratique.
+ *
+ * Le seuil vient de Paramètres › RH (`visiteMedicale`, 45 jours par défaut) et
+ * non d'un 60 codé en dur : il est déjà réglable, et deux seuils pour la même
+ * échéance finiraient par se contredire.
+ */
+function badgeVisiteMedicaleListe(salarieId){
+  const info = etatVisiteDuSalarie(salarieId);
+  const echeance = echeanceVisite(salarieId);
+  const commun = 'margin-left:6px;';
+  if(info.etat === 'depassee'){
+    return `<span class="badge danger" style="${commun}" title="Visite médicale dépassée depuis le ${fmtDate(echeance)}">🩺 Visite expirée</span>`;
+  }
+  if(info.etat === 'bientot'){
+    return `<span class="badge warn" style="${commun}" title="Prochaine visite médicale le ${fmtDate(echeance)}">🩺 À renouveler (${info.jours} j)</span>`;
+  }
+  if(info.etat === 'aJour'){
+    return `<span class="badge success" style="${commun}" title="Prochaine visite médicale le ${fmtDate(echeance)}">🩺 À jour</span>`;
+  }
+  return `<span class="badge danger" style="${commun}" title="Aucune échéance connue : rien ne préviendra">🩺 Aucun suivi</span>`;
+}
 function pastilleVisiteRh(salarieId){
   const info = etatVisiteDuSalarie(salarieId);
   if(info.etat === 'inconnue') return `<span class="doc-rh-pastille manquant" title="Aucune visite enregistrée">✕</span>`;
@@ -14514,7 +14544,9 @@ function salarieForm(){
       <div class="field"><label>N° Carte BTP</label><input type="text" id="sal_carteBtpNumero" value="${esc(e.carteBtpNumero)}"></div>
       <div class="field"><label>Validité carte BTP</label><input type="date" id="sal_carteBtpValidite" value="${e.carteBtpValidite||''}"></div>
       <div class="field"><label>Dernière visite médicale</label><input type="date" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate||''}" disabled style="background:var(--surface-2);"></div>
-      <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}" disabled style="background:var(--surface-2);"><div class="card-sub" style="margin-top:4px;">Tenues par le registre des visites, plus bas — la base les réécrit à chaque enregistrement.</div></div>
+      <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}" disabled style="background:var(--surface-2);">
+        <div style="margin-top:6px;">${e.id? badgeVisiteMedicaleListe(e.id) : '<span class="card-sub">Enregistrez la fiche, puis la première visite au registre ci-dessous.</span>'}</div>
+        <div class="card-sub" style="margin-top:4px;">Tenues par le registre des visites, plus bas — la base les réécrit à chaque enregistrement. L'échéance proposée suit le régime de suivi (art. R.4624-16 et suivants), et reste modifiable : c'est le médecin du travail qui arrête la date.</div></div>
     </div>
     <div class="section-title" style="margin-top:14px;">⚡ Habilitations & certifications</div>
     <div id="habilitationsZone">${habilitationsZoneHTML(e)}</div>
@@ -16880,6 +16912,7 @@ Object.assign(window, {
   avoirsDisponiblesPour,
   badgeAvoirHTML,
   badgeClass,
+  badgeVisiteMedicaleListe,
   badgeWorkflow,
   bandeauTacheHTML,
   barreFiltresFactures,
