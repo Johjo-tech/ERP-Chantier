@@ -22,6 +22,11 @@
 export interface LigneChapitrable {
   type?: string | null;
   designation?: string | null;
+  /**
+   * Le métier tranché sur ce chapitre. Absent ou `null` : il se lit sur le
+   * titre. `METIER_AUCUN` : le chapitre n'en désigne aucun, délibérément.
+   */
+  metier?: string | null;
 }
 
 /** Une ligne de travaux, avec ce qu'il faut pour l'annoncer et la chiffrer. */
@@ -32,7 +37,7 @@ export interface LigneTravail extends LigneChapitrable {
 }
 
 /** Comment le métier a été reconnu — l'écran le montre, l'utilisateur juge. */
-export type CertitudeMetier = "exact" | "contenu" | "approchant";
+export type CertitudeMetier = "choisi" | "exact" | "contenu" | "approchant";
 
 export interface MetierReconnu {
   metier: string;
@@ -49,6 +54,15 @@ export interface MetiersLus {
   /** Les chapitres qui ne désignent aucun métier : ils structurent, c'est tout. */
   ignores: string[];
 }
+
+/**
+ * Ce chapitre ne désigne aucun métier, et c'est un choix — pas un oubli.
+ *
+ * La chaîne vide ne conviendrait pas : `enfantsIdentiques` compare les lignes
+ * sur `String(v ?? "")`, où `null` et `""` sont le même texte. Un refus écrit
+ * `""` sur un chapitre dont la base porte `NULL` ne s'enregistrerait jamais.
+ */
+export const METIER_AUCUN = "(aucun)";
 
 /** Fautes de frappe tolérées : « PLOMBEIRE » est à 2 de « PLOMBERIE ». */
 export const DISTANCE_MAX = 2;
@@ -210,6 +224,71 @@ export function metierDuChapitre(
   return null;
 }
 
+/**
+ * Le métier d'un chapitre : celui qu'on a choisi, sinon celui que dit le titre.
+ *
+ * C'est le point d'entrée unique, et il vit ici plutôt que dans l'écran parce
+ * que trois lecteurs dérivent des mêmes lignes — les cases du bon, les cartes
+ * du planning, les tâches à créer. Une précédence posée dans le rendu HTML les
+ * ferait diverger, et c'est très exactement la divergence qui a rendu une tâche
+ * définitivement invalidable sur BC-2026-0866.
+ *
+ * Un choix est honoré même s'il ne figure plus au référentiel : c'est la parole
+ * de l'utilisateur, et `referentielMetiers` enseigne déjà qu'un métier employé
+ * compte autant qu'un métier déclaré. Un métier retiré des Réglages ne doit pas
+ * disparaître d'un vieux document.
+ */
+export function metierDeLaLigne(
+  ligne: LigneChapitrable,
+  connus: (string | null | undefined)[]
+): MetierReconnu | null {
+  const chapitre = (ligne.designation ?? "").trim();
+  const choisi = (ligne.metier ?? "").trim();
+
+  if (!choisi) return metierDuChapitre(chapitre, connus);
+  if (memeMetier(choisi, METIER_AUCUN)) return null;
+
+  return { metier: choisi, certitude: "choisi", chapitre };
+}
+
+/** Ce que la liste déroulante d'un chapitre affiche, et d'où ça vient. */
+export interface MetierAffiche {
+  /** La sélection : un métier, `METIER_AUCUN`, ou `""` si le titre est muet. */
+  valeur: string;
+  /** Vrai tant que personne n'a tranché : la valeur vient du titre. */
+  devine: boolean;
+  /** Comment elle a été obtenue ; `null` quand rien ne la désigne. */
+  certitude: CertitudeMetier | null;
+}
+
+/**
+ * Ce que montre la liste déroulante d'un chapitre.
+ *
+ * Séparé de `metierDeLaLigne` parce que l'écran a besoin d'une chose que le
+ * domaine n'a pas à connaître : la différence entre « rien n'est reconnu » et
+ * « on a refusé ». Les deux ne valent aucun métier, mais la première invite à
+ * choisir et la seconde non — et `METIER_AUCUN` doit rester sélectionné dans
+ * la liste, sans quoi le refus paraîtrait s'être effacé tout seul.
+ */
+export function metierAffiche(
+  ligne: LigneChapitrable,
+  connus: (string | null | undefined)[]
+): MetierAffiche {
+  const choisi = (ligne.metier ?? "").trim();
+
+  if (choisi) {
+    const refus = memeMetier(choisi, METIER_AUCUN);
+    return {
+      valeur: refus ? METIER_AUCUN : choisi,
+      devine: false,
+      certitude: refus ? null : "choisi",
+    };
+  }
+
+  const lu = metierDuChapitre(ligne.designation, connus);
+  return { valeur: lu?.metier ?? "", devine: true, certitude: lu?.certitude ?? null };
+}
+
 /** Une tâche déjà posée, réduite à ce qui la rend reconnaissable. */
 export interface TachePosee {
   metier?: string | null;
@@ -268,6 +347,9 @@ export function tachesAcreer(
  * Seules les lignes de type `chapitre` sont lues : une désignation de ligne
  * (« Remplacement siphon ») suggérerait un métier bien plus souvent qu'elle ne
  * le désignerait, et une déduction fausse coûte plus cher qu'une case à cocher.
+ *
+ * Le métier tranché sur un chapitre l'emporte sur son titre — voir
+ * `metierDeLaLigne`. Retaper le titre ne défait donc pas un choix.
  */
 export function metiersDesChapitres(
   lignes: LigneChapitrable[] | null | undefined,
@@ -280,18 +362,21 @@ export function metiersDesChapitres(
   for (const ligne of lignes ?? []) {
     if ((ligne.type ?? "ligne") !== "chapitre") continue;
 
+    /* Pas de garde sur le titre : un chapitre qu'on vient de créer n'en a pas
+       encore, et le métier qu'on y choisit doit compter tout de suite. Sans
+       cela, cocher PLOMBERIE sur un chapitre vierge ne ferait rien paraître,
+       et on le cocherait une seconde fois à la main. */
     const titre = (ligne.designation ?? "").trim();
-    if (!titre) continue;
-
-    const trouve = metierDuChapitre(titre, connus);
+    const trouve = metierDeLaLigne(ligne, connus);
     if (!trouve) {
-      ignores.push(titre);
+      if (titre) ignores.push(titre);
       continue;
     }
     if (metiers.some((m) => memeMetier(m, trouve.metier))) continue;
 
     metiers.push(trouve.metier);
-    origines[trouve.metier] = titre;
+    // Sans titre, il n'y a pas d'origine à montrer : le métier a été choisi.
+    if (titre) origines[trouve.metier] = titre;
   }
 
   return { metiers, origines, ignores };
@@ -358,7 +443,7 @@ export function travauxParMetier(
       const titre = (ligne.designation ?? "").trim();
       chapitreCourant = titre || null;
       // Un chapitre qu'aucun métier ne réclame structure quand même le bon.
-      metierCourant = titre ? (metierDuChapitre(titre, connus)?.metier ?? null) : null;
+      metierCourant = metierDeLaLigne(ligne, connus)?.metier ?? null;
       continue;
     }
 

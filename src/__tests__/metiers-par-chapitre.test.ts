@@ -10,7 +10,10 @@
 import { describe, it, expect } from "vitest";
 import {
   DISTANCE_MAX,
+  METIER_AUCUN,
   memeMetier,
+  metierAffiche,
+  metierDeLaLigne,
   metierDuChapitre,
   metiersDesChapitres,
   normaliserLibelle,
@@ -228,5 +231,118 @@ describe("Référentiel des métiers d'une société", () => {
 
   it("écarte les entrées vides", () => {
     expect(referentielMetiers(["PEINTURE", "", null, "   "], [undefined])).toEqual(["PEINTURE"]);
+  });
+});
+
+describe("Le métier tranché sur un chapitre", () => {
+  /* Un chapitre « SALLE DE BAIN » ne désigne aucun métier connu : la
+     reconnaissance ne pouvait rien en dire, et rien ne permettait de le
+     corriger. C'est ce trou que le choix explicite vient combler. */
+  it("l'emporte sur ce que dit le titre", () => {
+    const lu = metierDeLaLigne(
+      { type: "chapitre", designation: "PEINTURE SEJOUR", metier: "PLOMBERIE" },
+      CONNUS
+    );
+    expect(lu).toEqual({
+      metier: "PLOMBERIE",
+      certitude: "choisi",
+      chapitre: "PEINTURE SEJOUR",
+    });
+  });
+
+  it("nomme un métier que le titre ne désignait pas", () => {
+    expect(metierDuChapitre("SALLE DE BAIN", CONNUS)).toBeNull();
+    expect(metierDeLaLigne({ designation: "SALLE DE BAIN", metier: "PLOMBERIE" }, CONNUS)?.metier)
+      .toBe("PLOMBERIE");
+  });
+
+  /* Un métier retiré des Réglages ne doit pas disparaître d'un vieux document :
+     c'est la même raison qui fait que `referentielMetiers` compte les métiers
+     employés autant que les métiers déclarés. */
+  it("est honoré même s'il ne figure plus au référentiel", () => {
+    expect(metierDeLaLigne({ designation: "DIVERS", metier: "MENUISERIE" }, CONNUS)?.metier)
+      .toBe("MENUISERIE");
+  });
+
+  it("refuse tout métier quand on a choisi « aucun »", () => {
+    expect(metierDeLaLigne({ designation: "PEINTURE SEJOUR", metier: METIER_AUCUN }, CONNUS))
+      .toBeNull();
+  });
+
+  /* L'app historique écrit `""` pour « non renseigné », et un aller-retour en
+     base peut rendre `null`. Si l'un des trois valait refus, tout chapitre
+     jamais tranché cesserait d'être lu — les 830 bons d'un coup. */
+  it("déduit encore quand rien n'a été tranché, sous ses trois formes", () => {
+    for (const vide of ["", null, undefined]) {
+      expect(metierDeLaLigne({ designation: "PEINTURE SEJOUR", metier: vide }, CONNUS)?.metier)
+        .toBe("PEINTURE");
+    }
+  });
+
+  it("ne lit pas le métier posé sur une ligne ordinaire", () => {
+    const lignes = [{ type: "ligne", designation: "Remplacement siphon", metier: "PLOMBERIE" }];
+    expect(metiersDesChapitres(lignes, CONNUS).metiers).toEqual([]);
+  });
+
+  it("survit à un titre retapé — un choix ne se défait qu'explicitement", () => {
+    const ligne = { type: "chapitre", designation: "PEINTURE SEJOUR", metier: "PLOMBERIE" };
+    ligne.designation = "CARRELAGE CUISINE";
+    expect(metierDeLaLigne(ligne, CONNUS)?.metier).toBe("PLOMBERIE");
+  });
+
+  it("compte dès qu'il est choisi, avant même que le chapitre ait un titre", () => {
+    const lus = metiersDesChapitres([{ type: "chapitre", designation: "", metier: "SOL" }], CONNUS);
+    expect(lus.metiers).toEqual(["SOL"]);
+    // Rien à montrer comme origine : ce métier n'a pas été lu, il a été choisi.
+    expect(lus.origines).toEqual({});
+  });
+
+  it("laisse un chapitre refusé parmi les ignorés", () => {
+    const lus = metiersDesChapitres(
+      [{ type: "chapitre", designation: "PEINTURE SEJOUR", metier: METIER_AUCUN }],
+      CONNUS
+    );
+    expect(lus.metiers).toEqual([]);
+    expect(lus.ignores).toEqual(["PEINTURE SEJOUR"]);
+  });
+});
+
+describe("Ce qu'affiche la liste déroulante d'un chapitre", () => {
+  it("montre la déduction en la disant devinée", () => {
+    expect(metierAffiche({ designation: "PEINTURE SEJOUR" }, CONNUS)).toEqual({
+      valeur: "PEINTURE",
+      devine: true,
+      certitude: "contenu",
+    });
+  });
+
+  it("montre le choix en le disant tranché", () => {
+    expect(metierAffiche({ designation: "PEINTURE SEJOUR", metier: "SOL" }, CONNUS)).toEqual({
+      valeur: "SOL",
+      devine: false,
+      certitude: "choisi",
+    });
+  });
+
+  /* Sans quoi le refus paraîtrait s'être effacé tout seul : la liste
+     retomberait sur « — Déduit du titre — » et la déduction semblerait reprise. */
+  it("garde « aucun » sélectionné quand on a refusé", () => {
+    expect(metierAffiche({ designation: "PEINTURE SEJOUR", metier: METIER_AUCUN }, CONNUS)).toEqual({
+      valeur: METIER_AUCUN,
+      devine: false,
+      certitude: null,
+    });
+  });
+
+  it("ne propose rien sur un titre qui ne dit rien", () => {
+    expect(metierAffiche({ designation: "SALLE DE BAIN" }, CONNUS)).toEqual({
+      valeur: "",
+      devine: true,
+      certitude: null,
+    });
+  });
+
+  it("signale une reconnaissance approchante, la plus permissive des trois", () => {
+    expect(metierAffiche({ designation: "PLOMBEIRE" }, CONNUS).certitude).toBe("approchant");
   });
 });

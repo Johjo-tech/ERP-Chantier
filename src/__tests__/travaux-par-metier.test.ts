@@ -13,6 +13,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  METIER_AUCUN,
   travauxDeLaCarte,
   travauxParMetier,
   type LigneTravail,
@@ -205,5 +206,69 @@ describe("Les travaux que porte une carte", () => {
 
   it("ne rend rien à un métier que le bon ne porte pas", () => {
     expect(travauxDeLaCarte(BON, CONNUS, "CARRELAGE", "PEINTURE")).toEqual([]);
+  });
+});
+
+describe("Un chapitre dont le métier a été tranché", () => {
+  /* La carte du planning doit suivre la même précédence que les cases du bon.
+     Si elle ne la suivait pas, corriger un chapitre changerait les métiers
+     annoncés sans déplacer les travaux : l'équipe SOL arriverait avec la liste
+     de la peinture. */
+  it("emporte ses travaux sur la carte du métier choisi", () => {
+    const lignes: LigneTravail[] = [
+      { type: "chapitre", designation: "PEINTURE CHAMBRE 1", metier: "SOL" },
+      travail("Ragréage", 12, "m²"),
+    ];
+    const groupes = travauxParMetier(lignes, CONNUS);
+    expect(groupes.map((g) => g.metier)).toEqual(["SOL"]);
+    expect(groupes[0].lignes.map((l) => l.designation)).toEqual(["Ragréage"]);
+  });
+
+  /* Une tâche vaut bon × métier × jour, jamais bon × chapitre : deux chapitres
+     ramenés au même métier sont une seule venue d'équipe, mais leurs travaux
+     restent séparés — c'est la seule indication de pièce que porte le bon. */
+  it("fusionne avec un autre chapitre du même métier, sans mêler leurs blocs", () => {
+    const lignes: LigneTravail[] = [
+      { type: "chapitre", designation: "SALLE DE BAIN", metier: "PLOMBERIE" },
+      travail("Remplacement siphon"),
+      { type: "chapitre", designation: "CUISINE", metier: "PLOMBERIE" },
+      travail("Robinet mitigeur"),
+    ];
+    const groupes = travauxParMetier(lignes, CONNUS);
+    expect(groupes).toHaveLength(1);
+    expect(groupes[0].metier).toBe("PLOMBERIE");
+    expect(groupes[0].chapitres.map((c) => c.chapitre)).toEqual(["SALLE DE BAIN", "CUISINE"]);
+  });
+
+  /* `null` (hors chapitre) n'est pas un métier, et un chapitre refusé n'est pas
+     « hors chapitre » : les mêler ferait paraître les travaux d'un chapitre
+     nommé sur la carte du premier métier, où personne ne les cherche. */
+  it("refusé, ne rejoint pas les lignes posées avant tout chapitre", () => {
+    const lignes: LigneTravail[] = [
+      travail("Dépose bâche"),
+      { type: "chapitre", designation: "ARTICLE BPU", metier: METIER_AUCUN },
+      travail("Forfait déplacement"),
+    ];
+    const groupes = travauxParMetier(lignes, CONNUS);
+    expect(groupes).toHaveLength(1);
+    expect(groupes[0].metier).toBeNull();
+    expect(groupes[0].chapitres.map((c) => c.chapitre)).toEqual([null, "ARTICLE BPU"]);
+  });
+
+  /* Les 830 bons de la production ne portent aucun métier tranché : leur
+     lecture doit rester au bit près celle d'avant, sans quoi la colonne neuve
+     aurait déplacé des travaux que personne n'a touchés. */
+  it("laisse un bon d'avant la colonne strictement inchangé", () => {
+    const lignes: LigneTravail[] = [
+      travail("Protection sols"),
+      chapitre("PEINTURE TOUT LE LOGEMENT"),
+      travail("Deux couches", 60, "m²"),
+      chapitre("SOL CHAMBRE 1"),
+      travail("Pose lino", 12, "m²"),
+    ];
+    const groupes = travauxParMetier(lignes, CONNUS);
+    expect(groupes.map((g) => g.metier)).toEqual([null, "PEINTURE", "SOL"]);
+    expect(groupes[1].lignes.map((l) => l.designation)).toEqual(["Deux couches"]);
+    expect(groupes[2].lignes.map((l) => l.designation)).toEqual(["Pose lino"]);
   });
 });
