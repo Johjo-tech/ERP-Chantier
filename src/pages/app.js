@@ -1287,37 +1287,6 @@ function renderYearlyComparisonSVG(yearly){
     </g>`;
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:auto; display:block;">${bars}${legend}</svg>`;
 }
-function computeStatusBreakdown(factures){
-  const counts = {payée:0, partiel:0, impayée:0};
-  factures.forEach(f=>{
-    const st = reglementStatutFacture(f);
-    if(st.cle==='reglee') counts.payée++;
-    else if(st.cle==='partiellement_reglee') counts.partiel++;
-    else counts.impayée++;
-  });
-  return counts;
-}
-function renderDonutSVG(counts){
-  const total = counts.payée+counts.partiel+counts.impayée;
-  if(!total) return '<div class="empty">Pas encore de factures.</div>';
-  const colors = {payée:'#12875A', partiel:'#8A6D00', impayée:'#D9363E'};
-  const labels = {payée:'Payées', partiel:'Partielles', impayée:'Impayées'};
-  const r = 52, cx = 62, cy = 62, strokeW = 20;
-  const circumference = 2*Math.PI*r;
-  let cumulative = 0, circles = '';
-  ['payée','partiel','impayée'].forEach(key=>{
-    const val = counts[key];
-    if(!val) return;
-    const frac = val/total;
-    const dash = frac*circumference;
-    circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[key]}" stroke-width="${strokeW}" stroke-dasharray="${dash.toFixed(1)} ${(circumference-dash).toFixed(1)}" stroke-dashoffset="${(-cumulative).toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`;
-    cumulative += dash;
-  });
-  const legend = ['payée','partiel','impayée'].filter(k=>counts[k]>0).map(k=>
-    `<div style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-dim);"><span style="width:10px; height:10px; border-radius:3px; background:${colors[k]}; display:inline-block; flex-shrink:0;"></span>${labels[k]} <b style="color:var(--text); margin-left:2px;">${counts[k]}</b></div>`
-  ).join('');
-  return `<div style="display:flex; align-items:center; gap:22px;"><svg viewBox="0 0 124 124" style="width:110px; height:110px; flex-shrink:0;">${circles}</svg><div style="display:flex; flex-direction:column; gap:8px;">${legend}</div></div>`;
-}
 function relativeTime(iso){
   if(!iso) return '';
   const diff = Date.now() - new Date(iso).getTime();
@@ -1329,11 +1298,6 @@ function relativeTime(iso){
   const d = Math.floor(h/24);
   if(d < 7) return `il y a ${d} j`;
   return fmtDate(iso.slice(0,10));
-}
-function initials(name){
-  const parts = (name||'').trim().split(/\s+/).filter(Boolean);
-  if(!parts.length) return '?';
-  return parts.slice(0,2).map(w=>w[0]).join('').toUpperCase();
 }
 function buildActivityFeed(soc){
   const events = [];
@@ -2151,15 +2115,6 @@ function bcSelectOptionsPourIntervention(clientNom, current){
   }).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   return '<option value="">— Aucun —</option>' + list.map(b=>`<option value="${b.id}" ${b.id===current?'selected':''}>${esc(b.numeroBC)}${b.client? ' — '+esc(b.client):''}</option>`).join('');
 }
-function interventionSelectOptionsPourBC(clientNom, current){
-  const list = state.interventions.filter(i=>{
-    if(i.societeId!==state.societeId) return false;
-    if(clientNom && i.client!==clientNom) return false;
-    if(i.id===current) return true;
-    return !i.bonCommandeId;
-  }).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  return '<option value="">— Aucun —</option>' + list.map(i=>`<option value="${i.id}" ${i.id===current?'selected':''}>${esc(i.numero)}${i.client? ' — '+esc(i.client):''}</option>`).join('');
-}
 function lienWidgetHTML(depuis, id, clientNom){
   const placeholder = depuis==='intervention' ? 'Rechercher un bon de commande : n°, adresse, n° logement…' : 'Rechercher un rapport : n°, adresse, n° logement…';
   return `<div onclick="event.stopPropagation()" style="position:relative;">
@@ -2306,12 +2261,6 @@ function applyDevisMontant(devisId){
        hériter de ses métiers, et il fallait les recocher un à un. */
     appliquerMetiersDesChapitres();
   }
-}
-function metierSelectOptions(current){
-  return '<option value="">— Non précisé —</option>' + METIERS.map(m=>`<option value="${m.value}" ${m.value===current?'selected':''}>${m.label}</option>`).join('');
-}
-function metierFilterOptions(current){
-  return '<option value="">Tous les métiers</option>' + METIERS.map(m=>`<option value="${m.value}" ${m.value===current?'selected':''}>${m.label}</option>`).join('');
 }
 function metierLabel(value){
   return (METIERS.find(m=>m.value===value)||{}).label || '';
@@ -3012,18 +2961,6 @@ async function deleteItem(type, id){
   /* syncFactureStatut recharge les factures de son côté. */
   if(factureIdToSync) await syncFactureStatut(factureIdToSync);
   renderTab();
-}
-async function updateStatut(type, id, newStatut){
-  const item = state[arrKeyFor(type)].find(x=>x.id===id);
-  if(!item) return;
-  item.statut = newStatut;
-  await window.stSet(type+':'+id, item);
-  await rechargerType(type);
-  renderTab();
-}
-function printItem(){ window.print(); }
-function sousTotalChapitreHTML(total, fmt){
-  return `<tr class="p-subtotal"><td colspan="5">Sous-total HT du chapitre</td><td class="num">${fmt(total)}</td><td></td></tr>`;
 }
 function printableLignesRows(lignes, hidePrices){
   const fmt = hidePrices ? (()=>'•••') : money;
@@ -4321,64 +4258,6 @@ function closeViewIntervention(){
 function closeViewOnBackdrop(ev){
   if(ev.target === ev.currentTarget) closeViewIntervention();
 }
-function voirFactureDepuisDevis(factureId){ goToFacture(factureId); }
-function voirDevisDepuisFacture(devisId){ goToDevis(devisId); }
-function parsePreconisationsEnLignes(texte, fallback){
-  const lignes = (texte||'').split('\n').map(l=>l.trim()).filter(Boolean);
-  if(!lignes.length) return [{type:'ligne', designation: fallback||'', qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()}];
-  return lignes.map(l=>{
-    const m = l.match(/^(.*?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Zµ²³%]*)\s*$/i);
-    if(m) return {type:'ligne', designation: m[1].trim(), qte: parseFloat(m[2].replace(',','.'))||1, unite: m[3]? m[3] : 'u', prixUnitaire:0, tva: tvaDefaut()};
-    return {type:'ligne', designation: l, qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()};
-  });
-}
-function transformerInterventionEn(type, interventionId){
-  const i = state.interventions.find(x=>x.id===interventionId);
-  if(!i) return;
-  const cible = type==='devis' ? state.devis.find(d=>d.interventionId===interventionId) : state.factures.find(f=>f.interventionId===interventionId || (i.bonCommandeId && f.bonCommandeId===i.bonCommandeId));
-  if(cible){
-    showToast(`Ce rapport a déjà été transformé en ${type==='devis'?'devis':'facture'} (${cible.numero}). Ouvrez-${type==='devis'?'le':'la'} directement pour ${type==='devis'?'le':'la'} modifier.`);
-    return;
-  }
-  /* Un rapport rattaché à un bon ne facture pas à côté de lui : il facture le
-     bon, avec son contenu chiffré. Ce chemin forçait jusqu'ici la validation du
-     directeur par un simple drapeau — le bon partait en facturation en restant
-     « en cours » en base, et rien ne disait qu'on avait sauté le circuit.
-     Il emprunte désormais la même porte que tout le monde : la pré-facture. */
-  if(type==='facture' && i.bonCommandeId){
-    const bcLie = state.bonsCommande.find(b=>b.id===i.bonCommandeId);
-    if(bcLie){
-      if(!bcLie.valideDirecteur){
-        const droits = window.actionsFacturation ? window.actionsFacturation() : {};
-        if(!droits.peutFacturerHorsCircuit){
-          showToast('🔗 Ce rapport facture le bon de commande lié '+(bcLie.numeroBC||'')+', dont la pré-facture n\'est pas encore validée.', 'danger', 6000);
-          return;
-        }
-        showToast('🔗 Bon de commande lié '+(bcLie.numeroBC||'')+' : chiffrez-le ici, puis validez — sans passer par le planning si besoin.', 'success', 5000);
-        setTab('bonsCommande');
-        openValidationDirecteurModal(bcLie.id);
-        return;
-      }
-      showToast('🔗 Facturation du bon de commande lié '+(bcLie.numeroBC||'')+' (contenu chiffré du BC).', 'success', 3000);
-      transformerBonCommandeEnFacture(bcLie.id);
-      return;
-    }
-  }
-  setTab(type==='devis' ? 'devis' : 'factures');
-  const designationSuggeree = i.typePanne || '';
-  const lignesSuggerees = (i.rapport && i.rapport.preconisations && i.rapport.preconisations.trim())
-    ? parsePreconisationsEnLignes(i.rapport.preconisations)
-    : [{type:'ligne', designation: (i.rapport && i.rapport.constatations) ? i.rapport.constatations : designationSuggeree, qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()}];
-  const prefill = {
-    client: i.client, adresse: i.adresse, occupant: i.occupant||'', adresseLocataire: i.adresseLocataire||'',
-    interlocuteur: i.interlocuteur||'',
-    logementStatut: i.logementStatut||'', etage: i.etage||'', numeroLogement: i.numeroLogement||'', precisionCommune: i.precisionCommune||'', ancienLocataire: i.ancienLocataire||'',
-    date: todayISO(), lignes: lignesSuggerees,
-    statut:'brouillon', interventionId: i.id
-  };
-  if(type === 'facture') prefill.echeance = '';
-  openForm(type, prefill);
-}
 
 /* ---------- Factures ---------- */
 function renderFactures(){
@@ -4578,19 +4457,6 @@ function filterFactureCritere(cle, valeur){
   rafraichirZoneFactures();
 }
 function filterFacturesList(valeur){ filterFactureCritere('recherche', valeur); }
-function filterFactureConducteur(v){ filterFactureCritere('conducteur', v); }
-function filterFactureLogement(v){ filterFactureCritere('logement', v); }
-function filterFactureInterlocuteur(v){ filterFactureCritere('interlocuteur', v); }
-
-/* Le choix d'interlocuteur appartient au client précédent : on le remet à zéro
-   et on régénère la seule liste dépendante, sans re-rendre tout l'écran. */
-function filterFactureClient(valeur){
-  state.factureClientFilter = valeur;
-  state.factureInterlocuteurFilter = '';
-  const sel = document.getElementById('factureInterlocuteurSelect');
-  if(sel) sel.innerHTML = planningUnschedInterlocuteurOptions('', valeur);
-  rafraichirZoneFactures();
-}
 
 function filterFacturePeriode(valeur){
   state.facturePeriode = valeur;
@@ -6795,25 +6661,6 @@ async function toggleBCMetierFait(bcId, metier){
   await recharger('bonCommande');
   renderTab();
 }
-async function validerBCEtape(bcId, etape){
-  const b = state.bonsCommande.find(x=>x.id===bcId);
-  if(!b) return;
-  /* L'étape directeur engage le montant : elle passe par l'écran qui montre le
-     document et par l'opération qui contrôle, jamais par un enregistrement
-     silencieux. */
-  if(etape==='directeur'){ await openValidationDirecteurModal(bcId); return; }
-
-  /* Même règle que dans la modale : toutes les tâches ou aucune. */
-  try{
-    await window.validerAffaireConducteur(bcId);
-    await recharger('bonCommande', 'facture');
-    renderTab();
-    showToast('Affaire validée par le conducteur.', 'success');
-  }catch(err){
-    console.error('Validation conducteur refusée', err);
-    showToast(err.message || "Validation refusée.");
-  }
-}
 /* `devaliderBC` a été retirée avec son bouton « ↩ Réinitialiser les validations ».
    Elle écrivait `valideConducteur` et `valideDirecteur`, deux champs dérivés des
    tâches et sans colonne : le pont les ignore, le rechargement les recalculait à
@@ -7118,10 +6965,6 @@ function planningNextWeek(){
   state.planningWeekStart = isoDate(d);
   renderTab();
 }
-function planningToday(){
-  state.planningWeekStart = null;
-  renderTab();
-}
 function jumpToWeek(dateVal){
   if(!dateVal) return;
   state.planningWeekStart = isoDate(getMonday(new Date(dateVal+'T00:00:00')));
@@ -7129,10 +6972,6 @@ function jumpToWeek(dateVal){
 }
 function filterPlanningConducteur(value){
   state.planningConducteurFilter = value;
-  renderTab();
-}
-function filterPlanningTechnicien(value){
-  state.planningTechnicienFilter = value;
   renderTab();
 }
 function filterPlanningMetier(value){
@@ -7359,14 +7198,6 @@ function setPlanningView(view){
   if(estSousTraitant() && view!=='soustraitant') return;
   state.planningView = view;
   renderTab();
-}
-function renderPlanningRealiseNonFacture(){
-  const soc = state.societeId;
-  const list = state.bonsCommande.filter(b=>b.societeId===soc && b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
-  return `
-    <div class="card-sub" style="margin-bottom:14px;">Bons de commande ayant franchi toutes les étapes de validation (tâches, conducteur, directeur), pour lesquels aucune facture n'a encore été créée.</div>
-    <div>${list.length? list.map(b=>bonCommandeCardHTML(b, true)).join('') : '<div class="empty">Aucun bon de commande validé en attente de facturation.</div>'}</div>
-  `;
 }
 function renderPlanningEnAttente(mode){
   const soc = state.societeId;
@@ -12268,10 +12099,6 @@ function achatCategorieLabel(key){
   const found = ACHAT_CATEGORIES.find(c=>c.key===key);
   return found ? found.label : key;
 }
-function achatCategorieIcon(key){
-  const found = ACHAT_CATEGORIES.find(c=>c.key===key);
-  return found ? found.icon : '💰';
-}
 function chantierAchatsHTML(c){
   const achats = c.achats || [];
   const filtre = state.chantierAchatsFiltre || '';
@@ -12948,10 +12775,6 @@ function filterVehicules(f){
   state.vehiculeFiltre = f;
   renderTab();
 }
-function setVehiculeVue(v){
-  state.vehiculeVue = v;
-  renderTab();
-}
 function renderVehiculeListeHTML(list){
   if(!list.length) return listeVide('vehicule', 'Aucun véhicule dans cette catégorie.', 'véhicule');
   return `<div class="vehicule-liste-wrap">
@@ -12982,37 +12805,6 @@ function vehiculeTypeLabel(t){
   return {CTTE:'CTTE', VP:'VP', Tourisme:'Tourisme'}[t] || t || '';
 }
 function joursAvantVehicule(dateStr){ return joursAvant(dateStr); }
-function vehiculeCardHTML(v){
-  const dernierEntretien = (v.entretiens||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-  const jCT = joursAvantVehicule(v.prochainCT);
-  const ctAlerte = jCT!=null && jCT<=30 && !v.vendu;
-  const conducteurSal = v.conducteurSalarieId ? state.salaries.find(s=>s.id===v.conducteurSalarieId) : null;
-  return `<div class="vehicule-card ${v.vendu?'is-vendu':''}" onclick="openVehiculeDetail('${jsAttr(v.id)}')">
-    <div class="vehicule-card-top">
-      <div class="vehicule-icon">🚐</div>
-      <div style="flex:1; min-width:0;">
-        <div class="vehicule-card-nom">${esc(v.nom)}</div>
-        <div class="vehicule-card-plate">${esc(v.immatriculation||'—')}</div>
-      </div>
-      ${v.vendu? `<span class="badge">VENDU</span>` : (v.typeVehicule? `<span class="badge info">${esc(vehiculeTypeLabel(v.typeVehicule))}</span>` : '')}
-    </div>
-    <div class="vehicule-mini-badge ${conducteurSal?'is-on':''}" style="margin-bottom:10px;">👤 ${conducteurSal? `${esc(conducteurSal.prenom)} ${esc(conducteurSal.nom)}` : 'Sans conducteur attitré'}</div>
-    ${v.prochainCT && !v.vendu? `<div class="vehicule-ct-row ${ctAlerte?'is-blinking':''}">
-      🔧 Contrôle technique : <strong>${fmtDate(v.prochainCT)}</strong>${ctAlerte? ` <span class="vehicule-ct-tag">${jCT<0?'EXPIRÉ':'DANS '+jCT+' J'}</span>`:''}
-    </div>` : ''}
-    <div class="vehicule-card-specs">
-      <div class="vehicule-spec"><span class="vehicule-spec-icon">⚙️</span> ${esc(v.motorisation)||'—'}</div>
-      <div class="vehicule-spec"><span class="vehicule-spec-icon">🛞</span> ${esc(v.taillePneus)||'—'}</div>
-    </div>
-    <div class="vehicule-card-badges">
-      <span class="vehicule-mini-badge ${v.telepeageNumero?'is-on':''}">🛣️ ${v.telepeageNumero? `${esc(v.telepeageFournisseur||'Télépéage')} · ${esc(v.telepeageNumero)}` : 'Télépéage — non renseigné'}</span>
-      <span class="vehicule-mini-badge ${v.carteCarburantNumero?'is-on':''}">⛽ ${v.carteCarburantNumero? `${esc(v.carteCarburantFournisseur||'Carte carburant')} · ${esc(v.carteCarburantNumero)}` : 'Carte carburant — non renseignée'}</span>
-    </div>
-    <div class="vehicule-card-footer">
-      <span class="card-sub">${v.vendu? `Vendu le ${fmtDate(v.dateVente)}${v.prixVente? ' — '+moneyDisplay(v.prixVente):''}` : (dernierEntretien? 'Dernier entretien : '+fmtDate(dernierEntretien.date) : 'Aucun entretien enregistré')}</span>
-    </div>
-  </div>`;
-}
 function openVehiculeDetail(id){
   state.viewingVehicule = id;
   renderTab();
@@ -15236,10 +15028,6 @@ function majApresAnnuaire(etab){
 }
 let entrepriseSearchTimer = null;
 let entrepriseResults = [];
-function formatEntrepriseAdresse(r){
-  const s = r.siege || {};
-  return (s.adresse || '').trim();
-}
 function searchEntreprise(query){
   clearTimeout(entrepriseSearchTimer);
   const box = document.getElementById('clientSuggestions');
@@ -15636,10 +15424,6 @@ function conducteurDuSelect(idChamp){
   if(!el) return {};
   const fiche = state.conducteurs.find(c=>c.id === el.value);
   return { conducteurId: el.value || '', conducteur: fiche ? fiche.nom : '' };
-}
-function chantierSelectOptions(current){
-  const list = state.chantiers.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return '<option value="">— Aucun —</option>' + list.map(c=>`<option value="${c.id}" ${c.id===current?'selected':''}>${esc(c.nom)}</option>`).join('');
 }
 function conducteurFilterOptions(current, allLabel){
   const list = state.conducteurs.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
@@ -16656,27 +16440,6 @@ function docStatus(dateValidite){
   if(dateValidite < todayISO()) return {label:'Expiré', cls:'danger'};
   return {label:'À jour', cls:'success'};
 }
-function renderDocumentsSection(){
-  const list = state.documents.filter(d=>d.societeId===state.societeId);
-  return `
-    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
-      <span>Documents de la société</span>
-      <button class="btn small primary" onclick="openForm('document')">+ Ajouter un document</button>
-    </div>
-    <div id="formZoneDocument">${state.formOpen.document? documentForm() : ''}</div>
-    ${list.map(d=>{
-      const st = docStatus(d.dateValidite);
-      return `<div class="card"><div class="card-row">
-        <div><div class="card-title">${esc(d.nom)}</div><div class="card-sub">${d.dateValidite? 'Valide jusqu\u2019au '+fmtDate(d.dateValidite) : 'Date de validité non renseignée'}</div></div>
-        <span class="badge ${st.cls}">${st.label}</span>
-      </div>
-      <div style="margin-top:8px; display:flex; gap:8px;">
-        <button class="btn small" onclick="editItem('document','${jsAttr(d.id)}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('document','${jsAttr(d.id)}')">Supprimer</button>
-      </div></div>`;
-    }).join('') || '<div class="empty">Aucun document enregistré pour cette société.</div>'}
-  `;
-}
 function documentForm(){
   const e = state.editing;
   return `
@@ -16850,7 +16613,6 @@ Object.assign(window, {
   WF_LIBELLES,
   ZONES_DND,
   _joursFeriesCache,
-  achatCategorieIcon,
   achatCategorieLabel,
   addAbsence,
   addChantierAchat,
@@ -16980,7 +16742,6 @@ Object.assign(window, {
   chantierInfosDiversesHTML,
   chantierListItems,
   chantierMatchesSearch,
-  chantierSelectOptions,
   chantierTodoHTML,
   chantierTodoStatut,
   chapitreRow,
@@ -17052,7 +16813,6 @@ Object.assign(window, {
   computeRevenuePeriod,
   computeStatsBinomesParMois,
   computeStatsParConducteur,
-  computeStatusBreakdown,
   computeTopClients,
   computeTotals,
   computeTotalsAvecRemise,
@@ -17220,10 +16980,7 @@ Object.assign(window, {
   filterDevisStatut,
   filterFactureBorne,
   filterFactureClient,
-  filterFactureConducteur,
   filterFactureCritere,
-  filterFactureInterlocuteur,
-  filterFactureLogement,
   filterFacturePeriode,
   filterFacturesList,
   filterInterventionConducteur,
@@ -17235,7 +16992,6 @@ Object.assign(window, {
   filterPlanningList,
   filterPlanningLogement,
   filterPlanningMetier,
-  filterPlanningTechnicien,
   filterPlanningUnschedClient,
   filterPlanningUnschedInterlocuteur,
   filterRHList,
@@ -17250,7 +17006,6 @@ Object.assign(window, {
   fmtDate,
   formDocumentRhHTML,
   formVisiteRhHTML,
-  formatEntrepriseAdresse,
   generateInterventionPdf,
   generateRapportIA,
   genererPPSPS,
@@ -17294,7 +17049,6 @@ Object.assign(window, {
   importerBonCommande,
   imprimerRegistrePersonnel,
   initSignaturePad,
-  initials,
   instantaneIdentite,
   integrerTravailDansLignes,
   interlocuteurForm,
@@ -17302,7 +17056,6 @@ Object.assign(window, {
   interventionForm,
   interventionMatchesSearch,
   interventionSearchHaystack,
-  interventionSelectOptionsPourBC,
   invitationDuSalarie,
   invitationsPretes,
   inviterSalarieEcran,
@@ -17390,12 +17143,10 @@ Object.assign(window, {
   metierCheckboxesHTML,
   metierCouleur,
   metierDisplayLabel,
-  metierFilterOptions,
   metierLabel,
   metierPersoFilterOptions,
   metierPersoForm,
   metierPersoSelectOptions,
-  metierSelectOptions,
   metiersDisplayJoin,
   metiersDisponibles,
   metiersDuBrouillon,
@@ -17518,7 +17269,6 @@ Object.assign(window, {
   planningPrixSTZoneHTML,
   planningRowExpr,
   planningScheduledCardHTML,
-  planningToday,
   planningUnschedClientOptions,
   planningUnschedInterlocuteurOptions,
   pointDansPolygone,
@@ -17528,7 +17278,6 @@ Object.assign(window, {
   printDocument,
   printInterventionDocument,
   printInterventionDraft,
-  printItem,
   printPlanning,
   printableLignesRows,
   qteDejaPlanifiee,
@@ -17627,8 +17376,6 @@ Object.assign(window, {
   renderDevis,
   renderDevisListHTML,
   renderDocumentsLegauxSection,
-  renderDocumentsSection,
-  renderDonutSVG,
   renderDossiersClients,
   renderDossiersFournisseurs,
   renderDpgfMappingPreview,
@@ -17653,7 +17400,6 @@ Object.assign(window, {
   renderPlanning,
   renderPlanningCalendar,
   renderPlanningEnAttente,
-  renderPlanningRealiseNonFacture,
   renderPlus,
   renderPrintDoc,
   renderPrintIntervention,
@@ -17770,7 +17516,6 @@ Object.assign(window, {
   setTab,
   setReglementsVue,
   setVehiculeTva,
-  setVehiculeVue,
   setupAnnotationDrawing,
   setupSignatureCanvas,
   setupTechDessinCanvas,
@@ -17878,12 +17623,9 @@ Object.assign(window, {
   updatePieceCommandeChamp,
   updatePrixSousTraitant,
   updateSoldeCPPreview,
-  updateStatut,
   updateToolButtonsUI,
   validationConducteurCtx,
   validationDirecteurCtx,
-  validerBCEtape,
-  vehiculeCardHTML,
   vehiculeForm,
   vehiculeSchemaHTML,
   vehiculeSchemaMarks,
@@ -17894,8 +17636,6 @@ Object.assign(window, {
   visitesDuSalarie,
   visitesMedicalesHTML,
   visitesRhPretes,
-  voirDevisDepuisFacture,
-  voirFactureDepuisDevis,
   weekDays,
   wfEnregistrerConstats,
   wfMarquerRealisee,

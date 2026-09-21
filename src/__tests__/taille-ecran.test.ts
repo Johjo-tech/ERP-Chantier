@@ -30,9 +30,15 @@ const SEUIL_SEMGREP = 1_000_000;
  * `renderPrintIntervention` et leurs auxiliaires — qui forme un ensemble
  * cohérent. Il n'a pas été sorti cette nuit parce que les tâches #16, #18 et
  * #20 le réécrivent en même temps, et qu'un découpage raté sur ce chemin-là
- * casserait tous les PDF sans qu'un test le voie.
+ * casserait tous les PDF sans qu'un test le voie. L'ordre naturel est donc :
+ * finir de réécrire les modèles, PUIS sortir le bloc.
  *
- * Prochaine fois que ce test rougit : découper, ne pas raboter à nouveau. */
+ * Le seuil a rougi une seconde fois le même soir, à 987 021 octets. Il n'a PAS
+ * été relevé : 21 fonctions de premier niveau que plus rien n'appelait — ni le
+ * code, ni un attribut d'événement — ont été retirées, ce qui a rendu
+ * 14 326 octets. La marge reste donc à 20 000.
+ *
+ * La prochaine fois, il n'y aura plus de gras à retirer : ce sera découper. */
 const MARGE = 20_000;
 
 describe("L'écran reste analysable", () => {
