@@ -23,7 +23,12 @@ cd "$RACINE"
 
 MODE="${1:-tout}"
 BRANCHE_CIBLE="main"
-SITE="https://erpchantier.vercel.app"
+# Le domaine PERSONNALISÉ, et c'est ce qui rend l'étape 5 possible : la
+# protection SSO du projet vaut « tous les domaines SAUF les personnalisés ».
+# Sur erpchantier.vercel.app, le `curl` ci-dessous recevait un 403 et le script
+# concluait « le build a peut-être échoué » sur un déploiement parfaitement
+# réussi.
+SITE="https://magestiondechantier.fr"
 
 titre() { printf '\n\033[1m── %s\033[0m\n' "$1"; }
 ok()    { printf '   \033[32m✓\033[0m %s\n' "$1"; }
