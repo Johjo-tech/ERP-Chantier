@@ -510,7 +510,11 @@ function computeNotifications(){
   });
 
   state.salaries.filter(s=>s.societeId===soc).forEach(s=>{
-    window.alertesSalarie(s, s.habilitations||[]).forEach(a=> notifs.push(versNotif(a, '👷', 'rh')));
+    /* `s.habilitations` était toujours vide : le champ n'a jamais eu de
+       colonne. Les habilitations sont au dossier documentaire, et elles y ont
+       la forme que `alertesSalarie` attend — un id, un salarié, un nom, une
+       date de fin. Cette alerte-là ne s'était donc jamais déclenchée. */
+    window.alertesSalarie(s, toutesLesHabilitations()).forEach(a=> notifs.push(versNotif(a, '👷', 'rh')));
   });
 
   state.documents.filter(d=>d.societeId===soc).forEach(d=>{
@@ -13470,7 +13474,7 @@ function renderRHSalaries(){
   let filtered = q ? list.filter(s=>window.multiWordMatch([s.nom,s.prenom,s.poste].filter(Boolean).join(' ').toLowerCase(), q)) : list;
   if(metierFiltre) filtered = filtered.filter(s=>s.poste===metierFiltre);
   return `
-    <div class="page-head"><h1>RH</h1>${state.formOpen.salarie? '' : `<div style="display:flex; gap:8px;"><button class="btn" onclick="state.viewingRegistre=true; renderTab();">📋 Registre unique du personnel</button><button class="btn primary" onclick="openForm('salarie', {habilitations:[]})">+ Nouveau salarié</button></div>`}</div>
+    <div class="page-head"><h1>RH</h1>${state.formOpen.salarie? '' : `<div style="display:flex; gap:8px;"><button class="btn" onclick="state.viewingRegistre=true; renderTab();">📋 Registre unique du personnel</button><button class="btn primary" onclick="openForm('salarie', {habilitationsAJoindre:[]})">+ Nouveau salarié</button></div>`}</div>
     ${state.formOpen.salarie ? '' : `<div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
       <input type="text" style="flex:1; min-width:220px;" value="${esc(state.rhSearch||'')}" placeholder="Rechercher : nom, prénom, poste…" oninput="filterRHList(this.value)">
       <select style="width:auto; min-width:180px;" onchange="filterRHMetier(this.value)">
@@ -13656,7 +13660,7 @@ function alerteEcheance(dateStr){
 function renderSalarieListHTML(list){
   if(!list.length) return '<div class="empty">Aucun salarié pour cette société.</div>';
   return list.map(s=>{
-    const habilitationsAlerte = (s.habilitations||[]).filter(h=>{ const j=joursAvant(h.dateExpiration); return j!=null && j<=30; });
+    const habilitationsAlerte = habilitationsDuSalarie(s.id).filter(h=>{ const j=joursAvant(h.dateExpiration); return j!=null && j<=30; });
     const carteBtpAlerte = alerteEcheance(s.carteBtpValidite);
     const visiteAlerte = alerteEcheance(s.visiteMedicaleProchaine);
     const today = todayISO();
@@ -14483,7 +14487,7 @@ async function removeAbsence(salarieId, absenceId){
 }
 function salarieForm(){
   const e = state.editing;
-  if(!e.habilitations) e.habilitations = [];
+  if(!e.habilitationsAJoindre) e.habilitationsAJoindre = [];
   return `
   <div class="form-panel">
     <h3>${e.id? 'Modifier le salarié' : 'Nouveau salarié'}</h3>
@@ -14512,9 +14516,8 @@ function salarieForm(){
       <div class="field"><label>Dernière visite médicale</label><input type="date" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate||''}" disabled style="background:var(--surface-2);"></div>
       <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}" disabled style="background:var(--surface-2);"><div class="card-sub" style="margin-top:4px;">Tenues par le registre des visites, plus bas — la base les réécrit à chaque enregistrement.</div></div>
     </div>
-    <div class="section-title" style="margin-top:14px;">Habilitations & certifications</div>
-    <div id="habilitationsBody">${habilitationRowsHTML(e.habilitations)}</div>
-    <button class="btn small" onclick="addHabilitation()">+ Habilitation</button>
+    <div class="section-title" style="margin-top:14px;">⚡ Habilitations & certifications</div>
+    <div id="habilitationsZone">${habilitationsZoneHTML(e)}</div>
     ${e.id? `
     <div class="section-title" style="margin-top:18px;">📁 Dossier documentaire</div>
     ${dossierRhHTML(e)}
@@ -14701,44 +14704,147 @@ async function annulerInvitationSalarie(invitationId){
   showToast('Invitation annulée.', 'success');
 }
 
-function habilitationRowsHTML(habilitations){
-  if(!habilitations.length) return '<div class="empty">Aucune habilitation renseignée.</div>';
-  return habilitations.map((h,i)=>`
-    <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
-      <input type="text" data-idx="${i}" data-field="nom" value="${esc(h.nom)}" placeholder="Ex : CACES R486, Habilitation électrique B1V…" style="flex:1;">
-      <input type="date" data-idx="${i}" data-field="dateExpiration" value="${h.dateExpiration||''}" style="width:auto;" onchange="refreshHabilitationAlerte(${i}, this.value)">
-      <span id="habilitationAlerte_${i}">${alerteEcheance(h.dateExpiration)}</span>
-      <button class="btn small danger" onclick="removeHabilitation(${i})">✕</button>
-    </div>`).join('');
+/* ---------- Les habilitations, avec leurs fichiers ----------
+ * Ce bloc écrivait dans le vide. Il posait un tableau `habilitations` sur la
+ * fiche du salarié — or `salaries` n'a pas cette colonne, `colonnesDe()`
+ * l'écartait avant l'envoi, et tout ce qui était saisi disparaissait au
+ * rechargement suivant. Les CACES et les habilitations électriques d'un parc
+ * entier ont pu être saisis sans jamais être conservés.
+ *
+ * Elles vivent désormais où vivent les autres pièces du dossier : une ligne
+ * `salarie_documents` de type `habilitation`, et le fichier dans le bucket
+ * privé `terrain`, sous `<societeId>/salaries/<salarieId>/`. Ce premier
+ * segment n'est pas un rangement mais la clé du cloisonnement — les policies
+ * Storage le lisent pour décider qui voit quoi.
+ *
+ * À LA CRÉATION, le salarié n'a pas encore d'identifiant : on ne peut donc
+ * ni écrire la ligne ni ranger le fichier. Les pièces choisies attendent en
+ * mémoire et partent d'un bloc une fois la fiche enregistrée.
+ */
+const TYPE_HABILITATION = 'habilitation';
+
+/** Les habilitations déjà au dossier de ce salarié. */
+function habilitationsDuSalarie(salarieId){
+  return documentsDuSalarie(salarieId).filter(d=>d.type===TYPE_HABILITATION);
 }
-function refreshHabilitationAlerte(idx, value){
-  const el = document.getElementById('habilitationAlerte_'+idx);
-  if(el) el.innerHTML = alerteEcheance(value);
+
+/** Toutes les habilitations de la société — ce que les alertes surveillent. */
+function toutesLesHabilitations(){
+  return state.documentsRh.filter(d=>d.type===TYPE_HABILITATION);
 }
-function addHabilitation(){
-  captureHabilitationsFromDOM();
-  state.editing.habilitations.push({nom:'', dateExpiration:''});
-  document.getElementById('habilitationsBody').innerHTML = habilitationRowsHTML(state.editing.habilitations);
+
+function habilitationsZoneHTML(e){
+  const enAttente = e.habilitationsAJoindre || [];
+  const dejaLa = e.id && dossiersRhPrets() ? habilitationsDuSalarie(e.id) : [];
+  if(e.id && !dossiersRhPrets()) chargerDossiersRh();
+
+  return `
+    <p class="card-sub">CACES, habilitation électrique, AIPR… Joignez l'attestation (PDF ou image) et sa date de fin de validité : sans elle, aucune alerte ne préviendra de son expiration.</p>
+    ${dejaLa.length? `<div style="margin-top:8px;">${dejaLa.map(documentRhRowHTML).join('')}</div>` : ''}
+    ${enAttente.length? `<div style="margin-top:8px;">${enAttente.map(habilitationEnAttenteHTML).join('')}</div>` : ''}
+    ${(!dejaLa.length && !enAttente.length)? '<div class="empty">Aucune habilitation renseignée.</div>' : ''}
+    <div class="achat-salarie-zone" style="margin-top:10px;">
+      <label class="btn small primary" style="cursor:pointer;">📎 Joindre des habilitations
+        <input type="file" accept=".pdf,image/*" multiple style="display:none;" onchange="ajouterHabilitationsChoisies(this.files); this.value='';">
+      </label>
+      <button type="button" class="btn small" onclick="ajouterHabilitationSansFichier()">+ Sans fichier</button>
+      ${e.id? '' : '<span class="card-sub">Elles seront déposées à l\'enregistrement de la fiche.</span>'}
+    </div>`;
 }
-function removeHabilitation(idx){
-  captureHabilitationsFromDOM();
-  state.editing.habilitations.splice(idx,1);
-  document.getElementById('habilitationsBody').innerHTML = habilitationRowsHTML(state.editing.habilitations);
+
+function habilitationEnAttenteHTML(h){
+  return `<div class="chantier-file-row">
+    <span style="flex:1; min-width:0; display:flex; gap:8px; align-items:center;">
+      <input type="text" value="${esc(h.nom)}" placeholder="Ex : CACES R486, Habilitation électrique B1V…" style="flex:1; min-width:0;"
+        oninput="majHabilitationEnAttente('${jsAttr(h.cle)}','nom', this.value)">
+      <input type="date" value="${h.dateExpiration||''}" style="width:auto;" title="Fin de validité"
+        onchange="majHabilitationEnAttente('${jsAttr(h.cle)}','dateExpiration', this.value)">
+    </span>
+    <span class="card-sub">${h.fichierNom? '📎 '+esc(h.fichierNom) : 'sans fichier'}</span>
+    <span class="badge warn" title="Sera déposée à l'enregistrement de la fiche">à déposer</span>
+    <button type="button" class="btn small danger" onclick="retirerHabilitationEnAttente('${jsAttr(h.cle)}')">✕</button>
+  </div>`;
 }
-function captureHabilitationsFromDOM(){
-  const body = document.getElementById('habilitationsBody');
-  if(!body) return;
-  body.querySelectorAll('input[data-idx]').forEach(inp=>{
-    const idx = parseInt(inp.dataset.idx,10);
-    const field = inp.dataset.field;
-    if(state.editing.habilitations[idx]) state.editing.habilitations[idx][field] = inp.value;
-  });
+
+/** Le libellé proposé : le nom du fichier sans son extension. */
+function libelleDepuisNomFichier(nom){
+  return String(nom||'').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+}
+
+function ajouterHabilitationsChoisies(fichiers){
+  const e = state.editing;
+  if(!e.habilitationsAJoindre) e.habilitationsAJoindre = [];
+  for(const fichier of Array.from(fichiers||[])){
+    /* Le même verdict que pour toute pièce jointe : un seul jeu de règles,
+       donc un seul refus possible et les mêmes mots pour l'expliquer. */
+    const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
+    if(!verdict.ok){ showToast(verdict.motif, 'danger', 6000); continue; }
+    e.habilitationsAJoindre.push({
+      cle: uid(), nom: libelleDepuisNomFichier(fichier.name),
+      dateExpiration: '', fichier, fichierNom: fichier.name,
+    });
+  }
+  rafraichirZoneHabilitations();
+}
+
+function ajouterHabilitationSansFichier(){
+  const e = state.editing;
+  if(!e.habilitationsAJoindre) e.habilitationsAJoindre = [];
+  e.habilitationsAJoindre.push({ cle: uid(), nom: '', dateExpiration: '', fichier: null, fichierNom: '' });
+  rafraichirZoneHabilitations();
+}
+
+function majHabilitationEnAttente(cle, champ, valeur){
+  const h = (state.editing.habilitationsAJoindre||[]).find(x=>x.cle===cle);
+  if(h) h[champ] = valeur;
+}
+
+function retirerHabilitationEnAttente(cle){
+  state.editing.habilitationsAJoindre = (state.editing.habilitationsAJoindre||[]).filter(x=>x.cle!==cle);
+  rafraichirZoneHabilitations();
+}
+
+/* On ne redessine que cette zone : refaire le formulaire entier ferait perdre
+   le focus et tout ce qui est saisi et non encore lu. */
+function rafraichirZoneHabilitations(){
+  const zone = document.getElementById('habilitationsZone');
+  if(zone) zone.innerHTML = habilitationsZoneHTML(state.editing);
+  else renderTab();
+}
+
+/**
+ * Dépose les habilitations en attente sur la fiche enregistrée.
+ *
+ * Une par une, et sans interrompre les suivantes si l'une échoue : perdre les
+ * quatre autres parce que la troisième est trop lourde serait pire que de
+ * signaler celle-là. Ce qui n'est pas passé reste en attente à l'écran.
+ */
+async function deposerHabilitationsEnAttente(salarieId){
+  const enAttente = state.editing.habilitationsAJoindre || [];
+  if(!enAttente.length) return;
+
+  const restantes = [];
+  for(const h of enAttente){
+    if(!h.fichier && !String(h.nom||'').trim()) continue;
+    try{
+      await window.ajouterDocumentRh(salarieId, {
+        type: TYPE_HABILITATION,
+        nom: h.nom || h.fichierNom || 'Habilitation',
+        dateExpiration: h.dateExpiration || null,
+      }, h.fichier || null);
+    }catch(err){
+      console.error('Habilitation non déposée', h.nom, err);
+      showToast(`« ${h.nom || h.fichierNom} » n'a pas pu être déposée — ${refusDocumentRh(err)}`, 'danger', 8000);
+      restantes.push(h);
+    }
+  }
+  state.editing.habilitationsAJoindre = restantes;
+  await chargerDossiersRh(true);
 }
 async function saveSalarie(){
   const e = state.editing;
   const nom = document.getElementById('sal_nom').value.trim();
   if(!nom){ alert('Le nom du salarié est requis.'); return; }
-  captureHabilitationsFromDOM();
   const id = e.id || uid();
   const obj = { id, societeId: state.societeId, createdAt: e.createdAt || new Date().toISOString(),
     nom, prenom: document.getElementById('sal_prenom').value,
@@ -14759,7 +14865,11 @@ async function saveSalarie(){
     carteBtpValidite: document.getElementById('sal_carteBtpValidite').value,
     visiteMedicaleDate: document.getElementById('sal_visiteMedicaleDate').value,
     visiteMedicaleProchaine: document.getElementById('sal_visiteMedicaleProchaine').value,
-    habilitations: state.editing.habilitations.filter(h=>h.nom),
+    /* `habilitations` n'est plus posé ici, pour la même raison que les deux
+       champs ci-dessous : `salaries` n'a pas cette colonne. Ce qui était saisi
+       n'a jamais été conservé. Elles vont désormais au dossier documentaire,
+       déposées juste après l'enregistrement — le salarié doit exister pour
+       qu'on puisse ranger un fichier sous son identifiant. */
     /* `contratTravail` et `avenantsContrat` ne sont plus posés ici : ces deux
        champs n'ont jamais eu de colonne, `colonnesDe()` les écartait avant
        l'envoi, et les fichiers encodés en data-URL qu'ils portaient
@@ -14770,6 +14880,14 @@ async function saveSalarie(){
   const r = await window.stSet('salarie:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('salarie');
+  await deposerHabilitationsEnAttente(id);
+  /* Ce qui n'a pas pu être déposé garde le formulaire ouvert : refermer
+     ferait disparaître les pièces choisies sans que personne ne le voie. */
+  if((state.editing.habilitationsAJoindre||[]).length){
+    state.editing.id = id;
+    rafraichirZoneHabilitations();
+    return;
+  }
   closeForm('salarie');
   showToast(e.id? 'Salarié modifié.' : 'Salarié créé.', 'success');
 }
@@ -16710,7 +16828,6 @@ Object.assign(window, {
   addChapitre,
   addCommentaire,
   addDocumentLegal,
-  addHabilitation,
   addJours,
   addLigne,
   addMarkToSchema,
@@ -16804,7 +16921,6 @@ Object.assign(window, {
   cancelEditEntretien,
   candidatsLien,
   captureChantierDpgfLignesFromDOM,
-  captureHabilitationsFromDOM,
   cardRowClick,
   catalogueEtat,
   catalogueListeHTML,
@@ -17117,7 +17233,17 @@ Object.assign(window, {
   goToIntervention,
   guessAllColRoles,
   guessSkipRows,
-  habilitationRowsHTML,
+  ajouterHabilitationSansFichier,
+  ajouterHabilitationsChoisies,
+  deposerHabilitationsEnAttente,
+  habilitationEnAttenteHTML,
+  habilitationsDuSalarie,
+  habilitationsZoneHTML,
+  libelleDepuisNomFichier,
+  majHabilitationEnAttente,
+  rafraichirZoneHabilitations,
+  retirerHabilitationEnAttente,
+  toutesLesHabilitations,
   handleArticleCodeKeydown,
   handleBCAttachment,
   handleBCPhotoFiles,
@@ -17399,7 +17525,6 @@ Object.assign(window, {
   refreshBCPhotosUI,
   refreshChantierDpgfLignesZone,
   refreshDevisLieSelect,
-  refreshHabilitationAlerte,
   refreshInterlocuteurSelect,
   refreshLignesUI,
   refreshNotifBadge,
@@ -17440,7 +17565,6 @@ Object.assign(window, {
   removeChantierTodo,
   removeDateSupplementaire,
   removeDocumentLegal,
-  removeHabilitation,
   removeLigne,
   removeMaterielPret,
   removePhoto,
