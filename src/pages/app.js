@@ -4915,7 +4915,13 @@ async function emettreLaFacture(factureId){
 
   try{
     const emise = await window.emettreFacture(factureId);
+    /* Recharger ne suffit pas : `state.factures` est à jour, l'écran non.
+       Sans ce rendu, la carte gardait son numéro « Brouillon », ses montants
+       d'avant et son bouton « Émettre » jusqu'à ce qu'on recharge la page —
+       l'utilisateur cliquait donc une seconde fois, et se voyait répondre que
+       la facture était déjà émise. */
     await recharger('facture');
+    renderTab();
     showToast(`Facture émise sous le n° ${emise && emise.numero ? emise.numero : '—'}.`, 'success');
   }catch(err){
     console.error('Émission refusée', err);
@@ -5128,6 +5134,7 @@ async function confirmerImputation(){
     /* Le statut stocké suit les règlements : sans cette remise à jour, une
        facture soldée par un avoir resterait « impayée » dans les compteurs. */
     await syncFactureStatut(factureId);
+    renderTab();
     showToast('Avoir imputé.', 'success');
   }catch(err){
     console.error('Imputation refusée', err);
