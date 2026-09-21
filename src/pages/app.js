@@ -10337,7 +10337,7 @@ function renderReglagesOnglet(){
      posée, pas pendant qu'on assemble sa chaîne. */
   const onglet = state.reglagesTab || 'organisation';
   if(onglet === 'organisation') setTimeout(majCompletudeSociete, 0);
-  if(onglet === 'identite') setTimeout(()=>apercuCouleur(reglagesCourants().documents.couleurAccent), 0);
+  if(onglet === 'identite') setTimeout(apercuCouleur, 0);
   /* La numérotation appelait `rafraichirNumerotation()` depuis sa propre
      fonction de rendu, c'est-à-dire pendant qu'on assemblait sa chaîne : la
      zone `#zoneNumerotation` n'existait pas encore, le `if(!zone) return` en
@@ -10598,8 +10598,10 @@ function optionsTvaHTML(courant){
  * Sans cela on choisit un ton dans un sélecteur système, on enregistre, on
  * recharge — et on découvre seulement là que le foncé ne convient pas.
  */
-function apercuCouleur(couleur){
-  const p = window.paletteAccent(couleur);
+function apercuCouleur(){
+  const principale = valeurChamp('ie_couleur');
+  const seconde = valeurChamp('ie_couleurSecondaire');
+  const p = window.paletteSociete(principale, seconde);
   const zone = document.getElementById('rg_couleurApercu');
   if(zone){
     const pastille = (fond, texte, libelle) =>
@@ -10608,10 +10610,16 @@ function apercuCouleur(couleur){
       + pastille(p.accent, p.surAccent, 'Accent')
       + pastille(p.accentFonce, '#FFFFFF', 'Titres')
       + pastille(p.accentClair, '#182233', 'Fonds')
+      + pastille(p.secondaire, p.surSecondaire, 'En-têtes')
+      + pastille(p.secondaireClair, '#182233', 'Cartouches')
       + `</div>`;
   }
   /* Appliquée tout de suite : l'écran entier sert d'aperçu grandeur nature. */
   appliquerPalette(p);
+}
+function valeurChamp(id){
+  const el = document.getElementById(id);
+  return el ? el.value : null;
 }
 
 /**
@@ -10627,6 +10635,13 @@ function appliquerPalette(p){
   r.setProperty('--accent-2', p.accentFonce);
   r.setProperty('--accent-soft', p.accentClair);
   r.setProperty('--sur-accent', p.surAccent);
+  /* La seconde couleur n'est posée que si elle est là : `paletteAccent` seule
+     ne la porte pas, et écrire `undefined` effacerait la variable du CSS. */
+  if(p.secondaire){
+    r.setProperty('--secondaire', p.secondaire);
+    r.setProperty('--secondaire-soft', p.secondaireClair);
+    r.setProperty('--sur-secondaire', p.surSecondaire);
+  }
   /* Les halos et anneaux de focus étaient sept opacités d'un orange figé : ils
      seraient restés orange pendant que le reste virait. Les composantes
      suffisent, chaque opacité s'en déduit. */
@@ -10643,9 +10658,13 @@ function appliquerPalette(p){
  * choisi un violet, l'écran restait orange, et le réglage passait pour mort.
  */
 function appliquerCouleurSociete(){
-  const reglages = reglagesCourants();
-  const couleur = reglages && reglages.documents ? reglages.documents.couleurAccent : null;
-  appliquerPalette(window.paletteAccent(couleur));
+  appliquerPalette(paletteDeLaSociete());
+}
+
+/** Les deux couleurs de la société active, déclinées. */
+function paletteDeLaSociete(){
+  const d = (reglagesCourants() || {}).documents || {};
+  return window.paletteSociete(d.couleurAccent, d.couleurSecondaire);
 }
 
 function reglagesCourants(){
@@ -10912,13 +10931,17 @@ function renderIdentiteVisuelleSection(){
         <label class="btn small" style="cursor:pointer;">📷 ${s.logo? 'Changer le logo' : 'Ajouter un logo'}<input type="file" accept="image/*" style="display:none;" onchange="handleLogoUpload(this.files[0])"></label>
       </div>
       <div>
-        <div class="reglage-titre">Couleur dominante</div>
-        <div style="display:flex; align-items:center; gap:12px;">
-          <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur(this.value)"
-                 style="width:56px; height:40px; padding:2px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface);">
+        <div class="reglage-titre">Couleurs de la société</div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <label class="card-sub" style="margin:0; display:flex; align-items:center; gap:6px;">Principale
+            <input type="color" id="ie_couleur" value="${esc(reglagesCourants().documents.couleurAccent)}" oninput="apercuCouleur()"
+                   style="width:56px; height:40px; padding:2px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface);"></label>
+          <label class="card-sub" style="margin:0; display:flex; align-items:center; gap:6px;">Secondaire
+            <input type="color" id="ie_couleurSecondaire" value="${esc(reglagesCourants().documents.couleurSecondaire || window.SECONDAIRE_DEFAUT)}" oninput="apercuCouleur()"
+                   style="width:56px; height:40px; padding:2px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface);"></label>
           <div id="rg_couleurApercu"></div>
         </div>
-        <small class="card-sub" style="display:block; margin-top:8px;">Les tons clair et foncé s'en déduisent. L'écran change tout de suite ; enregistrez pour le garder.</small>
+        <small class="card-sub" style="display:block; margin-top:8px;">La principale porte les titres, les filets et le total TTC ; la secondaire les en-têtes de tableau et les cartouches. Les tons clair et foncé s'en déduisent. L'écran change tout de suite ; enregistrez pour le garder.</small>
       </div>
     </div>
 
@@ -11048,9 +11071,12 @@ async function saveInfosEntreprise(){
      `societes` : elle voyage donc à part, et on ne recopie que la clé touchée —
      écraser `documents` en entier effacerait le délai de paiement et le reste. */
   const couleur = v('ie_couleur');
-  if(couleur){
+  const secondaire = v('ie_couleurSecondaire');
+  if(couleur || secondaire){
     obj.reglages = { ...(s.reglages||{}),
-      documents: { ...((s.reglages||{}).documents||{}), couleurAccent: couleur } };
+      documents: { ...((s.reglages||{}).documents||{}),
+        ...(couleur? { couleurAccent: couleur } : {}),
+        ...(secondaire? { couleurSecondaire: secondaire } : {}) } };
   }
 
   const anomalies = window.verifierEntite(obj);
@@ -16716,6 +16742,8 @@ Object.assign(window, {
   annulerLectureBC,
   annulerRappel,
   apercuCouleur,
+  paletteDeLaSociete,
+  valeurChamp,
   appartenanceTache,
   appliquerClientOCR,
   appliquerCouleurSociete,

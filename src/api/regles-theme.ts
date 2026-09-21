@@ -11,6 +11,17 @@
 
 /** L'orange historique, et les deux tons choisis à la main autour de lui. */
 export const ACCENT_DEFAUT = "#FF6A1A";
+
+/**
+ * La seconde couleur, celle des en-têtes de tableau et des cartouches.
+ *
+ * Le bleu ardoise `#182233` est la couleur de texte de toute l'application
+ * depuis l'origine, et celle qu'ont déjà les en-têtes du planning imprimé :
+ * la prendre pour défaut ne change donc RIEN à ce qui sort aujourd'hui des
+ * documents. Une société qui ne touche pas au réglage ne doit rien voir
+ * bouger.
+ */
+export const SECONDAIRE_DEFAUT = "#182233";
 const PALETTE_HISTORIQUE: PaletteAccent = {
   accent: "#FF6A1A",
   accentFonce: "#C24E00",
@@ -27,6 +38,17 @@ export interface PaletteAccent {
   /** Le texte posé SUR la couleur : noir ou blanc, celui qui se lit. */
   surAccent: string;
 }
+
+export interface PaletteSecondaire {
+  secondaire: string;
+  /** Fond des encadrés tirés de la seconde couleur. */
+  secondaireClair: string;
+  /** Le texte posé SUR la seconde couleur. */
+  surSecondaire: string;
+}
+
+/** Les deux couleurs de la société, déclinées. */
+export interface PaletteSociete extends PaletteAccent, PaletteSecondaire {}
 
 /** Luminosités des deux déclinaisons, relevées sur la palette historique. */
 const L_FONCE = 0.38;
@@ -153,4 +175,36 @@ export function paletteAccent(couleur?: string | null): PaletteAccent {
     accentClair: versHex(h, s, L_CLAIR),
     surAccent: texteLisibleSur(rvb),
   };
+}
+
+/**
+ * La seconde couleur, déclinée.
+ *
+ * Elle n'a que deux dérivées : un fond très clair pour les cartouches, et
+ * l'encre qui se lit dessus. Pas de ton foncé — elle sert déjà de ton foncé,
+ * c'est son rôle sur les en-têtes de tableau.
+ */
+export function paletteSecondaire(couleur?: string | null): PaletteSecondaire {
+  const rvb = versRvb(String(couleur ?? "")) ?? versRvb(SECONDAIRE_DEFAUT)!;
+  const secondaire = `#${rvb.map((v) => v.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+  const [h, s] = versTsl(rvb);
+  return {
+    secondaire,
+    secondaireClair: versHex(h, s, L_CLAIR),
+    surSecondaire: texteLisibleSur(rvb),
+  };
+}
+
+/**
+ * Les deux couleurs d'une société, en une seule palette.
+ *
+ * Un seul point d'entrée pour l'écran comme pour les documents : deux appels
+ * séparés finiraient par être faits à deux endroits différents, et une moitié
+ * de palette se poserait sans l'autre.
+ */
+export function paletteSociete(
+  accent?: string | null,
+  secondaire?: string | null
+): PaletteSociete {
+  return { ...paletteAccent(accent), ...paletteSecondaire(secondaire) };
 }

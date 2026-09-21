@@ -20,6 +20,13 @@
   /* Composantes de l'accent : les opacités s'en déduisent sans figer la teinte. */
   --accent-rgb:255, 106, 26;
   --sur-accent:#FFFFFF;
+  /* La SECONDE couleur de la société : en-têtes de tableau, cartouches,
+     bandeaux. Le défaut est le bleu ardoise qui sert déjà de couleur de texte
+     et d'en-tête au planning imprimé — une société qui ne touche à rien ne
+     voit donc rien bouger. */
+  --secondaire:#182233;
+  --secondaire-soft:#EEF0F4;
+  --sur-secondaire:#FFFFFF;
   --danger:#D9363E;
   --danger-soft:#FBE7E8;
   --success:#12875A;
@@ -1144,7 +1151,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-line{ font-size:9.5pt; color:#3A4454; line-height:1.5; }
 .p-locataire{ margin-top:3mm; background:#F1F3F7; border-left:2.5px solid var(--accent); padding:2.5mm 3mm; }
 .p-lignes{ margin-top:7mm; }
-.p-lignes th{ font-size:8pt; text-transform:uppercase; letter-spacing:.5px; color:#6B7686; text-align:left; border-bottom:1px solid #E2E6ED; padding:2mm; }
+/* L'en-tête du tableau porte la SECONDE couleur de la société : c'est la
+   bande la plus visible du document après le filet de titre, et elle était
+   d'un gris qui n'appartenait à personne. */
+.p-lignes th{ font-size:8pt; text-transform:uppercase; letter-spacing:.5px; color:var(--sur-secondaire); background:var(--secondaire); text-align:left; border-bottom:1px solid var(--secondaire); padding:2mm; }
 .p-lignes th.num, .p-lignes td.num{ text-align:right; }
 /* L'unité n'est pas un nombre : collée à droite, elle s'éloignait de la
    quantité qu'elle qualifie. « 12   m² » se lit, « 12       m² » se déchiffre. */
@@ -1183,7 +1193,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-totals td{ padding:1.6mm 0; font-size:9.5pt; }
 .p-totals td.label{ color:#6B7686; }
 .p-totals td.val{ text-align:right; font-family:'JetBrains Mono',monospace; }
-.p-totals tr.grand td{ border-top:1.5px solid #182233; padding-top:3mm; font-size:12.5pt; font-weight:700; }
+/* Le total TTC dans la couleur dominante, en gras : c'est le chiffre qu'on
+   cherche en prenant le document, et il se confondait avec les sous-totaux.
+   Ceux-ci gardent l'encre du texte — les distinguer est tout l'objet. */
+.p-totals tr.grand td{ border-top:1.5px solid var(--accent); padding-top:3mm; font-size:12.5pt; font-weight:700; color:var(--accent-2); }
 .p-notes{ margin-top:9mm; font-size:9pt; background:#F8F9FB; border:1px solid #E2E6ED; border-radius:2mm; padding:3.5mm 4mm; }
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
@@ -1239,11 +1252,17 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 @media print{
   #app,#topbar,#bottomnav,.no-print{display:none !important;}
   body{background:#fff; color:#182233;}
+  /* Les fonds colorés sont de l'information, pas de la décoration : sans ce
+     réglage le navigateur les efface à l'impression, et l'en-tête du tableau
+     ressort blanc sur blanc. */
+  .p-lignes th, .p-print-grid th, .p-encadre{
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
 }
 #printArea.is-landscape{ width:297mm; }
 .p-print-grid{ width:100%; border-collapse:collapse; table-layout:fixed; }
 .p-print-grid th, .p-print-grid td{ border:1px solid #C7CDD6; vertical-align:top; padding:2mm; }
-.p-print-grid th{ background:#182233; color:#fff; font-size:9pt; text-transform:uppercase; letter-spacing:.3px; padding:2.5mm 2mm; }
+.p-print-grid th{ background:var(--secondaire); color:var(--sur-secondaire); font-size:9pt; text-transform:uppercase; letter-spacing:.3px; padding:2.5mm 2mm; }
 .p-print-grid .p-day-cell{ background:#F1F3F7; font-weight:700; font-size:9.5pt; text-transform:capitalize; width:26mm; text-align:center; vertical-align:middle; }
 .p-print-grid .p-work-cell{ height:22mm; }
 .p-print-job{ font-size:7.8pt; line-height:1.35; padding:1mm 1.2mm; margin-bottom:1.2mm; background:var(--accent-soft); border-left:2px solid var(--accent); border-radius:1mm; }

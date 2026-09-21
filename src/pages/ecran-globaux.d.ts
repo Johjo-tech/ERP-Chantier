@@ -25,6 +25,7 @@ declare global {
     REGIMES_TVA: any;
     REGLAGES_DEFAUT: any;
     SCHEMAS_ADRESSE_ELECTRONIQUE: any;
+    SECONDAIRE_DEFAUT: any;
     SERIES_NUMEROTATION: any;
     TYPES_DOCUMENT_RH: any;
     TYPES_VISITE: any;
@@ -157,6 +158,8 @@ declare global {
     ouvrirAttestationVisite: any;
     ouvrirDocumentRh: any;
     paletteAccent: any;
+    paletteSecondaire: any;
+    paletteSociete: any;
     passerPretAChiffrer: any;
     pdfFacturX: any;
     preparerPieceJointe: any;
