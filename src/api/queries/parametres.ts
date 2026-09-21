@@ -92,7 +92,11 @@ export async function saveSocieteSettings(
 export const SERIES_NUMEROTATION: { type: TypeDocument; label: string; prefixe: string }[] = [
   { type: "devis", label: "Devis", prefixe: "DEV" },
   { type: "facture", label: "Facture", prefixe: "FAC" },
-  { type: "intervention", label: "Rapport d'intervention", prefixe: "RAP" },
+  /* « INT », et non « RAP » : c'est le défaut de `numero_suivant_interne` en
+     base, qui fait seule autorité. L'écran annonçait RAP-2026-000001 dans
+     l'aperçu des réglages, et la base attribuait INT-2026-000001 — sur une
+     pièce qui part chez le client. */
+  { type: "intervention", label: "Rapport d'intervention", prefixe: "INT" },
   { type: "sav", label: "SAV", prefixe: "SAV" },
 ];
 

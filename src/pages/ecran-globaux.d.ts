@@ -14,6 +14,7 @@ declare global {
     INDEMNITE_RECOUVREMENT_EUR: any;
     LIBELLES_SEUILS: any;
     MENTION_FRANCHISE_EN_BASE: any;
+    METIER_AUCUN: any;
     MODES_REGLEMENT: any;
     MODE_REGLEMENT_DEFAUT: any;
     MOTIFS_AVOIR: any;
@@ -77,6 +78,7 @@ declare global {
     delaiPaiementRetenu: any;
     delaiPreregle: any;
     depasseLePlafondLegal: any;
+    dernierRefus: any;
     derniereVisite: any;
     docx: any;
     dossierSalarie: any;
@@ -129,7 +131,6 @@ declare global {
     mentionsLegales: any;
     messageAnomalies: any;
     messageBlocages: any;
-    METIER_AUCUN: any;
     metierAffiche: any;
     metierDeLaLigne: any;
     metierDuChapitre: any;

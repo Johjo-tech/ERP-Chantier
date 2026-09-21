@@ -249,8 +249,22 @@ function showToast(msg, type, duration){
     el._removeTimer = setTimeout(()=>{ el.style.display = 'none'; }, 250);
   }, duration || 6000);
 }
+/**
+ * Pourquoi l'enregistrement a échoué — le motif de la base, pas une supposition.
+ *
+ * Ce message annonçait une panne de connexion Supabase et renvoyait vers
+ * « l'aperçu Claude.ai ». Il était faux la plupart du temps : sur une base
+ * vivante, un échec d'écriture vient presque toujours d'un REFUS — une facture
+ * émise qu'on rouvre, un droit manquant, un champ obligatoire vide. Le
+ * déclencheur écrit alors une phrase qui dit quoi faire, et elle partait dans la
+ * console pendant que l'utilisateur lisait qu'il avait un problème de réseau.
+ *
+ * Il mentionnait de surcroît un aperçu qui ne veut rien dire pour le client.
+ */
 function saveFailedMessage(){
-  return "Échec de l'enregistrement (connexion à Supabase impossible). Si vous êtes dans l'aperçu Claude.ai, téléchargez le fichier et ouvrez-le dans votre navigateur — Supabase ne fonctionne pas depuis l'aperçu Claude.ai.";
+  const motif = window.dernierRefus && window.dernierRefus();
+  if(motif) return "Enregistrement refusé : " + motif;
+  return "L'enregistrement a échoué. Vérifiez votre connexion, puis réessayez — rien n'a été modifié.";
 }
 async function stDelete(key){
   try{
@@ -3954,7 +3968,11 @@ function transformerBonCommandeEnFacture(bcId){
     interlocuteur:'', conducteur:b.conducteur||'', conducteurId:b.conducteurId||'',
     date:todayISO(), echeance:'',
     lignes: (b.lignes&&b.lignes.length)? JSON.parse(JSON.stringify(b.lignes)) : [{type:'ligne', designation:`Travaux — BC ${b.numeroBC||''}`, qte:1, prixUnitaire:b.montant||0, tva: tvaDefaut()}],
-    remisePourcentage:0, bonCommandeId:b.id, chantierId:b.chantierId||null, statut:'impayée',
+    remisePourcentage:0, bonCommandeId:b.id, chantierId:b.chantierId||null,
+    /* Brouillon, comme les trois autres chemins de création. La secrétaire
+       relit puis émet ; naître « impayée » figeait le document avant même
+       qu'elle l'ait ouvert. */
+    statut:'brouillon',
     /* BT-13 de l'EN 16931 : la référence de commande de l'acheteur. Normalisée
        par la même règle que `bc_generer_facture`, pour que les deux chemins de
        création ne produisent pas deux valeurs différentes. */
@@ -4830,7 +4848,15 @@ async function saveFacture(){
        puisque l'exception partait dans la console et que l'écran ne disait
        rien. Un test aurait tenu ; `index.html` n'en a pas. */
     modePaiement: champSaisi('f_modePaiement', e.modePaiement) || window.modeReglementRetenu(delaiModeDuClient(client)),
-    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'impayée', ...conducteurDuSelect('f_conducteur'), verrouillee: e.verrouillee || false };
+    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0,
+    /* BROUILLON, et non « impayée ». Une facture enregistrée sans statut —
+       c'est le cas du bouton « + Nouvelle facture », qui n'en pose aucun —
+       partait « impayée », et `facture_attribuer_numero` numérote tout ce qui
+       n'est pas brouillon : la toute première facture du client était donc
+       DÉFINITIVE à la seconde où il cliquait Enregistrer, sans un mot. Le
+       numéro s'attribue à l'émission, par le bouton « 🧾 Émettre » — art. 242
+       nonies A. Le devis faisait déjà ainsi. */
+    statut: e.statut || 'brouillon', ...conducteurDuSelect('f_conducteur'), verrouillee: e.verrouillee || false };
   const r = await window.stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');

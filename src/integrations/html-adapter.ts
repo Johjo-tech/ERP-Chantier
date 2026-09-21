@@ -1356,6 +1356,26 @@ async function rangerPieceJointe(
 }
 
 /** Remplace : `async function stSet(key, val)`. */
+/**
+ * Le motif du dernier refus d'écriture, pour que l'écran puisse le DIRE.
+ *
+ * `stSet` rend un booléen, et trente-neuf appels en dépendent : changer sa
+ * signature reviendrait à réécrire l'écran. Le motif voyage donc à côté. Il est
+ * écrasé à chaque échec — c'est voulu : on ne veut que le dernier, celui qui
+ * vient de se produire, et l'écran le lit dans la foulée.
+ */
+let dernierMotifRefus: string | null = null;
+
+/**
+ * Ce que la base vient de refuser, en clair — ou `null` si rien.
+ *
+ * Postgres range le message utile dans `details` ou `hint` selon le cas, et
+ * `message` peut n'être qu'un emballage. On rend le plus parlant des trois.
+ */
+export function dernierRefus(): string | null {
+  return dernierMotifRefus;
+}
+
 export async function stSet(
   cle: string,
   valeur: Record<string, unknown>
@@ -1474,6 +1494,7 @@ export async function stSet(
       ...pieceJointe,
       id,
     });
+    dernierMotifRefus = null;
     return true;
   } catch (err) {
     const e = err as { message?: string; details?: string; hint?: string; code?: string };
@@ -1483,6 +1504,11 @@ export async function stSet(
       { code: e.code, message: e.message, details: e.details, hint: e.hint },
       err
     );
+    /* Le motif le plus parlant d'abord : `details` et `hint` portent la phrase
+       écrite par le déclencheur — « La facture FAC-2026-000012 est numérotée :
+       elle ne peut plus être supprimée » — là où `message` n'est souvent qu'un
+       emballage générique. */
+    dernierMotifRefus = e.details || e.hint || e.message || null;
     return false;
   }
 }
@@ -1867,6 +1893,7 @@ export function injectGlobalFunctions() {
 
   w.stGet = stGet;
   w.stSet = stSet;
+  w.dernierRefus = dernierRefus;
   w.stDelete = stDelete;
   w.stListKeys = stListKeys;
   /* Le chargement ne ramène que la société sur laquelle on travaille : la RLS
