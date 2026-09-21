@@ -4817,6 +4817,7 @@ function renderFacturesListHTML(list, vue){
         ? `<button class="btn small" onclick="etablirAvoirPour('${jsAttr(f.id)}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
         : `<button class="btn small" disabled title="Cette facture n'est pas émise : elle n'a pas de numéro, et se corrige directement par « Modifier ». Un avoir n'aurait rien à rectifier.">↩ Établir un avoir</button>`)}
       ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
+      ${estUnAvoir? '' : `<button class="btn small" onclick="dupliquerFacture('${jsAttr(f.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
       ${/* Le refus venait de la base, en 23001, avec une phrase que personne ne
             lisait : le bouton partait, la confirmation s'affichait, et rien ne
             se passait. Il reste visible, désactivé, et dit pourquoi. */''}
@@ -4921,7 +4922,8 @@ function factureForm(){
             règlement — les deux derniers sont dans le bandeau ci-dessus et
             dans l'onglet Règlements. */''}
       ${emise
-        ? `<button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`
+        ? `${unAvoir? '' : `<button class="btn primary" onclick="dupliquerFacture('${jsAttr(e.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
+           <button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`
         : `<button class="btn primary" onclick="saveFacture()" ${verrouillee?'disabled':''}>Enregistrer la facture</button>
            <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>`}
     </div>
@@ -5013,6 +5015,85 @@ async function saveFacture(){
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');
   closeForm('facture');
+}
+
+/**
+ * Repart d'une facture pour en établir une nouvelle.
+ *
+ * Une facture émise ne se modifie plus (art. L441-9) : refacturer les mêmes
+ * prestations au même client obligeait à tout ressaisir. La copie naît
+ * BROUILLON et SANS NUMÉRO — la série légale ne se consomme qu'à l'émission —
+ * et porte la date du jour.
+ *
+ * Ce qui ne se recopie pas, et pourquoi :
+ *
+ *  - les liens d'origine (devis, rapport, bon de commande) : le bon serait vu
+ *    comme facturé deux fois, et le verrou du commit précédent s'y tromperait ;
+ *  - l'identité figée de l'émetteur et le suivi de plateforme : ils naissent à
+ *    l'émission, pas avant ;
+ *  - le cadenas d'écran, qui ne concerne que le document déjà envoyé.
+ *
+ * Un avoir ne se duplique pas : il rectifie une facture précise, et une copie
+ * sans cible n'aurait rien à rectifier.
+ */
+async function dupliquerFacture(factureId){
+  const f = state.factures.find(x=>x.id===factureId);
+  if(!f) return;
+  if(window.estAvoir(f.typeDocument)){
+    showToast("Un avoir rectifie une facture précise : il ne se duplique pas.", 'danger', 6000);
+    return;
+  }
+
+  const id = uid();
+  const copie = {
+    id, societeId: f.societeId, numero: '', typeDocument: 'facture',
+    statut: 'brouillon', verrouillee: false,
+    createdAt: new Date().toISOString(),
+    factureRectifieeId: null, motifRectification: null,
+    devisId: null, interventionId: null, bonCommandeId: null,
+    refBonCommandeClient: f.refBonCommandeClient || null,
+    refMarche: f.refMarche || null,
+    chantierId: f.chantierId || null,
+    client: f.client, adresse: f.adresse,
+    interlocuteur: f.interlocuteur || '',
+    adresseLocataire: f.adresseLocataire || '',
+    codePostal: f.codePostal || '', ville: f.ville || '',
+    ...cleanLogementFields(f.logementStatut || '', f),
+    date: todayISO(),
+    /* L'échéance se recalcule depuis la date du jour : recopier celle de
+       l'ancienne facture livrerait un document déjà en retard. */
+    echeance: window.dateEcheance(todayISO(), {
+      jours: f.delaiPaiementJours ?? 0,
+      mode: f.delaiPaiementMode === 'fin_de_mois' ? 'fin_de_mois' : 'net',
+    }),
+    delaiPaiementJours: f.delaiPaiementJours ?? null,
+    delaiPaiementMode: f.delaiPaiementMode || null,
+    conditionsReglement: f.conditionsReglement || '',
+    modePaiement: f.modePaiement || null,
+    dateFinExecution: null,
+    acomptesDeduits: f.acomptesDeduits || 0,
+    retenueGarantiePourcentage: f.retenueGarantiePourcentage ?? null,
+    remisePourcentage: f.remisePourcentage || 0,
+    /* Copie profonde : partager le tableau ferait modifier les deux factures
+       d'un seul geste. Les identifiants de ligne partent — la base en donnera
+       de nouveaux, et les garder rattacherait les lignes à l'ancienne. */
+    lignes: (f.lignes||[]).map(l=>{ const { id: _sansId, ...reste } = JSON.parse(JSON.stringify(l)); return reste; }),
+    ...conducteurRepris(f),
+  };
+
+  const r = await window.stSet('facture:'+id, copie);
+  if(!r){ showToast(saveFailedMessage()); return; }
+  await recharger('facture');
+  const creee = state.factures.find(x=>x.id===id);
+  showToast('Copie créée en brouillon — elle recevra son numéro à l\'émission.', 'success', 4000);
+  openForm('facture', JSON.parse(JSON.stringify(creee || copie)));
+}
+
+/** Le conducteur suit la copie, par sa RÉFÉRENCE : le nom seul est réécrit. */
+function conducteurRepris(f){
+  return f.conducteurId
+    ? { conducteurId: f.conducteurId, conducteur: f.conducteur || '' }
+    : {};
 }
 
 /**
@@ -16591,7 +16672,9 @@ Object.assign(window, {
   dropOnHour,
   dropTodoColumn,
   dropUnsched,
+  conducteurRepris,
   dupliquerDevis,
+  dupliquerFacture,
   dupliquerLigne,
   dupliquerPhoto,
   easterDate,
