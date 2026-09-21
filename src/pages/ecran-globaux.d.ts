@@ -152,6 +152,7 @@ declare global {
     paletteAccent: any;
     passerPretAChiffrer: any;
     pdfFacturX: any;
+    pieceRecue: any;
     preparerPieceJointe: any;
     previsualiserImport: any;
     prochainActeur: any;

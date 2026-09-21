@@ -646,6 +646,9 @@ export function injecterSession() {
      voie, en lisant cette ligne, qu'il existe deux chemins et un seul rôle. */
   w.validerChiffrageHorsCircuit = queries.validerChiffrageHorsCircuit;
   w.validerAffaireConducteur = queries.validerAffaireConducteur;
+  /* Déplanifier relève de l'encadrement : la fonction SQL exige
+     `planning/modifier`, que la RLS des tâches, elle, n'exige pas. */
+  w.pieceRecue = queries.pieceRecue;
   w.emettreFacture = queries.emettreFacture;
   w.sauvegarderTerrain = queries.sauvegarderTerrain;
   w.marquerRealisee = queries.marquerRealisee;
