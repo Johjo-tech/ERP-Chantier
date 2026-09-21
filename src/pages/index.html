@@ -1174,6 +1174,31 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* Le pied vit dans le document pour l'impression navigateur ; pendant la
    génération du PDF, jsPDF le dessine lui-même, page après page. */
 #printArea.pdf-en-cours .p-footer{ display:none; }
+
+/* PENDANT LA CAPTURE, la marge basse de la zone ne sert plus à rien : les
+   12 mm réservés au pied la remplacent, sur chaque page et non sur la
+   dernière seulement. Conservée, elle n'était qu'un blanc de 14 mm collé à la
+   fin du document — assez pour faire basculer une page entière. La hauteur de
+   page se relit donc sans elle. */
+#printArea.pdf-en-cours{ padding-bottom:0; }
+#printArea.pdf-en-cours .p-page{ min-height:calc(297mm - 14mm - 12mm - 1mm); }
+
+/* Le document qui ne dépasse que d'un cheveu resserre ses blancs plutôt que
+   de lâcher une page presque vide. `lancerGenerationPdf` pose cette classe
+   après mesure, et ne la garde que si elle fait vraiment gagner une page :
+   on ne resserre jamais un document qui tenait déjà. Seuls les espacements
+   sont touchés, jamais les corps de texte — un document resserré doit rester
+   le même document. */
+#printArea.pdf-serre .p-lignes{ margin-top:3mm; }
+#printArea.pdf-serre .p-lignes td{ padding-top:1.4mm; padding-bottom:1.4mm; }
+#printArea.pdf-serre .p-totals{ margin-top:2mm; }
+#printArea.pdf-serre .p-conditions{ margin-top:3mm; }
+#printArea.pdf-serre .p-mentions{ margin-top:2mm; padding-top:1.5mm; }
+#printArea.pdf-serre .p-bas-de-page{ padding-top:2mm; }
+#printArea.pdf-serre .p-sign{ margin-top:5mm; }
+#printArea.pdf-serre .p-sigline{ margin-top:9mm; }
+#printArea.pdf-serre .p-notes{ margin-top:4mm; }
+#printArea.pdf-serre .p-section-title{ margin:4mm 0 1.5mm; }
 .p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }

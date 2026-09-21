@@ -3053,6 +3053,57 @@ function telechargerBlob(blob, nomFichier){
 /* Hauteur de la bande réservée au pied, en millimètres. À garder accordée à la
    soustraction de `.p-page{min-height}` ci-dessus. */
 const PIED_PDF_MM = 12;
+const LARGEUR_A4_MM = 210;
+const HAUTEUR_A4_MM = 297;
+
+/* Au-delà de quelle maigreur une dernière page est une page de trop.
+   12 % d'une A4 font 34 mm : en dessous, ce qui la remplit n'est jamais qu'une
+   tranche de mentions légales que le découpeur a coupée en deux. */
+const PART_DERNIERE_PAGE_MAIGRE = 0.12;
+
+/**
+ * Combien de pages ce document occupera, et ce qui tombera sur la dernière.
+ *
+ * On rejoue l'arithmétique d'html2pdf : il ne pagine pas, il découpe une image
+ * haute en tranches d'une page. La hauteur d'une tranche se déduit du rapport
+ * de la zone utile — la feuille moins la bande du pied — à la largeur A4.
+ */
+function decoupagePdf(hauteurPx, largeurPx){
+  const hauteurPage = largeurPx * ((HAUTEUR_A4_MM - PIED_PDF_MM) / LARGEUR_A4_MM);
+  const pages = Math.max(1, Math.ceil(hauteurPx / hauteurPage));
+  return { pages, part: (hauteurPx - (pages - 1) * hauteurPage) / hauteurPage };
+}
+
+/**
+ * Le document qui déborde d'un cheveu resserre ses blancs plutôt que de lâcher
+ * une page presque vide.
+ *
+ * C'est la cause des « deuxièmes pages vides » : rien n'ajuste la colonne à un
+ * nombre entier de pages, si bien qu'à huit lignes une facture dépassait de
+ * dix millimètres et sortait sur deux feuilles, la seconde ne portant qu'une
+ * tranche de mentions légales.
+ *
+ * On ne resserre que si cela fait vraiment gagner une page : un document qui
+ * tenait déjà ne doit pas changer d'allure. Et jamais les corps de texte —
+ * seulement les espacements, décrits par `.pdf-serre` dans la feuille de style.
+ */
+function resserrerSiPageDeTrop(area){
+  const mesurer = () => {
+    const h = Math.max(area.scrollHeight, area.offsetHeight);
+    const l = Math.max(area.scrollWidth, area.offsetWidth);
+    return { h, l, ...decoupagePdf(h, l) };
+  };
+
+  const avant = mesurer();
+  if(avant.pages < 2 || avant.part >= PART_DERNIERE_PAGE_MAIGRE) return avant;
+
+  area.classList.add('pdf-serre');
+  const apres = mesurer();
+  if(apres.pages < avant.pages) return apres;
+
+  area.classList.remove('pdf-serre');
+  return avant;
+}
 
 /**
  * Écrit l'identification légale au bas de CHAQUE page.
@@ -3113,10 +3164,15 @@ function dessinerPiedDePage(pdf, texte){
 
 async function lancerGenerationPdf(area, nomFichier, action, factureId){
   try{
+    /* La classe AVANT la mesure, et c'est la moitié du correctif : elle cache
+       le pied que jsPDF redessinera lui-même et libère la marge basse de la
+       zone. Mesurée avant, la hauteur comptait ces deux blancs, html2canvas
+       capturait une image d'autant plus haute — et le découpeur en tirait une
+       page de plus, vide. */
+    area.classList.add('pdf-en-cours');
     await attendreRendu();
 
-    const hauteur = Math.max(area.scrollHeight, area.offsetHeight);
-    const largeur = Math.max(area.scrollWidth, area.offsetWidth);
+    const { h: hauteur, l: largeur } = resserrerSiPageDeTrop(area);
     if(!hauteur || !largeur) throw new Error("le document à imprimer est vide");
 
     const opt = {
@@ -3133,7 +3189,6 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
     /* Le texte du pied est lu dans le document lui-même : il dit donc toujours
        la même chose que ce que le modèle a composé, pied personnalisé compris. */
     const textePied = (area.querySelector('.p-footer')?.textContent || '').trim();
-    area.classList.add('pdf-en-cours');
 
     let blob;
     try{
@@ -3141,7 +3196,7 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
         .get('pdf').then(pdf => dessinerPiedDePage(pdf, textePied))
         .outputPdf('blob');
     } finally {
-      area.classList.remove('pdf-en-cours');
+      area.classList.remove('pdf-en-cours', 'pdf-serre');
     }
 
     /* Une facture emporte sa version structurée : le même fichier porte la page
@@ -3172,6 +3227,7 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
     console.error('PDF generation error', err);
     showToast("Impossible de produire le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
   }finally{
+    area.classList.remove('pdf-en-cours', 'pdf-serre');
     area.style.display = 'none';
     nettoyerCalquesPdf();
   }
