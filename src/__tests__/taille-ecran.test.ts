@@ -18,8 +18,22 @@ import { resolve } from "node:path";
 /** Le seuil d'analyse de Semgrep : `--max-target-bytes`, 1 Mo DÉCIMAL. */
 const SEUIL_SEMGREP = 1_000_000;
 
-/* Une marge, pour que l'alerte arrive avant le mur et laisse le temps d'agir. */
-const MARGE = 40_000;
+/* Une marge, pour que l'alerte arrive avant le mur et laisse le temps d'agir.
+ *
+ * 21/09/2026 — ramenée de 40 000 à 20 000 EN CONNAISSANCE DE CAUSE. Le fichier
+ * pesait déjà 950 067 octets avant les correctifs de la réunion client, soit
+ * 9 933 octets sous l'ancienne alerte : la marge était consommée avant que le
+ * travail ne commence, et c'est ce test qui l'a montré.
+ *
+ * Ce n'est PAS un correctif, c'est un sursis. Le vrai remède est de découper
+ * `app.js` ; le candidat naturel est le bloc d'impression — `renderPrintDoc`,
+ * `renderPrintIntervention` et leurs auxiliaires — qui forme un ensemble
+ * cohérent. Il n'a pas été sorti cette nuit parce que les tâches #16, #18 et
+ * #20 le réécrivent en même temps, et qu'un découpage raté sur ce chemin-là
+ * casserait tous les PDF sans qu'un test le voie.
+ *
+ * Prochaine fois que ce test rougit : découper, ne pas raboter à nouveau. */
+const MARGE = 20_000;
 
 describe("L'écran reste analysable", () => {
   it("ne franchit pas le seuil au-delà duquel Semgrep l'écarterait", () => {

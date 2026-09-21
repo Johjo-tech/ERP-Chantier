@@ -1890,6 +1890,37 @@ function openForm(type, prefill){
      une date sans `data-auto`, et reste intouchée. */
   if(type === 'facture') appliquerDelaiPaiement();
 }
+/* ---------- L'enregistrement intermédiaire ----------
+ * « Enregistrer » refermait le formulaire : garder son travail en cours
+ * obligeait à le rouvrir, et une saisie longue n'avait aucun point de reprise.
+ * Ce bouton-ci garde ce qui est saisi, ne valide rien au-delà du client, et
+ * laisse le formulaire ouvert.
+ *
+ * Il n'attribue aucun numéro de facture : la série légale ne se consomme qu'à
+ * l'émission (art. 242 nonies A). Le devis, lui, reçoit le sien dès la
+ * première écriture — sa colonne `numero` est NOT NULL en base, et un numéro
+ * de devis n'est pas une série continue.
+ */
+function heureCourte(){
+  return new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+}
+
+/** Le repère de dernière sauvegarde, posé sans redessiner le formulaire. */
+function marquerBrouillonEnregistre(){
+  const el = document.getElementById('brouillonHorodatage');
+  if(el) el.textContent = `Brouillon enregistré à ${heureCourte()}`;
+  showToast('Brouillon enregistré.', 'success', 2500);
+  /* On ne redessine PAS l'onglet : le focus et le curseur seraient perdus en
+     pleine saisie, ce qui est exactement ce qu'on cherche à éviter ici. La
+     liste derrière le formulaire se remettra à jour à sa fermeture, qui passe
+     par `closeForm` — donc par `renderTab`. */
+}
+
+/** Ce que la barre d'actions affiche à droite des boutons. */
+function horodatageBrouillonHTML(){
+  return `<span id="brouillonHorodatage" class="card-sub" style="margin-left:auto; align-self:center;"></span>`;
+}
+
 function closeForm(type){
   state.formOpen[type] = false;
   state.editing = {type:null,id:null,lignes:[]};
@@ -3828,7 +3859,9 @@ function devisForm(){
     </div>
     <div class="form-actions-sticky">
       <button class="btn primary" onclick="saveDevis()">Enregistrer le devis</button>
+      <button class="btn" onclick="saveDevis(true)" title="Garder la saisie en cours sans refermer">💾 Enregistrer le brouillon</button>
       <button class="btn ghost" onclick="closeForm('devis')">Annuler</button>
+      ${horodatageBrouillonHTML()}
     </div>
   </div>`;
 }
@@ -3842,7 +3875,7 @@ function cleanLogementFields(statut, raw){
     ancienLocataire: statut === 'vacant' ? (raw.ancienLocataire||'') : ''
   };
 }
-async function saveDevis(){
+async function saveDevis(brouillon){
   const e = state.editing;
   const client = document.getElementById('f_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); return; }
@@ -3870,6 +3903,12 @@ async function saveDevis(){
   const r = await window.stSet('devis:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('devis');
+  if(brouillon){
+    state.editing.id = id;
+    state.editing.numero = obj.numero;
+    marquerBrouillonEnregistre();
+    return;
+  }
   closeForm('devis');
   if(obj.chantierId){
     await syncDevisLignesVersDpgf(obj);
@@ -4925,7 +4964,9 @@ function factureForm(){
         ? `${unAvoir? '' : `<button class="btn primary" onclick="dupliquerFacture('${jsAttr(e.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
            <button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`
         : `<button class="btn primary" onclick="saveFacture()" ${verrouillee?'disabled':''}>Enregistrer la facture</button>
-           <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>`}
+           <button class="btn" onclick="saveFacture(true)" ${verrouillee?'disabled':''} title="Garder la saisie en cours sans refermer, et sans attribuer de numéro">💾 Enregistrer le brouillon</button>
+           <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>
+           ${horodatageBrouillonHTML()}`}
     </div>
   </div>`;
 }
@@ -4943,7 +4984,7 @@ function refusEnregistrementFacture(e){
   return verrou && !verrou.reversible ? verrou.libelle : null;
 }
 
-async function saveFacture(){
+async function saveFacture(brouillon){
   const e = state.editing;
   const refus = refusEnregistrementFacture(e);
   if(refus){ showToast(refus, 'danger', 7000); return; }
@@ -5014,6 +5055,16 @@ async function saveFacture(){
   const r = await window.stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');
+  if(brouillon){
+    /* L'identifiant est posé sur la saisie en cours : sans lui, le prochain
+       enregistrement créerait une SECONDE facture au lieu de compléter
+       celle-ci. */
+    state.editing.id = id;
+    state.editing.numero = obj.numero;
+    state.editing.statut = obj.statut;
+    marquerBrouillonEnregistre();
+    return;
+  }
   closeForm('facture');
 }
 
@@ -6879,12 +6930,14 @@ function bonCommandeForm(){
       ${verrou
         ? `<button class="btn ghost" onclick="closeForm('bonCommande')">Fermer</button>`
         : `<button class="btn primary" onclick="saveBonCommande()">Enregistrer${isSAV? ' le SAV' : ' le bon de commande'}</button>
-           <button class="btn ghost" onclick="closeForm('bonCommande')">Annuler</button>`}
+           <button class="btn" onclick="saveBonCommande(true)" title="Garder la saisie en cours sans refermer, et sans exiger l'adresse ni les lignes">💾 Enregistrer le brouillon</button>
+           <button class="btn ghost" onclick="closeForm('bonCommande')">Annuler</button>
+           ${horodatageBrouillonHTML()}`}
     </div>
   </div>`;
 }
 let bcSaveInProgress = false;
-async function saveBonCommande(){
+async function saveBonCommande(brouillon){
   if(bcSaveInProgress) return;
   bcSaveInProgress = true;
   try{
@@ -6897,7 +6950,10 @@ async function saveBonCommande(){
   /* La règle vit dans `regles-bc.ts`, pas ici : la couche `queries` s'en sert
      pour refuser et cet écran pour expliquer. Le refus et son message ne
      peuvent donc pas diverger. */
-  const manques = window.manquesBonCommande({
+  /* Un brouillon échappe à ce contrôle : c'est tout son objet. Le bon ne
+     partira de toute façon nulle part tant qu'il n'est pas enregistré pour de
+     bon, et `manquesBonCommande` reste opposé à ce moment-là. */
+  const manques = brouillon ? [] : window.manquesBonCommande({
     adresse: document.getElementById('bc_adresse').value,
     lignes: state.editing.lignes,
   });
@@ -7003,6 +7059,12 @@ async function saveBonCommande(){
   const r = await window.stSet('bonCommande:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('bonCommande');
+  if(brouillon){
+    state.editing.id = id;
+    state.editing.numeroBC = obj.numeroBC;
+    marquerBrouillonEnregistre();
+    return;
+  }
   closeForm('bonCommande');
   showToast(e.id? 'Bon de commande modifié.' : 'Bon de commande créé.', 'success');
   } finally {
