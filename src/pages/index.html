@@ -964,6 +964,18 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 
 .lignes-table{width:100%; border-collapse:collapse; margin-top:4px;}
 .lignes-table th{font-size:10.5px; color:var(--text-dim); text-transform:uppercase; text-align:left; padding:4px 6px; letter-spacing:.05em;}
+/* Ce qui se compte se lit à droite, ce qui se raconte à gauche.
+   `.num` n'avait de règle QUE dans les documents imprimés : à l'écran, les
+   totaux et les champs de quantité et de prix restaient collés à gauche, si
+   bien qu'on ne pouvait pas comparer deux montants d'un coup d'œil — l'unité
+   et la décimale ne tombaient jamais au même endroit. */
+.lignes-table th.num, .lignes-table td.num{ text-align:right; }
+.lignes-table input[type="number"]{ text-align:right; }
+/* Le commentaire raconte : il reste à gauche, quoi qu'il arrive au reste de
+   la ligne. Écrit noir sur blanc pour qu'un alignement posé plus tard sur le
+   tableau ne l'emporte pas avec lui. */
+.lignes-table .commentaire-input,
+.lignes-table .row-ligne-comment textarea{ text-align:left; }
 .lignes-table td{padding:4px 6px;}
 /* La colonne des actions.
    Sa largeur est celle de la cellule la plus fournie — une ligne porte trois
@@ -1134,6 +1146,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-lignes{ margin-top:7mm; }
 .p-lignes th{ font-size:8pt; text-transform:uppercase; letter-spacing:.5px; color:#6B7686; text-align:left; border-bottom:1px solid #E2E6ED; padding:2mm; }
 .p-lignes th.num, .p-lignes td.num{ text-align:right; }
+/* L'unité n'est pas un nombre : collée à droite, elle s'éloignait de la
+   quantité qu'elle qualifie. « 12   m² » se lit, « 12       m² » se déchiffre. */
+.p-lignes th.unite, .p-lignes td.unite{ text-align:left; padding-left:1mm; }
+/* Le commentaire et le chapitre racontent : ils restent à gauche même si le
+   tableau devait un jour être aligné autrement. */
+.p-lignes .p-comment td, .p-lignes .p-chapitre td{ text-align:left; }
 .p-lignes td{ font-size:9.5pt; padding:2.3mm 2mm; border-bottom:.5px solid #EEF0F4; vertical-align:top; }
 .p-lignes tr{ break-inside:avoid; page-break-inside:avoid; }
 .p-totals, .p-notes, .p-sign, .p-locataire{ break-inside:avoid; page-break-inside:avoid; }

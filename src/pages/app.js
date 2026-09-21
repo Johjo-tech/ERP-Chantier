@@ -2998,7 +2998,7 @@ function printableLignesRows(lignes, hidePrices){
       const lht = window.montantLigneHt(l);
       running += lht;
       const sansPrix = !(parseFloat(l.prixUnitaire) > 0) ? ' p-sans-prix' : '';
-      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="num">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${l.tva}%</td><td class="num">${fmt(lht)}</td><td class="num">${fmt(window.montantLigneTtc(l))}</td></tr>`;
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${l.tva}%</td><td class="num">${fmt(lht)}</td><td class="num">${fmt(window.montantLigneTtc(l))}</td></tr>`;
     }
   });
   if(sawChap && hasChap) html += sousTotalChapitreHTML(running, fmt);
@@ -3384,7 +3384,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </td>
     </tr></table>
     <table class="p-lignes">
-      <tr><th style="width:36%;">Désignation</th><th class="num">Qté</th><th class="num">Unité</th><th class="num">Prix U. HT</th><th class="num">TVA</th><th class="num">Total HT</th><th class="num">Total TTC</th></tr>
+      <tr><th style="width:36%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">Prix U. HT</th><th class="num">TVA</th><th class="num">Total HT</th><th class="num">Total TTC</th></tr>
       ${printableLignesRows(lignes, hidePrices)}
     </table>
     <table class="p-totals">
