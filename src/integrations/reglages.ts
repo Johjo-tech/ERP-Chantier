@@ -28,6 +28,8 @@ export interface ReglagesDocuments {
   couleurAccent: string;
   /** Seconde couleur : en-têtes de tableau, cartouches, bandeaux. */
   couleurSecondaire: string;
+  /** Site web, imprimé au bas des documents. Pas de colonne : il ne sert qu'ici. */
+  siteWeb: string;
 }
 
 export interface ReglagesSociete {
@@ -69,6 +71,7 @@ export const REGLAGES_DEFAUT: ReglagesSociete = {
     afficherIban: true,
     couleurAccent: "#FF6A1A",
     couleurSecondaire: "#182233",
+    siteWeb: "",
   },
   unites: UNITES_DEFAUT,
   tauxTva: TAUX_TVA_DEFAUT,
@@ -145,6 +148,7 @@ export function fusionnerReglages(brut: unknown): ReglagesSociete {
       afficherIban: booleen(doc.afficherIban, d.afficherIban),
       couleurAccent: texte(doc.couleurAccent, d.couleurAccent),
       couleurSecondaire: texte(doc.couleurSecondaire, d.couleurSecondaire),
+      siteWeb: texte(doc.siteWeb, d.siteWeb),
     },
     unites: liste(r.unites, UNITES_DEFAUT),
     tauxTva: listeTaux(r.tauxTva, TAUX_TVA_DEFAUT),

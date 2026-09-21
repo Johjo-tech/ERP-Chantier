@@ -3353,7 +3353,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
   };
   return `
     <div class="p-page">
-    <table class="p-header"><tr>
+    <table class="p-header p-entete"><tr>
       <td style="width:55%;">
         ${logoHTML(s)}
         ${/* Le bloc « Émetteur » plus bas porte déjà le nom et l'adresse : les
@@ -3405,6 +3405,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     ${blocConditionsHTML(type, doc, s, hidePrices)}
     <div class="p-bas-de-page">
       ${blocMentionsHTML(type, s)}
+      ${bandeauContactHTML(em, s, hidePrices)}
       <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
     </div>
     </div>
@@ -3536,6 +3537,44 @@ function blocMentionsHTML(type, s){
     ${mentions.map(m=>`<div>${esc(m)}</div>`).join('')}
     ${complement? `<div style="white-space:pre-wrap;">${esc(complement)}</div>`:''}
   </div>`;
+}
+
+/**
+ * Le bandeau de contact, au bas du document.
+ *
+ * Le pied que jsPDF dessine sur CHAQUE page porte l'identité légale — forme
+ * juridique, capital, SIRET, TVA, RCS — parce que l'art. R123-238 l'exige sur
+ * tout document commercial, et qu'une page isolée doit dire de qui elle vient.
+ * Mais jsPDF écrit en Helvetica : pas d'icône, pas de mise en page, deux
+ * lignes au plus. Tout ce qui SERT à joindre l'entreprise ou à la payer est
+ * donc rendu ici, en HTML, une fois, au bas du document.
+ *
+ * Le site web vit dans les réglages et non dans une colonne de `societes` :
+ * il ne sert qu'aux documents, et lui ouvrir une colonne aurait demandé une
+ * migration pour une ligne de pied de page.
+ */
+function bandeauContactHTML(em, s, hidePrices){
+  const r = (s.reglages && s.reglages.documents) || {};
+  const siteWeb = (r.siteWeb || '').trim();
+  const contacts = [
+    em.adresse ? ['📍', em.adresse] : null,
+    em.telephone ? ['📞', em.telephone] : null,
+    em.email ? ['✉️', em.email] : null,
+    siteWeb ? ['🌐', siteWeb] : null,
+  ].filter(Boolean);
+
+  /* Les coordonnées bancaires disparaissent en mode sans prix : un document
+     sans montants n'a pas à porter de quoi le payer. */
+  const iban = em.iban || s.iban;
+  const banque = !hidePrices && (iban || s.bic)
+    ? ['🏦', [iban ? 'IBAN ' + iban : '', s.bic ? 'BIC ' + s.bic : ''].filter(Boolean).join(' — ')]
+    : null;
+  if(banque) contacts.push(banque);
+
+  if(!contacts.length) return '';
+  return `<div class="p-contact">${contacts
+    .map(([icone, texte]) => `<span class="p-contact-item"><span class="p-contact-icone">${icone}</span>${esc(texte)}</span>`)
+    .join('')}</div>`;
 }
 
 /* Le pied reprend l'identité légale : c'est là que se lisent la forme
@@ -10376,6 +10415,10 @@ function renderInfosEntrepriseSection(){
       <div class="field"><label>Ville</label><input type="text" id="ie_ville" value="${esc(s.ville)}"></div>
       <div class="field"><label>Téléphone</label><input type="text" id="ie_telephone" oninput="majCompletudeSociete()" value="${esc(s.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="ie_email" oninput="majCompletudeSociete()" value="${esc(s.email)}"></div>
+      ${/* Le site web ne sert qu'au pied des documents : il vit dans les
+            réglages plutôt que dans une colonne de `societes`, qu'il aurait
+            fallu ouvrir par une migration pour une ligne de pied de page. */''}
+      <div class="field"><label>Site web</label><input type="text" id="ie_siteWeb" value="${esc(reglagesCourants().documents.siteWeb || '')}" placeholder="www.exemple.fr"></div>
       ${champSiretHTML('ie_siret', s.siret, CIBLES_ANNUAIRE_SOCIETE)}
       <div class="field"><label>Nom du gérant / représentant</label><input type="text" id="ie_gerant" value="${esc(s.gerant)}"></div>
       <div class="field"><label>Téléphone du gérant</label><input type="text" id="ie_gerantTelephone" value="${esc(s.gerantTelephone)}"></div>
@@ -11074,11 +11117,13 @@ async function saveInfosEntreprise(){
      écraser `documents` en entier effacerait le délai de paiement et le reste. */
   const couleur = v('ie_couleur');
   const secondaire = v('ie_couleurSecondaire');
-  if(couleur || secondaire){
+  const siteWeb = v('ie_siteWeb');
+  if(couleur || secondaire || siteWeb !== undefined){
     obj.reglages = { ...(s.reglages||{}),
       documents: { ...((s.reglages||{}).documents||{}),
         ...(couleur? { couleurAccent: couleur } : {}),
-        ...(secondaire? { couleurSecondaire: secondaire } : {}) } };
+        ...(secondaire? { couleurSecondaire: secondaire } : {}),
+        ...(siteWeb !== undefined? { siteWeb } : {}) } };
   }
 
   const anomalies = window.verifierEntite(obj);
@@ -16773,6 +16818,7 @@ Object.assign(window, {
   bandeauTacheHTML,
   barreFiltresFactures,
   barreRecherche,
+  bandeauContactHTML,
   barreFiltresReglements,
   basculerReferencePrefacture,
   bcAProbleme,

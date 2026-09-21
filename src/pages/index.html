@@ -1145,7 +1145,7 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-tagline{ font-size:8.5pt; color:#6B7686; margin-top:1mm; }
 .p-doctitle{ font-family:'Manrope',sans-serif; font-size:15pt; font-weight:800; text-align:right; }
 .p-docmeta{ text-align:right; font-size:9.5pt; color:#6B7686; margin-top:1.5mm; line-height:1.5; }
-.p-rule{ border-bottom:2.5px solid var(--accent); margin:4mm 0 6mm; }
+.p-rule{ border-bottom:1.6px solid var(--accent); margin:3mm 0 5mm; }
 .p-parties td{ width:50%; vertical-align:top; padding-right:8mm; }
 .p-label{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin-bottom:1.5mm; }
 .p-name{ font-size:11pt; font-weight:700; margin-bottom:1mm; }
@@ -1210,7 +1210,16 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   .p-sans-prix td{ background:#FFF1F0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
 /* Logo de l'émetteur, en tête de tout document imprimé. */
-.p-logo{ max-height:18mm; max-width:55mm; display:block; margin-bottom:2.5mm; }
+/* Le logo remonte : il était collé au corps du document, et se retrouvait
+   plus bas que le titre en face de lui. Aligné en haut de la bande d'en-tête,
+   il tient le regard là où il doit. Un peu plus grand, aussi — 18 mm le
+   faisaient disparaître à côté d'un titre de 15 pt. */
+.p-logo{ max-height:22mm; max-width:60mm; display:block; margin:0 0 2mm; }
+/* La bande d'en-tête : une teinte de la couleur de la société à 5 %, assez
+   pour asseoir le bloc sans l'alourdir. Un aplat plein aurait mangé l'encre
+   sur la bande la plus large du document. */
+.p-entete{ background:rgba(var(--accent-rgb), .05); border-radius:2mm; padding:3mm 3mm 2mm; }
+.p-entete td{ vertical-align:top; }
 /* Conditions de règlement et mentions du code de commerce, en pied de facture. */
 .p-conditions{ width:100%; margin-top:6mm; break-inside:avoid; page-break-inside:avoid; }
 .p-conditions td{ width:50%; vertical-align:top; font-size:8.5pt; color:#3C4757; padding:2mm 6mm 2mm 3mm; background:rgba(var(--secondaire-rgb), .06); }
@@ -1233,7 +1242,15 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
 .p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
-.p-footer{ margin-top:6mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:3mm; }
+.p-footer{ margin-top:4mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:2.5mm; }
+/* Le bandeau de contact : ce qui sert à joindre l'entreprise ou à la payer.
+   Il vit en HTML et non dans le pied dessiné par jsPDF — celui-ci écrit en
+   Helvetica, sans icône ni mise en page, et porte l'identité LÉGALE que
+   l'art. R123-238 veut sur chaque page. */
+.p-contact{ margin-top:3mm; padding-top:2.5mm; border-top:.5px solid rgba(var(--accent-rgb), .30);
+  display:flex; flex-wrap:wrap; gap:1.5mm 5mm; font-size:8pt; color:#3C4757; break-inside:avoid; page-break-inside:avoid; }
+.p-contact-item{ display:inline-flex; align-items:baseline; gap:1.5mm; }
+.p-contact-icone{ font-size:8.5pt; }
 /* Les mentions légales appartiennent au pied de page, pas à la suite du texte.
    La page est une colonne haute d'au moins une feuille A4 (297mm moins les
    14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
@@ -1291,7 +1308,7 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   /* Les fonds colorés sont de l'information, pas de la décoration : sans ce
      réglage le navigateur les efface à l'impression, et l'en-tête du tableau
      ressort blanc sur blanc. */
-  .p-lignes th, .p-print-grid th, .p-encadre, .p-encadre-2,
+  .p-lignes th, .p-print-grid th, .p-encadre, .p-encadre-2, .p-entete,
   .p-locataire, .p-notes, .p-totals, .p-conditions td{
     -webkit-print-color-adjust:exact; print-color-adjust:exact;
   }
