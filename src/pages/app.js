@@ -1939,14 +1939,15 @@ function ligneRow(l,i){
     <td><select onchange="updateLigne(${i},'tva',this.value)">${optionsTvaHTML(l.tva)}</select></td>
     <td class="num mono" id="ligneHT-${i}" style="white-space:nowrap; font-weight:600;">${money(window.montantLigneHt(l))}</td>
     <td class="num mono" id="ligneTTC-${i}" style="white-space:nowrap; color:var(--text-dim);">${money(window.montantLigneTtc(l))}</td>
-    <td style="white-space:nowrap;">
+    <td class="ligne-actions">
       <button class="btn small ${hasComment?'primary':'ghost'}" onclick="toggleLigneComment(${i})" title="${hasComment?'Modifier le commentaire':'Ajouter un commentaire'}">💬</button>
-      <button class="btn small danger" onclick="removeLigne(${i})">✕</button>
+      <button class="btn small ghost" onclick="dupliquerLigne(${i})" title="Dupliquer cette ligne">⧉</button>
+      <button class="btn small danger" onclick="removeLigne(${i})" title="Supprimer cette ligne">✕</button>
     </td>
   </tr>
   ${isOpen? `<tr class="row-ligne-comment"><td colspan="7">
       <textarea rows="2" placeholder="Commentaire (optionnel, plusieurs lignes possibles)…" oninput="updateLigne(${i},'commentaire',this.value)">${esc(l.commentaire)}</textarea>
-    </td><td>${hasComment? `<button class="btn small ghost" onclick="updateLigne(${i},'commentaire',''); state.ligneCommentOuvert=null; refreshLignesUI();" title="Retirer le commentaire">✕</button>`:''}</td></tr>` : ''}`;
+    </td><td class="ligne-actions">${hasComment? `<button class="btn small ghost" onclick="updateLigne(${i},'commentaire',''); state.ligneCommentOuvert=null; refreshLignesUI();" title="Retirer le commentaire">✕</button>`:''}</td></tr>` : ''}`;
 }
 function toggleLigneComment(i){
   state.ligneCommentOuvert = state.ligneCommentOuvert===i ? null : i;
@@ -2552,13 +2553,19 @@ function chapitreRow(l,i,total){
     <td colspan="5"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><input type="text" class="chapitre-input" value="${esc(l.designation)}" placeholder="Titre du chapitre (ex. Plomberie, Main d'œuvre…)" oninput="updateLigne(${i},'designation',this.value)">${chapitreMetierHTML(l, i)}</div></td>
     <td class="mono" id="chapTotal-${i}" style="text-align:right; font-weight:700; white-space:nowrap;">${total!=null? money(total)+' HT' : ''}</td>
     <td></td>
-    <td><button class="btn small danger" onclick="removeLigne(${i})">✕</button></td>
+    <td class="ligne-actions">
+      <button class="btn small ghost" onclick="dupliquerLigne(${i})" title="Dupliquer ce chapitre">⧉</button>
+      <button class="btn small danger" onclick="removeLigne(${i})" title="Supprimer ce chapitre">✕</button>
+    </td>
   </tr>`;
 }
 function commentaireRow(l,i){
   return `<tr class="row-commentaire dnd-row" ondragover="dragOverLigne(event)" ondrop="dropLigne(event, ${i})">
     <td colspan="7"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i})" title="Déplacer">⠿</span><textarea class="commentaire-input" rows="2" oninput="updateLigne(${i},'designation',this.value)" placeholder="Commentaire / remarque (non chiffré)">${esc(l.designation)}</textarea></div></td>
-    <td><button class="btn small danger" onclick="removeLigne(${i})">✕</button></td>
+    <td class="ligne-actions">
+      <button class="btn small ghost" onclick="dupliquerLigne(${i})" title="Dupliquer ce commentaire">⧉</button>
+      <button class="btn small danger" onclick="removeLigne(${i})" title="Supprimer ce commentaire">✕</button>
+    </td>
   </tr>`;
 }
 function ligneRowsHTML(lignes){
@@ -2727,6 +2734,31 @@ function addLigne(){ state.editing.lignes.push({type:'ligne', designation:'',qte
 function addChapitre(){ state.editing.lignes.push({type:'chapitre', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function addCommentaire(){ state.editing.lignes.push({type:'commentaire', designation:'',qte:0,prixUnitaire:0,tva:0}); refreshLignesUI(); }
 function removeLigne(i){ state.editing.lignes.splice(i,1); if(!state.editing.lignes.length) state.editing.lignes.push({type:'ligne', designation:'',qte:1,unite:'u',prixUnitaire:0,tva: tvaDefaut()}); refreshLignesUI(); }
+
+/**
+ * Recopie une ligne juste en dessous d'elle-même.
+ *
+ * Une ligne, un chapitre ou un commentaire : le tableau est le même pour les
+ * trois, et le geste aussi. Une saisie de vingt lignes qui ne diffèrent que
+ * par la quantité se faisait jusqu'ici à la main, champ par champ.
+ *
+ * Copie PROFONDE, et surtout pas la même référence : deux lignes partageant
+ * l'objet auraient changé ensemble, et `enfantsIdentiques` n'y aurait vu que
+ * du feu. On laisse tomber l'`id` — la nouvelle ligne n'en a pas encore, la
+ * base lui en donnera un.
+ */
+function dupliquerLigne(i){
+  const source = state.editing.lignes[i];
+  if(!source) return;
+  const { id: _sansId, ...copie } = JSON.parse(JSON.stringify(source));
+  state.editing.lignes.splice(i + 1, 0, copie);
+  /* Le commentaire ouvert est repéré par un INDEX : sans ce décalage, insérer
+     au-dessus de lui ouvrirait le commentaire du voisin. */
+  if(state.ligneCommentOuvert != null && state.ligneCommentOuvert > i){
+    state.ligneCommentOuvert++;
+  }
+  refreshLignesUI();
+}
 let draggedLigneIndex = null;
 /* Le glisser-déposer des lignes sert deux tableaux : celui des documents —
    devis, facture, bon de commande — et celui de la pré-facture. Une seule
@@ -16560,6 +16592,7 @@ Object.assign(window, {
   dropTodoColumn,
   dropUnsched,
   dupliquerDevis,
+  dupliquerLigne,
   dupliquerPhoto,
   easterDate,
   echeanceSaisieAlaMain,
