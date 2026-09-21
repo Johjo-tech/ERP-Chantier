@@ -61,6 +61,7 @@ describe("Lignes de document", () => {
       prix_unitaire: 120.5,
       tva: 10,
       article_reference: null,
+      metier: null,
       position: 3,
     });
   });
@@ -82,7 +83,32 @@ describe("Lignes de document", () => {
 
   it("fait l'aller-retour sans perte", () => {
     const { position, ...row } = ligneVersDb(legacy, 0);
-    expect(ligneVersLegacy(row)).toEqual({ ...legacy, commentaire: undefined });
+    expect(ligneVersLegacy(row)).toEqual({
+      ...legacy,
+      commentaire: undefined,
+      metier: undefined,
+    });
+  });
+
+  /* `null` par défaut, et c'est la garantie qui compte : `enfantsIdentiques`
+     compare champ à champ, et les lignes des 830 bons portent `NULL` en base.
+     Émettre autre chose les ferait toutes paraître modifiées, d'où un
+     delete+insert que le verrou des factures émises refuse. */
+  it("n'invente aucun métier sur une ligne qui n'en porte pas", () => {
+    expect(ligneVersDb({ designation: "Divers" }, 0).metier).toBeNull();
+  });
+
+  it("transmet le métier tranché sur un chapitre", () => {
+    const chapitre = { type: "chapitre", designation: "SALLE DE BAIN", metier: "PLOMBERIE" };
+    expect(ligneVersDb(chapitre, 0).metier).toBe("PLOMBERIE");
+    expect(ligneVersLegacy(ligneVersDb(chapitre, 0)).metier).toBe("PLOMBERIE");
+  });
+
+  /* `undefined` et non `""` : un chapitre jamais tranché doit revenir dans
+     l'état « à déduire ». Rendre la chaîne vide fabriquerait un choix vide à
+     chaque relecture, et la déduction ne reprendrait plus jamais la main. */
+  it("relit « rien de tranché » comme indéfini, pas comme une chaîne vide", () => {
+    expect(ligneVersLegacy({ metier: null }).metier).toBeUndefined();
   });
 
   it("retombe sur le type « ligne » quand il manque", () => {

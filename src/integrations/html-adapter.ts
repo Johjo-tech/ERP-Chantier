@@ -98,6 +98,12 @@ export interface LigneLegacy {
   tva?: number;
   /** Code de l'article du catalogue d'où la ligne a été remplie. */
   articleReference?: string;
+  /**
+   * Le métier tranché sur un chapitre. Absent : il se lit sur le titre.
+   *
+   * `null` n'a pas le même sens que `""` ici — voir `ligneVersLegacy`.
+   */
+  metier?: string | null;
 }
 
 /**
@@ -142,6 +148,11 @@ export function ligneVersDb(ligne: LigneLegacy, position: number) {
     prix_unitaire: nombre(ligne.prixUnitaire),
     tva: nombre(ligne.tva),
     article_reference: ligne.articleReference || null,
+    /* `?? null` et non `|| null` : la valeur part telle quelle, y compris la
+       sentinelle de refus. Et `null` par défaut est ce qui garde les 830 bons
+       « identiques » aux yeux de `enfantsIdentiques` — un chapitre jamais
+       tranché n'a rien à réécrire. */
+    metier: ligne.metier ?? null,
     position,
   };
 }
@@ -156,6 +167,10 @@ export function ligneVersLegacy(row: Record<string, unknown>): LigneLegacy {
     prixUnitaire: row.prix_unitaire as number | undefined,
     tva: row.tva as number | undefined,
     articleReference: (row.article_reference as string | undefined) ?? undefined,
+    /* `undefined`, jamais `""` : c'est ce qui sépare « rien n'a été tranché »,
+       où la déduction reprend la main, de « on a tranché ». Rendre `""`
+       fabriquerait un choix vide à chaque aller-retour. */
+    metier: (row.metier as string | null) ?? undefined,
   };
 }
 

@@ -129,6 +129,9 @@ declare global {
     mentionsLegales: any;
     messageAnomalies: any;
     messageBlocages: any;
+    METIER_AUCUN: any;
+    metierAffiche: any;
+    metierDeLaLigne: any;
     metierDuChapitre: any;
     metiersDesChapitres: any;
     modeReglementRetenu: any;

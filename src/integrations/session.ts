@@ -175,7 +175,10 @@ import {
   refBonCommandeClient,
 } from "@/api/regles-bc";
 import {
+  METIER_AUCUN,
   memeMetier,
+  metierAffiche,
+  metierDeLaLigne,
   metierDuChapitre,
   metiersDesChapitres,
   referentielMetiers,
@@ -582,6 +585,13 @@ export function injecterSession() {
   w.metierDuChapitre = metierDuChapitre;
   w.metiersDesChapitres = metiersDesChapitres;
   w.referentielMetiers = referentielMetiers;
+  /* Le choix tranché sur un chapitre l'emporte sur son titre. La liste
+     déroulante de l'écran et le regroupement des travaux du planning doivent
+     lire cette précédence au même endroit, sinon corriger un chapitre
+     changerait les métiers annoncés sans déplacer les travaux. */
+  w.metierDeLaLigne = metierDeLaLigne;
+  w.metierAffiche = metierAffiche;
+  w.METIER_AUCUN = METIER_AUCUN;
   /* Les lignes du bon sont la seule description des travaux : elles descendent
      sur la tâche du terrain et remontent dans la pré-facture. */
   w.travauxParMetier = travauxParMetier;
