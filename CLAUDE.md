@@ -15,7 +15,9 @@ src/api/regles-*.ts         ← règles métier pures, sans accès base
 src/api/queries/*.ts        ← une table (et ses filles) par fichier
 src/api/operations/         ← enchaînements métier
 src/integrations/*.ts       ← pont vers le HTML, session, droits, annuaires
-src/pages/index.html        ← l'application (monolithe hérité, ~15 000 lignes)
+src/pages/app.js            ← l'application (monolithe hérité, ~17 000 lignes)
+src/pages/index.html        ← le squelette et le CSS, plus aucun script
+src/pages/ecran-globaux.d.ts ← ce que la couche TS pose sur `window`
 ```
 
 Les dépendances vont dans un seul sens : `pages` → `integrations` → `queries`
@@ -158,6 +160,13 @@ Un bug corrigé se double d'un test qui le reproduit.
 - Une colonne dérivée envoyée à l'écriture fait voir toutes les lignes comme
   modifiées par `enfantsIdentiques`, d'où un delete+insert que le déclencheur
   de facture figée refuse. `montant_ht` est exclu de la comparaison pour cela.
+- Le `metier` d'une ligne de chapitre a trois états, pas deux : `NULL` — il se
+  lit sur le titre, c'est le défaut des 830 bons —, un nom, ou la sentinelle
+  `METIER_AUCUN` (« (aucun) ») pour un refus délibéré. Ne **jamais** écrire `""`
+  pour dire « aucun » : `enfantsIdentiques` compare sur `String(v ?? "")`, où
+  `NULL` et la chaîne vide sont le même texte, et le refus ne s'enregistrerait
+  pas. La précédence « choisi l'emporte sur le titre » vit dans
+  `regles-metiers.metierDeLaLigne`, que l'écran **et** le planning doivent lire.
 
 ## Git
 
