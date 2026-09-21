@@ -965,11 +965,20 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 .lignes-table{width:100%; border-collapse:collapse; margin-top:4px;}
 .lignes-table th{font-size:10.5px; color:var(--text-dim); text-transform:uppercase; text-align:left; padding:4px 6px; letter-spacing:.05em;}
 .lignes-table td{padding:4px 6px;}
-/* La colonne des actions : largeur fixe, boutons groupés à droite. Sans
-   elle, la croix se posait là où le contenu de la cellule la laissait —
+/* La colonne des actions.
+   Sa largeur est celle de la cellule la plus fournie — une ligne porte trois
+   boutons, un chapitre deux — et une colonne de tableau est partagée : toutes
+   les croix s'alignent donc sur le même bord droit, quel que soit le type de
+   ligne. `width:1%` la garde aussi étroite que son contenu l'exige.
+   Sans cela, la croix se posait là où le contenu de la cellule la laissait :
    après le 💬 sur une ligne, contre le bord gauche sur un chapitre. */
 .lignes-table .ligne-actions{ width:1%; white-space:nowrap; text-align:right; vertical-align:middle; }
 .lignes-table .ligne-actions .btn{ margin-left:4px; }
+/* Le chapitre s'aère de 14 mm au-dessus pour se détacher — mais cette marge
+   ne doit pas descendre ses boutons : `vertical-align:middle` centre dans la
+   boîte de contenu, qui exclut ce rembourrage, et la croix tombait 4,5 px
+   plus bas que celles des lignes voisines. Mesuré dans Chromium. */
+.lignes-table .row-chapitre .ligne-actions{ padding-top:4px; }
 .lignes-table input,.lignes-table select{padding:7px 8px; font-size:13px;}
 .totals-box{margin-top:10px; padding-top:10px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:22px; font-size:13.5px;}
 .totals-box b{font-family:'JetBrains Mono',monospace;}
