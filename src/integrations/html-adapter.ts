@@ -1624,12 +1624,24 @@ export async function stDelete(cle: string): Promise<boolean> {
 
   const { error } = await dyn().from(collection.table).delete().eq("id", uuid);
   if (error) {
-    console.error("stDelete error:", error);
+    /* Le motif voyage comme pour `stSet` : sans lui, une suppression refusée
+       par un déclencheur — facture numérotée, bon facturé, métier employé —
+       ne produisait RIEN à l'écran. La ligne restait là, sans un mot, et
+       l'utilisateur recommençait. */
+    const e = error as { message?: string; details?: string; hint?: string; code?: string };
+    console.error(
+      "Suppression refusée par la base",
+      cle,
+      { code: e.code, message: e.message, details: e.details, hint: e.hint },
+      error
+    );
+    dernierMotifRefus = e.details || e.hint || e.message || null;
     return false;
   }
 
   cache.delete(cle);
   uuidParCle.delete(cle);
+  dernierMotifRefus = null;
   return true;
 }
 

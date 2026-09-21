@@ -281,6 +281,11 @@ function passeParUnePlateforme(doc){
     || window.relveDeLaFactureElectronique(cadreDuDocument(doc));
 }
 
+/* Le motif d'une suppression refusée, tel que la base l'a écrit. */
+function motifSuppression(){
+  const motif = window.dernierRefus && window.dernierRefus();
+  return motif || "La suppression a été refusée. Rien n'a été supprimé.";
+}
 function saveFailedMessage(){
   const motif = window.dernierRefus && window.dernierRefus();
   if(motif) return "Enregistrement refusé : " + motif;
@@ -2955,7 +2960,17 @@ async function deleteItem(type, id){
     const reg = state.reglements.find(r=>r.id===id);
     if(reg) factureIdToSync = reg.factureId;
   }
-  await window.stDelete(type+':'+id);
+  const supprime = await window.stDelete(type+':'+id);
+  if(!supprime){
+    /* Un refus de déclencheur ne se voyait PAS : la ligne restait à l'écran,
+       sans un mot, et l'utilisateur recommençait. Le motif que la base a écrit
+       est fait pour être lu — « Le métier « Peinture » est employé par 12 bons
+       de commande : […] Renommez-le plutôt ». */
+    showToast(motifSuppression(), 'danger', 8000);
+    await rechargerType(type);
+    renderTab();
+    return;
+  }
   await rechargerType(type);
   if(type === 'salarie') await Promise.all([chargerDossiersRh(true), chargerVisitesRh(true)]);
   /* syncFactureStatut recharge les factures de son côté. */
@@ -15270,16 +15285,61 @@ function renderMetiersSection(){
     <div id="liste-metierPerso">${listeMetiersHTML()}</div>
   `;
 }
+/**
+ * Les métiers de la société, dans l'ordre choisi.
+ *
+ * `position` d'abord, libellé ensuite : à égalité — et tous valent zéro tant
+ * que la migration n'est pas appliquée — on retombe exactement sur l'ordre
+ * alphabétique d'avant.
+ */
+function metiersOrdonnes(){
+  return state.metiersPerso
+    .filter(m=>m.societeId===state.societeId)
+    .slice()
+    .sort((a,b)=> (a.position||0) - (b.position||0) || (a.nom||'').localeCompare(b.nom||'', 'fr'));
+}
+
 const listeMetiersHTML = declarerListing('metierPerso',
-  ()=> state.metiersPerso.filter(m=>m.societeId===state.societeId),
-  list => list.map(m=>`
+  metiersOrdonnes,
+  list => list.map((m,i)=>`
       <div class="card"><div class="card-row">
         <div style="display:flex; align-items:center; gap:8px;"><span style="width:16px; height:16px; border-radius:4px; background:${esc(m.couleur||'#999')}; flex-shrink:0; border:1px solid rgba(0,0,0,.1);"></span><div class="card-title">${esc(m.nom)}</div></div>
       </div>
       <div style="margin-top:8px; display:flex; gap:8px;">
+        ${/* Réordonner par deux flèches et non par glisser-déposer : la liste
+              est courte, et la recherche peut n'en montrer qu'une partie —
+              déplacer dans une liste filtrée n'aurait aucun sens. */''}
+        <button class="btn small ghost" onclick="deplacerMetier('${jsAttr(m.id)}',-1)" ${i===0?'disabled':''} title="Monter">▲</button>
+        <button class="btn small ghost" onclick="deplacerMetier('${jsAttr(m.id)}',1)" ${i===list.length-1?'disabled':''} title="Descendre">▼</button>
         <button class="btn small" onclick="editItem('metierPerso','${jsAttr(m.id)}')">Modifier</button>
-        <button class="btn small danger" onclick="deleteItem('metierPerso','${jsAttr(m.id)}')">Supprimer</button>
+        <button class="btn small danger" onclick="deleteItem('metierPerso','${jsAttr(m.id)}')" title="Un métier employé par des bons, des tâches ou des lignes ne peut pas être supprimé : renommez-le, le nouveau nom suivra partout.">Supprimer</button>
       </div></div>`).join('') || listeVide('metierPerso', 'Aucun métier enregistré pour cette société.', 'métier'));
+
+/**
+ * Monte ou descend un métier d'un cran.
+ *
+ * On échange les deux positions plutôt que de renuméroter toute la liste :
+ * deux écritures au lieu de sept, et rien ne bouge pour les autres. La
+ * renumérotation de départ vient de la migration.
+ */
+async function deplacerMetier(id, sens){
+  const list = metiersOrdonnes();
+  const i = list.findIndex(m=>m.id===id);
+  const j = i + sens;
+  if(i < 0 || j < 0 || j >= list.length) return;
+
+  const a = list[i], b = list[j];
+  /* Deux positions égales — le cas avant migration — ne s'échangent pas
+     d'elles-mêmes : on leur donne leur rang courant avant de permuter. */
+  const posA = (a.position || 0) === (b.position || 0) ? i + 1 : (a.position || 0);
+  const posB = (a.position || 0) === (b.position || 0) ? j + 1 : (b.position || 0);
+
+  const okA = await window.stSet('metierPerso:'+a.id, { ...a, position: posB });
+  const okB = await window.stSet('metierPerso:'+b.id, { ...b, position: posA });
+  if(!okA || !okB){ showToast(saveFailedMessage(), 'danger', 7000); }
+  await recharger('metierPerso');
+  renderTab();
+}
 const METIER_PALETTE = ['#FF6A1A','#F5B301','#FFD23F','#2E9E4F','#5EC26A','#0E7C66','#178A7A','#1E8FD5','#3AA9E0','#0B5FA5','#5B5FE8','#7C6FF0','#8E5CE6','#B85CD1','#D65DB1','#C77DFF','#8A6D3B','#B08D57','#5C6470'];
 function pickMetierCouleur(couleur){
   const input = document.getElementById('mp_couleur');
@@ -15313,7 +15373,11 @@ async function saveMetierPerso(){
   const nom = document.getElementById('mp_nom').value.trim();
   if(!nom){ alert('Le nom du métier est requis.'); return; }
   const id = e.id || uid();
-  const obj = { id, societeId: state.societeId, nom, couleur: document.getElementById('mp_couleur').value };
+  /* La position se conserve : un champ absent est écrit à NULL par PostgREST,
+     et renommer un métier l'aurait renvoyé en tête de liste. Un métier neuf se
+     pose à la fin. */
+  const position = e.position != null ? e.position : (metiersOrdonnes().length + 1);
+  const obj = { id, societeId: state.societeId, nom, couleur: document.getElementById('mp_couleur').value, position };
   const r = await window.stSet('metierPerso:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('metierPerso');
@@ -17023,6 +17087,7 @@ Object.assign(window, {
   guessSkipRows,
   ajouterHabilitationSansFichier,
   ajouterHabilitationsChoisies,
+  deplacerMetier,
   deposerHabilitationsEnAttente,
   habilitationEnAttenteHTML,
   habilitationsDuSalarie,
@@ -17149,6 +17214,7 @@ Object.assign(window, {
   metierPersoSelectOptions,
   metiersDisplayJoin,
   metiersDisponibles,
+  metiersOrdonnes,
   metiersDuBrouillon,
   motifDeLaBase,
   moisAnnee,
@@ -17156,6 +17222,7 @@ Object.assign(window, {
   monEquipeId,
   money,
   moneyDisplay,
+  motifSuppression,
   montantsCherchables,
   numerosBCdeLaFacture,
   monthsForPeriod,
