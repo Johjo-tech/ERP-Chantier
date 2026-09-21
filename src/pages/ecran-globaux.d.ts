@@ -53,6 +53,7 @@ declare global {
     badgeOrigine: any;
     blocagesChiffrage: any;
     blocagesValidationConducteur: any;
+    bonEstFacture: any;
     cadreSuggere: any;
     catalogueComplet: any;
     chargerDocumentsRh: any;
@@ -228,6 +229,8 @@ declare global {
     ventilationTvaAffichage: any;
     verifierEntite: any;
     verifierPieceJointe: any;
+    verrouBonCommande: any;
+    verrouFacture: any;
     versSaisieBonCommande: any;
   }
 }

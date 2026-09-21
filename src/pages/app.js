@@ -4726,6 +4726,7 @@ function renderFacturesListHTML(list, vue){
        stocké ne distingue pas le partiel du non-réglé, et une facture réglée à
        moitié se lisait « impayée » sans qu'on sache qu'un acompte était tombé. */
     const reg = reglementStatutFacture(f);
+    const verrou = window.verrouFacture(f);
     const estUnAvoir = window.estAvoir(f.typeDocument);
     const rectifiee = f.factureRectifieeId ? state.factures.find(x=>x.id===f.factureRectifieeId) : null;
     const devisOrigine = f.devisId ? state.devis.find(d=>d.id===f.devisId) : null;
@@ -4747,7 +4748,12 @@ function renderFacturesListHTML(list, vue){
         : `<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}`}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')">Modifier</button>
+      ${/* « Modifier » sur une facture émise était un mensonge : le formulaire
+            s'ouvrait en lecture seule et la base refusait toute écriture. Le
+            bouton dit maintenant ce qu'il fait. */''}
+      ${verrou && verrou.code === 'emise'
+        ? `<button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')" title="${esc(verrou.libelle)}">👁 Consulter</button>`
+        : `<button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')">Modifier</button>`}
       <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
       ${/* L'ÉMISSION. `emettreFacture` existait, testée et exposée sur window —
@@ -4779,7 +4785,12 @@ function renderFacturesListHTML(list, vue){
         ? `<button class="btn small" onclick="etablirAvoirPour('${jsAttr(f.id)}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
         : `<button class="btn small" disabled title="Cette facture n'est pas émise : elle n'a pas de numéro, et se corrige directement par « Modifier ». Un avoir n'aurait rien à rectifier.">↩ Établir un avoir</button>`)}
       ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
-      <button class="btn small danger" onclick="deleteItem('facture','${jsAttr(f.id)}')">Supprimer</button>
+      ${/* Le refus venait de la base, en 23001, avec une phrase que personne ne
+            lisait : le bouton partait, la confirmation s'affichait, et rien ne
+            se passait. Il reste visible, désactivé, et dit pourquoi. */''}
+      ${verrou && verrou.code === 'emise'
+        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
+        : `<button class="btn small danger" onclick="deleteItem('facture','${jsAttr(f.id)}')">Supprimer</button>`}
     </div></div>`;
   }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';
 }
@@ -4790,20 +4801,21 @@ function factureForm(){
      la base refuse désormais toute retouche de l'en-tête d'une facture
      numérotée. Promettre « déverrouiller pour modifier » sur une facture émise
      serait promettre ce que la base refuse. */
-  const emise = !!(e.id && e.numero);
-  const verrouillee = e.id && e.verrouillee && !emise;
-  const fige = emise || verrouillee;
+  const verrou = e.id ? window.verrouFacture(e) : null;
+  const emise = !!(verrou && verrou.code === 'emise');
+  const verrouillee = !!(verrou && verrou.code === 'telechargee');
+  const fige = !!verrou;
   const unAvoir = window.estAvoir(e.typeDocument);
   const rectifieeEcran = e.factureRectifieeId ? state.factures.find(f=>f.id===e.factureRectifieeId) : null;
   return `
   <div class="form-panel">
     <h3>${e.id? (emise? (unAvoir?'Avoir ':'Facture ')+esc(e.numero) : 'Modifier la facture') :'Nouvelle facture'}</h3>
     ${emise? `<div class="facture-verrou-banner">
-      <span>🔒 ${unAvoir? 'Avoir' : 'Facture'} émis${unAvoir?'':'e'} sous le n° ${esc(e.numero)} — son contenu est définitif (art. L441-9).${unAvoir? '' : ' Une correction passe par un avoir.'}</span>
+      <span>🔒 ${esc(verrou.libelle)}</span>
       <span style="font-weight:400;">L'encaissement s'enregistre dans l'onglet <b>Règlements</b>.</span>
       ${unAvoir? '' : `<button type="button" class="btn small" onclick="etablirAvoirPour('${jsAttr(e.id)}')" title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>`}
     </div>` : verrouillee? `<div class="facture-verrou-banner">
-      <span>🔒 Cette facture a déjà été téléchargée ou envoyée — elle est verrouillée pour éviter une modification accidentelle.</span>
+      <span>🔒 ${esc(verrou.libelle)}</span>
       <button type="button" class="btn small danger" onclick="deverrouillerFacture('${jsAttr(e.id)}')">🔓 Déverrouiller pour modifier</button>
     </div>` : ''}
     ${unAvoir && rectifieeEcran? `<div class="numref" style="margin-bottom:10px;">Rectifie la facture ${esc(rectifieeEcran.numero)} du ${fmtDate(rectifieeEcran.date)}${e.motifRectification? ' — '+esc(e.motifRectification):''}</div>`:''}
@@ -4871,13 +4883,36 @@ function factureForm(){
     </div>
     </div>
     <div class="form-actions-sticky">
-      <button class="btn primary" onclick="saveFacture()" ${verrouillee?'disabled':''}>Enregistrer la facture</button>
-      <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>
+      ${/* Sur une facture émise, « Enregistrer » restait ACTIF : le clic
+            partait, la base répondait 23001, et l'écran n'en disait rien.
+            Les seuls gestes qui restent sont le duplicata, l'avoir et le
+            règlement — les deux derniers sont dans le bandeau ci-dessus et
+            dans l'onglet Règlements. */''}
+      ${emise
+        ? `<button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`
+        : `<button class="btn primary" onclick="saveFacture()" ${verrouillee?'disabled':''}>Enregistrer la facture</button>
+           <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>`}
     </div>
   </div>`;
 }
+
+/**
+ * Le même refus que la base, mais avant le voyage.
+ *
+ * `facture_emise_entete_figee` rejette déjà l'écriture ; sans ce garde, le
+ * clic partait quand même et l'utilisateur n'avait qu'un toast générique. La
+ * phrase vient du module de règles, donc elle ne peut pas diverger de celle
+ * qu'on affiche ailleurs.
+ */
+function refusEnregistrementFacture(e){
+  const verrou = e && e.id ? window.verrouFacture(e) : null;
+  return verrou && !verrou.reversible ? verrou.libelle : null;
+}
+
 async function saveFacture(){
   const e = state.editing;
+  const refus = refusEnregistrementFacture(e);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
   const client = document.getElementById('f_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); return; }
   const id = e.id || uid();

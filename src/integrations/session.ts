@@ -60,6 +60,11 @@ import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "
 import { apercuDe, urlApercuPdf, verifierPieceJointe } from "@/api/regles-piece-jointe";
 import { ACCENT_DEFAUT, paletteAccent } from "@/api/regles-theme";
 import {
+  bonEstFacture,
+  verrouBonCommande,
+  verrouFacture,
+} from "@/api/regles-verrouillage";
+import {
   avoirDisponible,
   estAvoir,
   libelleDocument,
@@ -727,6 +732,12 @@ export function injecterSession() {
      et n'avait aucun lecteur : KTA portait un violet, l'écran restait orange. */
   w.paletteAccent = paletteAccent;
   w.ACCENT_DEFAUT = ACCENT_DEFAUT;
+
+  /* Ce qu'une pièce déjà partie ne laisse plus toucher. Le même module dit le
+     refus et la phrase qui l'explique, à l'écran comme à l'écriture. */
+  w.verrouFacture = verrouFacture;
+  w.verrouBonCommande = verrouBonCommande;
+  w.bonEstFacture = bonEstFacture;
 
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;
