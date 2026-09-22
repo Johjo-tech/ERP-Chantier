@@ -85,7 +85,7 @@ function etatVisiteDuSalarie(salarieId){
    `habilitationsAJoindre` n'existent que là, avec les fichiers choisis. Les
    `input` sont reposés à la main — ils sont `disabled`, personne ne les relit,
    et aucun redessin n'est garanti derrière. */
-function resynchroniserDatesVisite(salarieId){
+export function resynchroniserDatesVisite(salarieId){
   const s = state.salaries.find(x=>x.id===salarieId);
   const e = state.editing;
   if(!s || !e || e.id !== salarieId) return;
@@ -103,16 +103,16 @@ function resynchroniserDatesVisite(salarieId){
    la forme de la chaîne « undefined » — le panneau s'ouvrirait en mémoire sans
    jamais se montrer. Aucun uuid ne peut valoir cette sentinelle. */
 const VISITE_FICHE_NEUVE = '__salarie_en_creation__';
-function cleRegistreVisites(salarie){
+export function cleRegistreVisites(salarie){
   return (salarie && salarie.id) || VISITE_FICHE_NEUVE;
 }
 let chargementVisitesRh = null;
-function visitesRhPretes(){
+export function visitesRhPretes(){
   return !chargementVisitesRh
     && state.visitesRhCharges
     && state.visitesRhSociete === state.societeId;
 }
-function chargerVisitesRh(force){
+export function chargerVisitesRh(force){
   if(chargementVisitesRh) return chargementVisitesRh;
   if(!force && visitesRhPretes()) return Promise.resolve();
   const societe = state.societeId;
@@ -137,7 +137,7 @@ function chargerVisitesRh(force){
 /* La conformité RH d'un salarié : son dossier ET son suivi médical.
    Les deux se composent ici, et non dans une règle feuille — celles-ci
    n'importent que des types, et ne peuvent donc pas se connaître. */
-function conformiteRhDuSalarie(salarieId){
+export function conformiteRhDuSalarie(salarieId){
   const bilan = dossierDuSalarie(salarieId);
   const visite = etatVisiteDuSalarie(salarieId);
   /* « Pas d'échéance connue » vaut manquement : on ne sait pas si la personne
@@ -170,7 +170,7 @@ function etatVisiteBadge(salarieId){
  * non d'un 60 codé en dur : il est déjà réglable, et deux seuils pour la même
  * échéance finiraient par se contredire.
  */
-function badgeVisiteMedicaleListe(salarieId){
+export function badgeVisiteMedicaleListe(salarieId){
   const info = etatVisiteDuSalarie(salarieId);
   const echeance = echeanceVisite(salarieId);
   const commun = 'margin-left:6px;';
@@ -185,7 +185,7 @@ function badgeVisiteMedicaleListe(salarieId){
   }
   return `<span class="badge danger" style="${commun}" title="Aucune échéance connue : rien ne préviendra">🩺 Aucun suivi</span>`;
 }
-function pastilleVisiteRh(salarieId){
+export function pastilleVisiteRh(salarieId){
   const info = etatVisiteDuSalarie(salarieId);
   if(info.etat === 'inconnue') return `<span class="doc-rh-pastille manquant" title="Aucune visite enregistrée">✕</span>`;
   if(info.etat === 'depassee') return `<span class="doc-rh-pastille expire" title="Échéance dépassée">!</span>`;
@@ -239,7 +239,7 @@ function visiteEnAttenteHTML(v){
 /* Le registre d'un salarié : son état, son historique, et de quoi compléter.
    Servi tel quel dans l'onglet Visites médicales et dans la fiche — y compris
    sur une fiche qui n'est pas encore enregistrée. */
-function visitesMedicalesHTML(salarie){
+export function visitesMedicalesHTML(salarie){
   const cle = cleRegistreVisites(salarie);
   const neuve = !salarie.id;
   /* Ce qui attend d'être déposé n'appartient qu'à la fiche ouverte : la même
@@ -282,7 +282,7 @@ function visitesMedicalesHTML(salarie){
    dates déjà tapés disparaîtraient au clic sur « + Enregistrer une visite ».
    Même geste que `rafraichirZoneHabilitations`, et le même repli sur
    `renderTab` pour l'onglet Visites médicales, où la zone n'existe pas. */
-function rafraichirZoneVisites(){
+export function rafraichirZoneVisites(){
   const zone = document.getElementById('suiviMedicalZone');
   if(zone) zone.innerHTML = visitesMedicalesHTML(state.editing);
   else renderTab();
@@ -530,7 +530,7 @@ async function ouvrirAttestationVisiteEcran(visiteId){
     showToast("L'attestation n'a pas pu être ouverte.");
   }
 }
-function renderRHVisites(){
+export function renderRHVisites(){
   const salaries = state.salaries.filter(s=>s.societeId===state.societeId);
   if(!visitesRhPretes()){
     chargerVisitesRh();

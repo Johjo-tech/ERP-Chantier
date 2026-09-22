@@ -80,7 +80,13 @@ function nomsDePremierNiveau(code: string): Set<string> {
     else if (motif.type === "AssignmentPattern") relever(motif.left);
     else if (motif.type === "RestElement") relever(motif.argument);
   };
-  for (const noeud of (parseAst(code) as any).body as Noeud[]) {
+  for (const brut of (parseAst(code) as any).body as Noeud[]) {
+    /* `export function x(){}` déclare bien `x` au premier niveau. Ne pas
+       déballer l'export le ferait passer pour absent, et la garde du sens
+       inverse crierait à l'orphelin sur du code parfaitement sain — c'est
+       arrivé au premier module sorti du monolithe. */
+    const noeud: Noeud =
+      brut.type === "ExportNamedDeclaration" && brut.declaration ? brut.declaration : brut;
     if (noeud.type === "FunctionDeclaration" || noeud.type === "ClassDeclaration")
       relever(noeud.id);
     else if (noeud.type === "VariableDeclaration")

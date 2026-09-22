@@ -13,7 +13,23 @@
  * simplement de répondre, sans la moindre erreur.
  */
 
-import { installerRhVisites } from './rh-visites.js';
+/* Le registre des visites médicales vit dans son propre module. Ce que
+   l'écran lui emprunte est nommé ici : le contrôle de types de `app.js`
+   ne lit pas `window`, et un nom disparu doit rougir à la compilation,
+   pas au clic. */
+import {
+  installerRhVisites,
+  badgeVisiteMedicaleListe,
+  chargerVisitesRh,
+  cleRegistreVisites,
+  conformiteRhDuSalarie,
+  pastilleVisiteRh,
+  rafraichirZoneVisites,
+  renderRHVisites,
+  resynchroniserDatesVisite,
+  visitesMedicalesHTML,
+  visitesRhPretes,
+} from './rh-visites.js';
 
 /* Alimenté au démarrage par les sociétés que la RLS rend visibles
    (voir src/integrations/session.ts). La liste ci-dessous n'est qu'un repli

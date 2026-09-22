@@ -29,13 +29,21 @@ import { colonnesDe } from "@/api/columns";
 const VISITES = readFileSync(resolve(__dirname, "../pages/rh-visites.js"), "utf8");
 const ECRAN = readFileSync(resolve(__dirname, "../pages/app.js"), "utf8");
 
-/** Une fonction de premier niveau, prise dans le fichier livré. */
+/**
+ * Une fonction de premier niveau, prise dans le fichier livré.
+ *
+ * Le `export ` est retiré : ce que l'écran emprunte au module est exporté pour
+ * que son contrôle de types le voie, mais `new Function` ne compile pas un
+ * export hors module.
+ */
 function extraire(nom: string, prefixe = "function", source = VISITES): string {
-  const debut = source.indexOf(`\n${prefixe} ${nom}(`);
-  if (debut < 0) throw new Error(`\`${nom}\` introuvable`);
-  const fin = source.indexOf("\n}", debut);
+  const marque = [`\nexport ${prefixe} ${nom}(`, `\n${prefixe} ${nom}(`]
+    .map((m) => source.indexOf(m))
+    .find((i) => i >= 0);
+  if (marque === undefined) throw new Error(`\`${nom}\` introuvable`);
+  const fin = source.indexOf("\n}", marque);
   if (fin < 0) throw new Error(`fin de \`${nom}\` introuvable`);
-  return source.slice(debut, fin + 2);
+  return source.slice(marque, fin + 2).replace(/^\nexport /, "\n");
 }
 
 interface Champ {

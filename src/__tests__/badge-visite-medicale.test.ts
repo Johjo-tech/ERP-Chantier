@@ -33,11 +33,15 @@ const AUJOURD_HUI = "2026-09-21";
 const SEUIL = 45;
 
 function extraire(nom: string): string {
-  const debut = SOURCE.indexOf(`\nfunction ${nom}(`);
-  if (debut < 0) throw new Error(`\`${nom}\` introuvable dans src/pages/rh-visites.js`);
+  /* `export ` retiré : le nom est exporté pour l'écran, mais `new Function` ne
+     compile pas un export hors module. */
+  const debut = [`\nexport function ${nom}(`, `\nfunction ${nom}(`]
+    .map((m) => SOURCE.indexOf(m))
+    .find((i) => i >= 0);
+  if (debut === undefined) throw new Error(`\`${nom}\` introuvable dans src/pages/rh-visites.js`);
   const fin = SOURCE.indexOf("\n}", debut);
   if (fin < 0) throw new Error(`fin de \`${nom}\` introuvable dans src/pages/rh-visites.js`);
-  return SOURCE.slice(debut, fin + 2);
+  return SOURCE.slice(debut, fin + 2).replace(/^\nexport /, "\n");
 }
 
 /** Le badge tel qu'il part en production, branché sur la vraie règle. */

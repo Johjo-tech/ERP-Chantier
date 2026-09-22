@@ -58,8 +58,10 @@ const publies = blocs.flatMap((bloc) =>
  */
 function nomsDeclares(source: string): Set<string> {
   const noms = new Set<string>();
-  for (const m of source.matchAll(/^(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm)) noms.add(m[1]);
-  for (const m of source.matchAll(/^(?:const|let|var) ([A-Za-z_$][\w$]*)\s*=/gm)) noms.add(m[1]);
+  /* `export ` en tête : un module d'écran exporte ce que l'autre lui emprunte,
+     et ces noms-là sont bel et bien déclarés au premier niveau. */
+  for (const m of source.matchAll(/^(?:export )?(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm)) noms.add(m[1]);
+  for (const m of source.matchAll(/^(?:export )?(?:const|let|var) ([A-Za-z_$][\w$]*)\s*=/gm)) noms.add(m[1]);
   for (const m of source.matchAll(/\}(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/g)) noms.add(m[1]);
   return noms;
 }
