@@ -27,6 +27,7 @@ const PALETTE_HISTORIQUE: PaletteAccent = {
   accentFonce: "#C24E00",
   accentClair: "#FFE7D6",
   surAccent: "#FFFFFF",
+  surAccentFonce: "#FFFFFF",
 };
 
 export interface PaletteAccent {
@@ -37,6 +38,17 @@ export interface PaletteAccent {
   accentClair: string;
   /** Le texte posé SUR la couleur : noir ou blanc, celui qui se lit. */
   surAccent: string;
+  /**
+   * Le texte posé sur le TON FONCÉ, qui n'est pas le même que sur l'accent.
+   *
+   * Le bandeau « Net à payer » est peint en `accentFonce`. Y réutiliser
+   * `surAccent` revient à décider de l'encre d'après une autre couleur : à
+   * luminosité 0,38 une teinte jaune reste claire, et le blanc y tombe à
+   * 2,5:1 là où l'encre sombre donne 6,4:1. Sur le violet de KTA c'est
+   * l'inverse — 10,4:1 pour le blanc. Le calcul doit être fait sur le ton
+   * qu'on peint, pas sur son voisin.
+   */
+  surAccentFonce: string;
 }
 
 export interface PaletteSecondaire {
@@ -169,11 +181,14 @@ export function paletteAccent(couleur?: string | null): PaletteAccent {
 
   const [h, s] = versTsl(rvb);
 
+  const accentFonce = versHex(h, s, L_FONCE);
+
   return {
     accent,
-    accentFonce: versHex(h, s, L_FONCE),
+    accentFonce,
     accentClair: versHex(h, s, L_CLAIR),
     surAccent: texteLisibleSur(rvb),
+    surAccentFonce: texteLisibleSur(versRvb(accentFonce)!),
   };
 }
 

@@ -178,17 +178,71 @@ describe("Déplacer un métier", () => {
   });
 });
 
+/**
+ * REVIREMENT ASSUMÉ, le 22/09/2026.
+ *
+ * La migration ci-dessus ne posait les métiers que sur une société qui n'en
+ * déclarait AUCUN — pour qu'une société ayant supprimé « Astreinte » ne la
+ * revoie pas réapparaître. Cette prudence manquait la demande : KTA déclarait
+ * déjà quatre métiers, elle était donc ignorée, et Plomberie, Menuiserie,
+ * Électricité et Astreinte n'y arrivaient jamais.
+ *
+ * `20260922100000_les_metiers_standard_partout` remplace la règle : le
+ * standard est un PLANCHER, complété métier par métier au sens de la forme
+ * normalisée. Elle ajoute aussi Étanchéité — 47 bons de KTA la portent — et
+ * harmonise la casse.
+ *
+ * L'assertion « ne repose rien sur une société pourvue » a donc été retirée
+ * plutôt que laissée à mentir. Ce qui suit éprouve la règle qui fait foi.
+ */
+const PARTOUT = readFileSync(
+  resolve(__dirname, "../../supabase/migrations/20260922100000_les_metiers_standard_partout.sql"),
+  "utf8"
+);
+
 describe("La migration et l'écran disent la même chose", () => {
-  it("précharge les sept métiers demandés", () => {
-    for (const m of ["Peinture", "Sol", "Plomberie", "Menuiserie", "Électricité", "Astreinte", "Faïence"]) {
-      expect(MIGRATION).toContain(`'${m}'`);
+  it("précharge les huit métiers standard", () => {
+    for (const m of ["Peinture", "Sol", "Plomberie", "Menuiserie", "Électricité", "Étanchéité", "Astreinte", "Faïence"]) {
+      expect(PARTOUT, m).toContain(`'${m}'`);
     }
   });
 
-  it("ne repose rien sur une société qui déclare déjà ses métiers", () => {
-    /* Sinon une société qui a volontairement supprimé « Astreinte » la
-       verrait réapparaître au prochain passage. */
-    expect(MIGRATION).toContain("if exists (select 1 from public.metiers where societe_id = p_societe)");
+  it("déclare la liste UNE seule fois", () => {
+    /* La fonction de pose et celle de graphie canonique la lisent toutes deux.
+       Écrite deux fois, elle finirait par dire deux choses. */
+    expect(PARTOUT).toContain("create or replace function public.metiers_standard_liste()");
+    expect(PARTOUT).toContain("from public.metiers_standard_liste()");
+  });
+
+  it("complète au lieu de renoncer dès qu'un métier existe", () => {
+    const pose = PARTOUT.slice(PARTOUT.indexOf("create or replace function public.metiers_standard(p_societe"));
+    expect(pose).not.toContain("return 0;");
+    /* Le garde porte sur CHAQUE métier, au sens de la forme normalisée :
+       « FAIENCE » compte pour « Faïence » et n'est pas reposé. */
+    expect(pose).toContain("public.metier_normalise(m.libelle) = public.metier_normalise(r.libelle)");
+  });
+
+  it("harmonise la casse AVANT de compléter", () => {
+    /* L'ordre inverse insérerait « Peinture » à côté de « PEINTURE », puis
+       l'harmonisation violerait `UNIQUE (societe_id, libelle)`. */
+    expect(PARTOUT.indexOf("metier_libelle_canonique(r.libelle)"))
+      .toBeLessThan(PARTOUT.indexOf("create or replace function public.metiers_standard(p_societe"));
+  });
+
+  it("ne devine pas les accents des métiers standard", () => {
+    /* `initcap` rendrait « Electricite » et « Etancheite », ce qui rouvrirait
+       la divergence de graphies qu'on vient de fermer. D'où le mappage
+       explicite, et `initcap` seulement pour le reste. */
+    const canon = PARTOUT.slice(PARTOUT.indexOf("metier_libelle_canonique(p_libelle text)"));
+    expect(canon).toContain("from public.metiers_standard_liste() s");
+    expect(canon.indexOf("metiers_standard_liste")).toBeLessThan(canon.indexOf("initcap"));
+  });
+
+  it("s'arrête plutôt que de trancher sur un référentiel ambigu", () => {
+    /* Deux graphies du même métier dans une société violeraient l'unicité une
+       fois ramenées au même libellé. Fusionner est un arbitrage humain. */
+    expect(PARTOUT).toContain("Deux graphies du même métier coexistent");
+    expect(PARTOUT).toContain("raise exception");
   });
 
   it("normalise les libellés comme l'écran, accents compris", () => {

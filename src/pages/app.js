@@ -10906,6 +10906,9 @@ function appliquerPalette(p){
   r.setProperty('--accent-2', p.accentFonce);
   r.setProperty('--accent-soft', p.accentClair);
   r.setProperty('--sur-accent', p.surAccent);
+  /* L'encre du bandeau « Net à payer », calculée sur le ton foncé et non sur
+     l'accent : voir `surAccentFonce` dans regles-theme. */
+  r.setProperty('--sur-accent-2', p.surAccentFonce);
   /* La seconde couleur n'est posée que si elle est là : `paletteAccent` seule
      ne la porte pas, et écrire `undefined` effacerait la variable du CSS. */
   if(p.secondaire){
@@ -14641,7 +14644,7 @@ function salarieForm(){
         <option value="M" ${e.sexe==='M'?'selected':''}>Homme</option>
       </select></div>
       <div class="field"><label>Équipe</label><select id="sal_technicienId">${technicienLinkOptions(e.technicienId)}</select></div>
-      <div class="field"><label>Compte utilisateur</label><select id="sal_profileId">${comptesLinkOptions(e.profileId)}</select><div class="card-sub" style="margin-top:4px;">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div>${zoneInvitationHTML(e)}</div>
+      <div class="field"><label>Compte utilisateur</label><div class="card-sub">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div>${zoneInvitationHTML(e)}</div>
       <div class="field"><label>Type de contrat</label><select id="sal_typeContrat">${TYPES_CONTRAT.map(t=>`<option value="${t}" ${e.typeContrat===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Coût horaire chargé (HT, salaire + charges)</label><input type="number" step="0.01" id="sal_coutHoraireCharge" value="${e.coutHoraireCharge!=null?e.coutHoraireCharge:''}" placeholder="Ex : 32.50"></div>
       <div class="field"><label>Salaire mensuel net</label><input type="number" step="0.01" id="sal_salaireMensuelNet" value="${e.salaireMensuelNet!=null?e.salaireMensuelNet:''}" placeholder="Ex : 1850"></div>
@@ -14703,7 +14706,13 @@ function technicienLinkOptions(current){
   const list = state.techniciens.filter(t=>t.societeId===state.societeId);
   return '<option value="">— Aucune —</option>' + list.map(t=>`<option value="${t.id}" ${t.id===current?'selected':''}>${esc(t.nom1||'Équipe')}</option>`).join('');
 }
-/* Les comptes de la société, pour rattacher un salarié au sien.
+/* Les comptes de la société, pour rattacher un conducteur au sien.
+
+   La fiche salarié ne s'en sert plus : on y crée le compte par invitation, à
+   l'adresse de la personne, plutôt que de piocher dans une liste — choisir le
+   mauvais nom donnait ses droits à quelqu'un d'autre sans rien annoncer. Le
+   conducteur, lui, n'a pas de circuit d'invitation : `inviter-salarie` exige un
+   `salarie_id`, et sa fiche n'en est pas une. Le menu reste donc ici.
 
    Le rattachement existant est toujours proposé, même si l'annuaire ne l'a pas
    ramené — annuaire non chargé, compte désactivé depuis, société changée. Sans
@@ -14722,9 +14731,14 @@ function comptesLinkOptions(current){
 
 /* ---------- Inviter un salarié à se créer un compte ----------
 
-   La liste ci-dessus ne sait que RATTACHER un compte existant. Créer l'identité
-   demande la clé de service, qui ne peut pas approcher le navigateur : le
-   bouton appelle la fonction de bord `inviter-salarie`.
+   C'est le SEUL chemin depuis la fiche salarié : le menu qui rattachait un
+   compte existant a été retiré. Il demandait de reconnaître une personne dans
+   une liste de noms de comptes, et un homonyme choisi de travers accordait ses
+   droits à quelqu'un d'autre sans que rien ne le dise. Ici, l'adresse désigne
+   la personne, et le courriel la lui fait confirmer.
+
+   Créer l'identité demande la clé de service, qui ne peut pas approcher le
+   navigateur : le bouton appelle la fonction de bord `inviter-salarie`.
 
    Le reste se fait tout seul en base. Deux déclencheurs sur `auth.users`
    inscrivent le membre et renseignent `salaries.profile_id` dès que l'adresse
@@ -14772,10 +14786,19 @@ function invitationDuSalarie(salarieId){
   return state.invitations.find(i=>i.salarie_id===salarieId && i.statut==='en_attente') || null;
 }
 function zoneInvitationHTML(e){
-  if(!e.id) return '';
-  if(!window.autorise || !window.autorise('utilisateurs','creer')) return '';
-  if(e.profileId) return '<div class="card-sub" style="margin-top:6px; color:#15803d;">✓ Compte rattaché.</div>';
-  if(!invitationsPretes()){ chargerInvitationsRh(); return ''; }
+  /* Le compte se lit toujours, même sans le droit de l'accorder : « ⚠ sans
+     compte » figure déjà sur la liste, et un champ vide se lirait comme une
+     fiche incomplète plutôt que comme un droit manquant. */
+  if(e.profileId){
+    const nom = window.nomIntervenant ? window.nomIntervenant(e.profileId) : '';
+    return `<div class="card-sub" style="margin-top:6px; color:#15803d;">✓ Compte rattaché${nom? ` — ${esc(nom)}`:''}.</div>`;
+  }
+  const peutInviter = !!(window.autorise && window.autorise('utilisateurs','creer'));
+  if(!peutInviter) return '<div class="card-sub" style="margin-top:6px;">⚠ Sans compte. Seul un administrateur peut lui en créer un.</div>';
+  /* À la création, le salarié n'a pas encore d'identifiant : l'invitation ne
+     saurait pas qui rattacher. Le dire, plutôt que de laisser le champ muet. */
+  if(!e.id) return '<div class="card-sub" style="margin-top:6px;">Enregistrez la fiche, puis invitez-le à se créer un compte : le bloc apparaîtra ici.</div>';
+  if(!invitationsPretes()){ chargerInvitationsRh(); return '<div class="card-sub" style="margin-top:6px;">Chargement des invitations…</div>'; }
 
   const invitation = invitationDuSalarie(e.id);
   if(invitation){
@@ -14993,7 +15016,11 @@ async function saveSalarie(){
     nationalite: document.getElementById('sal_nationalite').value,
     sexe: document.getElementById('sal_sexe').value,
     technicienId: document.getElementById('sal_technicienId').value || null,
-    profileId: document.getElementById('sal_profileId').value || null,
+    /* Plus aucun champ ne le porte : le compte ne se rattache plus à la main,
+       il se crée par invitation et c'est la base qui l'inscrit. On repose donc
+       ce qu'on a lu, sans quoi l'enregistrement de la fiche détacherait le
+       compte. */
+    profileId: e.profileId || null,
     typeContrat: document.getElementById('sal_typeContrat').value,
     coutHoraireCharge: parseFloat(document.getElementById('sal_coutHoraireCharge').value) || null,
     salaireMensuelNet: parseFloat(document.getElementById('sal_salaireMensuelNet').value) || null,
