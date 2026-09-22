@@ -15658,7 +15658,10 @@ function metierPersoForm(){
     <div class="field-grid">
       <div class="field full"><label>Nom du métier</label><input type="text" id="mp_nom" value="${esc(e.nom)}" placeholder="Ex : Menuiserie, Serrurerie, Peinture…"></div>
       <div class="field full">
-        <label>Couleur</label>
+        ${/* `.reglage-titre` et non `<label>` : c'est la classe que le projet
+             s'est donnée pour les réglages qui ne sont pas une saisie. Le
+             libellé flottant, lui, se poserait par-dessus la palette. */''}
+        <div class="reglage-titre">Couleur</div>
         <input type="hidden" id="mp_couleur" value="${esc(couleurActuelle)}">
         <div class="metier-palette">${METIER_PALETTE.map(c=>`<button type="button" class="metier-swatch ${c===couleurActuelle?'is-selected':''}" style="background:${c};" onclick="pickMetierCouleur('${jsAttr(c)}')" title="${c}"></button>`).join('')}</div>
       </div>

@@ -955,10 +955,17 @@ input:hover, textarea:hover, select:hover{ background:#E8ECF4; }
 input:focus, textarea:focus, select:focus{ outline:none; background:#fff; border-color:var(--accent); box-shadow:0 6px 18px rgba(var(--accent-rgb), .15); }
 input::placeholder, textarea::placeholder{ color:#A6ADBB; }
 select{ appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 15px center; padding-right:36px; cursor:pointer; }
-.field:has(> label + input), .field:has(> label + select), .field:has(> label + textarea){ position:relative; }
-.field:has(> label + input) > label, .field:has(> label + select) > label, .field:has(> label + textarea) > label{ position:absolute; top:8px; left:17px; z-index:1; font-size:10.5px; color:#98A0B0; font-weight:700; letter-spacing:.04em; text-transform:uppercase; pointer-events:none; }
-.field:has(> label + input) > input, .field:has(> label + select) > select, .field:has(> label + textarea) > textarea{ padding-top:25px; padding-bottom:9px; }
-.field:has(> label + input):focus-within > label, .field:has(> label + select):focus-within > label, .field:has(> label + textarea):focus-within > label{ color:var(--accent-2); }
+/* LE LIBELLÉ FLOTTANT NE VAUT QUE POUR UNE VRAIE SAISIE.
+   `input` tout court attrapait aussi les champs CACHÉS : dans le formulaire
+   d'un métier, `<label>Couleur</label>` suivi d'un `<input type="hidden">`
+   puis de la palette, le libellé passait en `position:absolute` et venait se
+   poser SUR la première pastille de couleur — on lisait « ULEUR » à travers
+   le rond orange. Un champ caché n'a pas de boîte : il ne peut pas porter son
+   libellé, et ce qui suit se le prend. */
+.field:has(> label + input:not([type=hidden])), .field:has(> label + select), .field:has(> label + textarea){ position:relative; }
+.field:has(> label + input:not([type=hidden])) > label, .field:has(> label + select) > label, .field:has(> label + textarea) > label{ position:absolute; top:8px; left:17px; z-index:1; font-size:10.5px; color:#98A0B0; font-weight:700; letter-spacing:.04em; text-transform:uppercase; pointer-events:none; }
+.field:has(> label + input:not([type=hidden])) > input:not([type=hidden]), .field:has(> label + select) > select, .field:has(> label + textarea) > textarea{ padding-top:25px; padding-bottom:9px; }
+.field:has(> label + input:not([type=hidden])):focus-within > label, .field:has(> label + select):focus-within > label, .field:has(> label + textarea):focus-within > label{ color:var(--accent-2); }
 .lignes-table input, .lignes-table select{ padding:8px 10px; border-radius:10px; background:#F3F5F9; font-size:13.5px; }
 .lignes-table select{ padding-right:26px; background-position:right 8px center; }
 input[type=checkbox], input[type=radio]{ accent-color:var(--accent); }
