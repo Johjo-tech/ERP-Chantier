@@ -65,6 +65,8 @@ export interface PaletteSociete extends PaletteAccent, PaletteSecondaire {}
 /** Luminosités des deux déclinaisons, relevées sur la palette historique. */
 const L_FONCE = 0.38;
 const L_CLAIR = 0.92;
+/** Le seuil AA du WCAG pour du texte de corps courant. */
+const CONTRASTE_AA = 4.5;
 
 function versRvb(hex: string): [number, number, number] | null {
   const brut = hex.trim().replace(/^#/, "");
@@ -158,6 +160,28 @@ function texteLisibleSur(fond: [number, number, number]): string {
 }
 
 /**
+ * Le ton foncé, garanti lisible sous une encre.
+ *
+ * Il sert deux fois : en TEXTE sur le papier blanc, et en FOND sous le
+ * bandeau « Net à payer ». Le second usage est le plus exigeant. À luminosité
+ * 0,38, seize teintes sur trois cent soixante ne laissent NI le blanc NI
+ * l'encre sombre atteindre 4,5:1 — la pire, un orange à 32°, tombe à 4,01.
+ * On descend donc la luminosité jusqu'à ce que l'une des deux passe.
+ *
+ * Assombrir ne coûte rien au premier usage : un ton plus sombre se lit
+ * seulement mieux sur du blanc. La teinte et la saturation, elles, ne bougent
+ * pas — c'est toute la promesse faite à la société qui choisit sa couleur.
+ */
+function tonFonceLisible(h: number, s: number): string {
+  for (let l = L_FONCE; l >= 0.2; l -= 0.01) {
+    const hex = versHex(h, s, l);
+    const rvb = versRvb(hex)!;
+    if (contraste(rvb, versRvb(texteLisibleSur(rvb))!) >= CONTRASTE_AA) return hex;
+  }
+  return versHex(h, s, 0.2);
+}
+
+/**
  * La palette d'une société.
  *
  * La teinte et la saturation sont celles qu'on a choisies ; seule la luminosité
@@ -181,7 +205,7 @@ export function paletteAccent(couleur?: string | null): PaletteAccent {
 
   const [h, s] = versTsl(rvb);
 
-  const accentFonce = versHex(h, s, L_FONCE);
+  const accentFonce = tonFonceLisible(h, s);
 
   return {
     accent,

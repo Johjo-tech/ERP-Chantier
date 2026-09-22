@@ -1253,10 +1253,9 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    comptent par dizaines. */
 .p-lignes td{ font-size:9.5pt; padding:1.1mm 2mm; line-height:1.25; border-bottom:.5px solid #EEF0F4; vertical-align:top; }
 .p-lignes tr{ break-inside:avoid; page-break-inside:avoid; }
-.p-totals, .p-notes, .p-sign, .p-locataire{ break-inside:avoid; page-break-inside:avoid; }
+.p-notes, .p-sign, .p-locataire{ break-inside:avoid; page-break-inside:avoid; }
 .p-chapitre td{ padding-top:3mm; padding-bottom:1mm; font-weight:700; font-size:9.5pt; color:var(--accent-2); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--accent-soft); }
 .p-comment td{ font-style:italic; color:#6B7686; font-size:9pt; border-bottom:none; }
-.p-subtotal td{ font-size:8.5pt; color:#6B7686; padding-top:.8mm; padding-bottom:2.5mm; border-bottom:none; }
 /* Ce que le technicien ou le conducteur a ajouté pendant le chantier : le
    directeur doit le distinguer de ce qui était commandé au départ. */
 .p-ajout td{ background:#FFF7E8; }
@@ -1276,42 +1275,130 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    il tient le regard là où il doit. Un peu plus grand, aussi — 18 mm le
    faisaient disparaître à côté d'un titre de 15 pt. */
 .p-logo{ max-height:22mm; max-width:60mm; display:block; margin:0 0 2mm; }
-/* La bande d'en-tête : une teinte de la couleur de la société à 5 %, assez
-   pour asseoir le bloc sans l'alourdir. Un aplat plein aurait mangé l'encre
-   sur la bande la plus large du document. */
-.p-entete{ background:rgba(var(--accent-rgb), .05); border-radius:2mm; padding:3mm 3mm 2mm; }
-.p-entete td{ vertical-align:top; }
-/* Conditions de règlement et mentions du code de commerce, en pied de facture. */
-.p-conditions{ width:100%; margin-top:6mm; break-inside:avoid; page-break-inside:avoid; }
-.p-conditions td{ width:50%; vertical-align:top; font-size:8.5pt; color:#3C4757; padding:2mm 6mm 2mm 3mm; background:rgba(var(--secondaire-rgb), .06); }
-.p-conditions td:first-child{ border-radius:1.5mm 0 0 1.5mm; }
-.p-conditions td:last-child{ border-radius:0 1.5mm 1.5mm 0; padding-right:3mm; }
-.p-conditions b{ display:block; font-size:8pt; text-transform:uppercase; letter-spacing:.4px; color:#6B7686; margin-bottom:1mm; }
 .p-mentions{ margin-top:5mm; padding-top:2.5mm; border-top:.5px solid #E2E6ED; font-size:7.8pt; color:#6B7686; line-height:1.45; break-inside:avoid; page-break-inside:avoid; }
 .p-mentions .p-label{ margin-bottom:1mm; }
-/* Le bloc des totaux devient un encadré, comme les autres : c'est la zone
-   qu'on cherche d'abord, et rien ne la délimitait. */
-.p-totals{ width:68mm; margin-left:auto; margin-top:5mm; background:rgba(var(--accent-rgb), .10); border:.35mm solid rgba(var(--accent-rgb), .30); border-radius:1.5mm; border-collapse:separate; padding:2mm 3mm; }
-.p-totals td{ padding:1.1mm 0; font-size:9.5pt; }
-.p-totals td.label{ color:#6B7686; }
-.p-totals td.val{ text-align:right; font-family:'JetBrains Mono',monospace; }
-/* Le total TTC dans la couleur dominante, en gras : c'est le chiffre qu'on
-   cherche en prenant le document, et il se confondait avec les sous-totaux.
-   Ceux-ci gardent l'encre du texte — les distinguer est tout l'objet. */
-.p-totals tr.grand td{ border-top:1.5px solid var(--accent); padding-top:3mm; font-size:12.5pt; font-weight:700; color:var(--accent-2); }
 .p-notes{ margin-top:9mm; font-size:9pt; background:rgba(var(--secondaire-rgb), .08); border:.35mm solid rgba(var(--secondaire-rgb), .22); border-radius:2mm; padding:3.5mm 4mm; }
 .p-sign{ margin-top:10mm; }
 .p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
 .p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
 .p-footer{ margin-top:4mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:2.5mm; }
-/* Le bandeau de contact : ce qui sert à joindre l'entreprise ou à la payer.
-   Il vit en HTML et non dans le pied dessiné par jsPDF — celui-ci écrit en
-   Helvetica, sans icône ni mise en page, et porte l'identité LÉGALE que
-   l'art. R123-238 veut sur chaque page. */
-.p-contact{ margin-top:3mm; padding-top:2.5mm; border-top:.5px solid rgba(var(--accent-rgb), .30);
-  display:flex; flex-wrap:wrap; gap:1.5mm 5mm; font-size:8pt; color:#3C4757; break-inside:avoid; page-break-inside:avoid; }
-.p-contact-item{ display:inline-flex; align-items:baseline; gap:1.5mm; }
-.p-contact-icone{ font-size:8.5pt; }
+/* ═════════════ Le gabarit des documents commerciaux ═════════════
+   Devis, bon de commande, pré-facture et facture partagent cette mise en
+   page. Tout est porté par `.p-doc`, posée sur la racine du document : ces
+   mêmes classes servent aussi à l'écran — l'éditeur de pré-facture pose
+   `.p-chapitre` sur ses propres lignes — et une règle non portée les
+   repeindrait. Le rapport d'intervention garde l'ancien en-tête : il n'a ni
+   lignes chiffrées ni totaux, le gabarit ne lui apprendrait rien. */
+
+/* L'en-tête tient DEUX lignes d'alignement, pas une : le nom de l'émetteur et
+   le titre partent du même bord haut, les identifiants fiscaux et le bloc
+   numéro/dates finissent sur le même bord bas. Une rangée de flex ne sait pas
+   tenir les deux à la fois — il faut une grille de deux rangées, le logo à
+   cheval dessus. */
+.p-doc .p-entete-grille{ display:grid; grid-template-columns:34mm 1fr 66mm; column-gap:7mm; }
+.p-doc .p-logo-case{ grid-area:1 / 1 / 3 / 2; display:flex; align-items:center; justify-content:center; }
+.p-doc .p-logo-case .p-logo{ max-height:26mm; max-width:100%; margin:0; }
+.p-doc .p-emetteur{ grid-area:1 / 2 / 2 / 3; min-width:0; padding-bottom:3mm; }
+/* Trois sociétés sur quatre n'ont pas encore de logo : sans ce repli, leur
+   en-tête s'ouvrirait sur 34 mm de vide. La colonne disparaît, le reste glisse. */
+.p-doc .p-sans-logo{ grid-template-columns:1fr 66mm; }
+.p-doc .p-sans-logo .p-emetteur{ grid-area:1 / 1 / 2 / 2; }
+.p-doc .p-sans-logo .p-ident-fisc{ grid-area:2 / 1 / 3 / 2; }
+.p-doc .p-sans-logo .p-titre-col{ grid-area:1 / 2 / 2 / 3; }
+.p-doc .p-sans-logo .p-meta{ grid-area:2 / 2 / 3 / 3; }
+.p-doc .p-emetteur-nom{ font-family:'Manrope',sans-serif; font-size:15pt; font-weight:800; letter-spacing:-.01em; }
+.p-doc .p-emetteur-coord{ font-size:8.5pt; color:var(--text-dim); line-height:1.6; }
+/* Les identifiants et les dates s'écrivent à l'encre du texte, pas dans la
+   couleur de la société : ce sont des données qu'on recopie, pas des titres. */
+.p-doc .p-ident-fisc{ grid-area:2 / 2 / 3 / 3; align-self:end; font-size:8pt; line-height:1.5; }
+.p-doc .p-ident-fisc b{ font-weight:600; }
+/* Le filet vertical se poursuit d'une rangée à l'autre : les deux blocs de la
+   colonne de droite le portent, et rien ne les sépare. */
+.p-doc .p-titre-col{ grid-area:1 / 3 / 2 / 4; padding-left:6mm; padding-bottom:5mm;
+  border-left:.8mm solid rgba(var(--accent-rgb), .28); }
+.p-doc .p-doctitre-grand{ font-family:'Manrope',sans-serif; font-size:24pt; font-weight:800;
+  letter-spacing:-.025em; line-height:1; }
+.p-doc .p-doctitre-grand span{ display:block; height:1.3mm; margin-top:2mm;
+  background:linear-gradient(90deg, var(--accent-soft), var(--accent), var(--accent-2)); }
+/* `margin:0` n'est pas cosmétique : la marge par défaut d'un <dl> vaut 1 em,
+   soit 3,2 mm qui décalent ce bloc vers le haut — son bas ne tombe plus sur
+   celui des identifiants, et le filet vertical se coupe d'autant. */
+.p-doc .p-meta{ grid-area:2 / 3 / 3 / 4; align-self:stretch; margin:0; padding-left:6mm;
+  border-left:.8mm solid rgba(var(--accent-rgb), .28);
+  display:grid; grid-template-columns:1fr auto; align-content:end; gap:1.2mm 5mm; font-size:9pt; }
+.p-doc .p-meta dt{ margin:0; color:var(--text-dim); white-space:nowrap; }
+.p-doc .p-meta dd{ margin:0; text-align:right; font-family:'JetBrains Mono',monospace;
+  font-size:8.5pt; font-weight:500; }
+
+/* Chantier et client, côte à côte. Le fond est un voile de la couleur de la
+   société et non un aplat : un gabarit fait d'aplats mange l'encre. */
+.p-doc .p-cartes{ display:grid; grid-template-columns:1fr 1fr; gap:8mm; margin-top:6mm; }
+.p-doc .p-carte{ background:rgba(var(--accent-rgb), .06); padding:3.5mm 5mm;
+  break-inside:avoid; page-break-inside:avoid; }
+.p-doc .p-carte-titre{ font-size:8pt; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--accent-2); margin-bottom:2mm; }
+.p-doc .p-carte .p-line{ font-size:9.5pt; line-height:1.55; }
+.p-doc .p-carte-refs{ display:grid; grid-template-columns:1fr auto; gap:1mm 4mm;
+  margin:3mm 0 0; padding-top:2.5mm; border-top:.2mm solid rgba(var(--accent-rgb), .28); font-size:8.5pt; }
+.p-doc .p-carte-refs dt{ margin:0; color:var(--text-dim); }
+.p-doc .p-carte-refs dd{ margin:0; text-align:right; font-family:'JetBrains Mono',monospace; }
+
+/* Le chapitre devient une bande qui porte son propre total : il fallait
+   auparavant descendre jusqu'à la ligne de sous-total pour le lire. */
+.p-doc .p-lignes th{ background:none; color:var(--accent-2); padding:0 2mm 1.4mm;
+  border-bottom:.3mm solid #E2E6ED; }
+.p-doc .p-lignes td{ padding:1.05mm 2mm; line-height:1.28; }
+.p-doc .p-chapitre td{ background:rgba(var(--accent-rgb), .10); border-bottom:none;
+  padding:1.5mm 3mm; text-transform:none; letter-spacing:.05em; }
+.p-doc .p-chapitre td:first-child{ border-left:1.2mm solid var(--accent); font-weight:700; font-size:10.5pt; }
+.p-doc .p-chapitre td.st{ font-size:8.5pt; color:var(--text-dim); font-weight:400; text-align:right; }
+.p-doc .p-chapitre td.stv{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10pt; text-align:right; }
+
+/* Le pavé de règlement se cale par le bas sur le net à payer, quelle que soit
+   la hauteur du détail de TVA au-dessus. */
+.p-doc .p-bloc-bas{ display:grid; grid-template-columns:1fr 78mm; gap:9mm; margin-top:5mm;
+  align-items:end; break-inside:avoid; page-break-inside:avoid; }
+.p-doc .p-reglement{ border:.2mm solid #E2E6ED; padding:4mm 5mm; font-size:9pt; color:var(--text-dim); }
+.p-doc .p-reglement b{ display:block; font-size:8pt; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--accent-2); margin-bottom:2mm; }
+.p-doc .p-reglement div{ margin-bottom:1mm; }
+.p-doc .p-reglement span{ font-family:'JetBrains Mono',monospace; font-size:8.5pt; color:#182233; }
+.p-doc .p-totaux{ display:flex; flex-direction:column; gap:2mm; }
+.p-doc .p-tva-detail{ background:rgba(var(--accent-rgb), .06); padding:2.2mm 4mm; font-size:9pt; }
+.p-doc .p-tva-detail b{ display:block; font-size:8pt; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--accent-2); margin-bottom:1.5mm; }
+.p-doc .p-kv{ display:flex; justify-content:space-between; gap:5mm; padding:.6mm 0; font-size:9.5pt; }
+.p-doc .p-kv span{ color:var(--text-dim); }
+.p-doc .p-kv em{ font-style:normal; font-family:'JetBrains Mono',monospace; }
+.p-doc .p-tva-detail .p-kv{ font-size:8.5pt; }
+.p-doc .p-tva-detail .p-kv.somme{ border-top:.2mm solid rgba(var(--accent-rgb), .28);
+  margin-top:1mm; padding-top:1.5mm; font-weight:700; }
+.p-doc .p-tva-detail .p-kv.somme span{ color:#182233; }
+.p-doc .p-ttc{ background:rgba(var(--accent-rgb), .14); padding:1.8mm 4mm; font-weight:700; font-size:11pt; }
+.p-doc .p-ttc span, .p-doc .p-ttc em{ color:var(--accent-2); }
+/* Le bandeau prend le ton foncé de la société, et son encre se calcule sur CE
+   ton : `--sur-accent-2`, et non `--sur-accent`, qui est décidée d'après
+   l'accent plein. À luminosité 0,38 une teinte jaune reste claire. */
+.p-doc .p-net{ background:var(--accent-2); padding:2.6mm 4mm; font-weight:700; font-size:13pt; }
+.p-doc .p-net span, .p-doc .p-net em{ color:var(--sur-accent-2); }
+
+/* Le pied déborde les marges du corps de 8 mm de chaque côté — 198 mm au lieu
+   de 182 — et descend à 6 pt. C'est ce qui permet aux mentions et à l'identité
+   légale de tenir chacune sur UNE seule ligne. Mesuré : 172 mm pour les
+   mentions, 190 mm pour l'identité. Cette dernière est la ligne critique — une
+   raison sociale plus longue la fait se replier, ce qui est le comportement
+   voulu : on ne coupe jamais une mention obligatoire. */
+.p-doc .p-bas-de-page{ margin-left:-8mm; margin-right:-8mm; padding-top:2.2mm;
+  border-top:.5mm solid rgba(var(--accent-rgb), .28); }
+.p-doc .p-mentions{ margin:0; padding:0; border:none; font-size:6pt; line-height:1.3; text-align:center; }
+.p-doc .p-footer{ margin-top:1.6mm; padding-top:1.4mm; font-size:6pt; line-height:1.3; }
+@media print{
+  .p-doc .p-carte, .p-doc .p-chapitre td, .p-doc .p-tva-detail,
+  .p-doc .p-ttc, .p-doc .p-net{
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+}
+
 /* Les mentions légales appartiennent au pied de page, pas à la suite du texte.
    La page est une colonne haute d'au moins une feuille A4 (297mm moins les
    14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
@@ -1346,14 +1433,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    le même document. */
 #printArea.pdf-serre .p-lignes{ margin-top:3mm; }
 #printArea.pdf-serre .p-lignes td{ padding-top:.6mm; padding-bottom:.6mm; line-height:1.15; }
-#printArea.pdf-serre .p-chapitre td{ padding-top:2mm; padding-bottom:.6mm; }
-#printArea.pdf-serre .p-subtotal td{ padding-top:.5mm; padding-bottom:1.5mm; }
-#printArea.pdf-serre .p-conditions td{ padding-top:1.2mm; padding-bottom:1.2mm; }
-#printArea.pdf-serre .p-totals td{ padding-top:.7mm; padding-bottom:.7mm; }
-#printArea.pdf-serre .p-totals{ margin-top:2mm; }
-#printArea.pdf-serre .p-conditions{ margin-top:3mm; }
-#printArea.pdf-serre .p-mentions{ margin-top:2mm; padding-top:1.5mm; }
-#printArea.pdf-serre .p-bas-de-page{ padding-top:2mm; }
+#printArea.pdf-serre .p-chapitre td{ padding-top:.9mm; padding-bottom:.9mm; }
+#printArea.pdf-serre .p-cartes{ margin-top:3mm; }
+#printArea.pdf-serre .p-carte{ padding:2.2mm 4mm; }
+#printArea.pdf-serre .p-bloc-bas{ margin-top:3mm; }
+#printArea.pdf-serre .p-tva-detail{ padding:1.4mm 4mm; }
+#printArea.pdf-serre .p-kv{ padding:.2mm 0; }
+#printArea.pdf-serre .p-bas-de-page{ padding-top:1.4mm; }
 #printArea.pdf-serre .p-sign{ margin-top:5mm; }
 #printArea.pdf-serre .p-sigline{ margin-top:9mm; }
 #printArea.pdf-serre .p-notes{ margin-top:4mm; }
@@ -1369,8 +1455,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   /* Les fonds colorés sont de l'information, pas de la décoration : sans ce
      réglage le navigateur les efface à l'impression, et l'en-tête du tableau
      ressort blanc sur blanc. */
-  .p-lignes th, .p-print-grid th, .p-encadre, .p-encadre-2, .p-entete,
-  .p-locataire, .p-notes, .p-totals, .p-conditions td{
+  .p-lignes th, .p-print-grid th, .p-encadre, .p-encadre-2,
+  .p-locataire, .p-notes{
     -webkit-print-color-adjust:exact; print-color-adjust:exact;
   }
 }

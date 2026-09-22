@@ -3029,34 +3029,35 @@ async function deleteItem(type, id){
   if(factureIdToSync) await syncFactureStatut(factureIdToSync);
   renderTab();
 }
+/* Les deux dernières cases de la bande de chapitre. Le total y est porté par
+   le titre au lieu d'une ligne à part, qu'il fallait aller chercher plus bas. */
 function sousTotalChapitreHTML(total, fmt){
-  return `<tr class="p-subtotal"><td colspan="5">Sous-total HT du chapitre</td><td class="num">${fmt(total)}</td><td></td></tr>`;
+  return `<td class="st">Total HT</td><td class="stv">${fmt(total)}</td>`;
 }
 function printableLignesRows(lignes, hidePrices){
   const fmt = hidePrices ? (()=>'•••') : money;
-  const hasChap = (lignes||[]).some(l=>(l.type||'ligne')==='chapitre');
-  let html = '', running = 0, sawChap = false;
+  /* Le total d'un chapitre s'écrit maintenant sur sa bande, donc avant ses
+     lignes : il se prend dans la liste des sous-totaux au lieu de s'accumuler
+     au fil du parcours. Même règle que l'écran — la refaire ici finirait par
+     donner deux montants pour un seul chapitre. */
+  const sousTotaux = computeChapterSubtotals(lignes);
+  let html = '', chap = 0;
   (lignes||[]).forEach(l=>{
     const t = l.type || 'ligne';
     // `classe` et `badge` marquent ce qui a été ajouté en cours de chantier
     const cls = l.classe ? ' '+esc(l.classe) : '';
     const badge = l.badge ? `<span class="p-badge-origine">${esc(l.badge)}</span> ` : '';
     if(t === 'chapitre'){
-      if(sawChap && hasChap) html += sousTotalChapitreHTML(running, fmt);
-      running = 0; sawChap = true;
-      html += `<tr class="p-chapitre${cls}"><td colspan="7">${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-chapitre${cls}"><td colspan="4">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
     } else if(t === 'commentaire'){
-      html += `<tr class="p-comment${cls}"><td colspan="7">${badge}${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-comment${cls}"><td colspan="6">${badge}${esc(l.designation)}</td></tr>`;
     } else {
       /* Même arithmétique que l'écran, empruntée à la règle plutôt que refaite :
          deux formules pour un seul montant finissent par diverger d'un centime. */
-      const lht = window.montantLigneHt(l);
-      running += lht;
       const sansPrix = !(parseFloat(l.prixUnitaire) > 0) ? ' p-sans-prix' : '';
-      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${l.tva}%</td><td class="num">${fmt(lht)}</td><td class="num">${fmt(window.montantLigneTtc(l))}</td></tr>`;
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
     }
   });
-  if(sawChap && hasChap) html += sousTotalChapitreHTML(running, fmt);
   return html;
 }
 function renderPrintIntervention(it){
@@ -3345,18 +3346,50 @@ function printInterventionDraft(action){
   generateInterventionPdf(state.editing, action);
 }
 /** Ce qu'un bon de commande porte en plus d'un devis : sa référence client et qui le suit. */
-function bonCommandeDocMetaHTML(b){
+function bonCommandeDocMetaLignes(b){
   const metiers = bcMetiersDuBC(b).map(m=>metierDisplayLabel(m)).filter(Boolean);
   return [
     /* La référence du client s'affiche dès qu'elle existe. Elle était
        conditionnée à la présence du numéro interne, si bien qu'un bon qui
        n'en avait pas — 788 sur 826 — imprimait un document muet sur la
        référence que le client, lui, utilise pour s'y retrouver. */
-    b.numeroBC ? `Réf. client : <b>${esc(b.numeroBC)}</b>` : '',
-    b.dateReception ? `Reçu le : <b>${fmtDate(b.dateReception)}</b>` : '',
-    b.conducteur ? `Conducteur : <b>${esc(b.conducteur)}</b>` : '',
-    metiers.length ? `Métiers : <b>${esc(metiers.join(', '))}</b>` : ''
-  ].filter(Boolean).map(x=>'<br>'+x).join('');
+    b.numeroBC ? ['Réf. client', esc(b.numeroBC)] : null,
+    b.conducteur ? ['Conducteur', esc(b.conducteur)] : null,
+    metiers.length ? ['Métiers', esc(metiers.join(', '))] : null
+  ].filter(Boolean);
+}
+/** Le bloc numéro/dates de l'en-tête, en paires libellé/valeur. */
+function metaDocHTML(type, doc){
+  const l = [['Numéro', esc(doc.numero)], ["Date d'émission", fmtDate(doc.date)]];
+  if(type==='facture' && doc.echeance) l.push(["Date d'échéance", fmtDate(doc.echeance)]);
+  if(type==='facture') l.push(...factureDocMetaLignes(doc));
+  if(type==='bonCommande') l.push(...bonCommandeDocMetaLignes(doc));
+  return l.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+/**
+ * La carte du chantier : où l'on intervient, et sous quelle référence.
+ *
+ * Le bon de commande du client et la date d'achèvement décrivent le CHANTIER
+ * et non la pièce comptable — les lire sous son adresse est la lecture
+ * naturelle pour le gestionnaire qui rapproche.
+ */
+function carteChantierHTML(doc){
+  const lieu = [
+    doc.numeroLogement ? 'Logement n° '+esc(doc.numeroLogement) : '',
+    doc.occupant ? '<b>'+esc(doc.occupant)+'</b>' : '',
+    doc.ancienLocataire ? 'Ancien locataire : '+esc(doc.ancienLocataire) : '',
+    esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville)),
+    [doc.logementStatut? esc(logementLabel(doc.logementStatut)):'', doc.etage? 'Étage '+esc(doc.etage):''].filter(Boolean).join(' — '),
+    doc.precisionCommune ? esc(doc.precisionCommune) : ''
+  ].filter(Boolean).join('<br>');
+  const refs = [
+    doc.refBonCommandeClient ? ['Votre bon de commande', esc(doc.refBonCommandeClient)] : null,
+    (doc.dateFinExecution && doc.dateFinExecution !== doc.date) ? ['Travaux achevés le', fmtDate(doc.dateFinExecution)] : null
+  ].filter(Boolean);
+  /* Sans chantier, la case reste vide plutôt que de disparaître : le client
+     doit rester dans la colonne de droite, où on le cherche. */
+  if(!lieu && !refs.length) return '<div></div>';
+  return `<div class="p-carte"><div class="p-carte-titre">Adresse du chantier</div>${lieu? `<div class="p-line">${lieu}</div>`:''}${refs.length? `<dl class="p-carte-refs">${refs.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`:''}</div>`;
 }
 /** Nom du PDF quand le document n'a pas de numéro. */
 const NOM_FICHIER_DEFAUT = { devis:'devis', facture:'facture', bonCommande:'bon-de-commande' };
@@ -3406,61 +3439,45 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
        après un changement de banque annonçait le nouveau compte. */
     iban: doc.emetteurIban || s.iban,
   };
+  const r = (s.reglages && s.reglages.documents) || {};
+  const fisc = [em.siret? `<b>Siret</b> ${esc(em.siret)}`:'', s.codeNaf? `<b>APE</b> ${esc(s.codeNaf)}`:''].filter(Boolean).join(' · ');
+  const logo = logoHTML(s);
   return `
-    <div class="p-page">
-    <table class="p-header p-entete"><tr>
-      <td style="width:55%;">
-        ${logoHTML(s)}
-        ${/* Le bloc « Émetteur » plus bas porte déjà le nom et l'adresse : les
-             répéter sous le logo les faisait figurer deux fois sur la page.
-             Sans logo, en revanche, l'en-tête doit bien identifier l'émetteur. */
-          logoHTML(s) ? '' : `<div class="p-company">${esc(em.nom)}</div>${em.adresse? `<div class="p-tagline">${esc(em.adresse)}</div>`:''}`}
-      </td>
-      <td style="width:45%;">
-        <div class="p-doctitle">${title}</div>
-        <div class="p-docmeta">N° <b>${esc(doc.numero)}</b><br>Date : <b>${fmtDate(doc.date)}</b>${type==='facture'&&doc.echeance? '<br>Échéance : <b>'+fmtDate(doc.echeance)+'</b>'+(doc.conditionsReglement? ' <span style="font-weight:400;">('+esc(doc.conditionsReglement)+')</span>':''):''}${type==='facture'? factureDocMetaHTML(doc):''}${type==='bonCommande'? bonCommandeDocMetaHTML(doc):''}</div>
-      </td>
-    </tr></table>
-    <div class="p-rule"></div>
-    <table class="p-parties"><tr>
-      <td>
-        <div class="p-label">Émetteur</div>
-        <div class="p-name">${esc(em.nom)}</div>
-        <div class="p-line">${em.adresse? esc(em.adresse)+'<br>':''}${em.siret? 'SIRET '+esc(em.siret)+'<br>':''}${em.tva? 'TVA '+esc(em.tva)+'<br>':''}${em.telephone? 'Tél. '+esc(em.telephone)+'<br>':''}${em.email? esc(em.email):''}</div>
-      </td>
-      <td>
-        <div class="p-label">Client</div>
-        <div class="p-name">${esc(doc.client)}</div>
-        <div class="p-line">${esc(doc.adresse)}</div>
-        ${doc.clientSiret? `<div class="p-line">SIRET ${esc(doc.clientSiret)}</div>`:''}
-        ${doc.clientTvaIntracom? `<div class="p-line">TVA ${esc(doc.clientTvaIntracom)}</div>`:''}
-        ${doc.interlocuteur? `<div class="p-line">À l'attention de ${esc(doc.interlocuteur)}</div>`:''}
-        ${(doc.adresseLocataire||doc.precisionCommune||doc.ancienLocataire||doc.numeroLogement||doc.occupant||doc.logementStatut||doc.etage)? `<div class="p-locataire"><div class="p-label">Lieu d'intervention</div><div class="p-line">${doc.numeroLogement? 'Logement n° '+esc(doc.numeroLogement)+'<br>':''}${doc.occupant? '<b>'+esc(doc.occupant)+'</b><br>':''}${doc.ancienLocataire? 'Ancien locataire : '+esc(doc.ancienLocataire)+'<br>':''}${esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville))}${doc.logementStatut? '<br>'+esc(logementLabel(doc.logementStatut)):''}${doc.etage? ' — Étage '+esc(doc.etage):''}${doc.precisionCommune? '<br>'+esc(doc.precisionCommune):''}</div></div>`:''}
-      </td>
-    </tr></table>
+    <div class="p-page p-doc">
+    <div class="p-entete-grille${logo? '' : ' p-sans-logo'}">
+      ${logo? `<div class="p-logo-case">${logo}</div>` : ''}
+      <div class="p-emetteur">
+        <div class="p-emetteur-nom">${esc(em.nom)}</div>
+        <div class="p-emetteur-coord">${[em.adresse, [em.telephone, em.email].filter(Boolean).join(' · '), (r.siteWeb||'').trim()].filter(Boolean).map(esc).join('<br>')}</div>
+      </div>
+      <div class="p-titre-col"><div class="p-doctitre-grand">${title}<span></span></div></div>
+      <div class="p-ident-fisc">${fisc}${em.tva? `${fisc?'<br>':''}<b>TVA intracommunautaire</b> ${esc(em.tva)}`:''}</div>
+      <dl class="p-meta">${metaDocHTML(type, doc)}</dl>
+    </div>
+    <div class="p-cartes">
+      ${carteChantierHTML(doc)}
+      <div class="p-carte">
+        <div class="p-carte-titre">Client</div>
+        <div class="p-line"><b>${esc(doc.client)}</b><br>${esc(doc.adresse)}${doc.clientSiret? '<br>SIRET '+esc(doc.clientSiret):''}${doc.clientTvaIntracom? '<br>TVA '+esc(doc.clientTvaIntracom):''}${doc.interlocuteur? "<br>À l'attention de "+esc(doc.interlocuteur):''}</div>
+      </div>
+    </div>
     <table class="p-lignes">
-      <tr><th style="width:36%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">Prix U. HT</th><th class="num">TVA</th><th class="num">Total HT</th><th class="num">Total TTC</th></tr>
+      <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
       ${printableLignesRows(lignes, hidePrices)}
     </table>
-    <table class="p-totals">
-      <tr><td class="label">Total HT</td><td class="val">${fmt(t.htAvant)}</td></tr>
-      ${t.remisePct>0? `<tr><td class="label">Remise (${t.remisePct}%)</td><td class="val">-${fmt(t.remiseMontantHT)}</td></tr>` : ''}
-      ${tvaLignesHTML(t, (libelle, montant)=>`<tr><td class="label">${libelle}</td><td class="val">${fmt(montant)}</td></tr>`)}
-      <tr class="grand"><td class="label">Total TTC</td><td class="val">${fmt(t.ttc)}</td></tr>
-      ${soldeLignesHTML(doc, t, fmt)}
-    </table>
+    <div class="p-bloc-bas">
+      ${blocReglementHTML(type, doc, s, em, hidePrices)}
+      <div class="p-totaux">${blocTotauxHTML(doc, t, fmt)}</div>
+    </div>
     ${/* Une facture ne se signe pas : elle constate une créance, elle ne
-         recueille pas d'accord. Les lignes de signature n'y avaient donc rien
-         à faire. Le devis, lui, vit de l'accord du client, et le bon de
-         commande de la validation de sa pré-facture. */
+         recueille pas d'accord. Le devis, lui, vit de l'accord du client, et
+         le bon de commande de la validation de sa pré-facture. */
       type === 'facture' ? '' : `<table class="p-sign"><tr>
       <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
       <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
     </tr></table>`}
-    ${blocConditionsHTML(type, doc, s, hidePrices)}
     <div class="p-bas-de-page">
       ${blocMentionsHTML(type, s)}
-      ${bandeauContactHTML(em, s, hidePrices)}
       <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
     </div>
     </div>
@@ -3519,64 +3536,80 @@ function libelleModePaiement(mode){
  * Rien ne s'affiche quand rien n'est déduit : une facture ordinaire n'a pas à
  * porter deux lignes à zéro.
  */
-function soldeLignesHTML(doc, t, fmt){
-  const s = window.soldeAPayer(t, {
+/**
+ * La colonne des totaux.
+ *
+ * Le pavé « Détail TVA » ne paraît qu'à PLUSIEURS taux : à un seul, il
+ * imprimerait trois fois le même montant — sa ligne, son total, et le total
+ * TVA du bloc juste en dessous. L'art. 242 nonies A ann. II du CGI n'exige la
+ * ventilation par taux que lorsqu'il y en a plusieurs.
+ *
+ * Le net à payer ferme toujours le bloc, même sans déduction : c'est le
+ * chiffre que le payeur cherche, et le faire disparaître quand il égale le
+ * TTC obligerait à savoir lequel lire.
+ */
+function blocTotauxHTML(doc, t, fmt){
+  const v = t.ventilation || [];
+  const kv = (l, x, c) => `<div class="p-kv${c||''}"><span>${l}</span><em>${x}</em></div>`;
+  const solde = window.soldeAPayer(t, {
     acomptes: doc.acomptesDeduits,
     retenuePourcentage: doc.retenueGarantiePourcentage,
   });
-  if(!s.aDesDeductions) return '';
-  return (s.acomptes>0 ? `<tr><td class="label">Acompte déjà versé</td><td class="val">-${fmt(s.acomptes)}</td></tr>` : '')
-       + (s.retenueMontant>0 ? `<tr><td class="label">Retenue de garantie (${window.formaterTaux(s.retenuePourcentage)})</td><td class="val">-${fmt(s.retenueMontant)}</td></tr>` : '')
-       + `<tr class="grand"><td class="label">Net à payer</td><td class="val">${fmt(s.netAPayer)}</td></tr>`;
+  return (v.length > 1
+      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map(pa=>kv(`TVA ${window.formaterTaux(pa.taux)} sur ${money(pa.base)}`, fmt(pa.montant))).join('')}${kv('Total TVA', fmt(t.tva), ' somme')}</div>`
+      : '')
+    + kv('Total HT', fmt(t.htAvant))
+    + (t.remisePct>0 ? kv(`Remise (${t.remisePct} %)`, '-'+fmt(t.remiseMontantHT)) : '')
+    + kv(v.length===1 ? `Total TVA ${window.formaterTaux(v[0].taux)}` : 'Total TVA', fmt(t.tva))
+    + kv('Total TTC', fmt(t.ttc), ' p-ttc')
+    + (solde.acomptes>0 ? kv('Acompte déjà versé', '-'+fmt(solde.acomptes)) : '')
+    + (solde.retenueMontant>0 ? kv(`Retenue de garantie (${window.formaterTaux(solde.retenuePourcentage)})`, '-'+fmt(solde.retenueMontant)) : '')
+    + kv('Net à payer', fmt(solde.netAPayer), ' p-net');
 }
 
-function factureDocMetaHTML(doc){
+function factureDocMetaLignes(doc){
   const devis = doc.devisId ? state.devis.find(d=>d.id===doc.devisId) : null;
-  const lignes = [];
-  if(doc.dateFinExecution && doc.dateFinExecution !== doc.date){
-    lignes.push('Travaux achevés le : <b>'+fmtDate(doc.dateFinExecution)+'</b>');
-  }
-  if(doc.refBonCommandeClient) lignes.push('Votre bon de commande : <b>'+esc(doc.refBonCommandeClient)+'</b>');
-  if(devis && devis.numero) lignes.push('Devis : <b>'+esc(devis.numero)+'</b>');
-  if(doc.refMarche) lignes.push('Marché : <b>'+esc(doc.refMarche)+'</b>');
   /* Un avoir désigne la pièce qu'il rectifie et dit pourquoi : sans cela, le
      destinataire ne sait pas sur quoi l'imputer, et rien ne justifie la
      rectification à qui relira les comptes. */
-  const rectifiee = doc.factureRectifieeId ? state.factures.find(f=>f.id===doc.factureRectifieeId) : null;
-  if(rectifiee && rectifiee.numero) lignes.push('Rectifie la facture : <b>'+esc(rectifiee.numero)+'</b> du '+fmtDate(rectifiee.date));
-  if(doc.motifRectification) lignes.push('Motif : <b>'+esc(doc.motifRectification)+'</b>');
-  return lignes.length ? '<br>'+lignes.join('<br>') : '';
+  const rect = doc.factureRectifieeId ? state.factures.find(f=>f.id===doc.factureRectifieeId) : null;
+  return [
+    devis && devis.numero ? ['Devis', esc(devis.numero)] : null,
+    doc.refMarche ? ['Marché', esc(doc.refMarche)] : null,
+    rect && rect.numero ? ['Rectifie la facture', esc(rect.numero)+' du '+fmtDate(rect.date)] : null,
+    doc.motifRectification ? ['Motif', esc(doc.motifRectification)] : null
+  ].filter(Boolean);
 }
 
-function blocConditionsHTML(type, doc, s, hidePrices){
+/**
+ * Le pavé « Pour votre règlement ».
+ *
+ * Il remplace les deux cartouches de conditions ET le bandeau de contact : le
+ * gabarit range chaque information là où on la cherche — coordonnées dans
+ * l'en-tête, coordonnées bancaires à côté du net à payer.
+ */
+function blocReglementHTML(type, doc, s, em, hidePrices){
   const r = (s.reglages && s.reglages.documents) || {};
-  const conditions = type==='devis'
-    ? (r.conditionsDevis||'').trim()
-    : (doc.conditionsReglement||'').trim();
   /* L'IBAN de la facture d'abord : il est figé à l'émission, et le lire dans
      les réglages courants ferait annoncer le compte d'aujourd'hui sur une
      facture d'il y a deux ans. Le BIC, lui, n'est pas figé — faute de colonne. */
-  const iban = doc.emetteurIban || s.iban;
+  const iban = em.iban || s.iban;
   const avecIban = (r.afficherIban !== false) && !hidePrices && (iban || s.bic);
-  const aUneEcheance = type === 'facture' && !!doc.echeance;
-  if(!conditions && !avecIban && !aUneEcheance) return '';
-
+  const conditions = (type==='devis' ? (r.conditionsDevis||'') : (doc.conditionsReglement||'')).trim();
+  /* La date d'échéance en toutes lettres : l'art. L441-9 exige la date à
+     laquelle le règlement doit intervenir, pas seulement le délai. */
+  const echeance = (type==='facture' && doc.echeance)
+    ? `<div>Échéance : <span>${fmtDate(doc.echeance)}</span></div>` : '';
+  if(!avecIban && !conditions && !echeance) return '<div></div>';
   /* Le titre annonçait « Règlement par virement » quel que soit le mode : la
      colonne `mode_paiement` était écrite et lue par personne. */
   const mode = libelleModePaiement(type==='devis' ? null : doc.modePaiement);
-
-  /* La date d'échéance en toutes lettres à côté des conditions : art. L441-9,
-     qui exige la date à laquelle le règlement doit intervenir — pas seulement
-     le délai dont elle découle. Le mode l'accompagne, c'est ce que le payeur
-     cherche en même temps. */
-  const echeance = (type === 'facture' && doc.echeance)
-    ? `<div>Échéance : <span style="font-weight:700;">${fmtDate(doc.echeance)}</span> — Règlement par ${esc(mode)}</div>`
-    : '';
-
-  return `<table class="p-conditions"><tr>
-    <td>${(conditions || echeance)? `<b>Conditions de paiement</b>${conditions? `<div>${esc(conditions)}</div>`:''}${echeance}` : ''}</td>
-    <td>${avecIban? `<b>Règlement par ${esc(mode)}</b><div>${iban? 'IBAN '+esc(iban):''}${iban&&s.bic? ' — ':''}${s.bic? 'BIC '+esc(s.bic):''}</div>` : ''}</td>
-  </tr></table>`;
+  return `<div class="p-reglement"><b>Pour votre règlement</b>`
+    + (avecIban && iban ? `<div>IBAN : <span>${esc(iban)}</span></div>` : '')
+    + (avecIban && s.bic ? `<div>BIC : <span>${esc(s.bic)}</span></div>` : '')
+    + echeance
+    + (conditions ? `<div>${esc(conditions)}</div>` : `<div>Règlement par ${esc(mode)}</div>`)
+    + `</div>`;
 }
 
 /* Les mentions du code de commerce ne concernent que la facture : les faire
@@ -3587,49 +3620,9 @@ function blocMentionsHTML(type, s){
   const complement = ((s.reglages && s.reglages.documents && s.reglages.documents.mentionsComplementaires)||'').trim();
   if(!mentions.length && !complement) return '';
 
-  return `<div class="p-mentions">
-    <div class="p-label">Mentions légales</div>
-    ${mentions.map(m=>`<div>${esc(m)}</div>`).join('')}
-    ${complement? `<div style="white-space:pre-wrap;">${esc(complement)}</div>`:''}
-  </div>`;
-}
-
-/**
- * Le bandeau de contact, au bas du document.
- *
- * Le pied que jsPDF dessine sur CHAQUE page porte l'identité légale — forme
- * juridique, capital, SIRET, TVA, RCS — parce que l'art. R123-238 l'exige sur
- * tout document commercial, et qu'une page isolée doit dire de qui elle vient.
- * Mais jsPDF écrit en Helvetica : pas d'icône, pas de mise en page, deux
- * lignes au plus. Tout ce qui SERT à joindre l'entreprise ou à la payer est
- * donc rendu ici, en HTML, une fois, au bas du document.
- *
- * Le site web vit dans les réglages et non dans une colonne de `societes` :
- * il ne sert qu'aux documents, et lui ouvrir une colonne aurait demandé une
- * migration pour une ligne de pied de page.
- */
-function bandeauContactHTML(em, s, hidePrices){
-  const r = (s.reglages && s.reglages.documents) || {};
-  const siteWeb = (r.siteWeb || '').trim();
-  const contacts = [
-    em.adresse ? ['📍', em.adresse] : null,
-    em.telephone ? ['📞', em.telephone] : null,
-    em.email ? ['✉️', em.email] : null,
-    siteWeb ? ['🌐', siteWeb] : null,
-  ].filter(Boolean);
-
-  /* Les coordonnées bancaires disparaissent en mode sans prix : un document
-     sans montants n'a pas à porter de quoi le payer. */
-  const iban = em.iban || s.iban;
-  const banque = !hidePrices && (iban || s.bic)
-    ? ['🏦', [iban ? 'IBAN ' + iban : '', s.bic ? 'BIC ' + s.bic : ''].filter(Boolean).join(' — ')]
-    : null;
-  if(banque) contacts.push(banque);
-
-  if(!contacts.length) return '';
-  return `<div class="p-contact">${contacts
-    .map(([icone, texte]) => `<span class="p-contact-item"><span class="p-contact-icone">${icone}</span>${esc(texte)}</span>`)
-    .join('')}</div>`;
+  /* Une seule ligne et pas d'intertitre : le gabarit les enchaîne comme un
+     texte courant, et un « Mentions légales » de 6 pt n'apprend rien. */
+  return `<div class="p-mentions">${esc(mentions.join(' '))}${complement? ' '+esc(complement):''}</div>`;
 }
 
 /* Le pied reprend l'identité légale : c'est là que se lisent la forme
@@ -17043,7 +17036,6 @@ Object.assign(window, {
   bandeauTacheHTML,
   barreFiltresFactures,
   barreRecherche,
-  bandeauContactHTML,
   barreFiltresReglements,
   basculerReferencePrefacture,
   bcAProbleme,
@@ -17060,12 +17052,14 @@ Object.assign(window, {
   bcTachesTerminees,
   bcToutesDatesDuBC,
   bcWorkflowStepperHTML,
-  blocConditionsHTML,
   blocMentionsHTML,
+  carteChantierHTML,
+  blocReglementHTML,
+  blocTotauxHTML,
   blocagesDirecteur,
   blocagesDirecteurHTML,
   bonCommandeCardHTML,
-  bonCommandeDocMetaHTML,
+  bonCommandeDocMetaLignes,
   bonCommandeForm,
   bonCommandeItemMatchesSearch,
   bonCommandeListItems,
@@ -17302,7 +17296,7 @@ Object.assign(window, {
   etatVisiteDuSalarie,
   exportAllData,
   exporterMesDonnees,
-  factureDocMetaHTML,
+  factureDocMetaLignes,
   factureDuReglement,
   factureForm,
   factureMatchesSearch,
@@ -17647,6 +17641,7 @@ Object.assign(window, {
   printInterventionDocument,
   printInterventionDraft,
   printPlanning,
+  metaDocHTML,
   printableLignesRows,
   qteDejaPlanifiee,
   quickActionsHTML,
@@ -17900,7 +17895,6 @@ Object.assign(window, {
   societeDepuisFormulaire,
   societeName,
   soldeCPRestant,
-  soldeLignesHTML,
   sousTotalChapitreHTML,
   sousTraitantActuel,
   sousTraitantFilterOptions,
