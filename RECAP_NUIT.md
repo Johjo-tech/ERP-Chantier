@@ -1,7 +1,7 @@
 # Retours réunion client du 21/09/2026 — ce qui a été fait
 
 Branche : **`feat/retours-client-21-09`**, partie de `origin/main` (`d7fa854`).
-20 commits, 26 fichiers, +4 145 / −423.
+22 commits, 28 fichiers, +4 698 / −429.
 
 État à la livraison : `npm run type-check` propre, `npm run build` vert,
 **1 208 tests au vert** (77 fichiers — 68 avant, 9 ajoutés).
