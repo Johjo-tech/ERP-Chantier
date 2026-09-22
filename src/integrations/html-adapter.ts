@@ -584,6 +584,64 @@ export function viderCache() {
  * Le plafond n'est pas lisible depuis le client : on compare ce qu'on reçoit à
  * ce qui existe, ce qui reste juste quel que soit le réglage.
  */
+/* ---------- Ce que la base a refusé de lire ----------
+ *
+ * `chargerCollection` avalait l'erreur : un `console.error`, puis un tableau
+ * VIDE rendu à l'écran. Le commentaire affirmait qu'« une erreur franche
+ * dégrade de façon visible : le bandeau Supabase inaccessible s'affiche ».
+ * C'était FAUX. Ce bandeau dépend de `hasRealStorage`, que seules les
+ * fonctions `kv_store` héritées de `app.js` mettent à jour — or ce sont les
+ * versions du pont qui tournent, jamais celles-là. Le drapeau reste
+ * éternellement vrai et le bandeau ne s'affiche jamais.
+ *
+ * Conséquence : session expirée, réseau coupé, table refusée — l'application
+ * s'affichait ENTIÈRE et PARFAITEMENT VIDE. « Aucun bon de commande pour cette
+ * société » sur une société qui en compte trois, tous les boutons sans effet,
+ * et pas un mot d'explication. Rien ne distinguait ça d'une base réellement
+ * vide.
+ */
+export interface EchecDeLecture {
+  source: string;
+  message: string;
+  code?: string;
+  /** La session ne vaut plus : se reconnecter est le seul remède. */
+  sessionExpiree: boolean;
+}
+
+const echecsLecture = new Map<string, EchecDeLecture>();
+
+/** PostgREST répond 401 avec ce code quand le jeton n'est plus valable. */
+function estSessionExpiree(e: { code?: string; message?: string }): boolean {
+  const code = (e.code ?? "").toUpperCase();
+  const message = (e.message ?? "").toLowerCase();
+  return (
+    code === "PGRST301" ||
+    code === "401" ||
+    message.includes("jwt expired") ||
+    message.includes("jwt is invalid") ||
+    message.includes("invalid claim")
+  );
+}
+
+function noterEchecDeLecture(source: string, erreur: unknown): void {
+  const e = erreur as { code?: string; message?: string; details?: string; hint?: string };
+  echecsLecture.set(source, {
+    source,
+    message: e.details || e.hint || e.message || "raison inconnue",
+    code: e.code,
+    sessionExpiree: estSessionExpiree(e),
+  });
+}
+
+/** Ce qui n'a pas pu être lu depuis le dernier chargement complet. */
+export function echecsDeLecture(): EchecDeLecture[] {
+  return [...echecsLecture.values()];
+}
+
+export function oublierEchecsDeLecture(): void {
+  echecsLecture.clear();
+}
+
 export function refuserSiTronque(
   source: string,
   recus: number,
@@ -654,13 +712,15 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
   }
 
   const { data, error, count } = await requete;
-  /* Une erreur franche — réseau coupé, RLS qui refuse — dégrade déjà de façon
-     visible : le bandeau « Supabase inaccessible » s'affiche. La troncature,
-     elle, ne se voit nulle part : c'est le seul cas qu'on transforme en refus. */
+  /* On rend toujours un tableau vide — une collection en échec ne doit pas
+     emporter les quinze autres — mais on GARDE la trace : l'écran s'en sert
+     pour dire ce qui manque, au lieu de se montrer vide et muet. */
   if (error) {
     console.error("Chargement de collection impossible", source, error);
+    noterEchecDeLecture(source, error);
     return [];
   }
+  echecsLecture.delete(source);
   refuserSiTronque(source, (data ?? []).length, count);
 
   const cles: string[] = [];
@@ -1244,6 +1304,9 @@ async function attacher(
   const refus = reponses.find((r) => r.error);
   if (refus) {
     console.error("Chargement de table fille impossible", source, refus.error);
+    /* Sans cela, un document s'affichait avec ses en-têtes et SANS SES LIGNES :
+       des totaux à zéro sur une facture qui n'est pas vide. */
+    noterEchecDeLecture(source, refus.error);
     return;
   }
   /* Les lignes filles sont bien plus nombreuses que leurs parents : c'est ici
@@ -1919,6 +1982,10 @@ export function injectGlobalFunctions() {
   w.stGet = stGet;
   w.stSet = stSet;
   w.dernierRefus = dernierRefus;
+  /* Ce que la base a refusé de LIRE. Sans cela, une session expirée donnait
+     une application entière et parfaitement vide, sans un mot d'explication. */
+  w.echecsDeLecture = echecsDeLecture;
+  w.oublierEchecsDeLecture = oublierEchecsDeLecture;
   w.stDelete = stDelete;
   w.stListKeys = stListKeys;
   /* Le chargement ne ramène que la société sur laquelle on travaille : la RLS

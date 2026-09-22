@@ -88,6 +88,7 @@ declare global {
     derniereVisite: any;
     docx: any;
     dossierSalarie: any;
+    echecsDeLecture: any;
     emettreFacture: any;
     enregistrerArticle: any;
     estAvoir: any;
@@ -156,6 +157,7 @@ declare global {
     nextSAVNumero: any;
     nomIntervenant: any;
     ongletsAutorises: any;
+    oublierEchecsDeLecture: any;
     ouvrirAttestationVisite: any;
     ouvrirDocumentRh: any;
     paletteAccent: any;

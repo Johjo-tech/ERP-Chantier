@@ -473,6 +473,57 @@ async function recharger(...prefixes){
   refreshNotifBadge();
 }
 
+/**
+ * Dire ce que la base a refusé de lire, plutôt que de se montrer vide.
+ *
+ * `chargerCollection` rend un tableau vide quand la lecture échoue — il le
+ * faut, sinon une collection en panne emporterait les quinze autres. Mais
+ * l'écran affichait alors « Aucun bon de commande pour cette société » sur une
+ * société qui en compte trois, tous les boutons sans effet, et pas un mot.
+ * Rien ne distinguait une panne d'une base réellement vide.
+ *
+ * Le bandeau « Supabase inaccessible » qui existait ne pouvait PAS s'afficher :
+ * il dépend de `hasRealStorage`, que seules les fonctions `kv_store` héritées
+ * de ce fichier mettent à jour — or ce sont celles du pont qui tournent. Le
+ * drapeau reste éternellement vrai.
+ */
+function signalerEchecsDeChargement(){
+  const echecs = window.echecsDeLecture ? window.echecsDeLecture() : [];
+  const ancien = document.getElementById('bandeauEchecLecture');
+  if(ancien) ancien.remove();
+  document.body.classList.remove('has-no-storage-banner');
+  if(!echecs.length) return;
+
+  const session = echecs.some(e => e.sessionExpiree);
+  const tables = [...new Set(echecs.map(e => e.source))];
+  const banniere = document.createElement('div');
+  banniere.id = 'bandeauEchecLecture';
+  banniere.className = session ? 'bandeau-alerte bandeau-session' : 'bandeau-alerte';
+  banniere.innerHTML = session
+    ? `⚠ <b>Votre session a expiré.</b> L'application ne peut plus lire vos données : ce qu'elle affiche est incomplet, et vos actions n'aboutiront pas. `
+      + `<button class="btn small" onclick="seReconnecter()">Se reconnecter</button>`
+    : `⚠ <b>Certaines données n'ont pas pu être chargées</b> (${esc(tables.join(', '))}). `
+      + `Ce que vous voyez est incomplet — ne vous y fiez pas pour décider. `
+      + `<button class="btn small" onclick="rechargerToutesLesDonnees()">Réessayer</button>`;
+  document.body.prepend(banniere);
+  document.body.classList.add('has-no-storage-banner');
+}
+
+/** Repartir sur une session neuve : c'est le seul remède à un jeton périmé. */
+function seReconnecter(){
+  window.location.replace('/login.html');
+}
+
+/** Retenter un chargement complet après un échec réseau. */
+async function rechargerToutesLesDonnees(){
+  if(window.oublierEchecsDeLecture) window.oublierEchecsDeLecture();
+  /* Pas de vidage de cache : `chargerCollection` réinterroge à chaque appel et
+     n'a rien mis en cache pour la collection qui a échoué. */
+  await loadAll();
+  renderShell();
+  renderTab();
+}
+
 async function loadAll(){
   /* Avant toute requête : le pont ne ramènera que cette société. Sans cela il
      téléchargeait aussi les documents des sociétés qu'on n'affiche pas. */
@@ -492,6 +543,7 @@ async function loadAll(){
      garde son propre appel. */
   appliquerCouleurSociete();
   refreshNotifBadge();
+  signalerEchecsDeChargement();
 }
 
 /* ---------- Helpers ---------- */
@@ -16760,15 +16812,11 @@ async function saveDocument(){
   // La préférence d'affichage du menu, relue à l'ouverture de la session.
   appliquerEpinglageMenu();
   renderTab();
-  if(!hasRealStorage){
-    const foot = document.getElementById('sidebarFoot');
-    if(foot){ foot.textContent = '⚠ Supabase inaccessible : voir le bandeau.'; foot.style.color = 'var(--accent-2)'; }
-    const banner = document.createElement('div');
-    banner.id = 'noStorageBanner';
-    banner.innerHTML = "⚠ <b>Connexion à Supabase impossible — vos données ne sont pas conservées.</b> Si vous voyez ce message dans l'aperçu Claude.ai, c'est normal : Claude.ai bloque les connexions vers des serveurs externes comme Supabase. Téléchargez ce fichier (bouton Télécharger) et ouvrez-le directement dans votre navigateur pour que Supabase fonctionne.";
-    document.body.prepend(banner);
-    document.body.classList.add('has-no-storage-banner');
-  }
+  /* Le bandeau « Supabase inaccessible » vivait ici, sous `if(!hasRealStorage)`.
+     Il ne pouvait pas s'afficher : ce drapeau n'est écrit que par les fonctions
+     `kv_store` héritées de ce fichier, que le pont remplace sur `window` — elles
+     ne s'exécutent jamais, et il reste éternellement vrai. `loadAll()` pose
+     désormais un bandeau qui, lui, sait ce qui a échoué. */
 })();
 
 
@@ -17529,6 +17577,9 @@ Object.assign(window, {
   refreshInterlocuteurSelect,
   refreshLignesUI,
   refreshNotifBadge,
+  signalerEchecsDeChargement,
+  seReconnecter,
+  rechargerToutesLesDonnees,
   refreshNotifPanelDOM,
   refreshPhotosUI,
   refreshPlanifierQteMontant,
