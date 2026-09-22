@@ -26,15 +26,17 @@ import {
   regimeSuivi,
 } from "@/api/regles-visite-medicale";
 
-const SOURCE = readFileSync(resolve(__dirname, "../pages/app.js"), "utf8");
+/* Le registre des visites est sorti d'`app.js` dans son propre module, pour
+   tenir le monolithe sous le seuil d'analyse de Semgrep. Le badge l'a suivi. */
+const SOURCE = readFileSync(resolve(__dirname, "../pages/rh-visites.js"), "utf8");
 const AUJOURD_HUI = "2026-09-21";
 const SEUIL = 45;
 
 function extraire(nom: string): string {
   const debut = SOURCE.indexOf(`\nfunction ${nom}(`);
-  if (debut < 0) throw new Error(`\`${nom}\` introuvable dans src/pages/app.js`);
+  if (debut < 0) throw new Error(`\`${nom}\` introuvable dans src/pages/rh-visites.js`);
   const fin = SOURCE.indexOf("\n}", debut);
-  if (fin < 0) throw new Error(`fin de \`${nom}\` introuvable dans src/pages/app.js`);
+  if (fin < 0) throw new Error(`fin de \`${nom}\` introuvable dans src/pages/rh-visites.js`);
   return SOURCE.slice(debut, fin + 2);
 }
 

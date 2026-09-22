@@ -13,6 +13,8 @@
  * simplement de répondre, sans la moindre erreur.
  */
 
+import { installerRhVisites } from './rh-visites.js';
+
 /* Alimenté au démarrage par les sociétés que la RLS rend visibles
    (voir src/integrations/session.ts). La liste ci-dessous n'est qu'un repli
    d'affichage si le pont n'a pas encore répondu. */
@@ -176,6 +178,13 @@ let state = {
      ce qui permet à `barreRecherche` et `filtrerListe` de rester génériques. */
   recherches: {}
 };
+
+/* Le module du suivi médical reçoit ici ce dont il a besoin, et rien de
+   plus. Aussi haut, parce que `state` est le seul de ces noms à ne pas être
+   hissé : l'installation doit suivre sa déclaration, et précéder le
+   démarrage — sinon le module verrait `undefined` au premier appel. */
+installerRhVisites({ state, esc, fmtDate, jsAttr, renderTab, showToast, recharger,
+  todayISO, uid, openAttachmentPreview, reglagesCourants, dossierDuSalarie, refusDocumentRh });
 
 /* ---------- Stockage (Supabase) ---------- */
 /* L'ADRESSE VIENT DE LA CONSTRUCTION, plus d'une constante écrite ici.
@@ -1918,6 +1927,10 @@ function openForm(type, prefill){
   }
   Object.keys(state.formOpen).forEach(k=> state.formOpen[k] = false);
   state.formOpen[type] = true;
+  /* `editItem` passe ici sans passer par `closeForm` : sans cette remise à
+     zéro, le panneau de visite du salarié précédent suivrait sur la fiche
+     suivante, prérempli de sa saisie. */
+  if(type === 'salarie') state.rhVisiteForm = null;
   pousserHistorique();
   if(!menuEpingle()) document.body.classList.add('sidebar-collapsed');
   renderTab();
@@ -1965,6 +1978,10 @@ function horodatageBrouillonHTML(){
 
 function closeForm(type){
   state.formOpen[type] = false;
+  /* Le panneau de visite vit à côté de `state.editing` et lui survivait :
+     abandonner une fiche neuve puis en ouvrir une autre faisait réapparaître la
+     visite abandonnée — sur quelqu'un d'autre. */
+  if(type === 'salarie') state.rhVisiteForm = null;
   state.editing = {type:null,id:null,lignes:[]};
   pousserHistorique(true);
   renderTab();
@@ -14138,413 +14155,9 @@ function ouvrirDossierRh(salarieId){
   renderTab();
 }
 
-/* ---------- Registre des visites médicales ----------
-
-   Le suivi en santé au travail a quitté le dossier documentaire : une visite
-   n'est pas un document, elle porte un type, un avis d'aptitude, des réserves
-   et une échéance. Les deux dates de la fiche salarié restent, mais tenues par
-   la base d'après la visite la plus récente — un déclencheur les réécrit à
-   chaque enregistrement, d'où les champs grisés dans le formulaire.
-
-   Le seuil est celui du médical (`visiteMedicale`, 45 j par défaut), pas celui
-   des documents (30 j) : c'est le réglage de Paramètres › RH qui le dit. */
-
-function seuilVisiteMedicale(){
-  const seuils = reglagesCourants().seuils || {};
-  return seuils.visiteMedicale != null ? seuils.visiteMedicale : 45;
-}
-function visitesDuSalarie(salarieId){
-  return window.trierVisites(state.visitesRh.filter(v=>v.salarieId===salarieId));
-}
-/* L'échéance qui fait foi est la COLONNE de la fiche, pas le registre.
-   Les deux disent la même chose dès qu'une visite est enregistrée — un
-   déclencheur s'en charge. Mais avant cela, la colonne porte encore ce qui
-   avait été saisi à la main, et c'est la seule échéance que l'entreprise
-   possède : la recalculer depuis un registre vide la ferait disparaître.
-   En production, le seul salarié était précisément dans ce cas. */
-function echeanceVisite(salarieId){
-  const s = state.salaries.find(x=>x.id===salarieId);
-  return (s && s.visiteMedicaleProchaine) || null;
-}
-function etatVisiteDuSalarie(salarieId){
-  return window.etatVisite(echeanceVisite(salarieId), todayISO(), seuilVisiteMedicale());
-}
-let chargementVisitesRh = null;
-function visitesRhPretes(){
-  return !chargementVisitesRh
-    && state.visitesRhCharges
-    && state.visitesRhSociete === state.societeId;
-}
-function chargerVisitesRh(force){
-  if(chargementVisitesRh) return chargementVisitesRh;
-  if(!force && visitesRhPretes()) return Promise.resolve();
-  const societe = state.societeId;
-  const ids = state.salaries.filter(s=>s.societeId===societe).map(s=>s.id);
-  chargementVisitesRh = (async ()=>{
-    try{
-      state.visitesRh = await window.chargerVisitesMedicales(ids);
-    }catch(err){
-      console.error('Registre des visites illisible', err);
-      state.visitesRh = [];
-      showToast("Les visites médicales n'ont pas pu être chargées.");
-    }finally{
-      state.visitesRhCharges = true;
-      state.visitesRhSociete = societe;
-      chargementVisitesRh = null;
-    }
-    renderTab();
-  })();
-  return chargementVisitesRh;
-}
-
-/* La conformité RH d'un salarié : son dossier ET son suivi médical.
-   Les deux se composent ici, et non dans une règle feuille — celles-ci
-   n'importent que des types, et ne peuvent donc pas se connaître. */
-function conformiteRhDuSalarie(salarieId){
-  const bilan = dossierDuSalarie(salarieId);
-  const visite = etatVisiteDuSalarie(salarieId);
-  /* « Pas d'échéance connue » vaut manquement : on ne sait pas si la personne
-     est suivie, et c'est ce que l'inspection du travail viendra demander. */
-  const manqueMedical = visite.etat === 'inconnue' || visite.etat === 'depassee';
-  return { ...bilan, visite, manqueMedical, complet: bilan.complet && !manqueMedical };
-}
-
-function etatVisiteBadge(salarieId){
-  const info = etatVisiteDuSalarie(salarieId);
-  const echeance = echeanceVisite(salarieId);
-  if(info.etat === 'depassee') return `<span class="badge danger">Dépassée depuis le ${fmtDate(echeance)}</span>`;
-  if(info.etat === 'bientot') return `<span class="badge warn">À prévoir dans ${info.jours} j</span>`;
-  if(info.etat === 'aJour') return `<span class="card-sub">Prochaine le ${fmtDate(echeance)}</span>`;
-  return `<span class="badge danger" title="Aucune échéance connue : rien ne préviendra">Aucun suivi</span>`;
-}
-/**
- * Le suivi médical, dit en un coup d'œil dans la liste des collaborateurs.
- *
- * L'information existait — deux dates sur la fiche, un registre complet plus
- * bas — mais la liste n'en montrait rien : un « ⚠ à vérifier » générique,
- * partagé avec la carte BTP et les habilitations, qui n'apprenait pas ce qui
- * n'allait pas. Or c'est en parcourant la liste qu'on décide qui convoquer.
- *
- * Quatre états et non trois : « aucun suivi » n'est pas « à jour ». Un salarié
- * dont on ignore l'échéance vaut, pour l'inspection du travail, un salarié non
- * suivi — et c'est le cas le plus fréquent en pratique.
- *
- * Le seuil vient de Paramètres › RH (`visiteMedicale`, 45 jours par défaut) et
- * non d'un 60 codé en dur : il est déjà réglable, et deux seuils pour la même
- * échéance finiraient par se contredire.
- */
-function badgeVisiteMedicaleListe(salarieId){
-  const info = etatVisiteDuSalarie(salarieId);
-  const echeance = echeanceVisite(salarieId);
-  const commun = 'margin-left:6px;';
-  if(info.etat === 'depassee'){
-    return `<span class="badge danger" style="${commun}" title="Visite médicale dépassée depuis le ${fmtDate(echeance)}">🩺 Visite expirée</span>`;
-  }
-  if(info.etat === 'bientot'){
-    return `<span class="badge warn" style="${commun}" title="Prochaine visite médicale le ${fmtDate(echeance)}">🩺 À renouveler (${info.jours} j)</span>`;
-  }
-  if(info.etat === 'aJour'){
-    return `<span class="badge success" style="${commun}" title="Prochaine visite médicale le ${fmtDate(echeance)}">🩺 À jour</span>`;
-  }
-  return `<span class="badge danger" style="${commun}" title="Aucune échéance connue : rien ne préviendra">🩺 Aucun suivi</span>`;
-}
-function pastilleVisiteRh(salarieId){
-  const info = etatVisiteDuSalarie(salarieId);
-  if(info.etat === 'inconnue') return `<span class="doc-rh-pastille manquant" title="Aucune visite enregistrée">✕</span>`;
-  if(info.etat === 'depassee') return `<span class="doc-rh-pastille expire" title="Échéance dépassée">!</span>`;
-  if(info.etat === 'bientot') return `<span class="doc-rh-pastille bientot" title="Échéance proche">~</span>`;
-  return `<span class="doc-rh-pastille ok" title="Suivi à jour">✓</span>`;
-}
-function visiteRhRowHTML(v){
-  const t = window.typeVisite(v.type);
-  const avis = window.avisAptitude(v.avis);
-  const regime = window.regimeSuivi(v.suivi);
-  const details = [regime.libelle, v.organisme, v.medecin]
-    .filter(Boolean).map(esc).join(' · ');
-  const couleurAvis = avis ? (avis.gravite==='danger'?'#a30f22':avis.gravite==='warn'?'#a56200':'#15803d') : 'inherit';
-  return `<div class="chantier-file-row">
-    <span style="flex:1; min-width:0;">
-      ${t.icone} <strong>${esc(t.libelle)}</strong> <span class="card-sub">du ${fmtDate(v.dateVisite)}</span>
-      ${avis? `<span style="color:${couleurAvis}; font-weight:700;"> · ${esc(avis.libelle)}</span>`:''}
-      ${details? `<span class="card-sub">${details}</span>`:''}
-      ${v.reserves? `<span class="card-sub">⚠ ${esc(v.reserves)}</span>`:''}
-      ${v.notes? `<span class="card-sub">📝 ${esc(v.notes)}</span>`:''}
-    </span>
-    ${v.prochaineVisite? `<span class="card-sub">→ ${fmtDate(v.prochaineVisite)}</span>` : '<span class="card-sub">sans échéance</span>'}
-    ${v.fichierChemin
-      ? `<button class="btn small ghost" onclick="ouvrirAttestationVisiteEcran('${jsAttr(v.id)}')">📎 Attestation</button>`
-      : '<span class="card-sub">sans attestation</span>'}
-    <button class="btn small" onclick="ouvrirFormVisiteRh('${jsAttr(v.salarieId)}','${jsAttr(v.id)}')">Modifier</button>
-    <button class="btn small danger" onclick="supprimerVisiteRhEcran('${jsAttr(v.id)}')">✕</button>
-  </div>`;
-}
-/* Le registre d'un salarié : son état, son historique, et de quoi compléter.
-   Servi tel quel dans l'onglet Visites médicales et dans la fiche. */
-function visitesMedicalesHTML(salarie){
-  if(!visitesRhPretes()){
-    chargerVisitesRh();
-    return '<div class="empty">Chargement du registre…</div>';
-  }
-  const visites = visitesDuSalarie(salarie.id);
-  const formIci = state.rhVisiteForm && state.rhVisiteForm.salarieId === salarie.id;
-  /* Une échéance sans registre : la date saisie à la main avant que le
-     registre n'existe. Elle vaut, mais elle ne dit ni le type de visite ni
-     l'avis rendu — le dire, plutôt que d'afficher un vide qui se lirait comme
-     une absence de suivi. */
-  const heritee = !visites.length && echeanceVisite(salarie.id);
-  return `
-    <div class="card-sub">${etatVisiteBadge(salarie.id)}</div>
-    <div style="margin-top:10px;">${visites.length
-      ? visites.map(visiteRhRowHTML).join('')
-      : (heritee
-        ? `<div class="empty">Échéance reprise de l'ancienne saisie, sans visite au registre : ni type, ni avis, ni attestation. Enregistrez la prochaine visite pour repartir sur du solide.</div>`
-        : '<div class="empty">Aucune visite enregistrée. Ce salarié n\'a pas de suivi médical traçable.</div>')}</div>
-    ${formIci? formVisiteRhHTML() : `<button class="btn small primary" style="margin-top:10px;" onclick="ouvrirFormVisiteRh('${jsAttr(salarie.id)}')">+ Enregistrer une visite</button>`}
-  `;
-}
-function ouvrirFormVisiteRh(salarieId, visiteId){
-  const v = visiteId ? state.visitesRh.find(x=>x.id===visiteId) : null;
-  /* Le régime par défaut est celui de la visite précédente : il change
-     rarement, et le resaisir à chaque fois inviterait à le laisser faux. */
-  const precedente = v ? null : window.derniereVisite(visitesDuSalarie(salarieId));
-  state.rhVisiteForm = {
-    salarieId, id: v? v.id : null,
-    dateVisite: v? v.dateVisite : todayISO(),
-    type: v? v.type : (precedente? 'periodique' : 'embauche'),
-    suivi: v? v.suivi : (precedente? precedente.suivi : 'simple'),
-    organisme: v? (v.organisme||'') : (precedente? (precedente.organisme||'') : ''),
-    medecin: v? (v.medecin||'') : '',
-    avis: v? (v.avis||'') : '',
-    reserves: v? (v.reserves||'') : '',
-    prochaineVisite: v? (v.prochaineVisite||'') : '',
-    notes: v? (v.notes||'') : '',
-    fichierNom: v? (v.fichierNom||'') : '',
-    /* Une échéance déjà enregistrée a été décidée par quelqu'un : la
-       proposition automatique ne doit pas la reprendre sous prétexte qu'on
-       corrige le régime. */
-    echeanceSaisieMain: !!(v && v.prochaineVisite)
-  };
-  renderTab();
-}
-function fermerFormVisiteRh(){
-  state.rhVisiteForm = null;
-  renderTab();
-}
-function formVisiteRhHTML(){
-  const f = state.rhVisiteForm;
-  return `<div class="form-panel" style="margin-top:12px;">
-    <h3>${f.id? 'Modifier la visite' : 'Enregistrer une visite médicale'}</h3>
-    <div class="field-grid">
-      <div class="field"><label>Date de la visite</label><input type="date" id="visRh_dateVisite" value="${f.dateVisite||''}" onchange="onVisiteRhEcheanceChange()"></div>
-      <div class="field"><label>Type de visite</label><select id="visRh_type" onchange="onVisiteRhEcheanceChange()">
-        ${window.TYPES_VISITE.map(t=>`<option value="${t.code}" ${f.type===t.code?'selected':''}>${t.icone} ${esc(t.libelle)}</option>`).join('')}
-      </select></div>
-      <div class="field"><label>Régime de suivi</label><select id="visRh_suivi" onchange="onVisiteRhEcheanceChange()">
-        ${window.REGIMES_SUIVI.map(r=>`<option value="${r.code}" ${f.suivi===r.code?'selected':''}>${esc(r.libelle)}</option>`).join('')}
-      </select><div class="card-sub" id="visRh_reference" style="margin-top:4px;"></div></div>
-      <div class="field"><label>Avis d'aptitude</label><select id="visRh_avis">
-        <option value="">— Non rendu —</option>
-        ${window.AVIS_APTITUDE.map(a=>`<option value="${a.code}" ${f.avis===a.code?'selected':''}>${esc(a.libelle)}</option>`).join('')}
-      </select></div>
-      <div class="field"><label>Service de santé au travail</label><input type="text" id="visRh_organisme" value="${esc(f.organisme)}" placeholder="Ex : AIST, APST BTP…"></div>
-      <div class="field"><label>Médecin</label><input type="text" id="visRh_medecin" value="${esc(f.medecin)}"></div>
-      <div class="field"><label>Prochaine visite</label><input type="date" id="visRh_prochaineVisite" value="${f.prochaineVisite||''}" onchange="onVisiteRhEcheanceMain()">
-        <div class="card-sub" id="visRh_avertissement" style="margin-top:4px;"></div></div>
-      <div class="field full"><label>Réserves et aménagements</label><input type="text" id="visRh_reserves" value="${esc(f.reserves)}" placeholder="Ex : pas de port de charge supérieure à 15 kg"></div>
-      <div class="field full"><label>Notes</label><input type="text" id="visRh_notes" value="${esc(f.notes)}"></div>
-    </div>
-    <div class="achat-salarie-zone">
-      <label class="btn small" style="cursor:pointer;">📎 ${f.id && f.fichierNom? "Remplacer l'attestation" : "Joindre l'attestation"}<input type="file" id="visRh_fichier" accept=".pdf,image/*" style="display:none;" onchange="onFichierVisiteRhChange()"></label>
-      <span class="card-sub" id="visRh_fichierNom">${f.fichierNom? esc(f.fichierNom) : 'PDF, JPEG, PNG ou WebP'}</span>
-    </div>
-    <div style="display:flex; gap:10px; margin-top:14px;">
-      <button class="btn primary" onclick="enregistrerVisiteRh()">Enregistrer</button>
-      <button class="btn ghost" onclick="fermerFormVisiteRh()">Annuler</button>
-    </div>
-  </div>`;
-}
-/* Le panneau ne se redessine pas : le fichier déjà choisi vit dans l'élément
-   `input`, et un redessin le perdrait sans le dire. On ne touche qu'aux deux
-   textes d'aide et à l'échéance proposée. */
-function onVisiteRhEcheanceChange(){
-  const date = document.getElementById('visRh_dateVisite').value;
-  const type = document.getElementById('visRh_type').value;
-  const suivi = document.getElementById('visRh_suivi').value;
-  document.getElementById('visRh_reference').textContent = window.regimeSuivi(suivi).reference;
-  const champ = document.getElementById('visRh_prochaineVisite');
-  /* La date proposée ne s'impose pas : le médecin a pu en écrire une autre sur
-     l'avis, et c'est la sienne qui fait foi.
-
-     Mais tant que personne n'a touché ce champ, la proposition suit le type et
-     le régime — sinon, choisir la date PUIS passer en suivi renforcé laisserait
-     les cinq ans du suivi simple, et l'écran proposerait un délai que la loi
-     n'accorde pas à ce salarié. */
-  if(date && !state.rhVisiteForm.echeanceSaisieMain){
-    const suggeree = window.prochaineVisiteSuggeree(date, suivi, type);
-    champ.value = suggeree || '';
-  }
-  onVisiteRhEcheanceSaisie();
-}
-/* L'utilisateur a posé lui-même l'échéance : la proposition ne la reprendra
-   plus, quoi qu'il change ensuite. C'est la date de l'avis qui fait foi. */
-function onVisiteRhEcheanceMain(){
-  state.rhVisiteForm.echeanceSaisieMain = true;
-  onVisiteRhEcheanceSaisie();
-}
-function onVisiteRhEcheanceSaisie(){
-  const date = document.getElementById('visRh_dateVisite').value;
-  const suivi = document.getElementById('visRh_suivi').value;
-  const prochaine = document.getElementById('visRh_prochaineVisite').value;
-  const zone = document.getElementById('visRh_avertissement');
-  if(!date || !prochaine){ zone.textContent = ''; zone.style.color = ''; return; }
-  const verdict = window.depasseLePlafondLegal(date, prochaine, suivi);
-  if(verdict.depasse){
-    zone.textContent = `Au-delà du délai maximal (${fmtDate(verdict.plafond)}, ${verdict.regime.reference}).`;
-    zone.style.color = '#a30f22';
-  } else {
-    zone.textContent = '';
-    zone.style.color = '';
-  }
-}
-function onFichierVisiteRhChange(){
-  const fichier = (document.getElementById('visRh_fichier').files||[])[0];
-  const zone = document.getElementById('visRh_fichierNom');
-  if(!fichier){ zone.textContent = 'PDF, JPEG, PNG ou WebP'; return; }
-  const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
-  zone.textContent = verdict.ok ? fichier.name : verdict.motif;
-}
-async function enregistrerVisiteRh(){
-  const f = state.rhVisiteForm;
-  if(!f) return;
-  const saisie = {
-    dateVisite: document.getElementById('visRh_dateVisite').value,
-    type: document.getElementById('visRh_type').value,
-    suivi: document.getElementById('visRh_suivi').value,
-    organisme: document.getElementById('visRh_organisme').value,
-    medecin: document.getElementById('visRh_medecin').value,
-    avis: document.getElementById('visRh_avis').value,
-    reserves: document.getElementById('visRh_reserves').value,
-    prochaineVisite: document.getElementById('visRh_prochaineVisite').value,
-    notes: document.getElementById('visRh_notes').value
-  };
-  if(!saisie.dateVisite){ showToast('Indiquez la date de la visite.'); return; }
-  if(saisie.prochaineVisite && saisie.prochaineVisite < saisie.dateVisite){
-    /* La base le refuse aussi — mais lui laisser dire non produirait un
-       message de contrainte, pas une phrase. */
-    showToast('La prochaine visite ne peut pas précéder celle-ci.');
-    return;
-  }
-  const fichier = (document.getElementById('visRh_fichier').files||[])[0] || null;
-  if(fichier){
-    const verdict = window.verifierPieceJointe({ nom: fichier.name, type: fichier.type, taille: fichier.size });
-    if(!verdict.ok){ showToast(verdict.motif); return; }
-  }
-  try{
-    if(f.id) await window.majVisiteMedicale(f.id, saisie, fichier);
-    else await window.ajouterVisiteMedicale(f.salarieId, saisie, fichier);
-  }catch(err){
-    console.error('Visite médicale refusée', err);
-    showToast(refusDocumentRh(err));
-    return;
-  }
-  state.rhVisiteForm = null;
-  /* Les deux dates de la fiche salarié viennent d'être recalculées en base par
-     le déclencheur : recharger les salariés, sinon l'écran garde les anciennes. */
-  await Promise.all([chargerVisitesRh(true), recharger('salarie')]);
-  showToast('Visite enregistrée.', 'success');
-}
-async function supprimerVisiteRhEcran(visiteId){
-  const v = state.visitesRh.find(x=>x.id===visiteId);
-  if(!v) return;
-  if(!confirm('Retirer cette visite du registre ? L\'attestation sera supprimée.')) return;
-  try{
-    await window.supprimerVisiteMedicale(v);
-  }catch(err){
-    console.error('Visite non supprimée', err);
-    showToast(refusDocumentRh(err));
-    return;
-  }
-  await Promise.all([chargerVisitesRh(true), recharger('salarie')]);
-  showToast('Visite retirée du registre.', 'success');
-}
-async function ouvrirAttestationVisiteEcran(visiteId){
-  const v = state.visitesRh.find(x=>x.id===visiteId);
-  if(!v) return;
-  try{
-    const ouvert = await window.ouvrirAttestationVisite(v);
-    if(!ouvert){ showToast("Cette visite n'a pas d'attestation jointe."); return; }
-    openAttachmentPreview(ouvert.url, ouvert.nom, ouvert.mime, ouvert.urlTelechargement);
-  }catch(err){
-    console.error('Attestation illisible', v.fichierChemin, err);
-    showToast("L'attestation n'a pas pu être ouverte.");
-  }
-}
-function renderRHVisites(){
-  const salaries = state.salaries.filter(s=>s.societeId===state.societeId);
-  if(!visitesRhPretes()){
-    chargerVisitesRh();
-    return '<div class="empty">Chargement du registre des visites…</div>';
-  }
-  const lignes = salaries.map(s=>({ s, visites: visitesDuSalarie(s.id), etat: etatVisiteDuSalarie(s.id) }));
-  const compte = (etat) => lignes.filter(l=>l.etat.etat===etat).length;
-
-  const filtre = state.rhVisiteFiltre||'';
-  const liste = filtre ? lignes.filter(l=>l.etat.etat===filtre) : lignes;
-  const ouvert = state.rhVisiteSalarieId ? lignes.find(l=>l.s.id===state.rhVisiteSalarieId) : null;
-
-  return `
-    <div class="page-head"><h1>Visites médicales</h1></div>
-    <div class="card-sub" style="margin-bottom:14px;">Suivi en santé au travail : embauche, périodique, reprise. L'échéance de la dernière visite pilote l'alerte, et remplace les deux dates autrefois saisies sur la fiche.</div>
-    <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
-      <button class="btn small ${!filtre?'primary':''}" onclick="filtrerVisitesRh('')">Tous (${lignes.length})</button>
-      <button class="btn small ${filtre==='depassee'?'primary':''}" onclick="filtrerVisitesRh('depassee')">Échéance dépassée (${compte('depassee')})</button>
-      <button class="btn small ${filtre==='bientot'?'primary':''}" onclick="filtrerVisitesRh('bientot')">À prévoir (${compte('bientot')})</button>
-      <button class="btn small ${filtre==='inconnue'?'primary':''}" onclick="filtrerVisitesRh('inconnue')">Jamais vus (${compte('inconnue')})</button>
-      <button class="btn small ${filtre==='aJour'?'primary':''}" onclick="filtrerVisitesRh('aJour')">À jour (${compte('aJour')})</button>
-    </div>
-    ${salaries.length? `<div class="vehicule-liste-wrap">
-      <table class="stats-table">
-        <thead><tr>
-          <th style="text-align:left;">Salarié</th><th></th><th>Dernière visite</th><th>Type</th>
-          <th>Avis</th><th>Prochaine</th><th>Historique</th><th></th>
-        </tr></thead>
-        <tbody>
-          ${liste.length? liste.map(({s, visites, etat})=>{
-            const derniere = visites[0] || null;
-            const avis = derniere ? window.avisAptitude(derniere.avis) : null;
-            const couleur = avis ? (avis.gravite==='danger'?'#a30f22':avis.gravite==='warn'?'#a56200':'#15803d') : 'inherit';
-            return `<tr>
-              <td style="text-align:left;"><strong>${esc(s.prenom)} ${esc(s.nom)}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
-              <td style="text-align:center;">${pastilleVisiteRh(s.id)}</td>
-              <td>${derniere? fmtDate(derniere.dateVisite) : '—'}</td>
-              <td>${derniere? esc(window.typeVisite(derniere.type).libelle) : '—'}</td>
-              <td${avis? ` style="color:${couleur}; font-weight:700;"`:''}>${avis? esc(avis.libelle) : '—'}</td>
-              <td>${etatVisiteBadge(s.id)}</td>
-              <td>${visites.length || '—'}</td>
-              <td><button class="btn small" onclick="ouvrirRegistreVisites('${jsAttr(s.id)}')">${state.rhVisiteSalarieId===s.id? 'Fermer':'Ouvrir'}</button></td>
-            </tr>`;
-          }).join('') : '<tr><td colspan="8" class="empty">Aucun salarié ne correspond à ce filtre.</td></tr>'}
-        </tbody>
-      </table>
-    </div>` : '<div class="empty">Aucun salarié pour cette société.</div>'}
-    ${ouvert? `<div class="card" style="margin-top:20px;">
-      <div class="card-row">
-        <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — suivi médical</div>
-        <button class="btn small ghost" onclick="ouvrirRegistreVisites('${jsAttr(ouvert.s.id)}')">Fermer</button>
-      </div>
-      <div style="margin-top:10px;">${visitesMedicalesHTML(ouvert.s)}</div>
-    </div>` : ''}
-  `;
-}
-function filtrerVisitesRh(valeur){
-  state.rhVisiteFiltre = valeur;
-  renderTab();
-}
-function ouvrirRegistreVisites(salarieId){
-  state.rhVisiteSalarieId = state.rhVisiteSalarieId===salarieId ? null : salarieId;
-  if(state.rhVisiteForm && state.rhVisiteForm.salarieId!==state.rhVisiteSalarieId) state.rhVisiteForm = null;
-  renderTab();
-}
+/* Le registre des visites médicales vit dans `rh-visites.js`.
+   Il en est sorti pour tenir `app.js` sous le seuil d'analyse de Semgrep —
+   voir l'en-tête de ce fichier-là, et `taille-ecran.test.ts`. */
 const TYPES_ABSENCE =['Congé payé','Arrêt maladie','Congé sans solde','Absence injustifiée','Accident du travail'];
 function soldeCPRestant(e){
   const initial = parseFloat(e.soldeCPInitial) || 0;
@@ -14649,16 +14262,17 @@ function salarieForm(){
       <div class="field"><label>Validité carte BTP</label><input type="date" id="sal_carteBtpValidite" value="${e.carteBtpValidite||''}"></div>
       <div class="field"><label>Dernière visite médicale</label><input type="date" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate||''}" disabled style="background:var(--surface-2);"></div>
       <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}" disabled style="background:var(--surface-2);">
-        <div style="margin-top:6px;">${e.id? badgeVisiteMedicaleListe(e.id) : '<span class="card-sub">Enregistrez la fiche, puis la première visite au registre ci-dessous.</span>'}</div>
+        <div style="margin-top:6px;">${e.id? badgeVisiteMedicaleListe(e.id) : '<span class="card-sub">Saisissez la première visite dans « Suivi médical », ci-dessous : elle sera enregistrée avec la fiche.</span>'}</div>
         <div class="card-sub" style="margin-top:4px;">Tenues par le registre des visites, plus bas — la base les réécrit à chaque enregistrement. L'échéance proposée suit le régime de suivi (art. R.4624-16 et suivants), et reste modifiable : c'est le médecin du travail qui arrête la date.</div></div>
     </div>
     <div class="section-title" style="margin-top:14px;">⚡ Habilitations & certifications</div>
     <div id="habilitationsZone">${habilitationsZoneHTML(e)}</div>
     ${e.id? `
     <div class="section-title" style="margin-top:18px;">📁 Dossier documentaire</div>
-    ${dossierRhHTML(e)}
+    ${dossierRhHTML(e)}` : ''}
     <div class="section-title" style="margin-top:18px;">🩺 Suivi médical</div>
-    ${visitesMedicalesHTML(e)}
+    <div id="suiviMedicalZone">${visitesMedicalesHTML(e)}</div>
+    ${e.id? `
     <div class="chantier-subsection-title" style="display:flex; justify-content:space-between; align-items:center;">
       <span>🏖️ Congés & Absences</span>
     </div>
@@ -14688,7 +14302,7 @@ function salarieForm(){
           <button class="btn small danger" onclick="removeAbsence('${jsAttr(e.id)}','${jsAttr(a.id)}')">✕</button>
         </div>`).join('') : '<div class="empty">Aucune absence enregistrée.</div>'}
     </div>
-    ` : `<div class="card-sub" style="margin-top:14px;">💡 Enregistrez d'abord la fiche pour pouvoir ajouter le contrat de travail et ses avenants.</div>`}
+    ` : `<div class="card-sub" style="margin-top:14px;">💡 Enregistrez d'abord la fiche pour pouvoir ajouter le dossier documentaire, le contrat de travail et les congés.</div>`}
     <div style="display:flex; gap:10px; margin-top:16px;">
       <button class="btn primary" onclick="saveSalarie()">Enregistrer</button>
       <button class="btn ghost" onclick="closeForm('salarie')">Annuler</button>
@@ -14997,10 +14611,49 @@ async function deposerHabilitationsEnAttente(salarieId){
   state.editing.habilitationsAJoindre = restantes;
   await chargerDossiersRh(true);
 }
+/* Même contrat que `deposerHabilitationsEnAttente` : une par une, sans
+   interrompre les suivantes, ce qui échoue reste en attente. Le salarié, lui,
+   est créé — l'échec porte sur la visite, pas sur la personne. Et c'est cette
+   écriture, seule, qui fait poser les deux dates par le déclencheur. */
+async function deposerVisitesEnAttente(salarieId){
+  const enAttente = state.editing.visitesAJoindre || [];
+  if(!enAttente.length) return;
+
+  const restantes = [];
+  for(const v of enAttente){
+    try{
+      await window.ajouterVisiteMedicale(salarieId, v.saisie, v.fichier || null);
+    }catch(err){
+      console.error('Visite non déposée', v.saisie.dateVisite, err);
+      showToast(`La visite du ${fmtDate(v.saisie.dateVisite)} n'a pas pu être enregistrée — ${refusDocumentRh(err)}`, 'danger', 8000);
+      restantes.push(v);
+    }
+  }
+  state.editing.visitesAJoindre = restantes;
+  if(restantes.length === enAttente.length) return;
+
+  /* Le registre d'abord — `chargerVisitesRh` prend ses identifiants dans
+     `state.salaries`, où le nouveau salarié est déjà. La fiche ensuite, et
+     séparément : c'est elle qui porte les deux dates que le déclencheur vient
+     d'écrire. */
+  await chargerVisitesRh(true);
+  await recharger('salarie');
+  resynchroniserDatesVisite(salarieId);
+}
 async function saveSalarie(){
   const e = state.editing;
   const nom = document.getElementById('sal_nom').value.trim();
   if(!nom){ alert('Le nom du salarié est requis.'); return; }
+  /* Un panneau de visite resté ouvert n'est pas une visite : rien n'a été lu de
+     ses champs, et enregistrer la fiche l'emporterait en silence. */
+  if(state.rhVisiteForm && state.rhVisiteForm.salarieId === cleRegistreVisites(e)
+     && document.getElementById('visRh_dateVisite')){
+    showToast("Une visite est en cours de saisie : enregistrez-la ou annulez-la avant la fiche.");
+    return;
+  }
+  /* Lu avant l'`Object.assign` plus bas, qui donne un identifiant à la fiche et
+     ferait dire « modifié » d'une création. */
+  const creation = !e.id;
   const id = e.id || uid();
   const obj = { id, societeId: state.societeId, createdAt: e.createdAt || new Date().toISOString(),
     nom, prenom: document.getElementById('sal_prenom').value,
@@ -15023,8 +14676,12 @@ async function saveSalarie(){
     email: document.getElementById('sal_email').value,
     carteBtpNumero: document.getElementById('sal_carteBtpNumero').value,
     carteBtpValidite: document.getElementById('sal_carteBtpValidite').value,
-    visiteMedicaleDate: document.getElementById('sal_visiteMedicaleDate').value,
-    visiteMedicaleProchaine: document.getElementById('sal_visiteMedicaleProchaine').value,
+    /* Lues sur la fiche, pas dans le DOM : ces deux `input` sont grisés, ils
+       n'affichent que ce que la base a calculé. Les relire reposait la valeur
+       d'avant, et seul le déclencheur `salaries_visite_medicale_etiquette`
+       empêchait la régression. */
+    visiteMedicaleDate: e.visiteMedicaleDate || null,
+    visiteMedicaleProchaine: e.visiteMedicaleProchaine || null,
     /* `habilitations` n'est plus posé ici, pour la même raison que les deux
        champs ci-dessous : `salaries` n'a pas cette colonne. Ce qui était saisi
        n'a jamais été conservé. Elles vont désormais au dossier documentaire,
@@ -15039,17 +14696,27 @@ async function saveSalarie(){
     absences: e.absences || [] };
   const r = await window.stSet('salarie:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
+  /* La fiche enregistrée devient la fiche en cours. Sans cela, `state.editing`
+     reste le clone pris à l'ouverture — vide sur une création — et le moindre
+     redessin repeindrait le formulaire à blanc sous les yeux de qui vient de le
+     remplir. `Object.assign` et non un remplacement : `visitesAJoindre` et
+     `habilitationsAJoindre` n'existent que là. */
+  Object.assign(state.editing, obj);
+  /* Le salarié doit d'abord entrer dans `state.salaries` : `chargerVisitesRh`
+     y prend les identifiants dont il interroge le registre. */
   await recharger('salarie');
   await deposerHabilitationsEnAttente(id);
+  await deposerVisitesEnAttente(id);
   /* Ce qui n'a pas pu être déposé garde le formulaire ouvert : refermer
      ferait disparaître les pièces choisies sans que personne ne le voie. */
-  if((state.editing.habilitationsAJoindre||[]).length){
+  if((state.editing.habilitationsAJoindre||[]).length || (state.editing.visitesAJoindre||[]).length){
     state.editing.id = id;
     rafraichirZoneHabilitations();
+    rafraichirZoneVisites();
     return;
   }
   closeForm('salarie');
-  showToast(e.id? 'Salarié modifié.' : 'Salarié créé.', 'success');
+  showToast(creation? 'Salarié créé.' : 'Salarié modifié.', 'success');
 }
 function renderClients(){
   return `
@@ -17031,7 +16698,6 @@ Object.assign(window, {
   avoirsDisponiblesPour,
   badgeAvoirHTML,
   badgeClass,
-  badgeVisiteMedicaleListe,
   badgeWorkflow,
   bandeauTacheHTML,
   barreFiltresFactures,
@@ -17106,10 +16772,8 @@ Object.assign(window, {
   chapitreRow,
   chargementDossiersRh,
   chargementInvitations,
-  chargementVisitesRh,
   chargerDossiersRh,
   chargerInvitationsRh,
-  chargerVisitesRh,
   chargerWorkflowTache,
   chercheesDans,
   chercherDansCatalogue,
@@ -17194,7 +16858,6 @@ Object.assign(window, {
   confirmerValidationConducteur,
   confirmerValidationDirecteur,
   confirmerValidationHorsCircuit,
-  conformiteRhDuSalarie,
   contexteBonCommande,
   contexteFacture,
   copierVersion,
@@ -17264,7 +16927,6 @@ Object.assign(window, {
   dupliquerPhoto,
   easterDate,
   echeanceSaisieAlaMain,
-  echeanceVisite,
   editItem,
   emailModalCopy,
   emailModalDownload,
@@ -17276,7 +16938,6 @@ Object.assign(window, {
   enregistrerArticleCatalogue,
   enregistrerChiffrageDirecteur,
   enregistrerDocumentRh,
-  enregistrerVisiteRh,
   enteteDashboard,
   enteteDossierHTML,
   entrepriseResults,
@@ -17292,8 +16953,6 @@ Object.assign(window, {
   etapeWorkflow,
   etatDocumentRhBadge,
   etatNavigation,
-  etatVisiteBadge,
-  etatVisiteDuSalarie,
   exportAllData,
   exporterMesDonnees,
   factureDocMetaLignes,
@@ -17312,7 +16971,6 @@ Object.assign(window, {
   fermerBulkSiFond,
   fermerChoixAssigne,
   fermerFormDocumentRh,
-  fermerFormVisiteRh,
   fermerImportCatalogue,
   fermerReferencePleinEcran,
   fermerReferencePleinEcranSiFond,
@@ -17358,11 +17016,9 @@ Object.assign(window, {
   filtrerDossiersRh,
   filtrerListe,
   filtrerParPeriode,
-  filtrerVisitesRh,
   findDayColAtX,
   fmtDate,
   formDocumentRhHTML,
-  formVisiteRhHTML,
   generateInterventionPdf,
   generateRapportIA,
   genererPPSPS,
@@ -17539,7 +17195,6 @@ Object.assign(window, {
   onDpgfSkipRowsChange,
   onDragAttachmentFloat,
   onFichierDocumentRhChange,
-  onFichierVisiteRhChange,
   onGlobalSearchInput,
   onRemiseMontantInput,
   onRemisePctInput,
@@ -17548,9 +17203,6 @@ Object.assign(window, {
   onResizeKeydown,
   onResizeMove,
   onTypeDocumentRhChange,
-  onVisiteRhEcheanceChange,
-  onVisiteRhEcheanceMain,
-  onVisiteRhEcheanceSaisie,
   openAjoutDateSupplModal,
   openAttachmentPreview,
   openAttachmentPreviewFor,
@@ -17583,7 +17235,6 @@ Object.assign(window, {
   optionsSocietesHTML,
   optionsTvaHTML,
   ouvrirArticleCatalogue,
-  ouvrirAttestationVisiteEcran,
   ouvrirBonCommandeOrigine,
   ouvrirBonDuClient,
   ouvrirChoixAssigne,
@@ -17595,12 +17246,10 @@ Object.assign(window, {
   ouvrirDossierRhDepuisListe,
   ouvrirFactureDepuisChantier,
   ouvrirFormDocumentRh,
-  ouvrirFormVisiteRh,
   ouvrirImportCatalogue,
   ouvrirMarquageRetour,
   ouvrirPieceJointeBC,
   ouvrirReferencePleinEcran,
-  ouvrirRegistreVisites,
   ouvrirReglementFacture,
   ouvrirTacheDansPlanning,
   parNom,
@@ -17609,7 +17258,6 @@ Object.assign(window, {
   parsePlanningId,
   parsePreconisationsEnLignes,
   pastilleDocumentRh,
-  pastilleVisiteRh,
   paysDefaut,
   periodeLabel,
   peutReglerParAvoir,
@@ -17772,7 +17420,6 @@ Object.assign(window, {
   renderRH,
   renderRHDocuments,
   renderRHSalaries,
-  renderRHVisites,
   renderRegistreUniquePersonnel,
   renderReglagesDocumentsSection,
   renderReglagesNav,
@@ -17886,7 +17533,6 @@ Object.assign(window, {
   setupSignatureCanvas,
   setupTechDessinCanvas,
   seuilDocumentRh,
-  seuilVisiteMedicale,
   shiftBCUnJourPlusTot,
   showRevenueTooltip,
   showToast,
@@ -17919,7 +17565,6 @@ Object.assign(window, {
   supabaseHeaders,
   supprimerDocumentRhEcran,
   supprimerLigneDirecteur,
-  supprimerVisiteRhEcran,
   syncDevisLignesVersDpgf,
   syncFactureStatut,
   tableauNumerotation,
@@ -17997,10 +17642,6 @@ Object.assign(window, {
   vehiculeTypeLabel,
   vendreVehiculeCtx,
   versionConstruite,
-  visiteRhRowHTML,
-  visitesDuSalarie,
-  visitesMedicalesHTML,
-  visitesRhPretes,
   weekDays,
   wfEnregistrerConstats,
   wfMarquerRealisee,

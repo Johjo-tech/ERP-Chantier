@@ -30,14 +30,23 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const APP = readFileSync(resolve(__dirname, "../pages/app.js"), "utf8");
+/* Les deux modules d'écran. `rh-visites.js` est sorti d'`app.js` pour le tenir
+   sous le seuil d'analyse de Semgrep : il a sa propre publication, et le même
+   piège. Les lire ensemble est ce qui empêche cette garde de rétrécir à mesure
+   que le monolithe se découpe. */
+const MODULES = ["../pages/app.js", "../pages/rh-visites.js"].map((f) =>
+  readFileSync(resolve(__dirname, f), "utf8"),
+);
+const APP = MODULES.join("\n");
 
 const DEBUT_BLOC = "Object.assign(window, {";
-const bloc = APP.slice(APP.lastIndexOf(DEBUT_BLOC));
-const corps = APP.slice(0, APP.lastIndexOf(DEBUT_BLOC));
+const blocs = MODULES.map((code) => code.slice(code.lastIndexOf(DEBUT_BLOC)));
+const corps = MODULES.map((code) => code.slice(0, code.lastIndexOf(DEBUT_BLOC))).join("\n");
 
-/** Les noms que le bloc de publication pose sur `window`. */
-const publies = [...bloc.matchAll(/^ {2}([A-Za-z_$][\w$]*),$/gm)].map((m) => m[1]);
+/** Les noms que les blocs de publication posent sur `window`. */
+const publies = blocs.flatMap((bloc) =>
+  [...bloc.matchAll(/^ {2}([A-Za-z_$][\w$]*),$/gm)].map((m) => m[1]),
+);
 
 /**
  * Les noms déclarés au premier niveau.

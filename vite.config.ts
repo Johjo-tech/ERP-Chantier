@@ -184,19 +184,27 @@ function gestionnairesPublies() {
   return {
     name: "gestionnaires-publies",
     buildStart() {
-      const app = readFileSync(resolve(__dirname, "src/pages/app.js"), "utf8");
+      /* Les deux modules d'écran, et non plus le seul `app.js` : le registre
+         des visites médicales est sorti dans `rh-visites.js` pour tenir sous le
+         seuil d'analyse de Semgrep, avec ses attributs et sa publication. Les
+         lire ensemble est ce qui empêche la garde de rétrécir à mesure que le
+         monolithe se découpe. */
+      const modules = ["src/pages/app.js", "src/pages/rh-visites.js"].map((f) =>
+        readFileSync(resolve(__dirname, f), "utf8"),
+      );
       const html = readFileSync(resolve(__dirname, "src/pages/index.html"), "utf8");
 
-      /* Ce que le bloc `Object.assign(window, { … })` de fin de fichier publie. */
-      const bloc = app.slice(app.lastIndexOf("Object.assign(window, {"));
-      const publies = new Set(
-        [...bloc.matchAll(/^\s{2}([A-Za-z_$][\w$]*),$/gm)].map((m) => m[1]),
-      );
+      /* Ce que les blocs `Object.assign(window, { … })` publient. */
+      const publies = new Set<string>();
+      for (const code of modules) {
+        const bloc = code.slice(code.lastIndexOf("Object.assign(window, {"));
+        for (const m of bloc.matchAll(/^\s{2}([A-Za-z_$][\w$]*),$/gm)) publies.add(m[1]);
+      }
 
       /* Ce que les attributs d'événement appellent, dans les gabarits comme dans
          la page — `on[a-z]+="…"` puis les identifiants suivis d'une parenthèse. */
       const appeles = new Set<string>();
-      for (const source of [app, html]) {
+      for (const source of [...modules, html]) {
         /* Guillemets doubles ET apostrophes simples : la première version ne
            voyait que les premiers, et un `onload='f()'` lui échappait — trou
            démontré par la revalidation. */
@@ -235,12 +243,13 @@ function gestionnairesPublies() {
        * publication, elles, sont restées. Rien ne l'a vu : ni le
        * contrôle de types, qui ignore ce fichier, ni les tests, ni ce
        * plugin-ci qui ne regardait que dans l'autre sens. */
-      const declares = nomsDePremierNiveau(app);
+      const declares = new Set<string>();
+      for (const code of modules) for (const n of nomsDePremierNiveau(code)) declares.add(n);
       const orphelins = [...publies].filter((n) => !declares.has(n));
 
       if (orphelins.length > 0) {
         throw new Error(
-          `\`app.js\` publie des noms qu'il ne déclare plus : ` +
+          `Un module d'écran publie des noms qu'il ne déclare plus : ` +
             `${orphelins.sort().join(", ")}. \`Object.assign(window, { … })\` ` +
             `lèverait « is not defined » au chargement, et AUCUN nom ne serait ` +
             `publié : l'écran s'afficherait sans qu'un seul bouton réponde. ` +
