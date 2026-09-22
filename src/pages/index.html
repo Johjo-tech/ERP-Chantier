@@ -70,9 +70,17 @@ a{color:inherit;}
    À 1920×1080 sous l'échelle 125 % de Windows — la configuration la plus
    répandue — « Réglages » manquait encore. Sur le poste de développement
    (macOS, fenêtre 860 px) tout tenait : c'est pourquoi personne ne l'avait vu.
-   La barre ne déborde plus ; c'est la liste des onglets qui défile, en
-   gardant l'identité en haut et l'épinglage en bas. */
-#sidebar{width:230px; flex-shrink:0; background:var(--sidebar-bg); display:flex; flex-direction:column; padding:20px 14px; position:sticky; top:0; height:100vh; overflow:hidden;}
+   La barre défile donc, épinglage et pied compris : tout reste atteignable,
+   quelle que soit la hauteur de la fenêtre. */
+#sidebar{width:230px; flex-shrink:0; background:var(--sidebar-bg); display:flex; flex-direction:column; padding:20px 14px; position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;}
+/* La barre de défilement de Windows est opaque et large : posée telle quelle
+   sur le bleu nuit du menu, elle y dessinait une bande claire. Firefox lit les
+   deux propriétés standard, Chrome et Edge le sélecteur WebKit. */
+#sidebar{scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.22) transparent;}
+#sidebar::-webkit-scrollbar{width:8px;}
+#sidebar::-webkit-scrollbar-track{background:transparent;}
+#sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18); border-radius:4px;}
+#sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32);}
 body.is-planning-view #sidebar{display:none;}
 body.is-planning-view.sidebar-forced #sidebar{display:flex;}
 body.sidebar-collapsed #sidebar{display:none;}
@@ -100,20 +108,14 @@ body.sidebar-collapsed #sidebar{display:none;}
      première lettre du nom, qui commençait à 38px. On passe dessous. */
   margin-top:40px;}
 .brand-dot{width:10px;height:10px;border-radius:50%;background:var(--accent); box-shadow:0 0 0 3px rgba(var(--accent-rgb), .25);}
-/* `min-height:0` n'est pas décoratif : un élément flexible refuse par défaut
-   de descendre sous la hauteur de son contenu (`min-height:auto`), et sans lui
-   `overflow-y:auto` ne défilerait jamais — la liste repousserait simplement le
-   bas de la barre hors de la fenêtre, ce qu'elle faisait déjà.
-   `overscroll-behavior` empêche la page de partir quand on arrive au bout. */
-.nav-items{display:flex; flex-direction:column; gap:3px; flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain;}
-/* La barre de défilement de Windows est opaque et large : posée telle quelle
-   sur le bleu nuit du menu, elle y dessinait une bande claire. Firefox lit les
-   deux propriétés standard, Chrome et Edge le sélecteur WebKit. */
-.nav-items{scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.22) transparent;}
-.nav-items::-webkit-scrollbar{width:8px;}
-.nav-items::-webkit-scrollbar-track{background:transparent;}
-.nav-items::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18); border-radius:4px;}
-.nav-items::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32);}
+/* `flex:0 0 auto` et non `flex:1` : la liste garde sa taille naturelle et
+   c'est la BARRE qui défile. Faire défiler la seule liste paraissait plus
+   élégant — l'épinglage restait rivé en bas — mais lui réservait ses 90 px
+   en permanence, et sur une fenêtre courte cela cachait trois entrées de plus
+   qu'avant. Mesuré : à 560 px de haut, sept entrées invisibles d'un coup
+   contre quatre. L'épinglage descend donc avec le reste ; `margin-top:auto`
+   le garde au bas tant qu'il reste de la place. */
+.nav-items{display:flex; flex-direction:column; gap:3px; flex:0 0 auto;}
 .nav-item{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; background:transparent; border:none; color:var(--sidebar-text-dim); font-size:13.5px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
   /* Un <button> centre son texte par défaut. Invisible sur un libellé d'une
      ligne ; « Pièces en commande » passe sur deux et paraissait décalé. */

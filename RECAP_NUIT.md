@@ -319,12 +319,24 @@ module sorti, sans quoi le refactor n'est pas vérifiable.
   inatteignables. Et 125 % est l'échelle **par défaut** de Windows sur un écran
   1080p — ce n'est pas un cas limite.
   **Notes** — invisible depuis le poste de développement : à 860 px tout tient.
-  **Notes** — c'est la LISTE des onglets qui défile désormais, l'identité
-  restant en haut et l'épinglage en bas. La ligne qui compte est
-  `min-height:0` : un élément flexible refuse par défaut de descendre sous la
-  hauteur de son contenu, et sans elle `overflow-y:auto` ne défile jamais —
-  une propriété de plus qui donnerait l'illusion que c'est traité. Le test la
-  garde nommément.
+  **Notes** — PREMIÈRE TENTATIVE ÉCARTÉE, et c'est la mesure qui a tranché.
+  Faire défiler la seule liste des onglets en gardant l'épinglage rivé en bas
+  paraissait plus élégant. Éprouvé au clic réel — `elementFromPoint` au centre
+  de chaque bouton — c'était PIRE que la production : réserver en permanence
+  les 90 px de l'épinglage et du pied cachait trois entrées de plus sur une
+  fenêtre courte, sept d'un coup à 560 px contre quatre avant. C'est donc la
+  BARRE ENTIÈRE qui défile, épinglage et pied compris, `margin-top:auto` les
+  gardant au bas tant qu'il reste de la place.
+
+  | hauteur | production (repos / après défilement) | correctif |
+  |---|---|---|
+  | 560 px | 4 injouables, **et 4 après** | 4, puis **0** |
+  | 625 px | 3, **et 3 après** | 3, puis **0** |
+  | 730 px | 0, épinglage perdu | 1, puis 0, épinglage et pied visibles |
+  | 814 px | 0, pied perdu | 0, tout visible |
+  | 900 px | 0 | 0 |
+
+  La production ne défile pas : ce qui y est injouable le reste.
   **Notes** — la barre de défilement de Windows est opaque et large : laissée
   telle quelle elle dessinait une bande claire sur le bleu nuit du menu. Elle
   est habillée pour Firefox (propriétés standard) et pour Chrome/Edge

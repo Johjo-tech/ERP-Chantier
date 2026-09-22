@@ -16,12 +16,28 @@
  *   macOS 1512×982 (fenêtre 860 px)            → tout tenait
  *       d'où un défaut invisible depuis le poste de développement.
  *
- * Après correctif, aux mêmes tailles : débord nul, épinglage et pied toujours
- * visibles, et la liste des onglets défile (229 px sous le pli à 625 px).
+ * PREMIÈRE TENTATIVE, ÉCARTÉE. Faire défiler la seule liste des onglets, en
+ * gardant l'épinglage rivé en bas, paraissait plus élégant. Mesuré au clic
+ * réel (`elementFromPoint` au centre de chaque bouton), c'était PIRE que la
+ * production : réserver en permanence les 90 px de l'épinglage et du pied
+ * cachait trois entrées de plus sur une fenêtre courte — sept d'un coup à
+ * 560 px, contre quatre avant.
+ *
+ * CE QUI A ÉTÉ RETENU : la barre entière défile, épinglage et pied compris.
+ * `margin-top:auto` les garde au bas tant qu'il reste de la place. Mesuré,
+ * entrées de menu injouables au repos puis après défilement :
+ *
+ *   hauteur   production            correctif
+ *   560 px    4, et 4 après         4, puis 0 — tout est atteignable
+ *   625 px    3, et 3 après         3, puis 0
+ *   730 px    0, épinglage perdu    1, puis 0, épinglage et pied visibles
+ *   814 px    0, pied perdu         0, tout visible
+ *   900 px    0                     0
+ *
+ * La colonne « production » ne défile pas : ce qui y est injouable le reste.
  *
  * Ce test ne rejoue pas la mesure — elle demande un navigateur, que la CI n'a
- * pas. Il tient les trois propriétés CSS sans lesquelles le défaut revient, et
- * dont l'une passe pour inutile à qui ne connaît pas le piège.
+ * pas. Il tient les propriétés CSS sans lesquelles le défaut revient.
  */
 
 import { describe, it, expect } from "vitest";
@@ -56,39 +72,38 @@ describe("La barre latérale ne déborde plus de la fenêtre", () => {
     expect(regle("#sidebar")).toContain("height:100vh");
   });
 
-  it("ne laisse plus rien dépasser de son cadre", () => {
+  it("défile quand son contenu ne tient pas", () => {
     /* Sans cela, les derniers onglets s'affichaient SOUS le bord bas de la
-       fenêtre, par-dessus rien, et restaient inatteignables. */
-    expect(regle("#sidebar")).toMatch(/overflow:\s*hidden/);
+       fenêtre et restaient inatteignables : `overflow` valait `visible`, donc
+       pas de barre de défilement. */
+    expect(toutesLesRegles("#sidebar")).toMatch(/overflow-y:\s*auto/);
   });
 
-  it("fait défiler la liste des onglets", () => {
-    expect(toutesLesRegles(".nav-items")).toMatch(/overflow-y:\s*auto/);
+  it("emporte l'épinglage et le pied dans le défilement", () => {
+    /* `flex:0 0 auto` sur la liste, et NON `flex:1`. Avec `flex:1` la liste
+       occupe la place restante et fait défiler son seul contenu, ce qui
+       réserve en permanence les 90 px de l'épinglage et du pied : mesuré, cela
+       cachait trois entrées de plus qu'avant sur une fenêtre courte. */
+    expect(regle(".nav-items")).toMatch(/flex:\s*0 0 auto/);
+    expect(regle(".nav-items")).not.toMatch(/flex:\s*1[;\s]/);
   });
 
-  it("autorise la liste à se comprimer — la ligne qui paraît inutile", () => {
-    /* `min-height:0`. Un élément flexible refuse par défaut de descendre sous
-       la hauteur de son contenu (`min-height:auto`). Sans cette ligne,
-       `overflow-y:auto` ne défile JAMAIS : la liste repousse simplement le bas
-       de la barre hors de la fenêtre — exactement le défaut d'origine, avec
-       une propriété de plus qui donne l'illusion qu'il est traité. */
-    expect(toutesLesRegles(".nav-items")).toMatch(/min-height:\s*0/);
-  });
-
-  it("garde l'épinglage et le pied hors de la zone qui défile", () => {
-    /* Ils suivent `.nav-items` dans la colonne : s'ils entraient dans la zone
-       défilante, ils repartiraient sous le pli, ce qu'on vient de corriger. */
+  it("garde l'épinglage au bas tant qu'il reste de la place", () => {
     const i = CSS.indexOf("\n.nav-items{");
     expect(CSS.indexOf("\n.sidebar-pin{")).toBeGreaterThan(i);
     expect(regle(".sidebar-pin")).toContain("margin-top:auto");
+  });
+
+  it("ne fait pas partir la page quand on arrive au bout du menu", () => {
+    expect(toutesLesRegles("#sidebar")).toContain("overscroll-behavior:contain");
   });
 
   it("habille la barre de défilement, qui est opaque sur Windows", () => {
     /* Laissée telle quelle, elle dessinait une bande claire sur le bleu nuit
        du menu. Firefox lit les propriétés standard, Chrome et Edge le
        sélecteur WebKit : il faut les deux. */
-    expect(toutesLesRegles(".nav-items")).toContain("scrollbar-width:thin");
-    expect(CSS).toContain(".nav-items::-webkit-scrollbar-thumb{");
+    expect(toutesLesRegles("#sidebar")).toContain("scrollbar-width:thin");
+    expect(CSS).toContain("#sidebar::-webkit-scrollbar-thumb{");
   });
 });
 
