@@ -120,9 +120,14 @@ describe("Les fonctions détruites le 21/09/2026 sont bien revenues", () => {
     expect(nomsDeclares(corps).has(nom)).toBe(true);
   });
 
-  it("sousTotalChapitreHTML précède son appelant, qui en dépend", () => {
+  it("sousTotalChapitreHTML est bien appelée, et pas seulement déclarée", () => {
     /* `printableLignesRows` l'appelle pour chaque chapitre : sans elle, tout
-       devis ou toute facture à chapitres échouait à l'impression. */
-    expect(corps).toContain("sousTotalChapitreHTML(running, fmt)");
+       devis ou toute facture à chapitres échouait à l'impression.
+       On cherche un APPEL, quels qu'en soient les arguments : la première
+       version de ce test citait `sousTotalChapitreHTML(running, fmt)` mot pour
+       mot et a rougi dès qu'une refonte du tableau a renommé la variable —
+       un test qui casse sur une réécriture légitime finit par être désarmé. */
+    const appels = [...corps.matchAll(/\bsousTotalChapitreHTML\s*\(/g)].length;
+    expect(appels, "déclaration + au moins un appel").toBeGreaterThanOrEqual(2);
   });
 });
