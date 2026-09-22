@@ -218,6 +218,35 @@ function gestionnairesPublies() {
             `Object.assign(window, { … }) en fin de fichier.`,
         );
       }
+
+      /* LE CONTRÔLE INVERSE, et il manquait.
+       *
+       * Un nom PUBLIÉ mais plus DÉCLARÉ fait lever `Object.assign` lui-même,
+       * au chargement du module : « X is not defined ». Et comme ce bloc est la
+       * dernière instruction du fichier, l'exception emporte TOUTE la
+       * publication — plus un seul nom n'atteint `window`. L'application
+       * s'affiche, et aucun bouton ne répond. Aucune donnée ne se charge non
+       * plus : l'init ne va pas plus loin.
+       *
+       * C'est arrivé le 21/09/2026, en retirant des fonctions mortes : le
+       * script de retrait coupait au premier `\n}` et dépassait sur les
+       * fonctions écrites en une seule ligne, emportant quatre voisines dont
+       * `filterFactureClient` et `sousTotalChapitreHTML`. Leurs entrées de
+       * publication, elles, sont restées. Rien ne l'a vu : ni le
+       * contrôle de types, qui ignore ce fichier, ni les tests, ni ce
+       * plugin-ci qui ne regardait que dans l'autre sens. */
+      const declares = nomsDePremierNiveau(app);
+      const orphelins = [...publies].filter((n) => !declares.has(n));
+
+      if (orphelins.length > 0) {
+        throw new Error(
+          `\`app.js\` publie des noms qu'il ne déclare plus : ` +
+            `${orphelins.sort().join(", ")}. \`Object.assign(window, { … })\` ` +
+            `lèverait « is not defined » au chargement, et AUCUN nom ne serait ` +
+            `publié : l'écran s'afficherait sans qu'un seul bouton réponde. ` +
+            `Restaurer ces fonctions, ou retirer leur ligne du bloc.`,
+        );
+      }
     },
   };
 }

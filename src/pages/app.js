@@ -3029,6 +3029,9 @@ async function deleteItem(type, id){
   if(factureIdToSync) await syncFactureStatut(factureIdToSync);
   renderTab();
 }
+function sousTotalChapitreHTML(total, fmt){
+  return `<tr class="p-subtotal"><td colspan="5">Sous-total HT du chapitre</td><td class="num">${fmt(total)}</td><td></td></tr>`;
+}
 function printableLignesRows(lignes, hidePrices){
   const fmt = hidePrices ? (()=>'•••') : money;
   const hasChap = (lignes||[]).some(l=>(l.type||'ligne')==='chapitre');
@@ -3637,6 +3640,64 @@ function piedDePageHTML(em, s){
   if(perso) return perso;
   return [em.nom, ...identifiants, em.adresse].filter(Boolean).join(' — ');
 }
+function parsePreconisationsEnLignes(texte, fallback){
+  const lignes = (texte||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lignes.length) return [{type:'ligne', designation: fallback||'', qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()}];
+  return lignes.map(l=>{
+    const m = l.match(/^(.*?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Zµ²³%]*)\s*$/i);
+    if(m) return {type:'ligne', designation: m[1].trim(), qte: parseFloat(m[2].replace(',','.'))||1, unite: m[3]? m[3] : 'u', prixUnitaire:0, tva: tvaDefaut()};
+    return {type:'ligne', designation: l, qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()};
+  });
+}
+
+function transformerInterventionEn(type, interventionId){
+  const i = state.interventions.find(x=>x.id===interventionId);
+  if(!i) return;
+  const cible = type==='devis' ? state.devis.find(d=>d.interventionId===interventionId) : state.factures.find(f=>f.interventionId===interventionId || (i.bonCommandeId && f.bonCommandeId===i.bonCommandeId));
+  if(cible){
+    showToast(`Ce rapport a déjà été transformé en ${type==='devis'?'devis':'facture'} (${cible.numero}). Ouvrez-${type==='devis'?'le':'la'} directement pour ${type==='devis'?'le':'la'} modifier.`);
+    return;
+  }
+  /* Un rapport rattaché à un bon ne facture pas à côté de lui : il facture le
+     bon, avec son contenu chiffré. Ce chemin forçait jusqu'ici la validation du
+     directeur par un simple drapeau — le bon partait en facturation en restant
+     « en cours » en base, et rien ne disait qu'on avait sauté le circuit.
+     Il emprunte désormais la même porte que tout le monde : la pré-facture. */
+  if(type==='facture' && i.bonCommandeId){
+    const bcLie = state.bonsCommande.find(b=>b.id===i.bonCommandeId);
+    if(bcLie){
+      if(!bcLie.valideDirecteur){
+        const droits = window.actionsFacturation ? window.actionsFacturation() : {};
+        if(!droits.peutFacturerHorsCircuit){
+          showToast('🔗 Ce rapport facture le bon de commande lié '+(bcLie.numeroBC||'')+', dont la pré-facture n\'est pas encore validée.', 'danger', 6000);
+          return;
+        }
+        showToast('🔗 Bon de commande lié '+(bcLie.numeroBC||'')+' : chiffrez-le ici, puis validez — sans passer par le planning si besoin.', 'success', 5000);
+        setTab('bonsCommande');
+        openValidationDirecteurModal(bcLie.id);
+        return;
+      }
+      showToast('🔗 Facturation du bon de commande lié '+(bcLie.numeroBC||'')+' (contenu chiffré du BC).', 'success', 3000);
+      transformerBonCommandeEnFacture(bcLie.id);
+      return;
+    }
+  }
+  setTab(type==='devis' ? 'devis' : 'factures');
+  const designationSuggeree = i.typePanne || '';
+  const lignesSuggerees = (i.rapport && i.rapport.preconisations && i.rapport.preconisations.trim())
+    ? parsePreconisationsEnLignes(i.rapport.preconisations)
+    : [{type:'ligne', designation: (i.rapport && i.rapport.constatations) ? i.rapport.constatations : designationSuggeree, qte:1, unite:'u', prixUnitaire:0, tva: tvaDefaut()}];
+  const prefill = {
+    client: i.client, adresse: i.adresse, occupant: i.occupant||'', adresseLocataire: i.adresseLocataire||'',
+    interlocuteur: i.interlocuteur||'',
+    logementStatut: i.logementStatut||'', etage: i.etage||'', numeroLogement: i.numeroLogement||'', precisionCommune: i.precisionCommune||'', ancienLocataire: i.ancienLocataire||'',
+    date: todayISO(), lignes: lignesSuggerees,
+    statut:'brouillon', interventionId: i.id
+  };
+  if(type === 'facture') prefill.echeance = '';
+  openForm(type, prefill);
+}
+
 function printDocument(type, id, action){
   action = action || 'open';
   const resolu = documentImprimable(type, id);
@@ -4443,6 +4504,16 @@ const CLE_ETAT_FILTRE = {
    rien à l'écran ne l'explique. */
 function critereFactures(cle, vue){
   return (FILTRES_FACTURES[vue]||[]).includes(cle) ? (state[CLE_ETAT_FILTRE[cle]] || '') : '';
+}
+
+/* Le choix d'interlocuteur appartient au client précédent : on le remet à zéro
+   et on régénère la seule liste dépendante, sans re-rendre tout l'écran. */
+function filterFactureClient(valeur){
+  state.factureClientFilter = valeur;
+  state.factureInterlocuteurFilter = '';
+  const sel = document.getElementById('factureInterlocuteurSelect');
+  if(sel) sel.innerHTML = planningUnschedInterlocuteurOptions('', valeur);
+  rafraichirZoneFactures();
 }
 
 function criteresFactures(vue){

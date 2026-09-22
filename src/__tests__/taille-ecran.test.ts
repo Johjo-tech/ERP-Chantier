@@ -20,46 +20,37 @@ const SEUIL_SEMGREP = 1_000_000;
 
 /* Une marge, pour que l'alerte arrive avant le mur et laisse le temps d'agir.
  *
- * 21/09/2026 — ramenée de 40 000 à 20 000 EN CONNAISSANCE DE CAUSE. Le fichier
- * pesait déjà 950 067 octets avant les correctifs de la réunion client, soit
- * 9 933 octets sous l'ancienne alerte : la marge était consommée avant que le
- * travail ne commence, et c'est ce test qui l'a montré.
+ * HISTORIQUE, parce que ce seuil a bougé trois fois en deux jours et que la
+ * troisième a coûté cher.
  *
- * Ce n'est PAS un correctif, c'est un sursis. Le vrai remède est de découper
- * `app.js` ; le candidat naturel est le bloc d'impression — `renderPrintDoc`,
- * `renderPrintIntervention` et leurs auxiliaires — qui forme un ensemble
- * cohérent. Il n'a pas été sorti cette nuit parce que les tâches #16, #18 et
- * #20 le réécrivent en même temps, et qu'un découpage raté sur ce chemin-là
- * casserait tous les PDF sans qu'un test le voie. L'ordre naturel est donc :
- * finir de réécrire les modèles, PUIS sortir le bloc.
+ * `app.js` pesait déjà 950 067 octets sur `main`, à 9 933 de l'alerte : la
+ * marge était consommée avant que le travail des retours client ne commence.
  *
- * Le seuil a rougi une seconde fois le même soir, à 987 021 octets. Il n'a PAS
- * été relevé : 21 fonctions de premier niveau que plus rien n'appelait — ni le
- * code, ni un attribut d'événement — ont été retirées, ce qui a rendu
- * 14 326 octets.
+ *  1. Marge ramenée de 40 000 à 20 000, en connaissance de cause.
+ *  2. Rougi à 987 021. PAS de relèvement : 21 fonctions de premier niveau que
+ *     plus rien n'appelait ont été retirées, 14 326 octets rendus.
+ *  3. Rougi à 984 132. Le gras avait disparu ; marge ramenée à 12 000 et
+ *     découpage reporté.
  *
- * Puis une TROISIÈME fois, à 984 132. Le gras avait bien disparu : le même
- * relevé ne trouvait plus que deux fonctions mortes, 1 376 octets. Le
- * découpage était donc dû, et il n'a pourtant pas été fait cette nuit-là.
+ * CE QUE LE RETRAIT A COÛTÉ. Le script qui a retiré ces 21 fonctions coupait
+ * au premier `\n}` rencontré. Sur une fonction écrite EN UNE SEULE LIGNE, ce
+ * `\n}` n'est pas le sien : c'est celui d'une fonction plus bas. La coupe a
+ * emporté quatre fonctions voisines — `filterFactureClient`,
+ * `sousTotalChapitreHTML`, `parsePreconisationsEnLignes` et
+ * `transformerInterventionEn` — en laissant leurs lignes dans le bloc
+ * `Object.assign(window, { … })`. Ce bloc étant la dernière instruction du
+ * fichier, son évaluation levait « is not defined » et emportait TOUTE la
+ * publication : l'écran s'affichait, et pas un bouton ne répondait.
  *
- * La raison, écrite pour qu'on puisse la contester : sortir le bloc
- * d'impression signifie déplacer une trentaine de fonctions qui lisent `state`
- * et une vingtaine d'auxiliaires. Un oubli ne casse RIEN à la construction —
- * un identifiant libre reste une recherche sur `window` au moment de l'appel —
- * et ne se voit qu'à la première génération de PDF. Or les modèles de
- * documents venaient d'être réécrits (#16, #18, #20) et c'est exactement ce
- * que l'utilisateur allait éprouver le lendemain matin. Un refactor non
- * surveillé, invérifiable par les tests existants, sur le chemin qu'on
- * s'apprête à faire tester : le risque et le moment ne s'accordaient pas.
+ * Le retrait de code mort n'est donc plus une façon de gagner de la place
+ * ici : il a été tenté, et il a cassé l'application. Deux gardes le
+ * rattraperaient désormais (`vite.config.ts` et
+ * `noms-publies-declares.test.ts`), mais le jeu n'en vaut pas la chandelle.
  *
- * La marge descend donc à 12 000 — le garde continue d'avertir 12 000 octets
- * avant le mur, et `app.js` ne grossit plus cette nuit-là. Ce qui reste à
- * faire est décrit dans RECAP_NUIT.md, en tête de liste.
- *
- * Il n'y a plus de troisième échappatoire : la prochaine fois, c'est le
- * découpage, et de préférence avec un contrôle statique des identifiants
- * libres du module sorti. */
-const MARGE = 12_000;
+ * Marge à 6 000. Il reste environ 9 ko avant le mur — l'équivalent d'UNE
+ * fonctionnalité. Le prochain changement d'ampleur sur ce fichier doit être
+ * précédé du découpage, pas suivi d'un énième rabotage. */
+const MARGE = 6_000;
 
 describe("L'écran reste analysable", () => {
   it("ne franchit pas le seuil au-delà duquel Semgrep l'écarterait", () => {
