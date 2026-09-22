@@ -1,10 +1,41 @@
 # Retours réunion client du 21/09/2026 — ce qui a été fait
 
 Branche : **`feat/retours-client-21-09`**, partie de `origin/main` (`d7fa854`).
-22 commits, 28 fichiers, +4 698 / −429.
+27 commits. `npm run type-check` propre, `npm run build` vert.
 
-État à la livraison : `npm run type-check` propre, `npm run build` vert,
-**1 208 tests au vert** (77 fichiers — 68 avant, 9 ajoutés).
+État à la livraison : **1 229 tests au vert** (79 fichiers — 68 avant, 11 ajoutés).
+
+---
+
+## 🔴 LIRE D'ABORD — un bug que j'ai introduit, et corrigé
+
+Le 22/09 au matin, la branche était **inutilisable** : l'écran s'affichait, et
+pas un bouton ne répondait. Ma faute, et elle mérite d'être comprise.
+
+```
+app.js:17244 Uncaught ReferenceError: filterFactureClient is not defined
+```
+
+La ligne 17244 est dans `Object.assign(window, { … })`, la **dernière**
+instruction du fichier. Évaluer l'objet levait, et l'exception emportait toute
+la publication : plus un seul nom n'atteignait `window`. D'où `setTab`,
+`toggleUserMenu`, `state`… tous « is not defined », et un écran vide puisque
+l'initialisation ne s'exécutait pas non plus.
+
+**L'origine** : le commit `7e621ee`, qui retirait 21 fonctions que plus rien
+n'appelait. Son script coupait au premier `\n}`. Sur une fonction écrite en une
+seule ligne, ce `\n}` est celui d'une fonction plus bas — la coupe a emporté
+tout ce qu'il y avait entre les deux. Quatre fonctions voisines détruites, dont
+`sousTotalChapitreHTML`, dont dépend l'impression de tout document à chapitres.
+
+**Corrigé** (`0343c57`) : les quatre fonctions restaurées depuis `origin/main`,
+et deux gardes ajoutées pour que cela ne puisse plus passer — dans
+`vite.config.ts` et dans `noms-publies-declares.test.ts`. Vérifié qu'aucun
+bandeau de section ni aucune constante n'a disparu par ailleurs.
+
+**La leçon retenue** : le retrait de code mort cesse d'être une façon de gagner
+de la place sur ce fichier. Il reste ~9 ko avant le mur Semgrep, et le prochain
+changement d'ampleur doit être précédé du découpage — pas d'un rabotage de plus.
 
 ---
 
