@@ -40,18 +40,39 @@
   --sidebar-active:rgba(255,255,255,.07);
   --radius:12px;
   --shadow:0 1px 2px rgba(16,24,40,.04), 0 2px 6px rgba(16,24,40,.05);
+  /* Les trois polices viennent de Google Fonts. `sans-serif` seul comme repli
+     laissait Windows servir ARIAL, sensiblement plus large en capitales : deux
+     libellés du menu passaient alors sur deux lignes au lieu d'une, et la
+     barre grandissait d'autant. Un réseau d'entreprise qui bloque le CDN
+     suffit à déclencher ce repli, et `display=swap` l'affiche immédiatement.
+     La pile nomme donc la police système de chaque plateforme avant de
+     capituler : Segoe UI sur Windows, San Francisco sur macOS. */
+  --police-texte:'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --police-titre:'Manrope','Segoe UI Semibold','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --police-mono:'JetBrains Mono','Cascadia Mono','Consolas',ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
-body{background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh;}
-h1,h2,h3,.stat-num{font-family:'Manrope',sans-serif; font-weight:800;}
-.brand,.nav-item span,.step-label{font-family:'Manrope',sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
-.mono{font-family:'JetBrains Mono',monospace;}
+body{background:var(--bg); color:var(--text); font-family:var(--police-texte); -webkit-font-smoothing:antialiased; min-height:100vh;}
+h1,h2,h3,.stat-num{font-family:var(--police-titre); font-weight:800;}
+.brand,.nav-item span,.step-label{font-family:var(--police-titre); font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
+.mono{font-family:var(--police-mono);}
 button{font-family:inherit; cursor:pointer;}
 a{color:inherit;}
 
 #app{display:flex; min-height:100vh;}
-#sidebar{width:230px; flex-shrink:0; background:var(--sidebar-bg); display:flex; flex-direction:column; padding:20px 14px; position:sticky; top:0; height:100vh;}
+/* `height:100vh` SANS `overflow` : la barre était haute d'une fenêtre, son
+   contenu de 834 px. Sur un portable Windows 1366×768 — fenêtre utile 625 px
+   une fois la barre des tâches et le chrome du navigateur déduits — « Pièces
+   en commande », « Statistiques » et « Réglages » tombaient sous le bord bas,
+   avec « Garder le menu ouvert » et le pied, et RIEN ne permettait d'y
+   accéder : `overflow` valait `visible`, donc pas de barre de défilement.
+   À 1920×1080 sous l'échelle 125 % de Windows — la configuration la plus
+   répandue — « Réglages » manquait encore. Sur le poste de développement
+   (macOS, fenêtre 860 px) tout tenait : c'est pourquoi personne ne l'avait vu.
+   La barre ne déborde plus ; c'est la liste des onglets qui défile, en
+   gardant l'identité en haut et l'épinglage en bas. */
+#sidebar{width:230px; flex-shrink:0; background:var(--sidebar-bg); display:flex; flex-direction:column; padding:20px 14px; position:sticky; top:0; height:100vh; overflow:hidden;}
 body.is-planning-view #sidebar{display:none;}
 body.is-planning-view.sidebar-forced #sidebar{display:flex;}
 body.sidebar-collapsed #sidebar{display:none;}
@@ -79,7 +100,20 @@ body.sidebar-collapsed #sidebar{display:none;}
      première lettre du nom, qui commençait à 38px. On passe dessous. */
   margin-top:40px;}
 .brand-dot{width:10px;height:10px;border-radius:50%;background:var(--accent); box-shadow:0 0 0 3px rgba(var(--accent-rgb), .25);}
-.nav-items{display:flex; flex-direction:column; gap:3px; flex:1;}
+/* `min-height:0` n'est pas décoratif : un élément flexible refuse par défaut
+   de descendre sous la hauteur de son contenu (`min-height:auto`), et sans lui
+   `overflow-y:auto` ne défilerait jamais — la liste repousserait simplement le
+   bas de la barre hors de la fenêtre, ce qu'elle faisait déjà.
+   `overscroll-behavior` empêche la page de partir quand on arrive au bout. */
+.nav-items{display:flex; flex-direction:column; gap:3px; flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain;}
+/* La barre de défilement de Windows est opaque et large : posée telle quelle
+   sur le bleu nuit du menu, elle y dessinait une bande claire. Firefox lit les
+   deux propriétés standard, Chrome et Edge le sélecteur WebKit. */
+.nav-items{scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.22) transparent;}
+.nav-items::-webkit-scrollbar{width:8px;}
+.nav-items::-webkit-scrollbar-track{background:transparent;}
+.nav-items::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18); border-radius:4px;}
+.nav-items::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32);}
 .nav-item{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; background:transparent; border:none; color:var(--sidebar-text-dim); font-size:13.5px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
   /* Un <button> centre son texte par défaut. Invisible sur un libellé d'une
      ligne ; « Pièces en commande » passe sur deux et paraissait décalé. */

@@ -4,7 +4,7 @@ Branche : **`feat/retours-client-21-09`**, partie de `origin/main` (`d7fa854`).
 20 commits, 26 fichiers, +4 145 / −423.
 
 État à la livraison : `npm run type-check` propre, `npm run build` vert,
-**1 199 tests au vert** (76 fichiers — 68 avant, 8 ajoutés cette nuit).
+**1 208 tests au vert** (77 fichiers — 68 avant, 9 ajoutés).
 
 ---
 
@@ -300,6 +300,48 @@ module sorti, sans quoi le refactor n'est pas vérifiable.
   ce qui n'est pas déclaré texte. « PLB-001 » y devenait 0 à la frappe, et
   « PEINTURE » aussi.
 
+### Signalé après coup
+
+- [x] **Sidebar mal affichée sous Windows**
+  Reproduit dans Chromium sur la vraie structure et le vrai CSS. `#sidebar`
+  était haute d'une fenêtre (`height:100vh`) et n'avait **aucun `overflow`** ;
+  son contenu en demande 834 px — quinze onglets pour un administrateur, plus
+  l'identité, l'épinglage et le pied.
+
+  | Fenêtre utile | Débord | Ce qui manquait |
+  |---|---|---|
+  | Windows 1366×768 → 625 px | **+209 px** | « Pièces en commande », « Statistiques », « Réglages », l'épinglage et le pied |
+  | Windows 1920×1080 à 125 % → 730 px | **+104 px** | « Réglages », l'épinglage et le pied |
+  | macOS 1512×982 → 860 px | 0 px | rien |
+
+  `overflow` valant `visible`, il n'y avait **aucune barre de défilement** :
+  ces entrées s'affichaient sous le bord bas de la fenêtre et restaient
+  inatteignables. Et 125 % est l'échelle **par défaut** de Windows sur un écran
+  1080p — ce n'est pas un cas limite.
+  **Notes** — invisible depuis le poste de développement : à 860 px tout tient.
+  **Notes** — c'est la LISTE des onglets qui défile désormais, l'identité
+  restant en haut et l'épinglage en bas. La ligne qui compte est
+  `min-height:0` : un élément flexible refuse par défaut de descendre sous la
+  hauteur de son contenu, et sans elle `overflow-y:auto` ne défile jamais —
+  une propriété de plus qui donnerait l'illusion que c'est traité. Le test la
+  garde nommément.
+  **Notes** — la barre de défilement de Windows est opaque et large : laissée
+  telle quelle elle dessinait une bande claire sur le bleu nuit du menu. Elle
+  est habillée pour Firefox (propriétés standard) et pour Chrome/Edge
+  (sélecteur WebKit).
+  **Notes** — les trois polices viennent de Google Fonts avec `sans-serif` pour
+  seul repli, ce qui laissait Windows servir **Arial**, sensiblement plus large
+  en capitales : « Bons de commande » passait alors sur deux lignes en plus de
+  « Pièces en commande ». Les piles nomment maintenant Segoe UI avant de
+  capituler. **Déclaré, pas mesuré** : Segoe UI n'existe pas sur le poste de
+  mesure, seul le pire cas (Arial) a pu être éprouvé.
+  **Notes** — vérifié que `overflow:hidden` ne rogne pas le menu utilisateur
+  déplié, qui fait 308 px et s'arrête à 424 px : il reste entier jusqu'à la
+  plus petite fenêtre testée.
+  **Notes** — le reste du CSS a été balayé : `.planning-unsched-list` traite
+  déjà le cas correctement (`max-height` + `overflow-y:auto`). La barre
+  latérale était la seule oubliée.
+
 ### En attente
 
 - [ ] **#10 — ⏸ Numéro de téléphone du locataire** — non traité, comme demandé.
@@ -336,4 +378,8 @@ Ce qui reste à éprouver à la main ce matin :
 - le lettrage d'un avoir sur une facture, qui écrit deux règlements en une
   seule insertion (#9) ;
 - l'écran des métiers **après** `npm run db:types`, pour voir la couleur et
-  l'ordre se conserver (#19).
+  l'ordre se conserver (#19) ;
+- **la barre latérale sur le poste Windows qui a signalé le défaut**, pour
+  confirmer que la liste défile bien et que Segoe UI est servie. Les mesures
+  ont été faites dans Chromium sur macOS en simulant les hauteurs de fenêtre
+  de Windows ; la police système de Windows, elle, n'a pas pu être éprouvée.
