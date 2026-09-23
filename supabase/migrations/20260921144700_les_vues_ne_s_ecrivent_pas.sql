@@ -43,3 +43,18 @@ revoke insert, update, delete, truncate
 
 comment on view public.v_bons_commande_terrain is
   'Projection de lecture pour le terrain. Droits du propriétaire (pas de security_invoker) : l''écriture y est RÉVOQUÉE pour anon et authenticated depuis le 2026-09-21, un INSERT anonyme y ayant créé un bon de commande réel. L''écriture vise la table.';
+
+-- NOTE DU 23/09/2026 — renommée depuis `20260921110000_les_vues_ne_s_ecrivent_pas.sql`.
+--
+-- Elle partageait son horodatage avec `le_chapitre_porte_son_metier`. Le registre
+-- `supabase_migrations.schema_migrations` ne retient qu'une ligne par version :
+-- les deux fichiers se présentaient sous la même, et le script de déploiement,
+-- qui résout `ls supabase/migrations/<version>_*.sql | head -1`, ne pouvait en
+-- voir qu'un seul. Les deux effets sont bien en production — la colonne `metier`
+-- sur les trois tables de lignes, et l'écriture révoquée sur les quatre vues
+-- sans `security_invoker` — mais un environnement reconstruit depuis les
+-- migrations en aurait sauté un, en silence.
+--
+-- L'horodatage retenu est l'heure à laquelle le fichier a réellement été écrit.
+-- La rejouer est sans effet : `revoke` sur un droit déjà retiré ne lève pas,
+-- vérifié sur la production dans une transaction annulée.
