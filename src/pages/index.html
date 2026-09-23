@@ -1056,7 +1056,22 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
    qui prend ce qui reste, les montants à droite. Les largeurs sont posées ici
    pour que le tableau tienne en A4 portrait à l'impression comme à l'écran. */
 .pf-table .pf-col-metier{ width:120px; max-width:120px; }
-.pf-table .pf-col-code{ width:86px; max-width:86px; }
+.pf-table .pf-col-code{ width:104px; max-width:104px; }
+/* La quantité et l'unité formaient deux champs libres séparés d'une espace :
+   dès que la désignation réclamait de la place, l'unité passait SOUS la
+   quantité et la ligne doublait de hauteur. Une boîte qui ne se coupe pas, et
+   une colonne assez large pour les deux. */
+.pf-table .pf-col-qte{ width:132px; max-width:132px; }
+.pf-table .pf-col-pu{ width:106px; max-width:106px; }
+.pf-qte{ display:flex; gap:5px; flex-wrap:nowrap; align-items:center; }
+.pf-qte input:first-child{ flex:1 1 auto; min-width:0; text-align:right; }
+.pf-qte input:last-child{ flex:0 0 42px; min-width:0; text-align:center; }
+.pf-table .pf-col-pu input{ width:100%; text-align:right; }
+/* La boîte de suggestions se place sur le champ, pas sur la cellule : une
+   `position:relative` sur un `<td>` n'est pas portée partout de la même façon. */
+.pf-code-pick{ position:relative; }
+.pf-code-pick input{ width:100%; }
+.pf-code-pick .suggest-box{ left:0; right:auto; min-width:260px; }
 .pf-table .pf-col-metier .chapitre-metier{ width:100%; max-width:none; font-size:12px; }
 .pf-table .pf-col-metier.card-sub{ font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pf-sous-totaux .lignes-table td{ border-top:1px solid var(--border); }

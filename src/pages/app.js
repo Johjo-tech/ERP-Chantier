@@ -2088,19 +2088,64 @@ function applyArticleObjectToLigne(i, art){
   refreshLignesUI();
 }
 
-function fermerSuggestionsArticle(i){
-  const box = document.getElementById('artSuggest-'+i);
+/**
+ * Recopie l'article dans une ligne de la PRÉ-FACTURE.
+ *
+ * Jumeau d'`applyArticleObjectToLigne`, et il faut les deux : ils n'écrivent
+ * pas au même endroit — `state.editing.lignes` pour le formulaire du document,
+ * `validationDirecteurCtx.lignes` pour la pré-facture, qui porte sa propre
+ * copie justement pour ne pas écraser une saisie en cours — et ne se
+ * redessinent pas pareil.
+ *
+ * Même règle que l'autre : on COPIE, on ne lie pas, et la quantité n'est jamais
+ * touchée — c'est la seule valeur que l'utilisateur a saisie lui-même.
+ */
+function appliquerArticleDirecteur(i, art){
+  const ctx = validationDirecteurCtx;
+  if(!ctx) return;
+  const ligne = ctx.lignes[i] || {};
+  ctx.lignes[i] = Object.assign({}, ligne, {
+    type: 'ligne',
+    articleReference: art.code,
+    designation: art.designation,
+    unite: art.unite || ligne.unite || 'u',
+    prixUnitaire: art.prixUnitaire,
+    tva: art.tva != null ? art.tva : tvaDefaut(),
+  });
+  /* Le tableau entier : la désignation et le prix viennent de changer, et
+     `rafraichirChiffrageDirecteur` ne redessine que les totaux. */
+  renderValidationDirecteur();
+}
+
+/* Deux éditeurs cherchent au catalogue, et le second n'y avait pas accès : le
+   champ « Code » de la pré-facture était un texte nu, sans proposition ni
+   remplissage. Le registre dit, par zone, où poser la boîte de suggestions et
+   quoi faire du choix ; la recherche elle-même reste commune. C'est le patron
+   de `ZONES_DND`, qui résout déjà le même problème pour le glisser-déposer. */
+const ZONES_ARTICLE = {
+  document:   { champ: (i) => 'artCode-' + i,   boite: (i) => 'artSuggest-' + i,   appliquer: applyArticleObjectToLigne },
+  prefacture: { champ: (i) => 'artCodePf-' + i, boite: (i) => 'artSuggestPf-' + i, appliquer: appliquerArticleDirecteur },
+};
+const zoneArticle = (zone) => ZONES_ARTICLE[zone] || ZONES_ARTICLE.document;
+/* La clé porte la zone : les deux éditeurs ne sont jamais ouverts ensemble
+   aujourd'hui, mais un cache partagé sur le seul index serait une bombe à
+   retardement le jour où ils le seraient. */
+const cleArticle = (zone, i) => (zone || 'document') + ':' + i;
+
+function fermerSuggestionsArticle(i, zone){
+  const box = document.getElementById(zoneArticle(zone).boite(i));
   if(box) box.style.display = 'none';
 }
 
-function searchArticleCode(inputEl, i){
+function searchArticleCode(inputEl, i, zone){
   const q = inputEl.value.trim();
-  const box = document.getElementById('artSuggest-'+i);
+  const cle = cleArticle(zone, i);
+  const box = document.getElementById(zoneArticle(zone).boite(i));
   if(!box) return;
-  clearTimeout(articleMinuteur[i]);
-  if(!q){ box.style.display = 'none'; articleMatchesCache[i] = []; return; }
+  clearTimeout(articleMinuteur[cle]);
+  if(!q){ box.style.display = 'none'; articleMatchesCache[cle] = []; return; }
 
-  articleMinuteur[i] = setTimeout(async ()=>{
+  articleMinuteur[cle] = setTimeout(async ()=>{
     let matches = [];
     try{
       matches = await window.chercherArticlesLigne(q);
@@ -2110,47 +2155,53 @@ function searchArticleCode(inputEl, i){
       box.style.display = 'block';
       return;
     }
-    articleMatchesCache[i] = matches;
+    articleMatchesCache[cle] = matches;
     if(!matches.length){
-      box.innerHTML = `<div class="suggest-empty">Aucun article — saisie manuelle possible<br><button type="button" class="btn small" style="margin-top:6px;" onmousedown="creerArticleDepuisLigne(${i})">+ Créer « ${esc(q)} » dans le catalogue</button></div>`;
+      /* Créer un article depuis la pré-facture ouvrirait le catalogue
+         par-dessus la modale de chiffrage, et la refermerait. On propose donc
+         la saisie manuelle, sans le bouton. */
+      const creer = (zone || 'document') === 'document'
+        ? `<br><button type="button" class="btn small" style="margin-top:6px;" onmousedown="creerArticleDepuisLigne(${i})">+ Créer « ${esc(q)} » dans le catalogue</button>`
+        : '';
+      box.innerHTML = `<div class="suggest-empty">Aucun article — saisie manuelle possible${creer}</div>`;
       box.style.display = 'block';
       return;
     }
-    box.innerHTML = matches.map((a,idx)=>`<div class="suggest-item" onmousedown="selectArticleMatch(${i}, ${idx})"><b>${esc(a.code)}</b><small>${esc(a.designation)} — ${money(a.prixUnitaire)}${a.unite? ' / '+esc(a.unite):''}</small></div>`).join('');
+    box.innerHTML = matches.map((a,idx)=>`<div class="suggest-item" onmousedown="selectArticleMatch(${i}, ${idx}, '${jsAttr(zone||'document')}')"><b>${esc(a.code)}</b><small>${esc(a.designation)} — ${money(a.prixUnitaire)}${a.unite? ' / '+esc(a.unite):''}</small></div>`).join('');
     box.style.display = 'block';
   }, DELAI_RECHERCHE_ARTICLE);
 }
 
-function selectArticleMatch(i, idx){
-  const art = (articleMatchesCache[i] || [])[idx];
-  fermerSuggestionsArticle(i);
-  if(art) applyArticleObjectToLigne(i, art);
+function selectArticleMatch(i, idx, zone){
+  const art = (articleMatchesCache[cleArticle(zone, i)] || [])[idx];
+  fermerSuggestionsArticle(i, zone);
+  if(art) zoneArticle(zone).appliquer(i, art);
 }
 
 /* Entrée et Tab valident tous deux : on tape un code qu'on connaît, on passe
    au champ suivant, et la ligne doit être remplie — sans détour par la liste.
    Le code exact l'emporte sur la première proposition, qui pourrait n'être
    qu'une correspondance partielle. */
-async function handleArticleCodeKeydown(ev, i){
-  if(ev.key === 'Escape'){ fermerSuggestionsArticle(i); return; }
+async function handleArticleCodeKeydown(ev, i, zone){
+  if(ev.key === 'Escape'){ fermerSuggestionsArticle(i, zone); return; }
   if(ev.key !== 'Enter' && ev.key !== 'Tab') return;
 
   const saisi = (ev.target.value || '').trim();
   if(!saisi) return;
   if(ev.key === 'Enter') ev.preventDefault();
-  clearTimeout(articleMinuteur[i]);
+  clearTimeout(articleMinuteur[cleArticle(zone, i)]);
 
   try{
     const exact = await window.articleParCode(saisi);
-    if(exact){ fermerSuggestionsArticle(i); applyArticleObjectToLigne(i, exact); return; }
+    if(exact){ fermerSuggestionsArticle(i, zone); zoneArticle(zone).appliquer(i, exact); return; }
   }catch(err){
     console.error('Article introuvable', err);
   }
 
-  const matches = articleMatchesCache[i] || [];
-  if(matches.length){ selectArticleMatch(i, 0); return; }
+  const matches = articleMatchesCache[cleArticle(zone, i)] || [];
+  if(matches.length){ selectArticleMatch(i, 0, zone); return; }
   // Référence inconnue : la ligne reste libre, on ne devine rien à sa place.
-  fermerSuggestionsArticle(i);
+  fermerSuggestionsArticle(i, zone);
 }
 
 /* La référence n'existe pas : plutôt que d'obliger à quitter le devis, on
@@ -6346,8 +6397,8 @@ function ligneTravailDirecteurHTML(t, metier){
     <td class="pf-col-metier card-sub">${metier? esc(metier) : '<span style="opacity:.5;">—</span>'}</td>
     <td class="pf-col-code"></td>
     <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartTravail(event, '${jsAttr(t.id)}')" title="Glisser dans une ligne du bon pour l'y intégrer">⠿</span><span>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></span></div></td>
-    <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:66px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:46px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
-    <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+    <td class="num pf-col-qte"><div class="pf-qte"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"><input type="text" value="${esc(t.unite||'u')}" aria-label="Unité" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></div></td>
+    <td class="num pf-col-pu"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
     <td></td>
   </tr>`;
 }
@@ -6415,10 +6466,16 @@ function chiffrageDirecteurHTML(ctx){
       ${/* Le métier de la ligne est celui de son chapitre : affiché, jamais
             saisi ici — deux points de saisie feraient deux vérités. */''}
       <td class="pf-col-metier card-sub" title="Métier du chapitre auquel cette ligne appartient">${vu.valeur? esc(vu.valeur) : '<span style="opacity:.5;">—</span>'}</td>
-      <td class="pf-col-code"><input type="text" value="${esc(l.articleReference||'')}" placeholder="Code" style="width:100%;" title="Code article du catalogue" oninput="majLigneDirecteur(${i},'articleReference',this.value)"></td>
+      <td class="pf-col-code"><div class="pf-code-pick">
+        <input type="text" class="art-pick" id="artCodePf-${i}" value="${esc(l.articleReference||'')}" placeholder="Code…" autocomplete="off" title="Tapez un code ou un mot de la désignation"
+          oninput="searchArticleCode(this, ${i}, 'prefacture'); majLigneDirecteur(${i},'articleReference',this.value)"
+          onkeydown="handleArticleCodeKeydown(event, ${i}, 'prefacture')"
+          onblur="setTimeout(()=>{const b=document.getElementById('artSuggestPf-${jsAttr(i)}'); if(b) b.style.display='none';},180)">
+        <div id="artSuggestPf-${i}" class="suggest-box"></div>
+      </div></td>
       <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="Désignation" style="width:100%;" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:66px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:46px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
+      <td class="num pf-col-qte"><div class="pf-qte"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" oninput="majLigneDirecteur(${i},'qte',this.value)"><input type="text" value="${esc(l.unite||'u')}" aria-label="Unité" oninput="majLigneDirecteur(${i},'unite',this.value)"></div></td>
+      <td class="num pf-col-pu"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
       <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
     </tr>` + suite(i);
   }).join('');
