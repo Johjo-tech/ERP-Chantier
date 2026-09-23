@@ -1289,6 +1289,7 @@ export type Database = {
       }
       conducteurs: {
         Row: {
+          actif: boolean
           cree_le: string
           email: string | null
           id: string
@@ -1296,10 +1297,12 @@ export type Database = {
           maj_le: string
           nom: string
           profile_id: string | null
+          salarie_id: string | null
           societe_id: string
           telephone: string | null
         }
         Insert: {
+          actif?: boolean
           cree_le?: string
           email?: string | null
           id?: string
@@ -1307,10 +1310,12 @@ export type Database = {
           maj_le?: string
           nom: string
           profile_id?: string | null
+          salarie_id?: string | null
           societe_id: string
           telephone?: string | null
         }
         Update: {
+          actif?: boolean
           cree_le?: string
           email?: string | null
           id?: string
@@ -1318,6 +1323,7 @@ export type Database = {
           maj_le?: string
           nom?: string
           profile_id?: string | null
+          salarie_id?: string | null
           societe_id?: string
           telephone?: string | null
         }
@@ -1327,6 +1333,20 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conducteurs_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conducteurs_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
             referencedColumns: ["id"]
           },
           {

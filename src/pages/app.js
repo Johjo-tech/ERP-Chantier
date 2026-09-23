@@ -14734,6 +14734,47 @@ function posteSaisi(){
   return (document.getElementById('sal_posteAutre').value||'').trim();
 }
 
+/** La fiche conducteur de ce salarié, s'il en a une — active ou retirée. */
+function ficheConducteurDuSalarie(salarieId){
+  if(!salarieId) return null;
+  return state.conducteurs.find(c => c.salarieId === salarieId && c.societeId === state.societeId) || null;
+}
+
+/**
+ * Tenir la fiche conducteur d'accord avec la fiche RH.
+ *
+ * Créée à la première coche, mise à jour ensuite — nom, courriel, téléphone
+ * viennent de RH, qui devient la seule saisie. DÉCOCHER NE SUPPRIME PAS : des
+ * documents désignent cette fiche par `conducteur_id`, et l'effacer les
+ * laisserait sans conducteur. Elle passe `actif = false` et sort des listes.
+ *
+ * Le nom suit la règle du reste de l'application — « Prénom NOM » —, et c'est
+ * lui que le déclencheur de base propagera sur les cinq tables qui portent
+ * l'étiquette `conducteur`.
+ */
+async function synchroniserFicheConducteur(salarie, veutEtreConducteur){
+  const existante = ficheConducteurDuSalarie(salarie.id);
+  const nom = [salarie.prenom, salarie.nom].filter(Boolean).join(' ').trim() || salarie.nom || '';
+
+  if(!veutEtreConducteur){
+    if(!existante || existante.actif === false) return true;
+    return !!(await window.stSet('conducteur:'+existante.id, { ...existante, actif:false }));
+  }
+  if(!nom){
+    showToast("Un conducteur a besoin d'un nom : renseignez au moins le nom du salarié.");
+    return false;
+  }
+  const fiche = existante || { id: uid(), societeId: state.societeId, salarieId: salarie.id };
+  return !!(await window.stSet('conducteur:'+fiche.id, {
+    ...fiche, nom, actif:true,
+    email: salarie.email || fiche.email || '',
+    telephone: salarie.telephone || fiche.telephone || '',
+    /* Le compte de la personne, s'il existe : sans lui, le tableau de bord du
+       conducteur ne sait pas distinguer ses affaires de celles des autres. */
+    profileId: salarie.profileId || fiche.profileId || null,
+  }));
+}
+
 function salarieForm(){
   const e = state.editing;
   if(!e.habilitationsAJoindre) e.habilitationsAJoindre = [];
@@ -14753,6 +14794,15 @@ function salarieForm(){
         <option value="M" ${e.sexe==='M'?'selected':''}>Homme</option>
       </select></div>
       <div class="field"><label>Équipe</label><select id="sal_technicienId">${technicienLinkOptions(e.technicienId)}</select></div>
+      ${/* Une seule liste de personnes. Cocher ici fait apparaître ce salarié
+            dans TOUS les choix de conducteur — bons, devis, factures,
+            rapports, chantiers, planning — sans avoir à le ressaisir dans les
+            Réglages. La fiche `conducteurs` existe toujours derrière : c'est
+            elle que `conducteur_id` désigne. */''}
+      <div class="field"><div class="reglage-titre">Rôle dans l'entreprise</div>
+        <label class="bc-tache-row"><input type="checkbox" id="sal_estConducteur" ${ficheConducteurDuSalarie(e.id)? 'checked':''}>
+        <span>Conducteur de travaux — proposé dans les documents</span></label>
+      </div>
       <div class="field"><label>Compte utilisateur</label><div class="card-sub">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div>${zoneInvitationHTML(e)}</div>
       <div class="field"><label>Type de contrat</label><select id="sal_typeContrat">${TYPES_CONTRAT.map(t=>`<option value="${t}" ${e.typeContrat===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Coût horaire chargé (HT, salaire + charges)</label><input type="number" step="0.01" id="sal_coutHoraireCharge" value="${e.coutHoraireCharge!=null?e.coutHoraireCharge:''}" placeholder="Ex : 32.50"></div>
@@ -15208,6 +15258,18 @@ async function saveSalarie(){
   /* Le salarié doit d'abord entrer dans `state.salaries` : `chargerVisitesRh`
      y prend les identifiants dont il interroge le registre. */
   await recharger('salarie');
+
+  /* APRÈS l'enregistrement du salarié, jamais avant : la fiche conducteur
+     porte `salarie_id` en clé étrangère, et la créer d'abord échouerait sur
+     une création. Et si elle échoue, on le DIT — sans quoi on aurait un
+     salarié coché « conducteur de travaux » qui n'apparaît dans aucune liste,
+     sans que rien ne l'explique. */
+  const veutEtreConducteur = !!(document.getElementById('sal_estConducteur')||{}).checked;
+  if(!(await synchroniserFicheConducteur(obj, veutEtreConducteur))){
+    showToast("Salarié enregistré, mais sa fiche de conducteur n'a pas pu l'être.");
+  } else {
+    await recharger('conducteur');
+  }
   await deposerHabilitationsEnAttente(id);
   await deposerVisitesEnAttente(id);
   /* Ce qui n'a pas pu être déposé garde le formulaire ouvert : refermer
@@ -15912,6 +15974,7 @@ function conducteurForm(){
   return `
   <div class="form-panel">
     <h3>${e.id? 'Modifier le conducteur' : 'Nouveau conducteur de travaux'}</h3>
+    ${e.salarieId? `<div class="wf-banner ok" style="margin-bottom:12px;">👤 Cette fiche suit un salarié des RH. Modifiez son nom, son téléphone ou son courriel <b>dans l'onglet RH</b> : le prochain enregistrement de sa fiche RH réécrirait ce qui serait changé ici.</div>` : ''}
     <div class="field-grid">
       <div class="field full"><label>Nom</label><input type="text" id="cd_nom" value="${esc(e.nom)}" placeholder="Ex : M. Martin"></div>
       <div class="field"><label>Téléphone</label><input type="tel" id="cd_telephone" value="${esc(e.telephone)}"></div>
@@ -15933,10 +15996,18 @@ async function saveConducteur(){
      la désignent. Recharger les seuls conducteurs laisserait donc l'écran sur
      l'ancien nom — partout ailleurs. */
   const ancienNom = e.id ? (state.conducteurs.find(c=>c.id===e.id)||{}).nom : null;
+  /* `actif` est NOT NULL, et un champ ABSENT ne prend pas le défaut de sa
+     colonne : supabase-js déclare `columns=` sur l'union des clés envoyées et
+     PostgREST y écrit NULL — l'écriture entière tomberait en 23502. On repose
+     donc ce qu'on a lu. Même raison pour `salarieId` : ne pas le renvoyer
+     détacherait la fiche de son salarié à la première modification ici. */
+  const avant = e.id ? (state.conducteurs.find(c=>c.id===e.id) || {}) : {};
   const obj = { id, societeId: state.societeId, nom,
     telephone: document.getElementById('cd_telephone').value,
     email: document.getElementById('cd_email').value,
-    profileId: document.getElementById('cd_profileId').value || null };
+    profileId: document.getElementById('cd_profileId').value || null,
+    salarieId: avant.salarieId ?? null,
+    actif: avant.actif !== false };
   const r = await window.stSet('conducteur:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   if(ancienNom != null && ancienNom !== nom)
@@ -15969,9 +16040,21 @@ function conducteurIdDe(e){
   return fiche ? fiche.id : '';
 }
 
+/* Les conducteurs proposés au choix : ceux de la société, actifs. Une fiche
+   désactivée — la case « conducteur de travaux » décochée en RH — sort des
+   listes sans être effacée : des documents la désignent par `conducteur_id`.
+   Elle est REMISE dans la liste si c'est elle qui est déjà attribuée au
+   document ouvert, faute de quoi l'enregistrer effacerait le conducteur en
+   silence. C'est le piège que `comptesLinkOptions` évite déjà ailleurs. */
+function conducteursChoisissables(courantId){
+  return state.conducteurs
+    .filter(c => c.societeId === state.societeId && (c.actif !== false || c.id === courantId))
+    .sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+}
+
 function conducteurSelectOptions(currentId){
-  const list = state.conducteurs.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return '<option value="">— Non attribué —</option>' + list.map(c=>`<option value="${esc(c.id)}" ${c.id===currentId?'selected':''}>${esc(c.nom)}</option>`).join('');
+  const list = conducteursChoisissables(currentId);
+  return '<option value="">— Non attribué —</option>' + list.map(c=>`<option value="${esc(c.id)}" ${c.id===currentId?'selected':''}>${esc(c.nom)}${c.actif===false? ' (retiré)':''}</option>`).join('');
 }
 
 /* On envoie la référence ET le nom. La base tient l'étiquette d'après la
@@ -15984,7 +16067,12 @@ function conducteurDuSelect(idChamp){
   return { conducteurId: el.value || '', conducteur: fiche ? fiche.nom : '' };
 }
 function conducteurFilterOptions(current, allLabel){
-  const list = state.conducteurs.filter(c=>c.societeId===state.societeId).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  /* Un conducteur retiré garde des affaires à son nom : le filtre doit pouvoir
+     les retrouver. On propose donc ceux qui sont actifs, plus celui qui est
+     déjà choisi. */
+  const list = state.conducteurs
+    .filter(c=>c.societeId===state.societeId && (c.actif !== false || c.nom === current))
+    .sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
   return `<option value="">${esc(allLabel||'Tous les conducteurs')}</option>` + list.map(c=>`<option value="${esc(c.nom)}" ${c.nom===current?'selected':''}>${esc(c.nom)}</option>`).join('');
 }
 function togglePlanningUnschedFilter(){
