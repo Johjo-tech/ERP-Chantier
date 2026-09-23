@@ -1472,13 +1472,37 @@ function computeMonthSummary(soc){
 }
 /* `fiche` restreint le décompte à un conducteur. Absente, on compte toute la
    société — c'est ce qu'attendent le pilotage et l'écran d'accueil. */
+/* Les états où le circuit du terrain est CLOS. */
+const CIRCUIT_CLOS = ['chiffre', 'facture', 'cloture_gratuit'];
+
+/**
+ * Ce bon attend-il encore quelqu'un ?
+ *
+ * `valideConducteur` se dérive des TÂCHES — « toutes validées », et la règle
+ * exige `taches.length > 0`. Un bon qui n'en porte aucune vaut donc « non
+ * validé par le conducteur », POUR TOUJOURS : un bon chiffré hors circuit, ou
+ * dont le terrain n'a jamais été pointé, revenait éternellement dans « Bons à
+ * valider » et dans « À traiter » alors que sa facture était déjà partie.
+ *
+ * La dérivation n'est pas en cause — elle dit une vérité sur les tâches. C'est
+ * la question qui était mal posée : ces écrans demandent « est-ce validé ? »
+ * quand ils veulent savoir « reste-t-il quelque chose à faire ? ». Un bon
+ * chiffré, facturé ou clos n'attend plus personne, quoi que disent ses tâches.
+ */
+function circuitTermine(b){
+  return CIRCUIT_CLOS.includes(b.statutWorkflow)
+    || state.factures.some(f => f.bonCommandeId === b.id);
+}
+
 function computeDashTraiter(soc, fiche){
   const today = todayISO();
   const bcs = state.bonsCommande.filter(b=>b.societeId===soc
     && (!fiche || b.conducteurId === fiche.id));
-  const enAttenteConducteur = bcs.filter(b=>!b.valideConducteur && !b.bonCommandeId).length;
-  const aValiderDirecteur = bcs.filter(b=>b.valideConducteur && !b.valideDirecteur).length;
-  const aFacturerList = bcs.filter(b=>b.valideDirecteur && !state.factures.some(f=>f.bonCommandeId===b.id));
+  const enAttenteConducteur = bcs.filter(b=>!circuitTermine(b) && !b.valideConducteur && !b.bonCommandeId).length;
+  const aValiderDirecteur = bcs.filter(b=>!circuitTermine(b) && b.valideConducteur && !b.valideDirecteur).length;
+  /* Une affaire close sans suite facturable n'est pas « à facturer ». */
+  const aFacturerList = bcs.filter(b=>b.valideDirecteur && b.statutWorkflow !== 'cloture_gratuit'
+    && !state.factures.some(f=>f.bonCommandeId===b.id));
   const aFacturer = aFacturerList.length;
   const aFacturerMontant = aFacturerList.reduce((s,b)=> s + (b.lignes? computeTotalsAvecRemise(b.lignes,0).ht : (parseFloat(b.montant)||0)), 0);
   const rappelsAujourdhui = bcs.filter(b=>b.rappelDate && b.rappelDate<=today).length;
@@ -1646,7 +1670,7 @@ function renderDashboardConducteur(){
   const enRetard = bons.filter(b=>b.dateFinTravaux && b.dateFinTravaux < today
     && !state.factures.some(f=>f.bonCommandeId===b.id));
   const piecesAttendues = bons.filter(b=>b.pieceACommander && !b.pieceACommanderDateCommande);
-  const nonPlanifies = bons.filter(b=>!b.datePlanifiee && !b.valideDirecteur);
+  const nonPlanifies = bons.filter(b=>!b.datePlanifiee && !circuitTermine(b));
 
   return `
     ${enteteDashboard(salutation(), fiche
@@ -7763,7 +7787,10 @@ function setPlanningView(view){
 function renderPlanningEnAttente(mode){
   const soc = state.societeId;
   const q = (state.planningSearch||'').trim().toLowerCase();
-  const list = state.bonsCommande.filter(b=>b.societeId===soc && !b.bonCommandeId && !b.valideConducteur &&
+  /* Même correction qu'au tableau de bord : un bon déjà chiffré ou facturé
+     n'est plus « en attente de validation », et il encombrait cette colonne
+     avec une carte que rien ne permet de planifier. */
+  const list = state.bonsCommande.filter(b=>b.societeId===soc && !b.bonCommandeId && !circuitTermine(b) && !b.valideConducteur &&
     (mode==='soustraitant' ? !!b.sousTraitant : !b.sousTraitant) &&
     (!q || window.multiWordMatch([b.client, b.numeroBC, b.conducteur, b.sousTraitant, b.adresse, b.numeroLogement, b.interlocuteur].filter(Boolean).join(' ').toLowerCase(), q)));
   return `
