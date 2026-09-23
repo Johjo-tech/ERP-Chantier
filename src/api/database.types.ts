@@ -3375,6 +3375,53 @@ export type Database = {
         }
         Relationships: []
       }
+      referentiels: {
+        Row: {
+          code: string | null
+          couleur: string | null
+          cree_le: string
+          domaine: string
+          icone: string | null
+          id: string
+          libelle: string
+          maj_le: string
+          position: number
+          societe_id: string
+        }
+        Insert: {
+          code?: string | null
+          couleur?: string | null
+          cree_le?: string
+          domaine: string
+          icone?: string | null
+          id?: string
+          libelle: string
+          maj_le?: string
+          position?: number
+          societe_id: string
+        }
+        Update: {
+          code?: string | null
+          couleur?: string | null
+          cree_le?: string
+          domaine?: string
+          icone?: string | null
+          id?: string
+          libelle?: string
+          maj_le?: string
+          position?: number
+          societe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referentiels_societe_id_fkey"
+            columns: ["societe_id"]
+            isOneToOne: false
+            referencedRelation: "societes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reglements: {
         Row: {
           cree_le: string
@@ -6199,6 +6246,18 @@ export type Database = {
         Returns: string
       }
       ref_bc_client: { Args: { p_numero: string }; Returns: string }
+      referentiels_liste: {
+        Args: never
+        Returns: {
+          code: string
+          couleur: string
+          domaine: string
+          icone: string
+          libelle: string
+          rang: number
+        }[]
+      }
+      referentiels_standard: { Args: { p_societe: string }; Returns: number }
       reparer_adresses: {
         Args: never
         Returns: {

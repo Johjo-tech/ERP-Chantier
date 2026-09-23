@@ -208,6 +208,12 @@ import {
   travauxParMetier,
 } from "@/api/regles-metiers";
 import {
+  entreesDuDomaine,
+  memeEntree,
+  prochainePosition,
+  referentielCompose,
+} from "@/api/regles-referentiels";
+import {
   badgeOrigine,
   comptesRendusTerrain,
   lignesAEnregistrer,
@@ -610,6 +616,10 @@ export function injecterSession() {
   w.metierDuChapitre = metierDuChapitre;
   w.metiersDesChapitres = metiersDesChapitres;
   w.referentielMetiers = referentielMetiers;
+  w.referentielCompose = referentielCompose;
+  w.entreesDuDomaine = entreesDuDomaine;
+  w.memeEntree = memeEntree;
+  w.prochainePosition = prochainePosition;
   /* Le choix tranché sur un chapitre l'emporte sur son titre. La liste
      déroulante de l'écran et le regroupement des travaux du planning doivent
      lire cette précédence au même endroit, sinon corriger un chapitre

@@ -51,6 +51,7 @@ const COLONNES: Record<string, readonly string[]> = {
   pdp_oauth_etats: ["code_verifier", "cree_le", "environnement", "etat", "expire_le", "id", "profile_id", "redirect_uri", "retour_url", "societe_id"],
   planning_taches: ["bon_commande_id", "chantier_id", "commentaire", "cree_le", "croquis", "date_tache", "dpgf_ligne_id", "heure_debut", "heure_fin", "id", "legacy_id", "libelle", "maj_le", "metier", "piece_a_commander", "piece_date_commande", "piece_description", "piece_fournisseur", "piece_recue_le", "quantite_planifiee", "realisee_le", "realisee_par", "refus_motif", "societe_id", "sous_traitant_id", "statut", "technicien_id", "validee_le", "validee_par"],
   profiles: ["actif", "cree_le", "email", "id", "maj_le", "nom"],
+  referentiels: ["code", "couleur", "cree_le", "domaine", "icone", "id", "libelle", "maj_le", "position", "societe_id"],
   reglements: ["cree_le", "date", "facture_id", "id", "legacy_id", "maj_le", "mode", "montant", "reference", "societe_id"],
   role_permissions: ["action", "module", "role"],
   salarie_absences: ["approuve_par", "commentaire", "cree_le", "date_approbation", "date_debut", "date_fin", "id", "justificatif_chemin", "justificatif_nom", "legacy_id", "maj_le", "motif", "nb_jours", "salarie_id", "statut", "type"],

@@ -178,7 +178,7 @@ let state = {
   factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
   factureMetierFilter: '', factureReglementFilter: '',
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
-  devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
+  devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], referentiels: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   bcCardOuverte: null,
   reglementEtatFiltre: '', reglementTri: 'retard',
   reglementClientFiltre: '', reglementDuFiltre: '', reglementAuFiltre: '',
@@ -470,6 +470,7 @@ const COLLECTIONS_ETAT = {
   'conducteur':   { champ:'conducteurs',   ranger: v => v.sort(parNom) },
   'technicien':   { champ:'techniciens',   ranger: v => v },
   'metierPerso':  { champ:'metiersPerso',  ranger: v => v },
+  'referentiel':  { champ:'referentiels',  ranger: v => v },
   'sousTraitant': { champ:'sousTraitants', ranger: v => v },
   'chantier':     { champ:'chantiers',     ranger: v => trierParDate(v, ['dateDebut']) },
   'salarie':      { champ:'salaries',      ranger: v => v.sort(parNom) },
@@ -812,7 +813,7 @@ function badgeClass(statut){
   const map = {'brouillon':'gray','envoyé':'info','envoyée':'info','accepté':'success','payée':'success','terminée':'success','reçu':'success','refusé':'danger','impayée':'danger','annulé':'danger','en cours':'yellow'};
   return map[statut] || 'gray';
 }
-function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:'interventions',bonCommande:'bonsCommande',client:'clients',article:'articles',document:'documents',reglement:'reglements',interlocuteur:'interlocuteurs',conducteur:'conducteurs',technicien:'techniciens',metierPerso:'metiersPerso',sousTraitant:'sousTraitants',chantier:'chantiers',salarie:'salaries',vehicule:'vehicules',materiel:'materiels'}[type]; }
+function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:'interventions',bonCommande:'bonsCommande',client:'clients',article:'articles',document:'documents',reglement:'reglements',interlocuteur:'interlocuteurs',conducteur:'conducteurs',technicien:'techniciens',metierPerso:'metiersPerso',referentiel:'referentiels',sousTraitant:'sousTraitants',chantier:'chantiers',salarie:'salaries',vehicule:'vehicules',materiel:'materiels'}[type]; }
 
 /* ---------- Rendu de la coquille ---------- */
 /* Menu utilisateur : sociétés réellement accessibles, et simulation de rôle
@@ -11065,6 +11066,7 @@ const REGLAGES_GROUPES = [
   ]},
   { titre:'Référentiels', items:[
     {id:'travaux', label:'Travaux & unités', icone:'🛠️', desc:'Métiers et unités'},
+    {id:'listes', label:'Listes de choix', icone:'📋', desc:'Catégories, états, unités, pièces'},
     {id:'intervenants', label:'Intervenants', icone:'🦺', desc:'Conducteurs, techniciens, sous-traitants'},
     {id:'rh', label:'RH', icone:'🧑‍🔧', desc:'Seuils d\'alerte'},
     {id:'vehicules', label:'Véhicules', icone:'🚚', desc:'Seuils d\'alerte'},
@@ -11116,6 +11118,7 @@ function renderReglagesOnglet(){
     case 'documents':     return renderReglagesDocumentsSection();
     case 'numerotation':  return renderNumerotationSection();
     case 'travaux':       return renderMetiersSection() + renderUnitesSection();
+    case 'listes':        return renderReferentielsSection();
     case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection();
     case 'rh':            return renderSeuilsSection('rh');
     case 'vehicules':     return renderSeuilsSection('vehicules');
@@ -15907,6 +15910,160 @@ async function saveClient(){
 }
 
 /* ---------- Articles / catalogue de prestations ---------- */
+/* ---------- Les listes de choix tenues par la société ----------
+   Catégories et états de matériel, catégories d'achat, unités, pièces
+   courantes et leurs fournisseurs. Un seul formulaire les édite toutes : le
+   `domaine` les sépare, et trois écrans auraient donné trois occasions de
+   diverger.
+
+   Le patron est celui des métiers, repris tel quel — trois conventions qu'il
+   ne faut pas trahir sous peine d'une liste qui ne se rafraîchit pas :
+   `openForm('<type>')`, la div `formZone<Type>`, et surtout `id="liste-<cle>"`
+   que `filtrerListe()` redessine. */
+
+const DOMAINES_REFERENTIEL = {
+  categorie_materiel: { titre:'Catégories de matériel', singulier:'catégorie', aide:"Ce que le formulaire d'un matériel propose." },
+  etat_materiel:      { titre:'États de matériel',      singulier:'état',      aide:"Repris aussi par les prêts de matériel et de véhicule." },
+  categorie_achat:    { titre:"Catégories d'achat",     singulier:'catégorie', aide:"Les achats d'un chantier s'y rangent. « Main-d'œuvre » ouvre les champs salarié et heures." },
+  unite:              { titre:'Unités',                 singulier:'unité',     aide:"Proposées sur chaque ligne de devis, de bon et de facture." },
+  piece_courante:     { titre:'Pièces courantes',       singulier:'pièce',     aide:"Vide au départ : ce que le terrain saisit devient une proposition." },
+  fournisseur_piece:  { titre:'Fournisseurs de pièces', singulier:'fournisseur', aide:"Vide au départ, alimenté par les commandes de pièces." },
+};
+
+/** Les entrées d'un domaine, dans l'ordre choisi. */
+function referentielsDuDomaine(domaine){
+  return window.entreesDuDomaine
+    ? window.entreesDuDomaine(state.referentiels||[], domaine, state.societeId)
+    : (state.referentiels||[]).filter(r=>r.domaine===domaine && r.societeId===state.societeId);
+}
+
+/**
+ * Ce que le menu propose : les entrées déclarées, PLUS ce que les fiches
+ * emploient déjà.
+ *
+ * Sans le second terme, une catégorie saisie avant que la liste existe
+ * disparaîtrait du menu — et deviendrait impossible à recocher. C'est ce que
+ * les métiers ont coûté avant qu'on y prenne garde.
+ */
+function referentielPropose(domaine, employes){
+  const declares = referentielsDuDomaine(domaine).map(r=>r.libelle);
+  return window.referentielCompose ? window.referentielCompose(declares, employes||[]) : declares;
+}
+
+/* La valeur courante est TOUJOURS dans la liste, même retirée du référentiel :
+   sinon ouvrir puis enregistrer une fiche changerait sa catégorie en silence. */
+function referentielOptions(domaine, courant, employes, vide){
+  const liste = referentielPropose(domaine, [...(employes||[]), courant]);
+  return `<option value="">${esc(vide || '— Non précisé —')}</option>`
+    + liste.map(v=>`<option value="${jsAttr(v)}" ${v===courant?'selected':''}>${esc(v)}</option>`).join('');
+}
+
+/** L'entrée complète — pour son code, sa couleur ou son icône. */
+function referentielEntree(domaine, libelle){
+  return referentielsDuDomaine(domaine).find(r=>window.memeEntree
+    ? window.memeEntree(r.libelle, libelle) : r.libelle===libelle) || null;
+}
+
+let domaineReferentielOuvert = 'categorie_materiel';
+function setDomaineReferentiel(domaine){ domaineReferentielOuvert = domaine; renderTab(); }
+
+function renderReferentielsSection(){
+  const d = domaineReferentielOuvert;
+  const def = DOMAINES_REFERENTIEL[d];
+  return `
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
+      <span>Listes de choix</span>
+      <button class="btn small primary" onclick="openForm('referentiel')">+ Nouvelle ${esc(def.singulier)}</button>
+    </div>
+    <div class="plus-subnav" style="margin-bottom:12px;">
+      ${Object.entries(DOMAINES_REFERENTIEL).map(([cle,v])=>
+        `<button class="plus-subnav-btn ${cle===d?'active':''}" onclick="setDomaineReferentiel('${jsAttr(cle)}')">${esc(v.titre)}</button>`).join('')}
+    </div>
+    <div class="card-sub" style="margin-bottom:12px;">${esc(def.aide)}</div>
+    ${barreRecherche('referentiel', 'Rechercher…')}
+    <div id="formZoneReferentiel">${state.formOpen.referentiel? referentielForm() : ''}</div>
+    <div id="liste-referentiel">${listeReferentielsHTML()}</div>
+  `;
+}
+
+const listeReferentielsHTML = declarerListing('referentiel',
+  ()=> referentielsDuDomaine(domaineReferentielOuvert),
+  list => list.map((r,i)=>`
+      <div class="card"><div class="card-row">
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${r.couleur? `<span style="width:16px; height:16px; border-radius:4px; background:${esc(r.couleur)}; flex-shrink:0; border:1px solid rgba(0,0,0,.1);"></span>`:''}
+          <div class="card-title">${r.icone? esc(r.icone)+' ' : ''}${esc(r.libelle)}</div>
+        </div>
+        ${r.code? `<span class="card-sub mono">${esc(r.code)}</span>`:''}
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px;">
+        ${/* Deux flèches plutôt qu'un glisser-déposer : la liste est courte, et
+              la recherche peut n'en montrer qu'une partie — déplacer dans une
+              liste filtrée n'aurait aucun sens. Même raison que les métiers. */''}
+        <button class="btn small ghost" onclick="deplacerReferentiel('${jsAttr(r.id)}',-1)" ${i===0?'disabled':''} title="Monter">▲</button>
+        <button class="btn small ghost" onclick="deplacerReferentiel('${jsAttr(r.id)}',1)" ${i===list.length-1?'disabled':''} title="Descendre">▼</button>
+        <button class="btn small" onclick="editItem('referentiel','${jsAttr(r.id)}')">Modifier</button>
+        <button class="btn small danger" onclick="deleteItem('referentiel','${jsAttr(r.id)}')" title="Les fiches qui portent cette valeur la gardent : elle continuera d'être proposée tant qu'une fiche l'emploie.">Supprimer</button>
+      </div></div>`).join('') || listeVide('referentiel', 'Aucune entrée dans cette liste.', 'entrée'),
+  r => [r.code].filter(Boolean));
+
+function referentielForm(){
+  const e = state.editing;
+  const d = e.domaine || domaineReferentielOuvert;
+  const def = DOMAINES_REFERENTIEL[d] || DOMAINES_REFERENTIEL.categorie_materiel;
+  return `
+  <div class="form-panel">
+    <h3>${e.id? 'Modifier' : 'Nouvelle'} ${esc(def.singulier)} — ${esc(def.titre)}</h3>
+    <div class="field-grid">
+      <div class="field full"><label>Libellé</label><input type="text" id="ref_libelle" value="${esc(e.libelle)}" placeholder="Ex : ${esc(def.singulier === 'unité' ? 'm²' : 'Échafaudage')}"></div>
+      ${e.code? `<div class="field full"><div class="reglage-titre">Code interne</div><div class="card-sub"><code>${esc(e.code)}</code> — posé par l'application, il ne se change pas : c'est lui que l'écran teste pour ouvrir les champs particuliers.</div></div>`:''}
+    </div>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn primary" onclick="saveReferentiel()">Enregistrer</button>
+      <button class="btn ghost" onclick="closeForm('referentiel')">Annuler</button>
+    </div>
+  </div>`;
+}
+
+async function saveReferentiel(){
+  const e = state.editing;
+  const libelle = document.getElementById('ref_libelle').value.trim();
+  if(!libelle){ alert('Le libellé est requis.'); return; }
+  const domaine = e.domaine || domaineReferentielOuvert;
+  const id = e.id || uid();
+  /* `position` se conserve : un champ absent est écrit à NULL par PostgREST, et
+     renommer une entrée l'aurait renvoyée en tête de liste. Une entrée neuve se
+     pose à la fin. Même raison pour `code`, `couleur` et `icone` — ne pas les
+     reposer les effacerait à la première modification. */
+  const position = e.position != null ? e.position
+    : (window.prochainePosition ? window.prochainePosition(state.referentiels||[], domaine, state.societeId)
+                                : referentielsDuDomaine(domaine).length + 1);
+  const obj = { id, societeId: state.societeId, domaine, libelle, position,
+    code: e.code || null, couleur: e.couleur || null, icone: e.icone || null };
+  if(!(await window.stSet('referentiel:'+id, obj))){ showToast(saveFailedMessage()); return; }
+  await recharger('referentiel');
+  closeForm('referentiel');
+  showToast(e.id? 'Entrée modifiée.' : 'Entrée créée.', 'success');
+}
+
+/* On échange les deux positions plutôt que de renuméroter toute la liste :
+   deux écritures au lieu de dix, et rien ne bouge pour les autres. */
+async function deplacerReferentiel(id, sens){
+  const liste = referentielsDuDomaine(domaineReferentielOuvert);
+  const i = liste.findIndex(r=>r.id===id);
+  const j = i + sens;
+  if(i < 0 || j < 0 || j >= liste.length) return;
+  const a = liste[i], b = liste[j];
+  /* Toutes les positions à zéro — l'état d'avant la première réorganisation —
+     rendrait l'échange sans effet. On leur donne d'abord leur rang courant. */
+  const posA = a.position || (i + 1), posB = b.position || (j + 1);
+  const ok1 = await window.stSet('referentiel:'+a.id, { ...a, position: posB });
+  const ok2 = await window.stSet('referentiel:'+b.id, { ...b, position: posA });
+  if(!ok1 || !ok2){ showToast(saveFailedMessage()); return; }
+  await recharger('referentiel');
+  renderTab();
+}
+
 function renderMetiersSection(){
   return `
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
@@ -17707,6 +17864,7 @@ Object.assign(window, {
   guessSkipRows,
   ajouterHabilitationSansFichier,
   ajouterHabilitationsChoisies,
+  deplacerReferentiel,
   deplacerMetier,
   deposerHabilitationsEnAttente,
   habilitationEnAttenteHTML,
@@ -17770,6 +17928,7 @@ Object.assign(window, {
   listeConducteursHTML,
   listeDossiersReglementsHTML,
   listeFacturesReglementsHTML,
+  listeReferentielsHTML,
   listeMetiersHTML,
   listePiecesCommandeHTML,
   listeSousTraitantsHTML,
@@ -17981,6 +18140,10 @@ Object.assign(window, {
   rechargerType,
   recomputeDpgfColRoles,
   redrawAnnotationCanvas,
+  referentielOptions,
+  referentielsDuDomaine,
+  referentielEntree,
+  referentielForm,
   referenceDocumentHTML,
   referencePrefacture,
   referencesPrefactureHTML,
@@ -18077,6 +18240,7 @@ Object.assign(window, {
   renderMateriel,
   renderMaterielDetail,
   renderMaterielListeHTML,
+  renderReferentielsSection,
   renderMetiersSection,
   renderMonCompteSection,
   renderNotifPanelContent,
@@ -18160,6 +18324,7 @@ Object.assign(window, {
   saveMetierPerso,
   saveMonNom,
   saveNumerotation,
+  saveReferentiel,
   saveReglages,
   saveReglement,
   saveSalarie,
@@ -18188,6 +18353,7 @@ Object.assign(window, {
   setControle,
   setDashRevenuePeriod,
   setEditing,
+  setDomaineReferentiel,
   setFacturesView,
   setPhotoCategorie,
   setPlanningView,

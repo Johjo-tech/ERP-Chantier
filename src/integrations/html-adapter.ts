@@ -253,6 +253,10 @@ const COLLECTIONS: Record<string, Collection> = {
   // `nom`. Les deux autres n'ont pas de colonne et sont écartés.
   technicien: { table: "techniciens", alias: { nom1: "nom" } },
   metierPerso: { table: "metiers", alias: { nom: "libelle" } },
+  /* Les listes de choix tenues par la société : catégories et états de
+     matériel, catégories d'achat, unités, pièces courantes. Un seul
+     `domaine` les sépare — trois tables auraient donné trois écrans. */
+  referentiel: { table: "referentiels" },
   sousTraitant: { table: "sous_traitants" },
   chantier: { table: "chantiers" },
   salarie: { table: "salaries", vueLecture: "v_salaries_annuaire" },

@@ -91,6 +91,7 @@ declare global {
     echecsDeLecture: any;
     emettreFacture: any;
     enregistrerArticle: any;
+    entreesDuDomaine: any;
     estAvoir: any;
     estRapproche: any;
     estSociete: any;
@@ -137,6 +138,7 @@ declare global {
     majVisiteMedicale: any;
     manquesBonCommande: any;
     marquerRealisee: any;
+    memeEntree: any;
     memeMetier: any;
     mentionsLegales: any;
     messageAnomalies: any;
@@ -172,6 +174,7 @@ declare global {
     preparerPieceJointe: any;
     previsualiserImport: any;
     prochainActeur: any;
+    prochainePosition: any;
     prochaineVisiteSuggeree: any;
     purgerDocumentsRh: any;
     purgerVisitesMedicales: any;
@@ -182,6 +185,7 @@ declare global {
     rechercherEntreprise: any;
     recommandationsSociete: any;
     refBonCommandeClient: any;
+    referentielCompose: any;
     referentielMetiers: any;
     refusAvoir: any;
     refusImputation: any;
