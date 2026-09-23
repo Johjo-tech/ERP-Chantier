@@ -9128,8 +9128,22 @@ async function poserAuPlanning(info, dateISO, heure, assigneeField, assigneeValu
   if(assigneeField && assigneeValue){
     setSchedField(bc, metierKey, assigneeField, assigneeValue);
   }
-  await window.stSet(planningKeyPrefix(info.kind)+bcId, bc);
+  /* Le résultat de l'écriture était IGNORÉ. Un refus — RLS, déclencheur, champ
+     sans colonne — laissait la carte se poser à l'écran puis revenir à « Non
+     planifiés » au prochain rendu, sans un mot. De l'extérieur, cela se lit
+     « cette carte ne peut pas être planifiée », et rien n'aide à comprendre.
+
+     En cas de refus on recharge depuis la base : `bc` est l'objet du cache, et
+     on vient de le modifier en mémoire. Le laisser tel quel afficherait une
+     date planifiée qui n'existe nulle part. */
+  if(!(await window.stSet(planningKeyPrefix(info.kind)+bcId, bc))){
+    showToast(saveFailedMessage());
+    await recharger('bonCommande');
+    renderTab();
+    return false;
+  }
   renderTab();
+  return true;
 }
 
 let choixAssigneCtx = null;
