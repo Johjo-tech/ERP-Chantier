@@ -2450,6 +2450,68 @@ export type Database = {
           },
         ]
       }
+      fournisseurs: {
+        Row: {
+          actif: boolean
+          adresse: string | null
+          code_postal: string | null
+          contact_nom: string | null
+          cree_le: string
+          email: string | null
+          id: string
+          maj_le: string
+          nom: string
+          notes: string | null
+          siret: string | null
+          societe_id: string
+          specialite: string | null
+          telephone: string | null
+          ville: string | null
+        }
+        Insert: {
+          actif?: boolean
+          adresse?: string | null
+          code_postal?: string | null
+          contact_nom?: string | null
+          cree_le?: string
+          email?: string | null
+          id?: string
+          maj_le?: string
+          nom: string
+          notes?: string | null
+          siret?: string | null
+          societe_id: string
+          specialite?: string | null
+          telephone?: string | null
+          ville?: string | null
+        }
+        Update: {
+          actif?: boolean
+          adresse?: string | null
+          code_postal?: string | null
+          contact_nom?: string | null
+          cree_le?: string
+          email?: string | null
+          id?: string
+          maj_le?: string
+          nom?: string
+          notes?: string | null
+          siret?: string | null
+          societe_id?: string
+          specialite?: string | null
+          telephone?: string | null
+          ville?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fournisseurs_societe_id_fkey"
+            columns: ["societe_id"]
+            isOneToOne: false
+            referencedRelation: "societes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fournisseurs_controle: {
         Row: {
           cree_le: string

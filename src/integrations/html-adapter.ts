@@ -268,6 +268,10 @@ const COLLECTIONS: Record<string, Collection> = {
      `domaine` les sépare — trois tables auraient donné trois écrans. */
   referentiel: { table: "referentiels" },
   sousTraitant: { table: "sous_traitants" },
+  /* L'annuaire des fournisseurs — pièces, matériaux, location. À ne pas
+     confondre avec `fournisseurs_controle`, qui sert la comparaison de
+     prix par lot et n'a qu'un nom. */
+  fournisseur: { table: "fournisseurs" },
   chantier: {
     table: "chantiers",
     /* Les dépenses du chantier. Sans cette déclaration, l'écran les

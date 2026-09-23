@@ -178,11 +178,11 @@ let state = {
   factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
   factureMetierFilter: '', factureReglementFilter: '',
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
-  devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], referentiels: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
+  devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], referentiels: [], fournisseurs: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   bcCardOuverte: null,
   reglementEtatFiltre: '', reglementTri: 'retard',
   reglementClientFiltre: '', reglementDuFiltre: '', reglementAuFiltre: '',
-  formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
+  formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, referentiel:false, fournisseur:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]},
   /* Le dossier documentaire des salariés. À part du reste : il ne transite pas
      par le pont kv_store — `salarie` y est déclaré sans table fille, donc un
@@ -471,6 +471,7 @@ const COLLECTIONS_ETAT = {
   'technicien':   { champ:'techniciens',   ranger: v => v },
   'metierPerso':  { champ:'metiersPerso',  ranger: v => v },
   'referentiel':  { champ:'referentiels',  ranger: v => v },
+  'fournisseur':  { champ:'fournisseurs',  ranger: v => v.sort(parNom) },
   'sousTraitant': { champ:'sousTraitants', ranger: v => v },
   'chantier':     { champ:'chantiers',     ranger: v => trierParDate(v, ['dateDebut']) },
   'salarie':      { champ:'salaries',      ranger: v => v.sort(parNom) },
@@ -813,7 +814,7 @@ function badgeClass(statut){
   const map = {'brouillon':'gray','envoyé':'info','envoyée':'info','accepté':'success','payée':'success','terminée':'success','reçu':'success','refusé':'danger','impayée':'danger','annulé':'danger','en cours':'yellow'};
   return map[statut] || 'gray';
 }
-function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:'interventions',bonCommande:'bonsCommande',client:'clients',article:'articles',document:'documents',reglement:'reglements',interlocuteur:'interlocuteurs',conducteur:'conducteurs',technicien:'techniciens',metierPerso:'metiersPerso',referentiel:'referentiels',sousTraitant:'sousTraitants',chantier:'chantiers',salarie:'salaries',vehicule:'vehicules',materiel:'materiels'}[type]; }
+function arrKeyFor(type){ return {devis:'devis',facture:'factures',intervention:'interventions',bonCommande:'bonsCommande',client:'clients',article:'articles',document:'documents',reglement:'reglements',interlocuteur:'interlocuteurs',conducteur:'conducteurs',technicien:'techniciens',metierPerso:'metiersPerso',referentiel:'referentiels',fournisseur:'fournisseurs',sousTraitant:'sousTraitants',chantier:'chantiers',salarie:'salaries',vehicule:'vehicules',materiel:'materiels'}[type]; }
 
 /* ---------- Rendu de la coquille ---------- */
 /* Menu utilisateur : sociétés réellement accessibles, et simulation de rôle
@@ -5974,7 +5975,12 @@ function bonCommandeCardHTML(b, workflowCtx){
         <label class="card-sub" style="margin:0;">Commandée le
           <input type="date" id="dateCommandePiece_${b.id}" value="${b.pieceACommanderDateCommande||''}" onchange="updatePieceCommandeChamp('${jsAttr(b.id)}','pieceACommanderDateCommande',this.value)">
         </label>
-        <input type="text" id="fournisseurPiece_${b.id}" placeholder="Nom du fournisseur" value="${esc(b.pieceACommanderFournisseur)}" onchange="updatePieceCommandeChamp('${jsAttr(b.id)}','pieceACommanderFournisseur',this.value)" style="min-width:160px;">
+        ${/* Le nom était retapé à chaque commande, et l'écran des pièces
+              regroupe les dossiers PAR NOM : deux graphies faisaient deux
+              dossiers pour un même fournisseur. Il se choisit désormais dans
+              l'annuaire — augmenté des noms déjà écrits, sans quoi une
+              commande ancienne perdrait le sien à la première réouverture. */''}
+        <select id="fournisseurPiece_${b.id}" onchange="updatePieceCommandeChamp('${jsAttr(b.id)}','pieceACommanderFournisseur',this.value)" style="min-width:180px;">${fournisseurOptions(b.pieceACommanderFournisseur)}</select>
         ${!b.pieceACommanderDateCommande? `<button class="btn small primary" onclick="marquerPieceCommandee('${jsAttr(b.id)}')">📦 Commandé</button>`:''}
         <button class="btn small ${b.pieceACommanderDateCommande?'primary':''}" onclick="replanifierApresPiece('${jsAttr(b.id)}')">✓ Pièce arrivée — Renvoyer au planning</button>
       </div>`:''}
@@ -11150,7 +11156,7 @@ function renderReglagesOnglet(){
     case 'numerotation':  return renderNumerotationSection();
     case 'travaux':       return renderMetiersSection() + renderUnitesSection();
     case 'listes':        return renderReferentielsSection();
-    case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection();
+    case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection() + renderFournisseursSection();
     case 'rh':            return renderSeuilsSection('rh');
     case 'vehicules':     return renderSeuilsSection('vehicules');
     case 'notifications': return renderNotificationsSection();
@@ -16024,7 +16030,6 @@ const DOMAINES_REFERENTIEL = {
   categorie_achat:    { titre:"Catégories d'achat",     singulier:'catégorie', aide:"Les achats d'un chantier s'y rangent. « Main-d'œuvre » ouvre les champs salarié et heures." },
   unite:              { titre:'Unités',                 singulier:'unité',     aide:"Proposées sur chaque ligne de devis, de bon et de facture." },
   piece_courante:     { titre:'Pièces courantes',       singulier:'pièce',     aide:"Vide au départ : ce que le terrain saisit devient une proposition." },
-  fournisseur_piece:  { titre:'Fournisseurs de pièces', singulier:'fournisseur', aide:"Vide au départ, alimenté par les commandes de pièces." },
 };
 
 /** Les entrées d'un domaine, dans l'ordre choisi. */
@@ -16440,6 +16445,120 @@ function filterPlanningUnschedClient(value){
 function filterPlanningUnschedInterlocuteur(value){
   state.planningUnschedInterlocuteurFilter = value;
   renderTab();
+}
+
+/* ---------- L'annuaire des fournisseurs ----------
+   Le nom était retapé partout — sur une pièce à commander, sur un achat de
+   chantier. L'écran des pièces commandées les regroupe même PAR NOM : deux
+   graphies du même fournisseur y faisaient deux dossiers, sans moyen de les
+   rapprocher.
+
+   Une liste de noms n'aurait pas suffi : on appelle un fournisseur pour
+   relancer une commande. D'où une fiche, et non une entrée de référentiel. */
+
+function fournisseursDeLaSociete(){
+  return (state.fournisseurs||[]).filter(f=>f.societeId===state.societeId);
+}
+
+/* Les noms déjà écrits sur des commandes, que l'annuaire ne déclare pas
+   encore : sans eux, un fournisseur historique disparaîtrait du menu et la
+   commande qui le porte deviendrait impossible à rouvrir sans le perdre. */
+function fournisseursEmployes(){
+  const noms = [];
+  (state.bonsCommande||[]).forEach(b=>{ if(b.pieceACommanderFournisseur) noms.push(b.pieceACommanderFournisseur); });
+  (state.chantiers||[]).forEach(c=>(c.achats||[]).forEach(a=>{ if(a.fournisseur) noms.push(a.fournisseur); }));
+  return noms;
+}
+
+/* Un fournisseur retiré reste proposé s'il est celui déjà choisi : sinon
+   enregistrer la fiche effacerait le lien en silence. */
+function fournisseurOptions(courant){
+  const actifs = fournisseursDeLaSociete().filter(f=>f.actif !== false || f.nom === courant).map(f=>f.nom);
+  const liste = window.referentielCompose
+    ? window.referentielCompose(actifs, [...fournisseursEmployes(), courant].filter(Boolean))
+    : actifs;
+  return `<option value="">— Non précisé —</option>`
+    + liste.map(n=>`<option value="${jsAttr(n)}" ${n===courant?'selected':''}>${esc(n)}</option>`).join('');
+}
+
+function renderFournisseursSection(){
+  return `
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
+      <span>Fournisseurs</span>
+      <button class="btn small primary" onclick="openForm('fournisseur')">+ Nouveau fournisseur</button>
+    </div>
+    <div class="card-sub" style="margin-bottom:12px;">Pièces, matériaux, location. C'est ce nom qui regroupe les pièces commandées en dossiers.</div>
+    ${barreRecherche('fournisseur', 'Rechercher : nom, spécialité, ville…')}
+    <div id="formZoneFournisseur">${state.formOpen.fournisseur? fournisseurForm() : ''}</div>
+    <div id="liste-fournisseur">${listeFournisseursHTML()}</div>
+  `;
+}
+
+const listeFournisseursHTML = declarerListing('fournisseur',
+  fournisseursDeLaSociete,
+  list => list.map(f=>`
+      <div class="card"><div class="card-row">
+        <div style="flex:1; min-width:0;">
+          <div class="card-title">${esc(f.nom)}${f.actif===false? ' <span class="badge gray" style="margin-left:6px;">Retiré</span>':''}</div>
+          <div class="card-sub">${[f.specialite, f.contactNom, f.telephone, withVille(f.adresse, f.codePostal, f.ville)].filter(Boolean).map(esc).join(' · ')||'—'}</div>
+        </div>
+        ${f.telephone? `<a class="btn small" href="tel:${jsAttr(String(f.telephone).replace(/[^+0-9]/g,''))}" onclick="event.stopPropagation();" title="Appeler">☎</a>`:''}
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn small" onclick="editItem('fournisseur','${jsAttr(f.id)}')">Modifier</button>
+        <button class="btn small danger" onclick="deleteItem('fournisseur','${jsAttr(f.id)}')" title="Les commandes passées gardent son nom : elles restent lisibles.">Supprimer</button>
+      </div></div>`).join('') || listeVide('fournisseur', 'Aucun fournisseur enregistré.', 'fournisseur'),
+  f => [f.specialite, f.ville, f.contactNom].filter(Boolean));
+
+function fournisseurForm(){
+  const e = state.editing;
+  return `
+  <div class="form-panel">
+    <h3>${e.id? 'Modifier le fournisseur' : 'Nouveau fournisseur'}</h3>
+    <div class="field-grid">
+      <div class="field full"><label>Nom</label><input type="text" id="fo_nom" value="${esc(e.nom)}" placeholder="Ex : Point P, Rexel, Cedeo…"></div>
+      <div class="field"><label>Spécialité</label><input type="text" id="fo_specialite" value="${esc(e.specialite)}" placeholder="Ex : Plomberie, Électricité, Outillage"></div>
+      <div class="field"><label>Contact</label><input type="text" id="fo_contactNom" value="${esc(e.contactNom)}" placeholder="Ex : M. Durand"></div>
+      <div class="field"><label>Téléphone</label><input type="tel" id="fo_telephone" value="${esc(e.telephone)}"></div>
+      <div class="field"><label>Email</label><input type="email" id="fo_email" value="${esc(e.email)}"></div>
+      <div class="field full"><label>Adresse</label><input type="text" id="fo_adresse" value="${esc(e.adresse)}"></div>
+      <div class="field"><label>Code postal</label><input type="text" id="fo_codePostal" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'fo_ville')"></div>
+      <div class="field"><label>Ville</label><input type="text" id="fo_ville" value="${esc(e.ville)}"></div>
+      <div class="field"><label>SIRET</label><input type="text" id="fo_siret" value="${esc(e.siret)}"></div>
+      <div class="field"><div class="reglage-titre">Disponibilité</div>
+        <label class="bc-tache-row"><input type="checkbox" id="fo_actif" ${e.actif===false?'':'checked'}>
+        <span>Proposé dans les listes</span></label></div>
+      <div class="field full"><label>Notes</label><input type="text" id="fo_notes" value="${esc(e.notes)}"></div>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn primary" onclick="saveFournisseur()">Enregistrer</button>
+      <button class="btn ghost" onclick="closeForm('fournisseur')">Annuler</button>
+    </div>
+  </div>`;
+}
+
+async function saveFournisseur(){
+  const e = state.editing;
+  const nom = document.getElementById('fo_nom').value.trim();
+  if(!nom){ alert('Le nom du fournisseur est requis.'); return; }
+  const id = e.id || uid();
+  const obj = { id, societeId: state.societeId, nom,
+    specialite: champSaisi('fo_specialite', e.specialite),
+    contactNom: champSaisi('fo_contactNom', e.contactNom),
+    telephone: champSaisi('fo_telephone', e.telephone),
+    email: champSaisi('fo_email', e.email),
+    adresse: champSaisi('fo_adresse', e.adresse),
+    codePostal: champSaisi('fo_codePostal', e.codePostal),
+    ville: champSaisi('fo_ville', e.ville),
+    siret: champSaisi('fo_siret', e.siret),
+    notes: champSaisi('fo_notes', e.notes),
+    /* `actif` est NOT NULL : un champ absent partirait à NULL et PostgREST
+       rejetterait l'écriture entière. Il est donc toujours envoyé. */
+    actif: !!(document.getElementById('fo_actif')||{}).checked };
+  if(!(await window.stSet('fournisseur:'+id, obj))){ showToast(saveFailedMessage()); return; }
+  await recharger('fournisseur');
+  closeForm('fournisseur');
+  showToast(e.id? 'Fournisseur modifié.' : 'Fournisseur créé.', 'success');
 }
 
 function renderSousTraitantsSection(){
@@ -17946,6 +18065,7 @@ Object.assign(window, {
   filterVehicules,
   filtrageFacturesActif,
   filtrerDossiersRh,
+  fournisseurForm,
   filtrerListe,
   filtrerParPeriode,
   findDayColAtX,
@@ -18033,6 +18153,7 @@ Object.assign(window, {
   listeDossiersReglementsHTML,
   listeFacturesReglementsHTML,
   listeReferentielsHTML,
+  listeFournisseursHTML,
   listeMetiersHTML,
   listePiecesCommandeHTML,
   listeSousTraitantsHTML,
@@ -18345,6 +18466,7 @@ Object.assign(window, {
   renderMaterielDetail,
   renderMaterielListeHTML,
   renderReferentielsSection,
+  renderFournisseursSection,
   renderMetiersSection,
   renderMonCompteSection,
   renderNotifPanelContent,
@@ -18425,6 +18547,9 @@ Object.assign(window, {
   saveInterlocuteur,
   saveIntervention,
   saveMateriel,
+  saveFournisseur,
+  fournisseurOptions,
+  fournisseursDeLaSociete,
   saveMetierPerso,
   saveMonNom,
   saveNumerotation,
