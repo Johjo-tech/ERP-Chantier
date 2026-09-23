@@ -1042,15 +1042,25 @@ function openAttachmentPreview(source, nom, mime, urlTelechargement){
   if(mode === 'image'){
     body.innerHTML = `<img src="${esc(source)}" draggable="false">`;
   } else if(mode === 'pdf'){
-    body.innerHTML = `<iframe src="${esc(source)}"></iframe>`;
+    /* `#zoom=page-width` : sans lui le lecteur intégré ajuste à la PAGE, et une
+       A4 dans cette fenêtre se lit à 55 %. Lui demander la largeur la porte à
+       environ 175 %. Le fragment n'est jamais envoyé au serveur — la signature
+       de l'URL reste intacte. C'est ce que fait déjà le plein écran de la
+       pré-facture ; cette fenêtre-ci l'avait manqué. */
+    body.innerHTML = `<iframe src="${esc(window.urlApercuPdf ? window.urlApercuPdf(source) : source)}"></iframe>`;
   } else {
     body.innerHTML = `<div class="empty">Aperçu non disponible pour ce type de fichier — utilisez le téléchargement.</div>`;
   }
-  if(!modal.style.left && !modal.style.right){
-    modal.style.right = '24px';
-    modal.style.bottom = '24px';
-  }
   modal.style.display = 'flex';
+  /* Centrée à la PREMIÈRE ouverture seulement : une fois déplacée ou
+     redimensionnée, la fenêtre doit rester où l'utilisateur l'a mise. Elle
+     était ancrée en bas à droite, ce qui la poussait hors de l'écran dès
+     qu'elle a grandi — d'où la mesure après affichage, jamais avant. */
+  if(!modal.style.left && !modal.style.top && !modal.style.right){
+    const r = modal.getBoundingClientRect();
+    modal.style.left = Math.max(12, Math.round((window.innerWidth - r.width) / 2)) + 'px';
+    modal.style.top = Math.max(12, Math.round((window.innerHeight - r.height) / 2)) + 'px';
+  }
 }
 function closeAttachmentPreview(){
   document.getElementById('attachmentPreviewModal').style.display = 'none';

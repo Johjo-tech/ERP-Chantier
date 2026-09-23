@@ -824,8 +824,11 @@ body.is-resizing-corner, body.is-resizing-corner *{cursor:nwse-resize !important
 .flash-highlight{ animation:flashHighlight .65s ease-in-out 2; }
 .search-focus{ outline:3px solid var(--accent); outline-offset:-1px; border-radius:var(--radius); }
 .view-modal{ position:fixed; inset:0; background:rgba(16,20,30,.6); z-index:200; display:none; align-items:flex-start; justify-content:center; overflow:auto; padding:40px 16px; }
+/* 650 × 600 figés : une A4 s'y affichait à 55 % et ne se lisait pas. La
+   fenêtre prend maintenant l'écran qu'il y a, sans jamais le déborder — elle
+   reste déplaçable et redimensionnable, et la taille choisie à la main tient. */
 .attachment-float{
-  position:fixed; z-index:600; width:650px; height:600px; background:#fff; border-radius:10px;
+  position:fixed; z-index:600; width:min(1180px, 94vw); height:min(900px, 90vh); background:#fff; border-radius:10px;
   padding:10px 10px 14px; box-shadow:0 14px 38px rgba(16,20,30,.35), 0 0 0 1px rgba(16,20,30,.06);
   transition:box-shadow .15s ease;
   flex-direction:column; gap:8px; overflow:hidden; min-width:280px; min-height:280px;
