@@ -2077,10 +2077,23 @@ function closeForm(type){
    gestion emploie `PC` et `MM`, et sans elles on ne pouvait pas choisir à la
    main ce que l'import écrivait. */
 const UNITES = ['u','pièce','h','forfait','m','m²','m³','ml','mm','jour'];
+/**
+ * Les unités proposées sur une ligne de document.
+ *
+ * ELLES VIENNENT DU RÉFÉRENTIEL, plus la constante. `UNITES` était la seule
+ * liste lue, alors que les Réglages en proposaient une autre — éditable, et
+ * sans le moindre effet. Deux listes, dont une qui mentait.
+ *
+ * `UNITES` reste le repli : tant que le référentiel n'est pas chargé — au
+ * premier rendu, ou si la collection n'a pas répondu —, les lignes doivent
+ * garder leurs unités plutôt que d'afficher un menu vide.
+ *
+ * Une unité héritée, absente de la liste, reste sélectionnable : sinon rouvrir
+ * une vieille ligne la changerait sans le dire.
+ */
 function uniteOptions(current){
-  const opts = UNITES.slice();
-  // Une unité héritée, absente de la liste, reste sélectionnable : sinon
-  // rouvrir une vieille ligne la changerait sans le dire.
+  const declarees = referentielsDuDomaine('unite').map(r=>r.libelle).filter(Boolean);
+  const opts = (declarees.length ? declarees : UNITES).slice();
   if(current && !opts.includes(current)) opts.unshift(current);
   return opts.map(v=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
 }
@@ -11468,14 +11481,26 @@ function renderReglagesDocumentsSection(){
   </div>`;
 }
 
+/**
+ * Les unités ont déménagé — et cet écran-ci ne les éditait pas vraiment.
+ *
+ * Il écrivait dans `reglages.unites`, que `uniteOptions()` n'a JAMAIS lu : il
+ * lisait la constante `UNITES` du code. On pouvait donc y saisir ce qu'on
+ * voulait sans le moindre effet sur une seule ligne de devis, et les deux
+ * listes ne disaient même pas la même chose.
+ *
+ * Le champ est retiré plutôt que corrigé : deux endroits pour une même liste
+ * finissent toujours par diverger. Le renvoi reste, pour que la disparition
+ * s'explique au lieu de surprendre.
+ */
 function renderUnitesSection(){
-  const r = reglagesCourants();
   return `<div class="card" style="margin-top:22px;">
     <div class="card-title" style="margin-bottom:10px;">📏 Unités</div>
-    <div class="card-sub" style="margin-bottom:12px;">Proposées dans les lignes de devis, factures et bons de commande.</div>
-    <div class="field full"><input type="text" id="rg_unites" value="${esc(r.unites.join(', '))}" placeholder="U, ml, m², h…"></div>
-    <small style="color:var(--text-dim); font-size:11px;">Séparées par des virgules. Laissez vide pour revenir à la liste par défaut.</small>
-    <div style="margin-top:14px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
+    <div class="card-sub">Les unités se tiennent désormais dans
+      <b>Référentiels › Listes de choix › Unités</b>, avec les autres listes —
+      et elles alimentent réellement les lignes de devis, de bons et de
+      factures, ce que ce champ-ci ne faisait pas.</div>
+    <div style="margin-top:14px;"><button class="btn" onclick="setReglagesTab('listes')">Ouvrir les listes de choix</button></div>
   </div>`;
 }
 
@@ -11662,9 +11687,11 @@ async function saveReglages(){
   if(el('rg_notifActives')) notifications.actives = el('rg_notifActives').checked;
   if(el('rg_notifDestinataires')) notifications.destinataires = el('rg_notifDestinataires').value;
 
-  const unites = el('rg_unites')
-    ? el('rg_unites').value.split(',').map(x=>x.trim()).filter(Boolean)
-    : base.unites;
+  /* Le champ n'existe plus — les unités vivent dans `referentiels`. On repose
+     ce qui était là plutôt que de l'effacer : une société y a peut-être écrit
+     quelque chose, et le perdre au premier enregistrement des réglages serait
+     une seconde perte après celle de n'avoir jamais été lu. */
+  const unites = base.unites;
 
   /* Le nettoyage — tri, doublons, valeurs aberrantes — est fait par
      `fusionnerReglages` à la relecture : une seule règle, côté testable. */
@@ -13302,7 +13329,29 @@ async function saveTodoDetail(){
   showToast('Tâche mise à jour.', 'success');
 }
 const TYPES_CONTRAT = ['CDI','CDD','Intérim','Apprenti'];
+/* Repli seulement : la liste vivante est dans `referentiels`, domaine
+   `etat_materiel`. Cette constante sert tant qu'elle n'est pas chargée — un
+   menu vide au premier rendu vaudrait pire qu'une liste figée. */
 const ETATS_MATERIEL = ['Neuf','Bon état','Usé','À réparer','Hors service'];
+
+/* Les trois écrans qui demandent un état — la fiche matériel, le prêt de
+   matériel et le prêt de véhicule — passent par ici. Trois gabarits recopiés
+   auraient fini par proposer trois listes. */
+function etatMaterielOptions(courant){
+  const declares = referentielsDuDomaine('etat_materiel').map(r=>r.libelle).filter(Boolean);
+  const liste = declares.length ? declares : ETATS_MATERIEL;
+  const opts = courant && !liste.includes(courant) ? [courant, ...liste] : liste;
+  return opts.map(v=>`<option value="${jsAttr(v)}" ${v===courant?'selected':''}>${esc(v)}</option>`).join('');
+}
+
+/* Ce que les fiches portent déjà : une catégorie saisie du temps du champ
+   libre doit rester proposée, sans quoi elle deviendrait impossible à
+   resélectionner. */
+function categoriesMaterielEmployees(){
+  return (state.materiels||[])
+    .filter(m=>m.societeId===state.societeId)
+    .map(m=>m.categorie).filter(Boolean);
+}
 function renderMateriel(){
   const all = state.materiels.filter(m=>m.societeId===state.societeId);
   const q = (state.materielSearch||'').trim().toLowerCase();
@@ -13391,8 +13440,13 @@ function materielForm(){
     <h3>${e.id? 'Modifier le matériel' : 'Nouveau matériel'}</h3>
     <div class="field-grid">
       <div class="field"><label>Nom du matériel</label><input type="text" id="mat_nom" value="${esc(e.nom)}" placeholder="Ex : Perforateur Hilti TE 60"></div>
-      <div class="field"><label>Catégorie</label><input type="text" id="mat_categorie" value="${esc(e.categorie)}" placeholder="Ex : Outillage électroportatif"></div>
-      <div class="field"><label>État général</label><select id="mat_etatGeneral">${ETATS_MATERIEL.map(et=>`<option value="${et}" ${e.etatGeneral===et?'selected':''}>${et}</option>`).join('')}</select></div>
+      ${/* La catégorie était une SAISIE LIBRE : chacun retapait sa graphie, et
+            « échafaudage » et « Échafaudages » comptaient pour deux. Elle se
+            choisit désormais dans la liste des Réglages — augmentée de ce que
+            les fiches emploient déjà, faute de quoi une catégorie saisie avant
+            la liste disparaîtrait du menu. */''}
+      <div class="field"><label>Catégorie</label><select id="mat_categorie">${referentielOptions('categorie_materiel', e.categorie, categoriesMaterielEmployees())}</select></div>
+      <div class="field"><label>État général</label><select id="mat_etatGeneral">${etatMaterielOptions(e.etatGeneral)}</select></div>
       <div class="field"><label>N° de série (optionnel)</label><input type="text" id="mat_numeroSerie" value="${esc(e.numeroSerie)}"></div>
       <div class="field"><label>Date d'achat</label><input type="date" id="mat_dateAchat" value="${e.dateAchat||''}"></div>
     </div>
@@ -13451,7 +13505,7 @@ function renderMaterielDetail(id){
       </div>` : `
       <div class="entretien-add-row">
         <select id="pretSalarieId_${m.id}">${salarieSelectOptions()}</select>
-        <select id="pretEtat_${m.id}">${ETATS_MATERIEL.map(et=>`<option value="${et}" ${m.etatGeneral===et?'selected':''}>${et}</option>`).join('')}</select>
+        <select id="pretEtat_${m.id}">${etatMaterielOptions(m.etatGeneral)}</select>
         <input type="date" id="pretDate_${m.id}" value="${todayISO()}">
         <input type="number" id="pretDuree_${m.id}" placeholder="Durée (jours)" style="width:140px;">
         <button class="btn primary" onclick="creerPretMateriel('${jsAttr(m.id)}')">+ Prêter</button>
@@ -13704,7 +13758,7 @@ function renderVehiculeDetail(id){
           }
           return !v.vendu? `<div class="entretien-add-row">
             <select id="pretVehSalarieId_${v.id}">${salarieSelectOptions()}</select>
-            <select id="pretVehEtat_${v.id}">${ETATS_MATERIEL.map(et=>`<option value="${et}">${et}</option>`).join('')}</select>
+            <select id="pretVehEtat_${v.id}">${etatMaterielOptions('')}</select>
             <input type="date" id="pretVehDate_${v.id}" value="${todayISO()}">
             <input type="number" id="pretVehDuree_${v.id}" placeholder="Durée (jours)" style="width:140px;">
             <button class="btn primary" onclick="creerPretVehicule('${jsAttr(v.id)}')">+ Prêter</button>
