@@ -1076,22 +1076,25 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
   flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:4px;
   text-align:right; min-width:0;
 }
-/* En LIGNE, pas en colonne. Empilés, six boutons imposaient 248 px de haut à
-   une carte dont l'entête n'en demande que soixante-dix : la colonne d'actions
-   devenait la hauteur de la carte, et « plus fine » n'était plus qu'un mot. */
-.bc-actions{
-  flex:0 1 auto; display:flex; flex-direction:row; flex-wrap:wrap;
-  justify-content:flex-end; align-items:flex-start; gap:5px;
-  min-width:0; max-width:340px;
+/* Les trois gestes de contact, à droite de l'identité. */
+.bc-contact{ flex:0 0 auto; }
+.bc-contact .planning-contact-zone{ margin:0; justify-content:flex-end; }
+/* Un compteur plutôt que dix étiquettes : le détail est dans la carte dépliée. */
+.contact-compteur{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:20px; height:20px; padding:0 5px; border-radius:10px;
+  background:var(--surface-2); color:var(--text-dim);
+  font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;
 }
-.bc-actions .btn{ white-space:nowrap; text-align:center; }
-/* Sous 780 px, la colonne d'actions repasse sous l'identité : trois colonnes
-   dans la largeur d'un téléphone ne laisseraient plus lire l'adresse. */
+/* Les actions restent EN BAS, sur une ligne, comme avant. */
+.bc-actions-bas{ margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+/* Sous 780 px, contact et état repassent sous l'identité : trois colonnes dans
+   la largeur d'un téléphone ne laisseraient plus lire l'adresse. */
 @media(max-width:780px){
   .bc-tete{ flex-wrap:wrap; }
   .bc-ident{ flex:1 1 100%; order:1; }
-  .bc-etat{ order:2; flex-direction:row; align-items:center; flex-wrap:wrap; }
-  .bc-actions{ order:3; flex-direction:row; flex-wrap:wrap; max-width:none; flex:1 1 100%; }
+  .bc-contact{ order:2; }
+  .bc-etat{ order:3; flex-direction:row; align-items:center; flex-wrap:wrap; margin-left:auto; }
 }
 .pf-table .pf-col-metier{ width:120px; max-width:120px; }
 .pf-table .pf-col-code{ width:104px; max-width:104px; }

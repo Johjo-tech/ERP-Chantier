@@ -5785,6 +5785,27 @@ function toggleBonCommandeCard(bcId){
   }
 }
 
+/**
+ * Les trois gestes de contact, sans l'historique.
+ *
+ * `planningContactZoneHTML` rend aussi la liste des tentatives déjà notées —
+ * utile sur une carte de planning, ruineux dans l'entête d'un bon suivi depuis
+ * trois semaines : dix étiquettes y feraient à elles seules la hauteur qu'on
+ * cherche justement à réduire. Un compteur les résume ; le détail reste dans
+ * la carte dépliée, en lecture.
+ */
+function contactBoutonsHTML(b){
+  const kind = b.kind || 'bonCommande';
+  const n = (b.tentativesContact||[]).length;
+  return `<div class="planning-contact-zone" onclick="event.stopPropagation()">
+    <button class="btn-contact btn-contact-appel" onclick="logTentativeContact('${jsAttr(kind)}','${jsAttr(b.id)}','appel')" title="Enregistrer une tentative d'appel (maintenant)">📞</button>
+    <button class="btn-contact btn-contact-sms" onclick="logTentativeContact('${jsAttr(kind)}','${jsAttr(b.id)}','sms')" title="Enregistrer un SMS envoyé (maintenant)">💬</button>
+    <button class="btn-contact btn-contact-rappel" onclick="openRappelModal('${jsAttr(kind)}','${jsAttr(b.id)}')" title="Programmer un rappel (ex : le locataire revient de congés)">📅</button>
+    ${n? `<span class="contact-compteur" title="${n} tentative(s) — le détail est dans la carte dépliée">${n}</span>`:''}
+    ${b.rappelDate? `<span class="contact-tag contact-tag-rappel" title="Rappel programmé">🔄 ${fmtDate(b.rappelDate)}</span>`:''}
+  </div>`;
+}
+
 function bonCommandeCardHTML(b, workflowCtx){
     const isSAV = !!b.bonCommandeId;
     const factureLiee = state.factures.find(f=>f.bonCommandeId===b.id);
@@ -5814,7 +5835,7 @@ function bonCommandeCardHTML(b, workflowCtx){
       <div class="card-sub">${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>
       ${ouverte? `
       <div class="card-sub">${b.interlocuteur? '👤 '+esc(b.interlocuteur):''}${b.interlocuteur && ((b.metiers&&b.metiers.length)||b.metier)? ' · ':''}${(b.metiers&&b.metiers.length)||b.metier? '🔧 '+esc(metiersDisplayJoin(b)):''}</div>
-      ${planningContactZoneHTML(b)}
+      ${planningContactZoneHTML(b, true)}
       ${b.natureTravaux? `<div class="card-sub">🛠️ ${esc(b.natureTravaux)}</div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
       ${devisLie? `<div class="card-sub">Devis lié : <a href="javascript:void(0)" onclick="goToDevis('${jsAttr(devisLie.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisLie.numero)}</a></div>`:''}
@@ -5855,36 +5876,38 @@ function bonCommandeCardHTML(b, workflowCtx){
       </div>`:''}
       ` : ''}
       </div>
+      ${/* Les boutons de contact — appeler, envoyer un message, programmer un
+            rappel — à DROITE de l'identité. Ils étaient noyés au milieu du
+            détail, alors que c'est le premier geste qu'on fait sur un bon dont
+            l'occupant ne répond pas. */''}
+      <div class="bc-contact">${contactBoutonsHTML(b)}</div>
       <div class="bc-etat">
         ${b.logementStatut? logementBadge(b.logementStatut) : ''}
         <div class="amount">${moneyDisplay(b.montant)}</div>
         ${isSAV? '' : badgeWorkflow(b)}
         <span class="badge ${badgeClass(b.statut)}">${esc(b.statut)}</span>
       </div>
-      ${/* Les actions passent à DROITE, dans l'entête : elles étaient en bas,
-            derrière tout le détail, et il fallait dérouler la carte entière
-            pour atteindre « Modifier ». Elles restent visibles repliée. */''}
-      <div class="bc-actions">
+    </div>
+    <div class="bc-actions-bas">
       ${/* En PREMIER, et visible carte repliée : c'est le geste qu'on vient
             chercher sur cet écran. Enfoui dans le détail, il obligeait à
             déplier chaque carte pour savoir laquelle était chiffrée. */''}
-      ${chiffrageIci? `<button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${jsAttr(b.id)}')">🧾 Pré-facture${(b.lignes&&b.lignes.length)? ` · ${money(computeTotals(b.lignes).ttc)} TTC` : ' · à chiffrer'}</button>`:''}
+      ${chiffrageIci? `<button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${jsAttr(b.id)}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>`:''}
       ${/* « Modifier » sur un bon déjà facturé laissait réécrire des travaux
             que le client tient déjà par écrit, sur une facture définitive. */''}
       ${verrou
-        ? `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="${esc(verrou.libelle)}">👁</button>`
-        : `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="Modifier ce bon de commande">✎</button>`}
+        ? `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="${esc(verrou.libelle)}">👁 Consulter</button>`
+        : `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')">Modifier</button>`}
       ${/* Une fois la pré-facture validée, l'étape suivante doit sauter aux yeux :
             c'est le geste qu'on cherche, pas un bouton gris parmi cinq. */''}
       ${(factureLiee||isSAV)? '' : (b.valideDirecteur
-        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${jsAttr(b.id)}')" title="Créer la facture de ce bon">🧾 Facturer</button>`
-        : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Facturer</button>`)}
-      ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')" title="Créer un SAV rattaché à ce bon">＋ SAV</button>`}
-      ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')" title="Modifier le lien vers le rapport">🔗 Rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')" title="Lier un rapport d'intervention">🔗 Rapport</button>`}
+        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${jsAttr(b.id)}')">🧾 Créer la facture</button>`
+        : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
+      ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')">Créer un SAV</button>`}
+      ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Lier un rapport</button>`}
       ${verrou
-        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">🗑</button>`
-        : `<button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')" title="Supprimer ce bon de commande">🗑</button>`}
-    </div>
+        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
+        : `<button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')">Supprimer</button>`}
     </div>
     ${ouverte? `
     ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
