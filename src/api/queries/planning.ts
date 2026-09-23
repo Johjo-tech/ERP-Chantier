@@ -30,6 +30,7 @@ import {
 import {
   STATUT_INITIAL,
   motifTransitionRefusee,
+  refusRetourAuPlanning,
   transitionPermise,
   type GesteTache,
 } from "../regles-taches";
@@ -248,6 +249,26 @@ export async function validerTache(
     p_motif: motif,
   });
   if (error) throw new SupabaseError("Validation refusée", error.code, error);
+}
+
+/**
+ * La pièce est arrivée : le bon retourne dans « Non planifiés ».
+ *
+ * Le rendez-vous tombe, le passage reste. Les tâches sont dé-datées, jamais
+ * supprimées : la visite a bien eu lieu, et c'est elle qui porte le constat, le
+ * croquis, la description de la pièce et son fournisseur.
+ *
+ * Rien n'est écrit sur le bon depuis ici. Ses champs `pieceACommander`,
+ * `metiersFait` et `dateOrigineFait` n'ont pas de colonne : ils se dérivent des
+ * tâches au chargement. Les poser depuis l'écran ne changeait donc rien — c'est
+ * exactement ce que faisait l'ancien chemin, message de succès compris.
+ */
+export async function pieceRecue(bcId: Uuid): Promise<void> {
+  const refus = refusRetourAuPlanning(await listTachesBonCommande(bcId));
+  if (refus) throw new Error(refus);
+
+  const { error } = await supabase.rpc("bc_piece_recue", { p_bc_id: bcId });
+  if (error) throw new SupabaseError("Retour au planning refusé", error.code, error);
 }
 
 /**

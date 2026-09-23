@@ -3175,7 +3175,7 @@ export type Database = {
           commentaire: string | null
           cree_le: string
           croquis: string | null
-          date_tache: string
+          date_tache: string | null
           dpgf_ligne_id: string | null
           heure_debut: string | null
           heure_fin: string | null
@@ -3206,7 +3206,7 @@ export type Database = {
           commentaire?: string | null
           cree_le?: string
           croquis?: string | null
-          date_tache: string
+          date_tache?: string | null
           dpgf_ligne_id?: string | null
           heure_debut?: string | null
           heure_fin?: string | null
@@ -3237,7 +3237,7 @@ export type Database = {
           commentaire?: string | null
           cree_le?: string
           croquis?: string | null
-          date_tache?: string
+          date_tache?: string | null
           dpgf_ligne_id?: string | null
           heure_debut?: string | null
           heure_fin?: string | null
@@ -6102,6 +6102,7 @@ export type Database = {
         Args: { p_bc_id: string }
         Returns: undefined
       }
+      bc_piece_recue: { Args: { p_bc_id: string }; Returns: undefined }
       code_unite: { Args: { p_unite: string }; Returns: string }
       conducteur_par_nom: {
         Args: { p_nom: string; p_societe: string }

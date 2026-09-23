@@ -167,3 +167,68 @@ export function prochainActeur(statut: string | null): string {
       return "";
   }
 }
+
+// ============ RETOUR AU PLANNING ============
+
+/** Ce qu'il faut savoir d'une tâche pour dire si le bon peut repartir. */
+export interface TacheDuRetour {
+  metier?: string | null;
+  date_tache?: string | null;
+  statut: string | null;
+}
+
+/**
+ * Pourquoi ce bon ne peut pas retourner au planning — `null` quand il le peut.
+ *
+ * Miroir de la garde de `bc_piece_recue`, qui oppose le même refus. Il sert à
+ * l'expliquer sur place, en nommant le métier et la date que l'utilisateur a
+ * sous les yeux, plutôt qu'après l'aller-retour et sous forme d'un code SQL.
+ *
+ * Une tâche validée est un arbitrage du conducteur : la sortir du calendrier le
+ * déferait sans laisser de trace. La sortie est le SAV, qui rouvre une affaire
+ * en le disant.
+ */
+export function refusRetourAuPlanning(taches: TacheDuRetour[]): string | null {
+  const arbitrees = (taches ?? []).filter((t) => statutDe(t.statut) === "validee");
+  if (!arbitrees.length) return null;
+
+  const nommees = arbitrees
+    .map((t) => [t.metier, t.date_tache].filter(Boolean).join(" du "))
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    `${arbitrees.length} tâche(s) de ce bon sont validées par le conducteur` +
+    (nommees ? ` (${nommees})` : "") +
+    " : une affaire arbitrée ne se replanifie pas — ouvrez un SAV."
+  );
+}
+
+/**
+ * Sur quelle tâche POSER le drapeau « pièce à commander ».
+ *
+ * Une seule : celle où le technicien se trouve. La porteuse d'abord, pour que
+ * le fournisseur et la date de commande rejoignent la description déjà saisie
+ * — les séparer les rendait illisibles, la lecture ne regardant que la
+ * porteuse. À défaut, la plus ancienne.
+ */
+export function cibleAPoserLaPiece<T extends { id: string; piece_a_commander?: boolean | null }>(
+  taches: T[]
+): string | null {
+  const liste = taches ?? [];
+  return (liste.find((t) => t.piece_a_commander) ?? liste[0])?.id ?? null;
+}
+
+/**
+ * Sur quelles tâches LEVER le drapeau. Toutes celles qui le portent.
+ *
+ * L'asymétrie avec la pose n'est pas un oubli : la lecture répond « pièce en
+ * commande » dès qu'UNE tâche est drapée. Lever sur une seule laissait donc le
+ * bon dans l'onglet avec son badge, et c'est précisément ce qui l'empêchait de
+ * retourner au planning.
+ */
+export function ciblesALeverLaPiece<T extends { id: string; piece_a_commander?: boolean | null }>(
+  taches: T[]
+): string[] {
+  return (taches ?? []).filter((t) => t.piece_a_commander).map((t) => t.id);
+}
