@@ -25,6 +25,11 @@
   },
   "include": [
     "src/pages/app.js",
+    /* Le registre des visites, sorti d'`app.js` pour le tenir sous le seuil
+       d'analyse de Semgrep. Nommé ici plutôt que laissé venir par l'import
+       qu'`app.js` en fait : le jour où cet import disparaîtrait, le module
+       quitterait ce contrôle sans un mot. */
+    "src/pages/rh-visites.js",
     /* Les types de Vite : l'écran lit `import.meta.env` pour savoir à quelle
        base parler, comme la couche TypeScript. */
     "src/vite-env.d.ts",
