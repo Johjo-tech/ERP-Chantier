@@ -1241,6 +1241,25 @@ function renderPlus(){
     ${state.plusTab==='parametres' ? renderParametres() : state.plusTab==='bonsCommande' ? renderBonsCommande() : state.plusTab==='planning' ? renderPlanning() : renderClients()}
   `;
 }
+/**
+ * Les onglets qui prennent la largeur de l'écran.
+ *
+ * `#content` est plafonné à 1080 px, et `content-wide` le porte à 1600. La
+ * liste était une chaîne de quatorze `||` où RÉGLAGES manquait — seul écran
+ * réel à rester à 1080. Et il y perdait 248 px de plus pour son rail de
+ * navigation : 756 px de contenu, contre 1314 à 1548 ailleurs. Presque la
+ * moitié, sans raison.
+ *
+ * Un ensemble plutôt qu'une chaîne : ajouter un quinzième onglet ne doit pas
+ * demander de relire quatorze comparaisons pour vérifier qu'on n'en a pas
+ * oublié un.
+ */
+const ONGLETS_LARGES = new Set([
+  'dashboard', 'devis', 'factures', 'interventions', 'bonsCommande', 'planning',
+  'clients', 'chantiers', 'rh', 'vehicules', 'materiel', 'piecesCommande',
+  'statistiques', 'catalogue', 'parametres',
+]);
+
 function renderTab(){
   const renderers = {dashboard:renderDashboard, chantiers:renderChantiers, clients:renderClients, devis:renderDevis, factures:renderFactures, interventions:renderInterventions, bonsCommande:renderBonsCommande, planning:renderPlanning, rh:renderRH, vehicules:renderVehicules, materiel:renderMateriel, piecesCommande:renderPiecesCommande, statistiques:renderStatistiques, parametres:renderParametres, plus:renderPlus, catalogue:renderCatalogue};
   const contentEl = document.getElementById('content');
@@ -1248,8 +1267,7 @@ function renderTab(){
   contentEl.classList.toggle('is-planning', state.tab==='planning');
   document.body.classList.toggle('is-planning-view', state.tab==='planning');
   if(state.tab!=='planning' && !menuEpingle()) document.body.classList.remove('sidebar-forced');
-  const isWide = state.tab==='devis' || state.tab==='factures' || state.tab==='interventions' || state.tab==='dashboard' || state.tab==='bonsCommande' || state.tab==='planning' || state.tab==='clients' || state.tab==='chantiers' || state.tab==='rh' || state.tab==='vehicules' || state.tab==='materiel' || state.tab==='piecesCommande' || state.tab==='statistiques' || state.tab==='catalogue';
-  contentEl.classList.toggle('content-wide', isWide);
+  contentEl.classList.toggle('content-wide', ONGLETS_LARGES.has(state.tab));
   if(state.tab==='interventions' && state.formOpen.intervention && (state.editing.step||1)===3){
     setTimeout(initSignaturePad, 30);
   }
