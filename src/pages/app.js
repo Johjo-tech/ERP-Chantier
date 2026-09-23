@@ -2327,6 +2327,7 @@ function applyDevisMontant(devisId){
   setVal('bc_codePostal', devis.codePostal);
   setVal('bc_ville', devis.ville);
   setVal('bc_occupant', devis.occupant);
+  setVal('bc_telephoneLocataire', devis.telephoneLocataire);
   setVal('bc_etage', devis.etage);
   setVal('bc_numeroLogement', devis.numeroLogement);
   setVal('bc_precisionCommune', devis.precisionCommune);
@@ -2334,7 +2335,7 @@ function applyDevisMontant(devisId){
   const logementSelect = document.getElementById('bc_logementStatut');
   if(logementSelect){
     logementSelect.value = devis.logementStatut || '';
-    toggleOccupantField(logementSelect, 'occupantFieldBC', 'communeFieldBC', 'vacantFieldBC', 'numeroFieldBC', 'etageFieldBC');
+    toggleOccupantField(logementSelect, 'occupantFieldBC', 'communeFieldBC', 'vacantFieldBC', 'numeroFieldBC', 'etageFieldBC', 'telLocataireFieldBC');
   }
   if(devis.lignes && devis.lignes.length){
     state.editing.lignes = JSON.parse(JSON.stringify(devis.lignes));
@@ -3410,6 +3411,11 @@ function carteChantierHTML(doc){
   const lieu = [
     doc.numeroLogement ? 'Logement n° '+esc(doc.numeroLogement) : '',
     doc.occupant ? '<b>'+esc(doc.occupant)+'</b>' : '',
+    /* Sous le nom, jamais à côté : c'est l'ordre dans lequel on cherche un
+       numéro. `carteChantierHTML` sert devis, bon ET facture — mais seuls les
+       deux premiers portent la colonne, la facture n'aura donc jamais rien à
+       rendre ici. */
+    doc.telephoneLocataire ? '☎ '+esc(doc.telephoneLocataire) : '',
     doc.ancienLocataire ? 'Ancien locataire : '+esc(doc.ancienLocataire) : '',
     esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville)),
     [doc.logementStatut? esc(logementLabel(doc.logementStatut)):'', doc.etage? 'Étage '+esc(doc.etage):''].filter(Boolean).join(' — '),
@@ -3980,10 +3986,11 @@ function devisForm(){
       <div class="field-grid">
       <div class="field full" style="margin-bottom:2px;"><button type="button" class="btn small ghost" onclick="toggleBox('locataireBoxDevis')">+ Le locataire est différent du client</button></div>
       <div id="locataireBoxDevis" style="display:${(e.occupant||e.adresseLocataire||e.logementStatut)?'contents':'none'};">
-        <div class="field"><label>Type</label><select id="f_logementStatut" onchange="toggleOccupantField(this,'occupantFieldDevis','communeFieldDevis','vacantFieldDevis','numeroFieldDevis','etageFieldDevis')">${logementOptions(e.logementStatut)}</select></div>
+        <div class="field"><label>Type</label><select id="f_logementStatut" onchange="toggleOccupantField(this,'occupantFieldDevis','communeFieldDevis','vacantFieldDevis','numeroFieldDevis','etageFieldDevis','telLocataireFieldDevis')">${logementOptions(e.logementStatut)}</select></div>
         <div class="field full" id="communeFieldDevis" style="display:${e.logementStatut==='commune'?'':'none'};"><label>Précision (partie commune)</label><input type="text" id="f_precisionCommune" value="${esc(e.precisionCommune)}" placeholder="Cave, hall d'entrée, local poubelles, parking, toiture…"></div>
         <div class="field full" id="vacantFieldDevis" style="display:${e.logementStatut==='vacant'?'':'none'};"><label>Ancien locataire</label><input type="text" id="f_ancienLocataire" value="${esc(e.ancienLocataire)}" placeholder="Ex : M. Dupont"></div>
         <div class="field" id="occupantFieldDevis" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Locataire</label><input type="text" id="f_occupant" value="${esc(e.occupant)}"></div>
+        <div class="field" id="telLocataireFieldDevis" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Téléphone du locataire</label><input type="tel" id="f_telephoneLocataire" value="${esc(e.telephoneLocataire)}" placeholder="Ex : 06 12 34 56 78"></div>
         <div class="address-trio">
           <div class="field" style="position:relative;"><label>Lieu d'intervention</label><input type="text" id="f_adresseLocataire" autocomplete="off" value="${esc(e.adresseLocataire)}" placeholder="Laisser vide si identique à l'adresse client" data-suggest="fLieuSuggestions" oninput="searchAdresse(this, {adresse:'f_adresseLocataire', codePostal:'f_codePostal', ville:'f_ville'})" onblur="setTimeout(()=>{const b=document.getElementById('fLieuSuggestions'); if(b) b.style.display='none';},150)"><div id="fLieuSuggestions" class="suggest-box"></div></div>
           <div class="field"><label>Code postal</label><input type="text" id="f_codePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'f_ville')"></div>
@@ -4041,6 +4048,7 @@ async function saveDevis(brouillon){
     ville: document.getElementById('f_ville').value,
     ...cleanLogementFields(document.getElementById('f_logementStatut').value, {
       occupant: document.getElementById('f_occupant').value,
+      telephoneLocataire: champSaisi('f_telephoneLocataire', e.telephoneLocataire),
       etage: document.getElementById('f_etage').value,
       numeroLogement: document.getElementById('f_numeroLogement').value,
       precisionCommune: document.getElementById('f_precisionCommune').value,
@@ -4173,6 +4181,7 @@ function setBCMode(mode){
   e.precisionCommune = grab('bc_precisionCommune') ?? e.precisionCommune;
   e.ancienLocataire = grab('bc_ancienLocataire') ?? e.ancienLocataire;
   e.occupant = grab('bc_occupant') ?? e.occupant;
+  e.telephoneLocataire = grab('bc_telephoneLocataire') ?? e.telephoneLocataire;
   e.etage = grab('bc_etage') ?? e.etage;
   e.numeroLogement = grab('bc_numeroLogement') ?? e.numeroLogement;
   e.dateReception = grab('bc_dateReception') ?? e.dateReception;
@@ -7138,10 +7147,11 @@ function bonCommandeForm(){
           <div class="field"><label>Code postal</label><input type="text" id="bc_codePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.codePostal)}" oninput="lookupVilleParCodePostal(this.value,'bc_ville')"></div>
           <div class="field"><label>Ville</label><input type="text" id="bc_ville" autocomplete="off" value="${esc(e.ville)}"></div>
         </div>
-        <div class="field"><label>Type</label><select id="bc_logementStatut" onchange="toggleOccupantField(this,'occupantFieldBC','communeFieldBC','vacantFieldBC','numeroFieldBC','etageFieldBC')">${logementOptions(e.logementStatut)}</select></div>
+        <div class="field"><label>Type</label><select id="bc_logementStatut" onchange="toggleOccupantField(this,'occupantFieldBC','communeFieldBC','vacantFieldBC','numeroFieldBC','etageFieldBC','telLocataireFieldBC')">${logementOptions(e.logementStatut)}</select></div>
         <div class="field full" id="communeFieldBC" style="display:${e.logementStatut==='commune'?'':'none'};"><label>Précision (partie commune)</label><input type="text" id="bc_precisionCommune" value="${esc(e.precisionCommune)}" placeholder="Cave, hall d'entrée, local poubelles, parking, toiture…"></div>
         <div class="field full" id="vacantFieldBC" style="display:${e.logementStatut==='vacant'?'':'none'};"><label>Ancien locataire</label><input type="text" id="bc_ancienLocataire" value="${esc(e.ancienLocataire)}" placeholder="Ex : M. Dupont"></div>
         <div class="field" id="occupantFieldBC" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Locataire</label><input type="text" id="bc_occupant" value="${esc(e.occupant)}"></div>
+        <div class="field" id="telLocataireFieldBC" style="display:${e.logementStatut==='occupé'?'':'none'};"><label>Téléphone du locataire</label><input type="tel" id="bc_telephoneLocataire" value="${esc(e.telephoneLocataire)}" placeholder="Ex : 06 12 34 56 78"></div>
         <div class="field" id="etageFieldBC" style="display:${(e.logementStatut==='occupé'||e.logementStatut==='vacant')?'':'none'};"><label>Étage</label><input type="text" id="bc_etage" value="${esc(e.etage)}" placeholder="RDC, 1er, 2e…"></div>
         <div class="field" id="numeroFieldBC" style="display:${(e.logementStatut==='occupé'||e.logementStatut==='vacant')?'':'none'};"><label>N° de logement</label><input type="text" id="bc_numeroLogement" value="${esc(e.numeroLogement)}" placeholder="Ex : 12, Appt 3B"></div>
       </div>
@@ -7260,6 +7270,7 @@ async function saveBonCommande(brouillon){
     ville: document.getElementById('bc_ville').value,
     ...cleanLogementFields(document.getElementById('bc_logementStatut').value, {
       occupant: document.getElementById('bc_occupant').value,
+      telephoneLocataire: champSaisi('bc_telephoneLocataire', e.telephoneLocataire),
       etage: document.getElementById('bc_etage').value,
       numeroLogement: document.getElementById('bc_numeroLogement').value,
       precisionCommune: document.getElementById('bc_precisionCommune').value,
@@ -8126,6 +8137,34 @@ async function updatePrixSousTraitant(kind, compositeId, value){
   renderTab();
   showToast('💶 Prix sous-traitant enregistré', 'success', 1800);
 }
+/**
+ * Le locataire et son numéro, sur une carte du planning.
+ *
+ * C'est le technicien qui lit cette carte avant de partir, et c'est lui qui
+ * appelle pour convenir de l'heure. Le numéro n'était saisi nulle part et ne
+ * s'affichait nulle part : il fallait rouvrir le bon, ou ne pas appeler.
+ *
+ * Le nom accompagne le numéro. Seul, il serait ambigu — la carte porte déjà un
+ * `interlocuteur`, qui est le contact du BAILLEUR, pas l'occupant.
+ *
+ * `tel:` n'accepte ni espace ni point : l'attribut est réduit aux chiffres et
+ * au « + », tandis que le texte garde la graphie saisie. Et le clic doit être
+ * arrêté — toute la carte est cliquable et ouvrirait la fiche par-dessus
+ * l'appel, comme le fait déjà le lien de pièce jointe juste en dessous.
+ *
+ * Les deux gabarits l'appellent : la carte non planifiée et celle posée sur un
+ * jour. Deux copies du même rendu finiraient par diverger.
+ */
+function ligneLocatairePlanning(b){
+  const tel = (b.telephoneLocataire||'').trim();
+  const nom = (b.occupant||'').trim();
+  if(!tel && !nom) return '';
+  const lien = tel
+    ? `<a href="tel:${jsAttr(tel.replace(/[^+0-9]/g, ''))}" onclick="event.stopPropagation();" style="color:inherit; text-decoration:underline;">☎ ${esc(tel)}</a>`
+    : '';
+  return `<div class="planning-card-sub">🏠 ${nom? esc(nom) : 'Locataire'}${nom && lien? ' · ' : ''}${lien}</div>`;
+}
+
 function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
   const kindBadge = '';
   const couleur = metierCouleur(b.metier);
@@ -8140,6 +8179,7 @@ function planningCardHTML(b, unscheduled, assigneeField, assigneeValue){
     <div class="planning-card-sub">${esc(b.numero)}</div>
     ${b.isSAV? '' : `<div class="planning-etape planning-etape-${etapeWorkflow(b).cle}" title="${esc(etapeWorkflow(b).label)}">${esc(etapeWorkflow(b).court)}</div>`}
     ${b.interlocuteur? `<div class="planning-card-sub">👤 ${esc(b.interlocuteur)}</div>`:''}
+    ${ligneLocatairePlanning(b)}
     ${(b.conducteur || b.metier)? `<div class="planning-card-sub">${b.conducteur? '🦺 '+esc(b.conducteur):''}${b.conducteur && b.metier? ' · ':''}${b.metier? '🔧 '+esc(metierDisplayLabel(b.metier)):''}</div>`:''}
     ${b.adresse? `<div class="planning-card-sub">📍 ${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>`:''}
     ${b.logementStatut? `<div class="planning-card-sub" style="margin-top:2px;">${logementBadge(b.logementStatut)}</div>`:''}
@@ -8237,6 +8277,7 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
     <div class="planning-card-sub">${esc(b.numero)}</div>
     ${b.isSAV? '' : `<div class="planning-etape planning-etape-${etapeWorkflow(b).cle}" title="${esc(etapeWorkflow(b).label)}">${esc(etapeWorkflow(b).court)}</div>`}
     ${b.interlocuteur? `<div class="planning-card-sub">👤 ${esc(b.interlocuteur)}</div>`:''}
+    ${ligneLocatairePlanning(b)}
     ${(b.conducteur || b.metier)? `<div class="planning-card-sub">${b.conducteur? '🦺 '+esc(b.conducteur):''}${b.conducteur && b.metier? ' · ':''}${b.metier? '🔧 '+esc(metierDisplayLabel(b.metier)):''}</div>`:''}
     ${b.adresse? `<div class="planning-card-sub">📍 ${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>`:''}
     ${b.logementStatut? `<div class="planning-card-sub" style="margin-top:2px;">${logementBadge(b.logementStatut)}</div>`:''}
@@ -9921,11 +9962,19 @@ function wizardNav(step){
 }
 function setEditing(field, value){ state.editing[field] = value; }
 function toggleBox(id){ const el = document.getElementById(id); if(!el) return; el.style.display = (el.style.display === 'none' ? 'contents' : 'none'); }
-function toggleOccupantField(selectEl, occupantFieldId, communeFieldId, vacantFieldId, numeroFieldId, etageFieldId){
+/* `telFieldId` est optionnel : seuls le devis et le bon portent le téléphone du
+   locataire. La facture ne l'a pas — elle part chez le bailleur et se conserve
+   dix ans — et le rapport d'intervention non plus. Un paramètre en fin de liste
+   laisse les trois autres appels inchangés. */
+function toggleOccupantField(selectEl, occupantFieldId, communeFieldId, vacantFieldId, numeroFieldId, etageFieldId, telFieldId){
   const val = selectEl.value;
   const showOccupant = val === 'occupé';
   const occEl = document.getElementById(occupantFieldId);
   if(occEl) occEl.style.display = showOccupant ? '' : 'none';
+  if(telFieldId){
+    const telEl = document.getElementById(telFieldId);
+    if(telEl) telEl.style.display = showOccupant ? '' : 'none';
+  }
   if(etageFieldId){
     const showEtage = (val === 'occupé' || val === 'vacant');
     const etEl = document.getElementById(etageFieldId);

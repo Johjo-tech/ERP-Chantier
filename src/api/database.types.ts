@@ -276,6 +276,7 @@ export type Database = {
           statut: string | null
           statut_workflow: string | null
           technicien: string | null
+          telephone_locataire: string | null
           tentatives_contact: Json
           ville: string | null
         }
@@ -340,6 +341,7 @@ export type Database = {
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          telephone_locataire?: string | null
           tentatives_contact?: Json
           ville?: string | null
         }
@@ -404,6 +406,7 @@ export type Database = {
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          telephone_locataire?: string | null
           tentatives_contact?: Json
           ville?: string | null
         }
@@ -1362,6 +1365,7 @@ export type Database = {
           remise_pourcentage: number
           societe_id: string
           statut: Database["public"]["Enums"]["devis_statut"]
+          telephone_locataire: string | null
           ville: string | null
         }
         Insert: {
@@ -1392,6 +1396,7 @@ export type Database = {
           remise_pourcentage?: number
           societe_id: string
           statut?: Database["public"]["Enums"]["devis_statut"]
+          telephone_locataire?: string | null
           ville?: string | null
         }
         Update: {
@@ -1422,6 +1427,7 @@ export type Database = {
           remise_pourcentage?: number
           societe_id?: string
           statut?: Database["public"]["Enums"]["devis_statut"]
+          telephone_locataire?: string | null
           ville?: string | null
         }
         Relationships: [
