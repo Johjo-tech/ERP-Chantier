@@ -12942,15 +12942,38 @@ const ACHAT_CATEGORIES = [
   {key:'salarie', label:'Salarié', icon:'👷', color:'#F0A82E'},
   {key:'soustraitant', label:'Sous-traitant', icon:'🔧', color:'#9B6EF0'}
 ];
+/**
+ * Les catégories d'achat, telles qu'on les propose et les affiche.
+ *
+ * La valeur STOCKÉE est le `code`, pas le libellé : c'est lui que l'écran
+ * teste — « salarie » ouvre les champs salarié et heures —, et c'est ce qui
+ * permet de renommer « Salarié » en « Main-d'œuvre » sans toucher aux
+ * dépenses déjà saisies.
+ *
+ * `ACHAT_CATEGORIES` reste le repli tant que la collection n'est pas chargée :
+ * un menu vide au premier rendu vaudrait pire qu'une liste figée.
+ */
+function achatCategories(){
+  const declarees = referentielsDuDomaine('categorie_achat')
+    .filter(r=>r.code)
+    .map(r=>({ key:r.code, label:r.libelle, icon:r.icone || '💰', color:r.couleur || '#999' }));
+  return declarees.length ? declarees : ACHAT_CATEGORIES;
+}
+
+/* Le repli porte la même forme que les catégories connues : un objet vide
+   obligerait chaque lecture à se garder elle-même. */
+function achatCategorieDef(key){
+  return achatCategories().find(c=>c.key===key) || { key:key||'', label:key||'', color:'#999', icon:'💰' };
+}
+
 function achatCategorieLabel(key){
-  const found = ACHAT_CATEGORIES.find(c=>c.key===key);
-  return found ? found.label : key;
+  return achatCategorieDef(key).label || key;
 }
 function chantierAchatsHTML(c){
   const achats = c.achats || [];
   const filtre = state.chantierAchatsFiltre || '';
   const totalParCategorie = {};
-  ACHAT_CATEGORIES.forEach(cat=>{ totalParCategorie[cat.key] = achats.filter(a=>a.categorie===cat.key).reduce((s,a)=>s+(parseFloat(a.montant)||0),0); });
+  achatCategories().forEach(cat=>{ totalParCategorie[cat.key] = achats.filter(a=>a.categorie===cat.key).reduce((s,a)=>s+(parseFloat(a.montant)||0),0); });
   const totalGeneral = Object.values(totalParCategorie).reduce((s,v)=>s+v,0);
   const filtered = filtre ? achats.filter(a=>a.categorie===filtre) : achats;
   const sorted = [...filtered].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
@@ -12960,7 +12983,7 @@ function chantierAchatsHTML(c){
       <span class="achats-grand-total">${moneyDisplay(totalGeneral)} <span class="card-sub" style="font-weight:400;">au total</span></span>
     </div>
     <div class="achats-totals">
-      ${ACHAT_CATEGORIES.map(cat=>{
+      ${achatCategories().map(cat=>{
         const montant = totalParCategorie[cat.key];
         const pct = totalGeneral>0 ? Math.round(montant/totalGeneral*100) : 0;
         return `<div class="achats-total-card ${filtre===cat.key?'is-active':''}" onclick="filterChantierAchats('${jsAttr(cat.key)}')" style="--cat-color:${cat.color};">
@@ -12977,7 +13000,7 @@ function chantierAchatsHTML(c){
     <div class="achat-add-card">
       <div class="achat-add-row">
         <select id="achatCategorie_${c.id}" onchange="onAchatCategorieChange('${jsAttr(c.id)}')">
-          ${ACHAT_CATEGORIES.map(cat=>`<option value="${cat.key}">${cat.icon} ${cat.label}</option>`).join('')}
+          ${achatCategories().map(cat=>`<option value="${jsAttr(cat.key)}">${esc(cat.icon)} ${esc(cat.label)}</option>`).join('')}
         </select>
         <input type="text" id="achatDesignation_${c.id}" placeholder="Désignation…" style="flex:1;">
         <input type="number" step="0.01" id="achatMontant_${c.id}" placeholder="Montant HT">
@@ -12992,14 +13015,12 @@ function chantierAchatsHTML(c){
     </div>
     <div class="achats-list">
       ${sorted.length? sorted.map(a=>{
-        /* Le repli porte la même forme que les catégories connues : un objet vide
-           obligeait chaque lecture à se garder elle-même, et TypeScript à refuser. */
-        const cat = ACHAT_CATEGORIES.find(x=>x.key===a.categorie) || {key:'', label:'', color:'#999', icon:'💰'};
+        const cat = achatCategorieDef(a.categorie);
         return `<div class="achat-row" style="--cat-color:${cat.color||'#999'};">
           <div class="achat-row-icon" style="background:${cat.color}22; color:${cat.color};">${cat.icon||'💰'}</div>
           <div class="achat-row-main">
             <div class="achat-designation">${esc(a.designation)}${a.heures? ` <span class="card-sub">(${a.heures}h)</span>`:''}</div>
-            <div class="achat-date">${achatCategorieLabel(a.categorie)} · ${fmtDate(a.date)}</div>
+            <div class="achat-date">${achatCategorieLabel(a.categorie)} · ${fmtDate(a.dateAchat || a.date)}</div>
           </div>
           <div class="achat-montant">${moneyDisplay(a.montant)}</div>
           <button class="todo-remove" onclick="removeChantierAchat('${jsAttr(c.id)}','${jsAttr(a.id)}')" title="Supprimer">✕</button>
@@ -13043,7 +13064,11 @@ async function addChantierAchat(chantierId){
   const c = state.chantiers.find(x=>x.id===chantierId);
   if(!c) return;
   if(!c.achats) c.achats = [];
-  c.achats.push({ id: uid(), categorie, designation, montant, date, salarieId, heures });
+  /* `dateAchat` et non `date` : la colonne s'appelle `date_achat`, et le pont
+     convertit mécaniquement camelCase → snake_case. Sous le nom `date`, la
+     date serait partie vers une colonne inexistante et aurait été écartée —
+     l'achat se serait enregistré sans sa date, en silence. */
+  c.achats.push({ id: uid(), categorie, designation, montant, dateAchat: date, salarieId, heures });
   await window.stSet('chantier:'+chantierId, c);
   await recharger('chantier');
   renderTab();
@@ -16092,8 +16117,15 @@ async function saveReferentiel(){
   const position = e.position != null ? e.position
     : (window.prochainePosition ? window.prochainePosition(state.referentiels||[], domaine, state.societeId)
                                 : referentielsDuDomaine(domaine).length + 1);
+  /* Un code est posé à la création et ne bouge plus. C'est lui que les fiches
+     retiennent pour les catégories d'achat — le libellé, lui, se renomme sans
+     rien casser. Dérivé du libellé plutôt que saisi : personne n'a envie
+     d'inventer une clé technique pour ajouter « Location de matériel ». */
+  const code = e.code || (window.normaliserEntree
+    ? window.normaliserEntree(libelle).toLowerCase().replace(/ +/g, '_')
+    : libelle.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
   const obj = { id, societeId: state.societeId, domaine, libelle, position,
-    code: e.code || null, couleur: e.couleur || null, icone: e.icone || null };
+    code, couleur: e.couleur || null, icone: e.icone || null };
   if(!(await window.stSet('referentiel:'+id, obj))){ showToast(saveFailedMessage()); return; }
   await recharger('referentiel');
   closeForm('referentiel');

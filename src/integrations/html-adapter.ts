@@ -195,6 +195,16 @@ interface Collection {
    */
   lignes?: { table: TableName; fk: string; vueLecture?: string; avecMontantHt?: boolean };
   photos?: { table: TableName; fk: string };
+  /**
+   * `achats` : les dépenses d'un chantier. Une troisième clé nommée plutôt
+   * qu'un parcours générique des enfants — le refactoriser aurait touché les
+   * lignes de devis, de bon et de facture pour un gain nul sur ce lot.
+   *
+   * Elles étaient jusqu'ici empilées dans un champ `achats` de l'objet
+   * chantier, que `colonnesDe()` écartait en silence : l'écran disait
+   * « enregistré » et rien ne partait.
+   */
+  achats?: { table: TableName; fk: string };
   /** Le document porte le nom du client en clair (colonne `client_nom`). */
   client?: boolean;
   /**
@@ -258,7 +268,12 @@ const COLLECTIONS: Record<string, Collection> = {
      `domaine` les sépare — trois tables auraient donné trois écrans. */
   referentiel: { table: "referentiels" },
   sousTraitant: { table: "sous_traitants" },
-  chantier: { table: "chantiers" },
+  chantier: {
+    table: "chantiers",
+    /* Les dépenses du chantier. Sans cette déclaration, l'écran les
+       empilait dans un champ sans colonne et rien ne s'enregistrait. */
+    achats: { table: "chantier_achats", fk: "chantier_id" },
+  },
   salarie: { table: "salaries", vueLecture: "v_salaries_annuaire" },
   vehicule: { table: "vehicules" },
   materiel: { table: "materiels" },
@@ -745,6 +760,7 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
     const valeur = versLegacy(prefixe, brut, await codeSociete(societeId));
     if (collection.lignes) valeur.lignes = [];
     if (collection.photos) valeur.photos = [];
+    if (collection.achats) valeur.achats = [];
 
     const cle = `${prefixe}:${valeur.id}`;
     cache.set(cle, valeur);
@@ -762,6 +778,16 @@ async function chargerCollection(prefixe: string): Promise<string[]> {
       uuidParPrefixe,
       "photos",
       (row) => row.chemin as string
+    );
+  }
+
+  if (collection.achats && cles.length) {
+    /* Rendus tels quels : l'écran des achats lit `categorie`, `salarieId` et
+       `heures` en camelCase, et `versLegacy` fait la conversion. */
+    await attacher(collection.achats, uuidParPrefixe, "achats", (row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [toCamel(k), v])
+      )
     );
   }
 
@@ -1399,7 +1425,7 @@ async function appliquerWorkflow(
 async function attacher(
   enfant: { table: TableName; fk: string; vueLecture?: string },
   uuidParPrefixe: Map<Uuid, string>,
-  champ: "lignes" | "photos",
+  champ: "lignes" | "photos" | "achats",
   mapper: (row: Record<string, unknown>) => unknown
 ) {
   const source = enfant.vueLecture ?? enfant.table;
@@ -1630,6 +1656,32 @@ export async function stSet(
           ...(collection.lignes!.avecMontantHt ? { montant_ht: montantLigneHt(l) } : {}),
           [collection.lignes!.fk]: parentId,
         }))
+      );
+    }
+
+    if (collection.achats) {
+      /* `colonnesDe()` filtre AVANT l'envoi : un champ de l'écran sans colonne
+         ferait rejeter l'insertion entière par PostgREST, pas seulement le
+         champ. Les enfants ne passent pas par ce filtre — d'où le tri
+         explicite ici, sur les colonnes réelles de la table. */
+      /* `colonnesDe` rend un Set, et NULL pour une table inconnue du fichier
+         généré — c'est-à-dire tant que `npm run db:types` n'a pas tourné. Dans
+         ce cas on n'envoie rien plutôt qu'un champ que PostgREST refuserait,
+         ce qui ferait tomber l'écriture du chantier entier. */
+      const colonnes = colonnesDe(collection.achats.table);
+      const achats = ((valeur.achats as Record<string, unknown>[]) ?? []).filter(Boolean);
+      await remplacerEnfants(
+        collection.achats,
+        parentId,
+        achats.map((a) => {
+          const ligne: Record<string, unknown> = { [collection.achats!.fk]: parentId };
+          for (const [cle, v] of Object.entries(a)) {
+            const colonne = toSnake(cle);
+            if (colonne === "id" || !colonnes?.has(colonne)) continue;
+            ligne[colonne] = v === "" ? null : v;
+          }
+          return ligne;
+        })
       );
     }
 

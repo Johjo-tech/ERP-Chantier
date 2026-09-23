@@ -210,6 +210,7 @@ import {
 import {
   entreesDuDomaine,
   memeEntree,
+  normaliserEntree,
   prochainePosition,
   referentielCompose,
 } from "@/api/regles-referentiels";
@@ -619,6 +620,7 @@ export function injecterSession() {
   w.referentielCompose = referentielCompose;
   w.entreesDuDomaine = entreesDuDomaine;
   w.memeEntree = memeEntree;
+  w.normaliserEntree = normaliserEntree;
   w.prochainePosition = prochainePosition;
   /* Le choix tranché sur un chapitre l'emporte sur son titre. La liste
      déroulante de l'écran et le regroupement des travaux du planning doivent

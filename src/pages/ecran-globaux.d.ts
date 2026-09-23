@@ -160,6 +160,7 @@ declare global {
     nextNumero: any;
     nextSAVNumero: any;
     nomIntervenant: any;
+    normaliserEntree: any;
     ongletsAutorises: any;
     oublierEchecsDeLecture: any;
     ouvrirAttestationVisite: any;

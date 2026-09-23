@@ -464,6 +464,7 @@ export type Database = {
       }
       chantier_achats: {
         Row: {
+          categorie: string | null
           chantier_id: string
           cree_le: string
           date_achat: string | null
@@ -471,12 +472,15 @@ export type Database = {
           fichier_chemin: string | null
           fichier_nom: string | null
           fournisseur: string | null
+          heures: number | null
           id: string
           legacy_id: string | null
           maj_le: string
           montant: number
+          salarie_id: string | null
         }
         Insert: {
+          categorie?: string | null
           chantier_id: string
           cree_le?: string
           date_achat?: string | null
@@ -484,12 +488,15 @@ export type Database = {
           fichier_chemin?: string | null
           fichier_nom?: string | null
           fournisseur?: string | null
+          heures?: number | null
           id?: string
           legacy_id?: string | null
           maj_le?: string
           montant?: number
+          salarie_id?: string | null
         }
         Update: {
+          categorie?: string | null
           chantier_id?: string
           cree_le?: string
           date_achat?: string | null
@@ -497,10 +504,12 @@ export type Database = {
           fichier_chemin?: string | null
           fichier_nom?: string | null
           fournisseur?: string | null
+          heures?: number | null
           id?: string
           legacy_id?: string | null
           maj_le?: string
           montant?: number
+          salarie_id?: string | null
         }
         Relationships: [
           {
@@ -516,6 +525,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_chantier_avancement"
             referencedColumns: ["chantier_id"]
+          },
+          {
+            foreignKeyName: "chantier_achats_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "salaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chantier_achats_salarie_id_fkey"
+            columns: ["salarie_id"]
+            isOneToOne: false
+            referencedRelation: "v_salaries_annuaire"
+            referencedColumns: ["id"]
           },
         ]
       }
