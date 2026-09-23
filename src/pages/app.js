@@ -917,6 +917,12 @@ function renderUserMenu(){
 function nomAffichable(){
   const brut = (window.nomIntervenant && window.monCompteId
     ? window.nomIntervenant(window.monCompteId()) : '') || '';
+  /* Un nom DONNÉ par la personne se rend tel quel. Le passer dans la mise en
+     forme ci-dessous découperait sur les tirets et recapitaliserait chaque
+     morceau : « Jean-Pierre Dubois » deviendrait « Jean Pierre Dubois », et
+     « de La Tour » un « De La Tour ». Cette mise en forme n'existe que pour
+     rendre une ADRESSE lisible, et ne doit servir qu'à ça. */
+  if(brut && brut !== 'un utilisateur' && !brut.includes('@')) return brut;
   const source = (brut && brut !== 'un utilisateur') ? brut
     : ((window.utilisateurCourant && window.utilisateurCourant()) || '');
   if(!source) return '';
@@ -1496,8 +1502,13 @@ function bcFacturesKTA(){
 /* Le tableau de bord de pilotage saluait « Aissa Choumane » en toutes lettres :
    tout le monde était accueilli sous ce nom. */
 function salutation(){
-  const qui = (window.utilisateurCourant && window.utilisateurCourant()) || '';
-  const nom = qui.includes('@') ? qui.split('@')[0].replace(/[._-]+/g, ' ') : qui;
+  /* Le NOM DU PROFIL, pas le début de l'adresse. La salutation refabriquait
+     « laurent johan1 » à partir de `laurent.johan1@gmail.com` alors que
+     `profiles.nom` porte « Johan » et que la barre latérale l'affichait déjà
+     correctement : `nomAffichable` existait, elle ne l'appelait simplement
+     pas. L'adresse ne sert plus que de repli, quand personne n'a renseigné
+     son nom. */
+  const nom = nomAffichable();
   return 'Bonjour 👋' + (nom ? ' ' + nom : '');
 }
 
