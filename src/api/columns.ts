@@ -45,7 +45,7 @@ const COLONNES: Record<string, readonly string[]> = {
   materiel_prets: ["commentaire", "cree_le", "date_debut", "date_fin", "etat_depart", "etat_retour", "id", "legacy_id", "maj_le", "materiel_id", "personne", "salarie_id"],
   materiels: ["categorie", "cree_le", "date_achat", "etat_general", "id", "legacy_id", "maj_le", "nom", "numero_serie", "societe_id"],
   membres_societe: ["actif", "cree_le", "id", "maj_le", "profile_id", "role", "societe_id"],
-  metiers: ["cree_le", "id", "legacy_id", "libelle", "maj_le", "societe_id"],
+  metiers: ["couleur", "cree_le", "id", "legacy_id", "libelle", "maj_le", "position", "societe_id"],
   pdp_connexion_secrets: ["access_token", "bail_refresh", "connexion_id", "cree_le", "dernier_refresh_le", "expire_le", "maj_le", "refresh_token"],
   pdp_connexions: ["adresse_electronique_schema", "adresse_electronique_valeur", "connecte_le", "cree_le", "environnement", "etat", "expire_le", "fournisseur", "id", "maj_le", "message", "pdp_company_id", "pdp_seller_number", "societe_id"],
   pdp_oauth_etats: ["code_verifier", "cree_le", "environnement", "etat", "expire_le", "id", "profile_id", "redirect_uri", "retour_url", "societe_id"],

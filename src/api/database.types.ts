@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -2981,27 +2976,33 @@ export type Database = {
       }
       metiers: {
         Row: {
+          couleur: string | null
           cree_le: string
           id: string
           legacy_id: string | null
           libelle: string
           maj_le: string
+          position: number
           societe_id: string
         }
         Insert: {
+          couleur?: string | null
           cree_le?: string
           id?: string
           legacy_id?: string | null
           libelle: string
           maj_le?: string
+          position?: number
           societe_id: string
         }
         Update: {
+          couleur?: string | null
           cree_le?: string
           id?: string
           legacy_id?: string | null
           libelle?: string
           maj_le?: string
+          position?: number
           societe_id?: string
         }
         Relationships: [
@@ -6139,6 +6140,25 @@ export type Database = {
         Returns: string
       }
       mes_societes: { Args: never; Returns: string[] }
+      metier_employe: {
+        Args: { p_libelle: string; p_societe: string }
+        Returns: string
+      }
+      metier_libelle_canonique: { Args: { p_libelle: string }; Returns: string }
+      metier_normalise: { Args: { p_texte: string }; Returns: string }
+      metiers_identiques_au_nom_pres: {
+        Args: { p_apres: Json; p_avant: Json }
+        Returns: boolean
+      }
+      metiers_standard: { Args: { p_societe: string }; Returns: number }
+      metiers_standard_liste: {
+        Args: never
+        Returns: {
+          couleur: string
+          libelle: string
+          rang: number
+        }[]
+      }
       mon_role: {
         Args: { p_societe: string }
         Returns: Database["public"]["Enums"]["role_membre"]
@@ -6431,3 +6451,4 @@ export const Constants = {
     },
   },
 } as const
+
