@@ -1,9 +1,29 @@
-# Retours réunion client du 21/09/2026 — ce qui a été fait
+# Livraison du 23/09/2026 — tout ce qui est prêt à être testé
 
-Branche : **`feat/retours-client-21-09`**, partie de `origin/main` (`d7fa854`).
-27 commits. `npm run type-check` propre, `npm run build` vert.
+Branche à tester : **`integration/livraison-23-09`**, partie de `origin/main`
+(`d7fa854`). Rien n'est poussé, `main` n'a pas bougé.
 
-État à la livraison : **1 229 tests au vert** (79 fichiers — 68 avant, 11 ajoutés).
+État : **1 301 tests au vert** (85 fichiers), `type-check`, `type-check:ecran`
+et `build` propres, et les **5 migrations en attente éprouvées à blanc sur la
+production** — transaction annulée, rien n'y a été modifié.
+
+## Quatre chantiers menés en parallèle, réunis ici
+
+Quatre sessions ont travaillé en même temps, parfois dans le même arbre. Tout
+est désormais sur une seule branche.
+
+| # | Chantier | Quand |
+|---|---|---|
+| 1 | **Vos 20 retours de la réunion du 21/09** — le gros de ce document | 21/09 soir → 22/09 matin |
+| 2 | **Le gabarit des documents** — allure des quatre pièces imprimées, thème, encre du bandeau « Net à payer » | 22/09 |
+| 3 | **Le suivi médical + le découpage du monolithe** — la visite qui ne remontait pas dans la fiche, puis 523 lignes sorties d'`app.js` vers `rh-visites.js` | 22–23/09 |
+| 4 | **Le retour au planning après réception de pièce** — sa migration était DÉJÀ appliquée sur la base alors que son code n'était sur aucune branche de livraison | 21/09 |
+
+**Laissé de côté, en connaissance de cause** : `feat/tache-affectee-au-planning`
+(4 commits du 10/09 — la tâche qui naît avec son équipe, et un statut de devis).
+Sa base est 165 commits en arrière et le circuit des tâches a été réécrit
+depuis : la fusion demande d'arbitrer 14 conflits sur les fichiers les plus
+sensibles. La branche est intacte, rien n'est perdu, on la reprendra à froid.
 
 ---
 
@@ -41,16 +61,38 @@ changement d'ampleur doit être précédé du découpage — pas d'un rabotage d
 
 ## ⚠ À FAIRE AVANT DE TESTER
 
-### 1. Appliquer les deux migrations, puis régénérer les types
+### 1. Appliquer les cinq migrations, puis régénérer les types
 
 ```bash
 ./scripts/deployer.sh --base     # applique les migrations en attente
 npm run db:types                 # INDISPENSABLE, le script ne le fait pas
 ```
 
-Les deux migrations ont été **éprouvées à blanc sur la production**, chacune
-dans une transaction annulée — rien n'y a été modifié. Les constats sont dans
-les messages de commit et dans les tests.
+Les cinq en attente, dans l'ordre où elles s'appliqueront :
+
+| version | objet |
+|---|---|
+| `20260921144700` | les vues de lecture ne s'écrivent plus — **déjà en vigueur**, seulement mal enregistrée (voir ci-dessous) |
+| `20260921150000` | un bon de commande facturé ne bouge plus |
+| `20260921160000` | les métiers : couleur, ordre, suppression et renommage gardés |
+| `20260922090000` | renommer un métier va jusqu'au bout, même sur un bon facturé |
+| `20260922100000` | les métiers standard sur toutes les sociétés, d'une seule graphie |
+
+Les cinq ont été **éprouvées à blanc sur la production, en séquence** —
+transaction annulée, rien n'y a été modifié. Résultat attendu :
+
+```
+akt / alkia / chm   8 métiers
+kta                 8 métiers + Carrelage conservé
+```
+
+**Le doublon d'horodatage, corrigé.** Deux fichiers portaient la version
+`20260921110000` ; le registre n'en retient qu'une et le script de déploiement
+n'en voyait qu'un seul. Les deux effets sont bien en production — vérifié, il
+n'y avait pas de trou ouvert — mais un environnement reconstruit depuis les
+migrations en aurait sauté un, en silence. C'est ainsi que ce dépôt a perdu la
+trace de 88 migrations. La seconde a repris son propre horodatage ; elle sera
+rejouée, sans effet.
 
 `npm run db:types` n'est pas optionnel : `colonnesDe()` filtre à l'écriture sur
 `src/api/columns.ts`, qui est généré. Tant qu'il ne connaît pas
@@ -58,7 +100,21 @@ les messages de commit et dans les tests.
 seront **écartés en silence à l'enregistrement** — exactement le défaut que
 #19 corrige. La lecture, elle, marche dès la migration appliquée.
 
-### 2. Le découpage de `src/pages/app.js` est dû
+### 2. Le découpage de `src/pages/app.js` — FAIT, par une autre session
+
+`rh-visites.js` (34 ko) est sorti du monolithe, qui redescend de 990 à
+**973 ko** : 21 ko sous le seuil d'analyse de Semgrep, contre 3 ko de marge
+avant. Vérifié que ce nouveau module ne masque **aucun** des 238 noms que la
+couche TypeScript pose sur `window` — c'était le risque réel d'un découpage.
+
+Une réserve : le second garde-fou de construction, celui qui vérifie qu'on
+n'appelle pas un nom du pont « nu », ne lit toujours qu'`app.js`. Sans
+conséquence aujourd'hui, mais il ne couvrira pas le prochain module sorti.
+
+Ce qui suit est le récit de cette dette, gardé parce qu'il dit pourquoi elle
+s'est créée.
+
+### 2 bis. L'historique du seuil de taille
 
 La garde de taille (`src/__tests__/taille-ecran.test.ts`) a rougi **trois fois**
 dans la soirée. Le fichier pesait déjà 950 067 octets sur `main`, à 9 933 de
@@ -426,3 +482,37 @@ Ce qui reste à éprouver à la main ce matin :
   confirmer que la liste défile bien et que Segoe UI est servie. Les mesures
   ont été faites dans Chromium sur macOS en simulant les hauteurs de fenêtre
   de Windows ; la police système de Windows, elle, n'a pas pu être éprouvée.
+
+---
+
+## Ce qui reste à faire après vos tests
+
+Par ordre d'importance, et aucun n'est bloquant pour tester.
+
+1. **Les équipes proposées par métier.** Les colonnes existent déjà
+   (`techniciens.metier`, `metiers[]`) et le formulaire d'équipe les fait
+   cocher — mais le métier n'a **aucun effet** : on peut affecter une équipe
+   Peinture à une tâche Plomberie, rien ne le signale. C'est le lot C du plan,
+   non commencé.
+2. **Le type d'intervention n'est jamais enregistré.** `typePanne` n'a pas de
+   colonne ; le pont le traduit en `interventions.type_panne`, qui n'existe
+   pas, et l'écarte en silence. Un rapport rouvert perd son type : étape 2
+   sans cases à cocher, PDF sans contrôles. La vraie colonne,
+   `interventions.metier`, n'est jamais écrite. C'est le lot D, non commencé.
+3. **`feat/tache-affectee-au-planning`**, laissée de côté (voir en tête).
+4. **Le second garde-fou de construction** ne lit qu'`app.js` : il ne couvrira
+   pas le prochain module sorti du monolithe.
+
+## Comment tester
+
+```bash
+git checkout integration/livraison-23-09
+./scripts/deployer.sh --base     # les 5 migrations
+npm run db:types                 # INDISPENSABLE
+npm run test:run && npm run build
+npm run dev
+```
+
+Le parcours à éprouver en priorité est celui de la section « Ce que je n'ai pas
+pu vérifier » ci-dessus : ce sont les points où mes mesures s'arrêtent et où
+seules de vraies données tranchent.
