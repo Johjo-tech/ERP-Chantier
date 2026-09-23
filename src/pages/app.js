@@ -11102,8 +11102,7 @@ const REGLAGES_GROUPES = [
     {id:'numerotation', label:'Numérotation', icone:'🔢', desc:'Compteurs par année'},
   ]},
   { titre:'Référentiels', items:[
-    {id:'travaux', label:'Travaux & unités', icone:'🛠️', desc:'Métiers et unités'},
-    {id:'listes', label:'Listes de choix', icone:'📋', desc:'Catégories, états, unités, pièces'},
+    {id:'listes', label:'Listes de choix', icone:'📋', desc:'Métiers, catégories, états, unités'},
     {id:'intervenants', label:'Intervenants', icone:'🦺', desc:'Conducteurs, techniciens, sous-traitants'},
     {id:'rh', label:'RH', icone:'🧑‍🔧', desc:'Seuils d\'alerte'},
     {id:'vehicules', label:'Véhicules', icone:'🚚', desc:'Seuils d\'alerte'},
@@ -11154,7 +11153,10 @@ function renderReglagesOnglet(){
     case 'legaux':        return renderDocumentsLegauxSection();
     case 'documents':     return renderReglagesDocumentsSection();
     case 'numerotation':  return renderNumerotationSection();
-    case 'travaux':       return renderMetiersSection() + renderUnitesSection();
+    /* « Travaux & unités » n'a plus de contenu à elle : les métiers et les
+       unités sont dans les listes de choix. Le cas reste, pour qu'un onglet
+       mémorisé ne tombe pas sur un écran vide. */
+    case 'travaux':
     case 'listes':        return renderReferentielsSection();
     case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection() + renderFournisseursSection();
     case 'rh':            return renderSeuilsSection('rh');
@@ -11502,29 +11504,6 @@ function renderReglagesDocumentsSection(){
       <div class="field full"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="rg_afficherIban" ${d.afficherIban?'checked':''}> Rappeler l'IBAN sur les factures</label></div>
     </div>
     <div style="margin-top:16px;"><button class="btn primary" onclick="saveReglages()">Enregistrer</button></div>
-  </div>`;
-}
-
-/**
- * Les unités ont déménagé — et cet écran-ci ne les éditait pas vraiment.
- *
- * Il écrivait dans `reglages.unites`, que `uniteOptions()` n'a JAMAIS lu : il
- * lisait la constante `UNITES` du code. On pouvait donc y saisir ce qu'on
- * voulait sans le moindre effet sur une seule ligne de devis, et les deux
- * listes ne disaient même pas la même chose.
- *
- * Le champ est retiré plutôt que corrigé : deux endroits pour une même liste
- * finissent toujours par diverger. Le renvoi reste, pour que la disparition
- * s'explique au lieu de surprendre.
- */
-function renderUnitesSection(){
-  return `<div class="card" style="margin-top:22px;">
-    <div class="card-title" style="margin-bottom:10px;">📏 Unités</div>
-    <div class="card-sub">Les unités se tiennent désormais dans
-      <b>Référentiels › Listes de choix › Unités</b>, avec les autres listes —
-      et elles alimentent réellement les lignes de devis, de bons et de
-      factures, ce que ce champ-ci ne faisait pas.</div>
-    <div style="margin-top:14px;"><button class="btn" onclick="setReglagesTab('listes')">Ouvrir les listes de choix</button></div>
   </div>`;
 }
 
@@ -16024,7 +16003,20 @@ async function saveClient(){
    `openForm('<type>')`, la div `formZone<Type>`, et surtout `id="liste-<cle>"`
    que `filtrerListe()` redessine. */
 
+/* « metiers » n'est PAS un domaine de la table `referentiels`, et c'est
+   délibéré : les métiers gardent leur table et toute sa machinerie — un
+   déclencheur qui propage un renommage sur cinq tables et jusque dans les clés
+   jsonb, un refus de suppression quand le métier est employé, un miroir SQL de
+   la normalisation, huit métiers posés à la naissance d'une société. Rien de
+   cela n'existe pour une liste ordinaire, et le déplacer voudrait dire tout
+   réécrire, plus migrer `bons_commande.metier`, `metiers[]`, les clés de
+   `montant_par_metier`, `planning_taches.metier` et les lignes.
+
+   Ce qui est rapatrié, c'est l'ÉCRAN : on tient toutes ses listes au même
+   endroit, et celle des métiers garde son formulaire à elle — couleurs
+   comprises. */
 const DOMAINES_REFERENTIEL = {
+  metiers: { titre:'Métiers', singulier:'métier', aide:"Les corps d'état de la société. Ils servent aux bons, aux tâches, aux équipes et aux sous-totaux par métier.", propre:true },
   categorie_materiel: { titre:'Catégories de matériel', singulier:'catégorie', aide:"Ce que le formulaire d'un matériel propose." },
   etat_materiel:      { titre:'États de matériel',      singulier:'état',      aide:"Repris aussi par les prêts de matériel et de véhicule." },
   categorie_achat:    { titre:"Catégories d'achat",     singulier:'catégorie', aide:"Les achats d'un chantier s'y rangent. « Main-d'œuvre » ouvre les champs salarié et heures." },
@@ -16066,22 +16058,33 @@ function referentielEntree(domaine, libelle){
     ? window.memeEntree(r.libelle, libelle) : r.libelle===libelle) || null;
 }
 
-let domaineReferentielOuvert = 'categorie_materiel';
+let domaineReferentielOuvert = 'metiers';
 function setDomaineReferentiel(domaine){ domaineReferentielOuvert = domaine; renderTab(); }
+
+/* Les onglets et la phrase d'aide, communs à toutes les listes — y compris à
+   celles qui gardent leur propre formulaire en dessous. */
+function ongletsReferentiel(d){
+  return `
+    <div class="plus-subnav" style="margin-bottom:12px; margin-top:30px;">
+      ${Object.entries(DOMAINES_REFERENTIEL).map(([cle,v])=>
+        `<button class="plus-subnav-btn ${cle===d?'active':''}" onclick="setDomaineReferentiel('${jsAttr(cle)}')">${esc(v.titre)}</button>`).join('')}
+    </div>
+    <div class="card-sub" style="margin-bottom:12px;">${esc(DOMAINES_REFERENTIEL[d].aide)}</div>`;
+}
 
 function renderReferentielsSection(){
   const d = domaineReferentielOuvert;
   const def = DOMAINES_REFERENTIEL[d];
+  /* Une liste qui a son propre écran le garde : les métiers ont un formulaire
+     à couleurs, un refus de suppression et un renommage propagé que le
+     formulaire générique ne sait pas rendre. Seuls les onglets sont communs. */
+  if(def.propre) return ongletsReferentiel(d) + renderMetiersSection();
   return `
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
       <span>Listes de choix</span>
       <button class="btn small primary" onclick="openForm('referentiel')">+ Nouvelle ${esc(def.singulier)}</button>
     </div>
-    <div class="plus-subnav" style="margin-bottom:12px;">
-      ${Object.entries(DOMAINES_REFERENTIEL).map(([cle,v])=>
-        `<button class="plus-subnav-btn ${cle===d?'active':''}" onclick="setDomaineReferentiel('${jsAttr(cle)}')">${esc(v.titre)}</button>`).join('')}
-    </div>
-    <div class="card-sub" style="margin-bottom:12px;">${esc(def.aide)}</div>
+    ${ongletsReferentiel(d)}
     ${barreRecherche('referentiel', 'Rechercher…')}
     <div id="formZoneReferentiel">${state.formOpen.referentiel? referentielForm() : ''}</div>
     <div id="liste-referentiel">${listeReferentielsHTML()}</div>
@@ -18504,7 +18507,6 @@ Object.assign(window, {
   renderTechModalPhotos,
   renderTopClientsHTML,
   renderTravauxSupplementairesListe,
-  renderUnitesSection,
   renderUserMenu,
   renderValidationConducteurTaches,
   renderValidationDirecteur,
