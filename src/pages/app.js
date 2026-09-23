@@ -13700,7 +13700,17 @@ function renderRHSalaries(){
   const list = state.salaries.filter(s=>s.societeId===state.societeId);
   const q = (state.rhSearch||'').trim().toLowerCase();
   const metierFiltre = state.rhMetierFiltre||'';
-  const metiersDistincts = Array.from(new Set(list.map(s=>s.poste).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  /* Le référentiel D'ABORD, puis ce que portent les fiches et qu'il ne déclare
+     pas — un « Chef d'équipe » saisi en libre, ou un poste d'avant la liste.
+     Bâtir le filtre sur les seuls `poste` déjà tapés, comme auparavant, y
+     faisait entrer chaque variante de graphie : « Plombier », « PLOMBIER » et
+     « plomberie » comptaient pour trois entrées, et aucune ne correspondait au
+     métier « Plomberie » du référentiel. */
+  const duReferentiel = metiersDisponibles();
+  const horsReferentiel = Array.from(new Set(list.map(s=>s.poste).filter(Boolean)))
+    .filter(v => !duReferentiel.some(m => window.memeMetier(m, v)))
+    .sort((a,b)=>a.localeCompare(b));
+  const metiersDistincts = [...duReferentiel, ...horsReferentiel];
   let filtered = q ? list.filter(s=>window.multiWordMatch([s.nom,s.prenom,s.poste].filter(Boolean).join(' ').toLowerCase(), q)) : list;
   if(metierFiltre) filtered = filtered.filter(s=>s.poste===metierFiltre);
   return `
@@ -14341,6 +14351,51 @@ async function removeAbsence(salarieId, absenceId){
   await recharger('salarie');
   renderTab();
 }
+/* La sentinelle du choix libre. Une chaîne qu'aucun métier ne peut porter :
+   le référentiel n'accepte pas de parenthèses en tête de libellé. */
+const POSTE_AUTRE = '(autre)';
+
+/** Un poste tiré du référentiel des métiers ? Comparaison tolérante, comme partout. */
+function posteEstDuReferentiel(poste){
+  const v = (poste||'').trim();
+  if(!v) return true;   // fiche neuve : la liste s'ouvre sur « — », pas sur « Autre… »
+  return metiersDisponibles().some(m => window.memeMetier(m, v));
+}
+
+/**
+ * Les métiers du référentiel, plus « Autre… ».
+ *
+ * La valeur courante est RÉINJECTÉE si elle n'est pas dans la liste — sinon
+ * ouvrir puis enregistrer une fiche existante changerait le poste en silence.
+ * C'est le piège que `comptesLinkOptions` évite déjà juste à côté : 51 salariés
+ * portent aujourd'hui un poste écrit à la main.
+ */
+function posteOptions(courant){
+  const v = (courant||'').trim();
+  const libre = v && !posteEstDuReferentiel(v);
+  return `<option value="" ${!v?'selected':''}>—</option>`
+    + metiersDisponibles().map(m =>
+        `<option value="${jsAttr(m)}" ${window.memeMetier(m, v)?'selected':''}>${esc(m)}</option>`).join('')
+    + `<option value="${POSTE_AUTRE}" ${libre?'selected':''}>Autre…</option>`;
+}
+
+/* Le champ libre n'apparaît que sur « Autre… ». Rien n'est redessiné : le
+   formulaire porte d'autres saisies en cours. */
+function basculerPosteLibre(valeur){
+  const champ = document.getElementById('sal_posteAutreChamp');
+  if(!champ) return;
+  champ.style.display = valeur === POSTE_AUTRE ? '' : 'none';
+  if(valeur === POSTE_AUTRE) document.getElementById('sal_posteAutre').focus();
+}
+
+/* Ce qui part en base : le métier choisi, ou le texte libre. `poste` reste une
+   colonne de texte — aucune migration, et les fiches d'avant restent lisibles. */
+function posteSaisi(){
+  const choix = document.getElementById('sal_poste').value;
+  if(choix !== POSTE_AUTRE) return choix;
+  return (document.getElementById('sal_posteAutre').value||'').trim();
+}
+
 function salarieForm(){
   const e = state.editing;
   if(!e.habilitationsAJoindre) e.habilitationsAJoindre = [];
@@ -14350,7 +14405,8 @@ function salarieForm(){
     <div class="field-grid">
       <div class="field"><label>Prénom</label><input type="text" id="sal_prenom" value="${esc(e.prenom)}"></div>
       <div class="field"><label>Nom</label><input type="text" id="sal_nom" value="${esc(e.nom)}"></div>
-      <div class="field"><label>Poste / métier</label><input type="text" id="sal_poste" value="${esc(e.poste)}" placeholder="Ex : Plombier, Chef d'équipe…"></div>
+      <div class="field"><label>Poste / métier</label><select id="sal_poste" onchange="basculerPosteLibre(this.value)">${posteOptions(e.poste)}</select></div>
+      <div class="field" id="sal_posteAutreChamp" style="${posteEstDuReferentiel(e.poste)? 'display:none;' : ''}"><label>Lequel ?</label><input type="text" id="sal_posteAutre" value="${posteEstDuReferentiel(e.poste)? '' : esc(e.poste)}" placeholder="Ex : Chef d'équipe, Apprenti, Conducteur de travaux"></div>
       <div class="field"><label>Date de naissance</label><input type="date" id="sal_dateNaissance" value="${e.dateNaissance||''}"></div>
       <div class="field"><label>Nationalité</label><input type="text" id="sal_nationalite" value="${esc(e.nationalite)}" placeholder="Ex : Française"></div>
       <div class="field"><label>Sexe</label><select id="sal_sexe">
@@ -14766,7 +14822,7 @@ async function saveSalarie(){
   const id = e.id || uid();
   const obj = { id, societeId: state.societeId, createdAt: e.createdAt || new Date().toISOString(),
     nom, prenom: document.getElementById('sal_prenom').value,
-    poste: document.getElementById('sal_poste').value,
+    poste: posteSaisi(),
     dateNaissance: document.getElementById('sal_dateNaissance').value,
     nationalite: document.getElementById('sal_nationalite').value,
     sexe: document.getElementById('sal_sexe').value,
@@ -16812,6 +16868,7 @@ Object.assign(window, {
   barreFiltresFactures,
   barreRecherche,
   barreFiltresReglements,
+  basculerPosteLibre,
   basculerReferencePrefacture,
   bcAProbleme,
   bcFacturesKTA,
