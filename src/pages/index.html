@@ -1086,8 +1086,10 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
   background:var(--surface-2); color:var(--text-dim);
   font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;
 }
-/* Les actions restent EN BAS, sur une ligne, comme avant. */
-.bc-actions-bas{ margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+.bc-etat-badges{ display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+/* Les actions restent EN BAS, sur une ligne, collées à l'adresse : elles en
+   étaient séparées de 37 px de vide, dont 27 venaient de la colonne d'état. */
+.bc-actions-bas{ margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; }
 /* Sous 780 px, contact et état repassent sous l'identité : trois colonnes dans
    la largeur d'un téléphone ne laisseraient plus lire l'adresse. */
 @media(max-width:780px){

@@ -5881,11 +5881,17 @@ function bonCommandeCardHTML(b, workflowCtx){
             détail, alors que c'est le premier geste qu'on fait sur un bon dont
             l'occupant ne répond pas. */''}
       <div class="bc-contact">${contactBoutonsHTML(b)}</div>
+      ${/* Le montant, puis les pastilles SUR UNE LIGNE. Empilées, elles
+            portaient la colonne à 86 px quand l'identité n'en fait que 59 :
+            l'entête prenait leur hauteur, et le blanc sous l'adresse était
+            tout ce qui restait de cet écart. */''}
       <div class="bc-etat">
-        ${b.logementStatut? logementBadge(b.logementStatut) : ''}
         <div class="amount">${moneyDisplay(b.montant)}</div>
-        ${isSAV? '' : badgeWorkflow(b)}
-        <span class="badge ${badgeClass(b.statut)}">${esc(b.statut)}</span>
+        <div class="bc-etat-badges">
+          ${b.logementStatut? logementBadge(b.logementStatut) : ''}
+          ${isSAV? '' : badgeWorkflow(b)}
+          <span class="badge ${badgeClass(b.statut)}">${esc(b.statut)}</span>
+        </div>
       </div>
     </div>
     <div class="bc-actions-bas">
