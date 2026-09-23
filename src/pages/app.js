@@ -180,6 +180,7 @@ let state = {
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   bcCardOuverte: null,
+  reglementEtatFiltre: '', reglementTri: 'retard',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]},
   /* Le dossier documentaire des salariés. À part du reste : il ne transite pas
@@ -9338,14 +9339,15 @@ function renderReglements(embedded){
   if(state.reglementsClient){
     return renderReglementsClientDetail(state.reglementsClient, factures);
   }
-  const vue = state.reglementsVue === 'tous' ? 'tous' : 'clients';
+  const vue = ['tous', 'factures'].includes(state.reglementsVue) ? state.reglementsVue : 'clients';
   return `
     ${embedded? '' : '<div class="page-head"><h1>Règlements</h1></div>'}
     <div class="plus-subnav" style="margin-bottom:14px;">
       <button class="plus-subnav-btn ${vue==='clients'?'active':''}" onclick="setReglementsVue('clients')">Par client</button>
+      <button class="plus-subnav-btn ${vue==='factures'?'active':''}" onclick="setReglementsVue('factures')" title="Quelles factures sont payées, lesquelles ne le sont pas">Par facture</button>
       <button class="plus-subnav-btn ${vue==='tous'?'active':''}" onclick="setReglementsVue('tous')">Tous les règlements</button>
     </div>
-    ${vue==='tous' ? renderTousLesReglements() : `
+    ${vue==='factures' ? renderFacturesParReglement() : vue==='tous' ? renderTousLesReglements() : `
       ${barreRecherche('reglementClient', 'Rechercher : client, n° de facture…')}
       <div id="liste-reglementClient">${listeDossiersReglementsHTML()}</div>`}
   `;
@@ -9460,6 +9462,99 @@ function barreFiltresReglements(){
     </select>
     ${window.criteresReglementsActifs(f)? `<button class="btn small ghost" onclick="reinitialiserFiltresReglements()" title="Tout réafficher">✕ Effacer</button>` : ''}
   </div>`;
+}
+
+/**
+ * L'état de paiement d'une facture, en un mot.
+ *
+ * `statutReglement` distingue déjà réglée / partiellement / non réglée. Il lui
+ * manque le RETARD, qui n'est pas un état de plus mais un croisement : une
+ * facture non soldée dont l'échéance est passée. C'est la question qu'on pose
+ * vraiment — « qu'est-ce qui traîne ? » —, et elle n'avait nulle part où se
+ * poser dans cet écran.
+ */
+function etatReglementFacture(f){
+  const st = reglementStatutFacture(f);
+  const jours = joursDepuisEcheance(f) || 0;
+  const enRetard = !st.avoir && st.reste > 0.01 && jours > 0;
+  return { ...st, jours, enRetard };
+}
+
+const ETATS_REGLEMENT = [
+  ['', 'Tous les états'],
+  ['non_reglee', 'Non réglées'],
+  ['partiellement_reglee', 'Partiellement réglées'],
+  ['reglee', 'Réglées'],
+  ['en_retard', 'En retard'],
+];
+
+const TRIS_REGLEMENT = [
+  ['retard', 'Les plus en retard d\'abord'],
+  ['reste', 'Reste dû décroissant'],
+  ['echeance', 'Échéance la plus proche'],
+  ['client', 'Client (A → Z)'],
+];
+
+/* Les avoirs sont écartés : ils ne se règlent pas, ils s'imputent, et leur
+   « reste » est un crédit disponible — l'additionner aux impayés ferait
+   grossir la créance du montant même qui l'éteint. */
+function facturesParEtatReglement(){
+  const etat = state.reglementEtatFiltre || '';
+  const tri = state.reglementTri || 'retard';
+  const lignes = facturesDesReglements()
+    .filter(f => !(window.estAvoir && window.estAvoir(f.typeDocument)))
+    .map(f => ({ f, e: etatReglementFacture(f) }))
+    .filter(({e}) => !etat || (etat === 'en_retard' ? e.enRetard : e.cle === etat));
+
+  const comparateurs = {
+    retard:   (a, b) => (b.e.enRetard - a.e.enRetard) || (b.e.jours - a.e.jours),
+    reste:    (a, b) => b.e.reste - a.e.reste,
+    echeance: (a, b) => String(a.f.echeance || a.f.date || '9999').localeCompare(String(b.f.echeance || b.f.date || '9999')),
+    client:   (a, b) => String(a.f.client || '').localeCompare(String(b.f.client || '')),
+  };
+  return lignes.sort(comparateurs[tri] || comparateurs.retard);
+}
+
+function majEtatReglement(valeur){ state.reglementEtatFiltre = valeur; renderTab(); }
+function majTriReglement(valeur){ state.reglementTri = valeur; renderTab(); }
+
+function renderFacturesParReglement(){
+  const lignes = facturesParEtatReglement();
+  const du = lignes.reduce((s, {e}) => s + (e.reste > 0.01 ? e.reste : 0), 0);
+  const enRetard = lignes.filter(({e}) => e.enRetard).length;
+  const etat = state.reglementEtatFiltre || '';
+  const tri = state.reglementTri || 'retard';
+  const opt = (liste, courant) => liste.map(([k, l]) => `<option value="${k}" ${k === courant ? 'selected' : ''}>${l}</option>`).join('');
+
+  return `
+    <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
+      <select style="width:auto; min-width:210px;" onchange="majEtatReglement(this.value)">${opt(ETATS_REGLEMENT, etat)}</select>
+      <select style="width:auto; min-width:210px;" onchange="majTriReglement(this.value)" title="Ordre d'affichage">${opt(TRIS_REGLEMENT, tri)}</select>
+      ${etat? `<button class="btn small ghost" onclick="majEtatReglement('')" title="Tout réafficher">✕ Effacer</button>` : ''}
+    </div>
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;">
+      <div><div class="card-title">${lignes.length} facture${lignes.length > 1 ? 's' : ''}</div>
+      <div class="card-sub">${enRetard ? `dont <b>${enRetard}</b> en retard` : 'aucune en retard'}</div></div>
+      <div style="text-align:right;"><div class="amount">${moneyDisplay(du)}</div><div class="card-sub">reste à encaisser</div></div>
+    </div>
+    ${lignes.length ? lignes.map(({f, e}) => `<div class="card">
+      <div class="card-row">
+        <div style="flex:1; min-width:0;">
+          <div class="card-title">${esc(f.client)}</div>
+          <div class="card-sub"><span class="numref-lg">${esc(f.numero || 'Brouillon')}</span> · ${fmtDate(f.date)}${f.echeance ? ' · échéance ' + fmtDate(f.echeance) : ''}</div>
+          <div class="card-sub">${moneyDisplay(e.ttc)} TTC · ${moneyDisplay(e.paye)} encaissé${e.reste > 0.01 ? ' · <b>' + moneyDisplay(e.reste) + ' dû</b>' : ''}</div>
+        </div>
+        <div style="text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+          <span class="badge ${e.cls}">${esc(e.label)}</span>
+          ${e.enRetard ? `<span class="badge danger" title="Échéance dépassée">Retard ${e.jours} j</span>` : ''}
+        </div>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn small" onclick="openReglementsClient('${jsAttr(f.client)}')">Ouvrir le dossier</button>
+        <button class="btn small ghost" onclick="goToFacture('${jsAttr(f.id)}')">Voir la facture</button>
+      </div>
+    </div>`).join('') : `<div class="empty">Aucune facture dans cet état.</div>`}
+  `;
 }
 
 function renderTousLesReglements(){
@@ -17486,6 +17581,8 @@ Object.assign(window, {
   marquerMaterielRendu,
   marquerNotifsCocheesFaites,
   marquerPieceCommandee,
+  majEtatReglement,
+  majTriReglement,
   majFiltreReglement,
   materielForm,
   materielStatut,
