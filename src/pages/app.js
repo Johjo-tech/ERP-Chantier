@@ -181,6 +181,7 @@ let state = {
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   bcCardOuverte: null,
   reglementEtatFiltre: '', reglementTri: 'retard',
+  reglementClientFiltre: '', reglementDuFiltre: '', reglementAuFiltre: '',
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]},
   /* Le dossier documentaire des salariés. À part du reste : il ne transite pas
@@ -763,6 +764,13 @@ function computeTotals(lignes){
   const t = window.totauxDocument(lignes, 0);
   return {ht: t.ht, tva: t.tva, ttc: t.ttc};
 }
+/* Un avoir, quel que soit l'endroit d'où on le regarde. `window.estAvoir` vient
+   du pont et n'est pas garanti au premier rendu ; ce garde évite qu'un avoir
+   passe pour une facture pendant l'amorçage. */
+function estAvoirDoc(doc){
+  return !!(doc && window.estAvoir && window.estAvoir(doc.typeDocument));
+}
+
 function computeDocTotals(doc){
   /* Un avoir porte des montants POSITIFS, comme la facture qu'il rectifie :
      c'est son type qui dit le sens, et l'export de la facture électronique
@@ -1445,7 +1453,13 @@ function computeMonthSummary(soc){
   const tauxConversion = devisDuMois.length? Math.round(devisAcceptes/devisDuMois.length*100) : 0;
   /* Sur le statut stocké, une facture réglée à moitié échappait au total dû.
      Le reste à payer le dit sans intermédiaire. */
-  const impayeesMontant = factures.reduce((s,f)=>{ const st=reglementStatutFacture(f); return s + (st.cle==='reglee' ? 0 : st.reste); },0);
+  const impayeesMontant = factures.reduce((s,f)=>{
+    /* Un avoir écarté, et non compté à zéro : son `reste` est le crédit qui
+       lui reste à donner. Ajouté ici, il gonflait les impayés de son propre
+       montant — exactement ce contre quoi `computeDocTotals` prévient. */
+    if(estAvoirDoc(f)) return s;
+    const st=reglementStatutFacture(f); return s + (st.cle==='reglee' ? 0 : st.reste);
+  },0);
   const totalFacture = factures.reduce((s,f)=>s+computeDocTotals(f).ttc,0) || 1;
   const tauxEncaisse = Math.max(0, Math.round((1 - impayeesMontant/totalFacture)*100));
   return { caMois, caMoisPct: Math.min(100, Math.round(caMois/maxMois*100)), tauxConversion, devisCount: devisDuMois.length, tauxEncaisse, impayeesMontant };
@@ -1462,7 +1476,7 @@ function computeDashTraiter(soc, fiche){
   const aFacturer = aFacturerList.length;
   const aFacturerMontant = aFacturerList.reduce((s,b)=> s + (b.lignes? computeTotalsAvecRemise(b.lignes,0).ht : (parseFloat(b.montant)||0)), 0);
   const rappelsAujourdhui = bcs.filter(b=>b.rappelDate && b.rappelDate<=today).length;
-  const facturesEchues = state.factures.filter(f=>f.societeId===soc && f.statut==='impayée' && f.echeance && f.echeance<today).length;
+  const facturesEchues = state.factures.filter(f=>f.societeId===soc && f.statut==='impayée' && !estAvoirDoc(f) && f.echeance && f.echeance<today).length;
   return { enAttenteConducteur, aValiderDirecteur, aFacturer, aFacturerMontant, rappelsAujourdhui, facturesEchues };
 }
 function sousTraitantActuel(){
@@ -1653,7 +1667,7 @@ function renderDashboardConducteur(){
 
 function renderDashboardSousTraitant(){
   const mesFactures = facturesDuSousTraitant();
-  const impayees = mesFactures.filter(f=>f.statut==='impayée').length;
+  const impayees = mesFactures.filter(f=>f.statut==='impayée' && !estAvoirDoc(f)).length;
   const devisST = state.devis.filter(d=>d.societeId===state.societeId && d.sousTraitantEmetteur && (!sousTraitantActuel() || d.sousTraitantEmetteur===sousTraitantActuel()));
   const facturesKTAPretes = bcFacturesKTA().filter(b=>b.montantSousTraitant!=null && !factureSTQuiCouvre(b.id)).length;
   const dateLabel = new Date().toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
@@ -1726,7 +1740,10 @@ function renderDashboard(){
   const interventions = state.interventions.filter(i=>i.societeId===soc);
   const devisEnAttente = devis.filter(d=>d.statut==='envoyé');
   const devisEnAttenteMontant = devisEnAttente.reduce((s,d)=>s+computeDocTotals(d).ht,0);
-  const impayees = factures.filter(f=>f.statut==='impayée');
+  /* Le statut stocké ne distingue rien : un avoir naît « impayée » en base —
+     il y en a en production — et se comptait donc parmi les factures à
+     encaisser. */
+  const impayees = factures.filter(f=>f.statut==='impayée' && !estAvoirDoc(f));
   const enCours = interventions.filter(i=>i.statut==='en cours').length;
   const dateLabel = new Date().toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
   const activity = buildActivityFeed(soc);
@@ -4693,9 +4710,18 @@ function bonsDeLaVue(vue){
    dépendent de la remise, le statut de règlement des règlements enregistrés. */
 function contexteFacture(f){
   const st = reglementStatutFacture(f);
-  const etiquettes = [st.cle==='reglee'? 'payee' : st.cle==='partiellement_reglee'? 'partiel' : 'impayee'];
+  /* UN AVOIR N'EST PAS UN IMPAYÉ. Son état vient de `statutImputation` —
+     « disponible », « partiellement imputé », « imputé » — et aucune de ces
+     clés ne vaut `reglee` : le ternaire le rangeait donc dans le `else`, et
+     tout avoir non épuisé s'affichait « 🔴 Impayée ». Pire, son « reste » est
+     un CRÉDIT disponible, pas une dette : passé son échéance, il ressortait
+     aussi « ⏰ En retard ». Il porte désormais ses propres étiquettes, et
+     aucune de celles du règlement. */
+  const etiquettes = st.avoir
+    ? ['avoir', st.cle === 'impute' ? 'avoir_impute' : 'avoir_disponible']
+    : [st.cle==='reglee'? 'payee' : st.cle==='partiellement_reglee'? 'partiel' : 'impayee'];
   // Une facture en retard reste impayée : les deux filtres doivent la trouver
-  if(st.reste > 0.01 && (joursDepuisEcheance(f)||0) > 0) etiquettes.push('retard');
+  if(!st.avoir && st.reste > 0.01 && (joursDepuisEcheance(f)||0) > 0) etiquettes.push('retard');
   return { extras: montantsCherchables(f), reglements: etiquettes };
 }
 function contexteBonCommande(b){
@@ -9501,8 +9527,19 @@ const TRIS_REGLEMENT = [
 function facturesParEtatReglement(){
   const etat = state.reglementEtatFiltre || '';
   const tri = state.reglementTri || 'retard';
+  const client = state.reglementClientFiltre || '';
+  const du = state.reglementDuFiltre || '';
+  const au = state.reglementAuFiltre || '';
+  /* La date qui compte ici est l'ÉCHÉANCE, pas celle d'émission : on cherche
+     ce qui arrive à terme dans la période, pas ce qui a été facturé. Sans
+     échéance, la date du document en tient lieu — c'est déjà la règle de
+     `joursDepuisEcheance`, et deux lectures du terme finiraient par diverger. */
+  const terme = (f) => f.echeance || f.date || '';
   const lignes = facturesDesReglements()
-    .filter(f => !(window.estAvoir && window.estAvoir(f.typeDocument)))
+    .filter(f => !estAvoirDoc(f))
+    .filter(f => !client || f.client === client)
+    .filter(f => !du || terme(f) >= du)
+    .filter(f => !au || terme(f) <= au)
     .map(f => ({ f, e: etatReglementFacture(f) }))
     .filter(({e}) => !etat || (etat === 'en_retard' ? e.enRetard : e.cle === etat));
 
@@ -9517,6 +9554,21 @@ function facturesParEtatReglement(){
 
 function majEtatReglement(valeur){ state.reglementEtatFiltre = valeur; renderTab(); }
 function majTriReglement(valeur){ state.reglementTri = valeur; renderTab(); }
+function majFiltreFactureReglement(champ, valeur){
+  state[{client:'reglementClientFiltre', du:'reglementDuFiltre', au:'reglementAuFiltre'}[champ]] = valeur;
+  renderTab();
+}
+function reinitialiserFiltresFactureReglement(){
+  Object.assign(state, { reglementEtatFiltre:'', reglementClientFiltre:'', reglementDuFiltre:'', reglementAuFiltre:'' });
+  renderTab();
+}
+/* Les clients qui ont au moins une facture : proposer ceux qui n'en ont pas
+   offrirait des filtres qui ne ramènent jamais rien. */
+function optionsClientsFactureReglement(courant){
+  const noms = [...new Set(facturesDesReglements().filter(f=>!estAvoirDoc(f)).map(f=>f.client).filter(Boolean))].sort();
+  return `<option value="">Tous les clients</option>`
+    + noms.map(n=>`<option value="${jsAttr(n)}" ${n===courant?'selected':''}>${esc(n)}</option>`).join('');
+}
 
 function renderFacturesParReglement(){
   const lignes = facturesParEtatReglement();
@@ -9529,8 +9581,12 @@ function renderFacturesParReglement(){
   return `
     <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
       <select style="width:auto; min-width:210px;" onchange="majEtatReglement(this.value)">${opt(ETATS_REGLEMENT, etat)}</select>
+      <select style="width:auto; min-width:200px;" onchange="majFiltreFactureReglement('client', this.value)">${optionsClientsFactureReglement(state.reglementClientFiltre||'')}</select>
+      <label class="card-sub" style="margin:0;" title="Échéance à partir du">Échéance du <input type="date" style="width:auto;" value="${esc(state.reglementDuFiltre||'')}" onchange="majFiltreFactureReglement('du', this.value)"></label>
+      <label class="card-sub" style="margin:0;" title="Échéance jusqu'au">au <input type="date" style="width:auto;" value="${esc(state.reglementAuFiltre||'')}" onchange="majFiltreFactureReglement('au', this.value)"></label>
       <select style="width:auto; min-width:210px;" onchange="majTriReglement(this.value)" title="Ordre d'affichage">${opt(TRIS_REGLEMENT, tri)}</select>
-      ${etat? `<button class="btn small ghost" onclick="majEtatReglement('')" title="Tout réafficher">✕ Effacer</button>` : ''}
+      ${(etat || state.reglementClientFiltre || state.reglementDuFiltre || state.reglementAuFiltre)
+        ? `<button class="btn small ghost" onclick="reinitialiserFiltresFactureReglement()" title="Tout réafficher">✕ Effacer</button>` : ''}
     </div>
     <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;">
       <div><div class="card-title">${lignes.length} facture${lignes.length > 1 ? 's' : ''}</div>
@@ -17583,6 +17639,7 @@ Object.assign(window, {
   marquerPieceCommandee,
   majEtatReglement,
   majTriReglement,
+  majFiltreFactureReglement,
   majFiltreReglement,
   materielForm,
   materielStatut,
@@ -17782,6 +17839,7 @@ Object.assign(window, {
   ecrireFiltresReglementsDansURL,
   reglerParAvoir,
   reinitialiserFiltresFactures,
+  reinitialiserFiltresFactureReglement,
   reinitialiserFiltresReglements,
   relancerCatalogue,
   relancerLectureBC,
