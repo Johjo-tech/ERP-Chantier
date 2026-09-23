@@ -179,6 +179,7 @@ let state = {
   factureMetierFilter: '', factureReglementFilter: '',
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
+  bcCardOuverte: null,
   formOpen: {devis:false, facture:false, intervention:false, client:false, article:false, document:false, reglement:false, interlocuteur:false, reglementBulk:false, bonCommande:false, conducteur:false, technicien:false, metierPerso:false, sousTraitant:false, chantier:false, salarie:false, vehicule:false, materiel:false},
   editing: {type:null, id:null, lignes:[]},
   /* Le dossier documentaire des salariés. À part du reste : il ne transite pas
@@ -5769,6 +5770,21 @@ function facturesDuBonCommande(bcId){
 function verrouDuBonCommande(bcId){
   return window.verrouBonCommande(facturesDuBonCommande(bcId));
 }
+/* Une seule carte dépliée à la fois : deux ouvertes, et on retombe sur la
+   liste illisible qu'on vient de quitter. Seule la carte concernée est
+   redessinée — `renderTab()` referait toute la liste et ferait remonter le
+   défilement en haut, sous les yeux de celui qui vient de cliquer. */
+function toggleBonCommandeCard(bcId){
+  const avant = state.bcCardOuverte;
+  state.bcCardOuverte = avant === bcId ? null : bcId;
+  for(const id of [avant, state.bcCardOuverte]){
+    if(!id) continue;
+    const carte = document.getElementById('bonCommande-card-'+id);
+    const b = state.bonsCommande.find(x=>x.id===id);
+    if(carte && b) carte.outerHTML = bonCommandeCardHTML(b, carte.dataset.wf === '' ? false : carte.dataset.wf);
+  }
+}
+
 function bonCommandeCardHTML(b, workflowCtx){
     const isSAV = !!b.bonCommandeId;
     const factureLiee = state.factures.find(f=>f.bonCommandeId===b.id);
@@ -5785,10 +5801,19 @@ function bonCommandeCardHTML(b, workflowCtx){
        deux vues de Facturation — et pour un rôle qui voit les prix. */
     const chiffrageIci = (workflowCtx === false || workflowCtx === 'validation' || workflowCtx === 'afacturer')
       && (!window.affichePrix || window.affichePrix());
-    return `<div class="card" id="bonCommande-card-${b.id}">
-      <div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}${verrou? ` <span class="badge success" style="margin-left:6px;" title="${esc(verrou.libelle)}">🔒 Facturé</span>`:''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.interlocuteur? ' · 👤 '+esc(b.interlocuteur):''}${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}${(b.metiers&&b.metiers.length)||b.metier? ' · 🔧 '+esc(metiersDisplayJoin(b)):''}</div>
+    /* Repliée par défaut. La carte portait vingt-cinq blocs conditionnels et
+       faisait trois écrans de haut sur une liste de cent bons : on ne
+       parcourait plus rien. Ne restent que les quatre lignes qui identifient
+       l'affaire — client, n° de bon, conducteur, adresse — et les actions, à
+       droite. Le reste est à un clic, jamais perdu. */
+    const ouverte = state.bcCardOuverte === b.id;
+    return `<div class="card bc-card ${ouverte?'est-ouverte':''}" id="bonCommande-card-${b.id}" data-wf="${jsAttr(workflowCtx===false? '' : String(workflowCtx||''))}">
+      <div class="bc-tete">
+      <button class="bc-chevron" onclick="event.stopPropagation(); toggleBonCommandeCard('${jsAttr(b.id)}')" title="${ouverte?'Replier':'Tout afficher'}" aria-expanded="${ouverte}">${ouverte?'▾':'▸'}</button>
+      <div class="bc-ident"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}${verrou? ` <span class="badge success" style="margin-left:6px;" title="${esc(verrou.libelle)}">🔒 Facturé</span>`:''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}</div>
       <div class="card-sub">${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>
+      ${ouverte? `
+      <div class="card-sub">${b.interlocuteur? '👤 '+esc(b.interlocuteur):''}${b.interlocuteur && ((b.metiers&&b.metiers.length)||b.metier)? ' · ':''}${(b.metiers&&b.metiers.length)||b.metier? '🔧 '+esc(metiersDisplayJoin(b)):''}</div>
       ${planningContactZoneHTML(b)}
       ${b.natureTravaux? `<div class="card-sub">🛠️ ${esc(b.natureTravaux)}</div>`:''}
       ${bonCommandeOrigine? `<div class="card-sub">Bon de commande d'origine : <a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(bonCommandeOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(bonCommandeOrigine.numeroBC)}</a></div>`:''}
@@ -5817,9 +5842,6 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${/* Un seul chemin vers le chiffrage. L'éditeur qui vivait ici ne lisait
             que `b.lignes` et ignorait les travaux ajoutés sur le chantier : on
             pouvait chiffrer une affaire sans jamais les voir. */''}
-      ${chiffrageIci? `<div class="tech-fiche-zone">
-        <button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${jsAttr(b.id)}')">🧾 Ouvrir la pré-facture${(b.lignes&&b.lignes.length)? ` — ${money(computeTotals(b.lignes).ttc)} TTC` : ' — pas encore chiffrée'}</button>
-      </div>`:''}
       ${pieceAttendueLigne(b, 'card-sub')}
       ${b.datePlanificationInitiale? `<div class="card-sub">🕓 Planifiée une première fois le ${fmtDate(b.datePlanificationInitiale)} (reportée pour attente de pièce)</div>`:''}
       ${b.dateInterventionTerminee? `<div class="card-sub" style="color:#2E9BF0; font-weight:600;">✅ Intervention terminée le ${fmtDate(b.dateInterventionTerminee)}</div>`:''}
@@ -5831,36 +5853,45 @@ function bonCommandeCardHTML(b, workflowCtx){
         ${!b.pieceACommanderDateCommande? `<button class="btn small primary" onclick="marquerPieceCommandee('${jsAttr(b.id)}')">📦 Commandé</button>`:''}
         <button class="btn small ${b.pieceACommanderDateCommande?'primary':''}" onclick="replanifierApresPiece('${jsAttr(b.id)}')">✓ Pièce arrivée — Renvoyer au planning</button>
       </div>`:''}
+      ` : ''}
       </div>
-      ${b.logementStatut? `<div style="flex:0 0 auto; align-self:center; text-align:center; padding:0 6px;">${logementBadge(b.logementStatut)}</div>`:''}
-      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(b.montant)}</div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:5px;">
-          ${isSAV? '' : badgeWorkflow(b)}
-          <span class="badge ${badgeClass(b.statut)}">${esc(b.statut)}</span>
-        </div>
+      <div class="bc-etat">
+        ${b.logementStatut? logementBadge(b.logementStatut) : ''}
+        <div class="amount">${moneyDisplay(b.montant)}</div>
+        ${isSAV? '' : badgeWorkflow(b)}
+        <span class="badge ${badgeClass(b.statut)}">${esc(b.statut)}</span>
       </div>
-    </div>
-    ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
-    ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
-    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+      ${/* Les actions passent à DROITE, dans l'entête : elles étaient en bas,
+            derrière tout le détail, et il fallait dérouler la carte entière
+            pour atteindre « Modifier ». Elles restent visibles repliée. */''}
+      <div class="bc-actions">
+      ${/* En PREMIER, et visible carte repliée : c'est le geste qu'on vient
+            chercher sur cet écran. Enfoui dans le détail, il obligeait à
+            déplier chaque carte pour savoir laquelle était chiffrée. */''}
+      ${chiffrageIci? `<button class="btn small primary" onclick="event.stopPropagation(); openValidationDirecteurModal('${jsAttr(b.id)}')">🧾 Pré-facture${(b.lignes&&b.lignes.length)? ` · ${money(computeTotals(b.lignes).ttc)} TTC` : ' · à chiffrer'}</button>`:''}
       ${/* « Modifier » sur un bon déjà facturé laissait réécrire des travaux
             que le client tient déjà par écrit, sur une facture définitive. */''}
       ${verrou
-        ? `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="${esc(verrou.libelle)}">👁 Consulter</button>`
-        : `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')">Modifier</button>`}
+        ? `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="${esc(verrou.libelle)}">👁</button>`
+        : `<button class="btn small" onclick="editItem('bonCommande','${jsAttr(b.id)}')" title="Modifier ce bon de commande">✎</button>`}
       ${/* Une fois la pré-facture validée, l'étape suivante doit sauter aux yeux :
             c'est le geste qu'on cherche, pas un bouton gris parmi cinq. */''}
       ${(factureLiee||isSAV)? '' : (b.valideDirecteur
-        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${jsAttr(b.id)}')">🧾 Créer la facture</button>`
-        : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
-      ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')">Créer un SAV</button>`}
-      ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Lier un rapport</button>`}
+        ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${jsAttr(b.id)}')" title="Créer la facture de ce bon">🧾 Facturer</button>`
+        : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Facturer</button>`)}
+      ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')" title="Créer un SAV rattaché à ce bon">＋ SAV</button>`}
+      ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')" title="Modifier le lien vers le rapport">🔗 Rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')" title="Lier un rapport d'intervention">🔗 Rapport</button>`}
       ${verrou
-        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
-        : `<button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')">Supprimer</button>`}
+        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">🗑</button>`
+        : `<button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')" title="Supprimer ce bon de commande">🗑</button>`}
     </div>
+    </div>
+    ${ouverte? `
+    ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
+    ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
     ${state.lienOuvert==='bonCommande:'+b.id? `<div style="margin-top:8px;">${lienWidgetHTML('bonCommande', b.id, b.client)}</div>`:''}
     ${(!factureLiee && !isSAV && !b.valideDirecteur && workflowCtx!=='pieceCommande')? `<div class="bc-attente-message" style="margin-top:8px;">⏳ En attente — ${!b.valideConducteur? "la validation du conducteur puis du directeur est requise" : "la validation du directeur est requise"} avant de pouvoir facturer ce bon de commande.</div>` : ''}
+    ` : ''}
     </div>`;
 }
 function bcMetiersDuBC(b){
@@ -17856,6 +17887,7 @@ Object.assign(window, {
   toggleDossier,
   toggleDpgfSection,
   toggleGhostMode,
+  toggleBonCommandeCard,
   toggleLienZone,
   toggleLigneComment,
   toggleMenuEpingle,

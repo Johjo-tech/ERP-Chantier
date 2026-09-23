@@ -1055,6 +1055,44 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 /* La pré-facture : un code article étroit, un métier compact, une désignation
    qui prend ce qui reste, les montants à droite. Les largeurs sont posées ici
    pour que le tableau tienne en A4 portrait à l'impression comme à l'écran. */
+/* ---- La carte d'un bon de commande ----
+   Elle portait vingt-cinq blocs conditionnels empilés et faisait trois écrans
+   de haut sur une liste de cent bons. Repliée, elle tient sur trois lignes :
+   client, n° et conducteur, adresse. L'état et les actions passent à droite —
+   ils étaient en bas, derrière tout le détail. */
+.bc-tete{ display:flex; align-items:flex-start; gap:10px; }
+.bc-chevron{
+  flex:0 0 auto; width:22px; height:22px; margin-top:1px;
+  border:1px solid var(--border); border-radius:6px; background:var(--surface);
+  color:var(--text-dim); font-size:11px; line-height:1; cursor:pointer; padding:0;
+}
+.bc-chevron:hover{ background:var(--surface-2); color:var(--text); }
+.bc-ident{ flex:1 1 auto; min-width:0; }
+/* `min-width:0` sur les trois : sans lui, une adresse longue pousse les actions
+   hors de la carte au lieu de se couper. */
+.bc-ident .card-sub{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bc-card.est-ouverte .bc-ident .card-sub{ white-space:normal; }
+.bc-etat{
+  flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:4px;
+  text-align:right; min-width:0;
+}
+/* En LIGNE, pas en colonne. Empilés, six boutons imposaient 248 px de haut à
+   une carte dont l'entête n'en demande que soixante-dix : la colonne d'actions
+   devenait la hauteur de la carte, et « plus fine » n'était plus qu'un mot. */
+.bc-actions{
+  flex:0 1 auto; display:flex; flex-direction:row; flex-wrap:wrap;
+  justify-content:flex-end; align-items:flex-start; gap:5px;
+  min-width:0; max-width:340px;
+}
+.bc-actions .btn{ white-space:nowrap; text-align:center; }
+/* Sous 780 px, la colonne d'actions repasse sous l'identité : trois colonnes
+   dans la largeur d'un téléphone ne laisseraient plus lire l'adresse. */
+@media(max-width:780px){
+  .bc-tete{ flex-wrap:wrap; }
+  .bc-ident{ flex:1 1 100%; order:1; }
+  .bc-etat{ order:2; flex-direction:row; align-items:center; flex-wrap:wrap; }
+  .bc-actions{ order:3; flex-direction:row; flex-wrap:wrap; max-width:none; flex:1 1 100%; }
+}
 .pf-table .pf-col-metier{ width:120px; max-width:120px; }
 .pf-table .pf-col-code{ width:104px; max-width:104px; }
 /* La quantité et l'unité formaient deux champs libres séparés d'une espace :
