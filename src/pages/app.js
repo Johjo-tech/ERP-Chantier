@@ -493,12 +493,39 @@ const COLLECTIONS_ETAT = {
  *   await recharger('facture');                 // une facture enregistrée
  *   await recharger('reglement', 'facture');    // un règlement change aussi le statut
  */
+/**
+ * Recharge des collections — chacune pour son compte.
+ *
+ * `Promise.all` faisait tomber TOUT le chargement au premier échec : une seule
+ * table injoignable — droits, table absente, réseau — et pas une collection
+ * n'était affectée. `state.metiersPerso` restait vide, la déduction du métier
+ * sur les chapitres ne trouvait plus de référentiel, et plus rien n'était
+ * reconnu sur les devis, les bons et la pré-facture. Rien à l'écran ne disait
+ * pourquoi : l'exception mourait dans l'appelant.
+ *
+ * `allSettled` isole les échecs. Ce qui répond est rangé ; ce qui échoue LAISSE
+ * LA COLLECTION EN PLACE — la vider afficherait un écran vide qu'on prendrait
+ * pour une absence de données. Le pont a déjà noté l'échec de son côté, et
+ * `signalerEchecsDeChargement` le remonte à l'utilisateur.
+ *
+ * Le risque grandit avec chaque collection ajoutée : elles sont dix-huit.
+ */
 async function recharger(...prefixes){
   const connus = prefixes.filter(p => COLLECTIONS_ETAT[p]);
-  const valeurs = await Promise.all(connus.map(p => loadPrefix(p + ':')));
+  const issues = await Promise.allSettled(connus.map(p => loadPrefix(p + ':')));
   connus.forEach((p, i) => {
+    const issue = issues[i];
+    if(issue.status !== 'fulfilled'){
+      /* Le pont a déjà noté l'échec au moment de la lecture
+         (`noterEchecDeLecture`), et `signalerEchecsDeChargement` le remonte à
+         l'utilisateur. Ici on trace, et surtout on NE TOUCHE PAS à la
+         collection : la vider afficherait un écran vide qu'on prendrait pour
+         une absence de données. */
+      console.error('Collection illisible, valeur précédente conservée : ' + p, issue.reason);
+      return;
+    }
     const def = COLLECTIONS_ETAT[p];
-    state[def.champ] = def.ranger(valeurs[i]);
+    state[def.champ] = def.ranger(issue.value);
   });
   refreshNotifBadge();
 }
