@@ -6026,8 +6026,28 @@ function majBoutonValidationConducteur(actif){
   const btn = document.getElementById('validationConducteurConfirmBtn');
   if(btn) btn.disabled = !actif;
 }
+/**
+ * La tâche de la carte actuellement ouverte.
+ *
+ * `chargerWorkflowTache` charge d'abord le métier de la carte cliquée, puis
+ * n'ajoute derrière que les tâches ORPHELINES — celles qu'aucun métier du bon
+ * ne réclame. La première entrée est donc toujours celle de la carte, quel que
+ * soit le nombre de métiers du bon.
+ *
+ * C'est ce que l'ancien test `wfTaches.length === 1` ratait : dès qu'une tâche
+ * orpheline existait, ou sur tout bon multi-métiers, il rendait `null` — et le
+ * travail supplémentaire perdait le seul lien qui dit son métier.
+ */
+function tacheDeLaCarteOuverte(bcId){
+  if(!techModalCtx || techModalCtx.bcId !== bcId) return null;
+  const entree = wfTaches[0];
+  if(!entree || entree.horsMetier || !entree.tache) return null;
+  return entree.tache.id || null;
+}
+
 function addTravailSupplementaireTechnicien(){
-  addTravailSupplementaire(techModalCtx.bcId, 'techTravailSupInput', 'techTravailSupListe');
+  addTravailSupplementaire(techModalCtx.bcId, 'techTravailSupInput', 'techTravailSupListe',
+    tacheDeLaCarteOuverte(techModalCtx.bcId));
 }
 function addTravailSupplementaireConducteur(){
   addTravailSupplementaire(validationConducteurCtx, 'travailSupInput', 'validationConducteurTravauxSup');
@@ -6058,7 +6078,7 @@ function renderTravauxSupplementairesListe(liste, bcId, containerId){
    l'objet BC n'avait aucune colonne et n'était donc jamais enregistré. Ils
    restent « à chiffrer » jusqu'à ce qu'un prix leur soit donné — les ajouter
    comme ligne à 0 € du bon de commande les aurait rendus invisibles. */
-async function addTravailSupplementaire(bcId, inputId, containerId){
+async function addTravailSupplementaire(bcId, inputId, containerId, tacheId){
   const input = document.getElementById(inputId);
   const libelle = (input.value||'').trim();
   if(!libelle) return;
@@ -6067,11 +6087,12 @@ async function addTravailSupplementaire(bcId, inputId, containerId){
     const role = window.roleEffectif();
     await window.ajouterTravailSupplementaire(window.societeActive().uuid, {
       bon_commande_id: bcId,
-      /* La saisie est au niveau du bon, pas du métier : rattacher la ligne à
-         une tâche n'a de sens que si le bon n'en porte qu'une. Sur un bon
-         multi-métiers, en désigner une serait arbitraire — le bon suffit à
-         la retrouver, `bon_commande_id` étant la seule colonne obligatoire. */
-      planning_tache_id: wfTaches.length === 1 ? wfTaches[0].tache.id : null,
+      /* La tâche donne son MÉTIER au travail, et ce métier décide du chapitre
+         où il sera chiffré, sous-totalisé, puis facturé. Le technicien saisit
+         depuis la fiche d'UNE carte : sa tâche est connue sans ambiguïté. Le
+         conducteur saisit au niveau du bon — il n'y a alors aucune tâche à
+         désigner, et le travail restera groupé à la fin du document. */
+      planning_tache_id: tacheId || null,
       libelle,
       quantite: 1,
       origine: (role === 'conducteur' || role === 'admin') ? 'conducteur' : 'technicien',
@@ -6300,7 +6321,36 @@ function blocagesDirecteurHTML(blocages, ctx, contournementOffert){
 
 /* Chiffrage : toute ligne et tout travail supplémentaire y passe, pour que le
    directeur valide chaque montant et pas seulement ceux qui manquent. */
+/**
+ * Une ligne de travail supplémentaire, où qu'elle soit posée : dans le chapitre
+ * de son métier, ou dans le groupe de fin. Un seul gabarit pour les deux — deux
+ * copies finiraient par diverger, et c'est le montant qui divergerait.
+ *
+ * `p-ajout` n'est pas du décor : posée DANS un chapitre du bon, la ligne serait
+ * sans cela indiscernable de ce que le client a commandé. Le liseré ambre et
+ * l'étiquette d'origine sont ce qui tient la distinction à l'écran du
+ * directeur — sur la facture, elle se fond, c'est voulu.
+ */
+function ligneTravailDirecteurHTML(t, metier){
+  const manquant = t.statut !== 'chiffre';
+  return `<tr class="p-ajout ${manquant?'p-sans-prix':''}">
+    <td class="pf-col-metier card-sub">${metier? esc(metier) : '<span style="opacity:.5;">—</span>'}</td>
+    <td class="pf-col-code"></td>
+    <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartTravail(event, '${jsAttr(t.id)}')" title="Glisser dans une ligne du bon pour l'y intégrer">⠿</span><span>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></span></div></td>
+    <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:66px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:46px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
+    <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
+    <td></td>
+  </tr>`;
+}
+
 function chiffrageDirecteurHTML(ctx){
+  /* Chaque travail rejoint le chapitre du métier sur lequel il a été constaté.
+     La règle est dans `prefacture.ts` et sert aussi à l'enregistrement : c'est
+     ce qui garantit que la facture dira exactement ce que cet écran a montré. */
+  const placement = window.placerTravauxDansChapitres(
+    ctx.lignes||[], ctx.travaux||[], ctx.taches||[], metiersDisponibles()
+  );
+
   /* Tout est rendu, chapitres et commentaires compris. Les filtrer ici les
      laissait s'ajouter dans le dossier sans jamais apparaître : le bouton
      répondait, l'écran non. Leur index d'origine est conservé — c'est lui que
@@ -6319,6 +6369,15 @@ function chiffrageDirecteurHTML(ctx){
   /* Le métier courant suit le dernier chapitre rencontré : c'est lui que
      chaque ligne hérite, et c'est la règle que le planning lit déjà. */
   let chapitreCourant = '', metierChoisiCourant = undefined;
+  /* Les travaux que ce chapitre réclame, émis juste après sa dernière ligne.
+     Les lignes du bon gardent leur index — c'est lui que la saisie, la
+     suppression et le glisser-déposer adressent —, et les travaux gardent leur
+     identifiant : les mêler dans un seul `tbody` ne casse donc ni l'un ni
+     l'autre. */
+  const suite = (i) => (placement.apres.get(i)||[])
+    .map(t => ligneTravailDirecteurHTML(t, window.metierDuTravail(t, ctx.taches||[])))
+    .join('');
+
   const rows = lignes.map(({l,i})=>{
     const type = l.type || 'ligne';
     const manquant = type === 'ligne' && !(parseFloat(l.prixUnitaire) > 0);
@@ -6340,7 +6399,7 @@ function chiffrageDirecteurHTML(ctx){
         <td class="pf-col-metier">${type==='chapitre'? metierPrefactureHTML(l, i) : ''}</td>
         <td colspan="4"><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartLigne(event, ${i}, 'prefacture')" title="Déplacer">⠿</span><input type="text" value="${esc(l.designation||'')}" placeholder="${type==='chapitre'?'Titre du chapitre':'Commentaire (ni quantité ni prix)'}" style="width:100%; ${allure}" oninput="majLigneDirecteur(${i},'designation',this.value)"></div></td>
         <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
-      </tr>`;
+      </tr>` + suite(i);
     }
     const vu = window.metierAffiche({ type:'chapitre', designation: chapitreCourant, metier: metierChoisiCourant }, metiersDisponibles());
     return `<tr class="dnd-row ${manquant?'p-sans-prix':''}" ondragover="dragOverLigne(event,'prefacture')" ondrop="dropLigne(event, ${i}, 'prefacture')">
@@ -6352,22 +6411,14 @@ function chiffrageDirecteurHTML(ctx){
       <td class="num"><input type="number" step="0.01" min="0" value="${l.qte!=null?esc(l.qte):1}" style="width:66px; text-align:right;" oninput="majLigneDirecteur(${i},'qte',this.value)"> <input type="text" value="${esc(l.unite||'u')}" style="width:46px;" oninput="majLigneDirecteur(${i},'unite',this.value)"></td>
       <td class="num"><input type="number" step="0.01" min="0" value="${l.prixUnitaire!=null?esc(l.prixUnitaire):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majLigneDirecteur(${i},'prixUnitaire',this.value)"></td>
       <td class="num"><button class="btn small danger" onclick="supprimerLigneDirecteur(${i})" title="Retirer">✕</button></td>
-    </tr>`;
+    </tr>` + suite(i);
   }).join('');
 
   /* Les travaux supplémentaires vivent dans leur propre table et ont leur
-     circuit : on les chiffre ici, on ne les invente ni ne les efface. */
-  const travaux = (ctx.travaux||[]).map(t=>{
-    const manquant = t.statut !== 'chiffre';
-    return `<tr class="${manquant?'p-sans-prix':''}">
-      <td class="pf-col-metier card-sub">${esc(t.metier||'')}</td>
-      <td class="pf-col-code"></td>
-      <td><div class="row-mic"><span class="drag-handle" draggable="true" ondragstart="dragStartTravail(event, '${jsAttr(t.id)}')" title="Glisser dans une ligne du bon pour l'y intégrer">⠿</span><span>${esc(t.libelle||'—')} <span class="p-badge-origine">${esc(window.badgeOrigine(t.origine))}</span></span></div></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${t.quantite!=null?esc(t.quantite):1}" style="width:66px; text-align:right;" oninput="majTravailDirecteur('${jsAttr(t.id)}','quantite',this.value)"> <input type="text" value="${esc(t.unite||'u')}" style="width:46px;" oninput="majTravailDirecteur('${jsAttr(t.id)}','unite',this.value)"></td>
-      <td class="num"><input type="number" step="0.01" min="0" value="${t.prix_vente_ht!=null?esc(t.prix_vente_ht):''}" placeholder="prix" style="width:92px; text-align:right;" oninput="majPrixTravailDirecteur('${jsAttr(t.id)}', this.value)"></td>
-      <td></td>
-    </tr>`;
-  }).join('');
+     circuit : on les chiffre ici, on ne les invente ni ne les efface. Ce qui
+     change, c'est OÙ on les pose — dans le chapitre du métier sur lequel le
+     technicien travaillait quand il les a constatés. */
+  const restants = (placement.restants||[]).map(t=> ligneTravailDirecteurHTML(t, null)).join('');
 
   /* Les lignes du bon vivent dans leur propre `tbody` : c'est lui que le
      glisser-déposer adresse. Les travaux supplémentaires sont dans un autre,
@@ -6385,7 +6436,7 @@ function chiffrageDirecteurHTML(ctx){
     <tbody id="validationDirecteurLignes">
       ${rows || `<tr><td colspan="6" class="card-sub">Ce bon de commande n'a aucune ligne. Ajoutez-les ci-dessous.</td></tr>`}
     </tbody>
-    ${travaux? `<tbody><tr class="p-chapitre"><td colspan="6">Travaux supplémentaires constatés sur le chantier</td></tr>${travaux}</tbody>`:''}
+    ${restants? `<tbody><tr class="p-chapitre"><td colspan="6">Travaux supplémentaires constatés sur le chantier</td></tr>${restants}</tbody>`:''}
   </table>
   <div id="validationDirecteurParMetier">${sousTotauxMetiersHTML(ctx)}</div>
   <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
@@ -6448,10 +6499,18 @@ function supprimerLigneDirecteur(index){
 }
 
 /** Le total de ce qui est saisi à l'instant, lignes et travaux confondus. */
+/* Le document tel qu'il sera imprimé et facturé : les lignes du bon, chaque
+   travail supplémentaire dans le chapitre de son métier, le reste à la fin.
+   Une seule construction, lue par le total, les sous-totaux, l'aperçu et
+   l'enregistrement — quatre lectures d'une même vérité. */
+function documentDirecteur(ctx){
+  return window.lignesDocumentDirecteur(
+    ctx.lignes, ctx.travaux, tvaDefaut(), ctx.taches||[], metiersDisponibles()
+  );
+}
+
 function totalChiffrageHTML(ctx){
-  return totalsBoxInnerHTML(computeTotalsAvecRemise(
-    window.lignesDocumentDirecteur(ctx.lignes, ctx.travaux, tvaDefaut()), 0
-  ));
+  return totalsBoxInnerHTML(computeTotalsAvecRemise(documentDirecteur(ctx), 0));
 }
 
 function comptesRendusHTML(ctx){
@@ -6502,7 +6561,12 @@ function metierPrefactureHTML(l, i){
  * document : deux formules pour un même montant divergent d'un centime.
  */
 function sousTotauxMetiersHTML(ctx){
-  const groupes = window.montantsParMetier(ctx.lignes||[], metiersDisponibles(), window.montantLigneHt);
+  /* Sur le document FUSIONNÉ, pas sur les seules lignes du bon : un travail
+     supplémentaire constaté pendant la tâche Plomberie appartient au corps
+     d'état Plomberie, et son montant doit peser dans ce sous-total-là. Lu sur
+     `ctx.lignes`, il n'était compté nulle part — et le directeur arbitrait un
+     chiffrage par métier dont les ajouts du chantier étaient absents. */
+  const groupes = window.montantsParMetier(documentDirecteur(ctx), metiersDisponibles(), window.montantLigneHt);
   if(groupes.length < 2) return '';
 
   const total = groupes.reduce((s,g)=> s + g.montantHt, 0);
@@ -6853,6 +6917,41 @@ async function enregistrerChiffrageDirecteur(silencieux){
 /* Un seul geste pour l'utilisateur : enregistrer fait partie de valider. Les
    deux restent deux appels, pour qu'un échec d'enregistrement n'ait jamais
    l'air d'une validation — et le message dit lequel des deux a échoué. */
+/**
+ * Figer le document : les travaux chiffrés rejoignent les lignes du bon.
+ *
+ * L'ordre des deux écritures n'est pas indifférent — c'est la règle que
+ * `enregistrerChiffrageDirecteur` suit déjà. Les lignes D'ABORD : si le bon
+ * n'avait pas pu s'écrire alors qu'un travail est déjà marqué « intégré », le
+ * travail aurait disparu des deux côtés, ni ligne du bon ni travail en
+ * attente. Et « intégré » n'est pas une suppression : la trace de ce que le
+ * terrain a constaté reste en base.
+ */
+async function integrerTravauxDansLeBon(ctx){
+  const chiffres = (ctx.travaux||[]).filter(t => t.statut === 'chiffre');
+  if(!chiffres.length) return true;
+
+  const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(!b) return false;
+
+  try{
+    b.lignes = window.lignesAEnregistrer(documentDirecteur(ctx));
+    b.montant = computeTotals(b.lignes).ht;
+    if(!(await window.stSet('bonCommande:'+b.id, b))){
+      showToast(saveFailedMessage());
+      return false;
+    }
+    for(const t of chiffres) await window.integrerTravailSupplementaire(t.id);
+    ctx.travaux = (await window.listTravauxSupplementaires(ctx.bcId)).filter(t=>t.statut !== 'integre');
+    ctx.lignes = JSON.parse(JSON.stringify(b.lignes));
+    return true;
+  }catch(err){
+    console.error("Intégration des travaux supplémentaires refusée", err);
+    showToast(err.message || "Les travaux supplémentaires n'ont pas pu rejoindre le bon : rien n'a été validé.");
+    return false;
+  }
+}
+
 async function confirmerValidationDirecteur(){
   const ctx = validationDirecteurCtx;
   if(!ctx) return;
@@ -6862,6 +6961,18 @@ async function confirmerValidationDirecteur(){
     showToast("Les prix n'ont pas pu être enregistrés : rien n'a été validé.");
     return;
   }
+
+  /* Les travaux chiffrés deviennent des lignes du bon, à la place que leur
+     métier leur donne. C'est ce qui rend la facture FIDÈLE à cet écran :
+     `bc_generer_facture` recopie les lignes du bon dans l'ordre, puis n'ajoute
+     que les travaux restés « chiffré » — et il les colle tout à la fin, sans
+     chapitre, donc sous le dernier chapitre du bon. Intégrés ici, ils n'y
+     passent plus, et la facture porte l'ordre décidé ici.
+
+     Faire ce travail en SQL aurait obligé à y réécrire la déduction du métier
+     d'un chapitre — qui se lit sur le TITRE pour les 830 bons dont le chapitre
+     ne déclare rien. Deux implémentations, deux dérives. */
+  if(!(await integrerTravauxDansLeBon(ctx))) return;
 
   try{
     await window.validerChiffrage(ctx.bcId);

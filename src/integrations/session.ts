@@ -210,7 +210,10 @@ import {
 import {
   badgeOrigine,
   comptesRendusTerrain,
+  lignesAEnregistrer,
   lignesDocumentDirecteur,
+  metierDuTravail,
+  placerTravauxDansChapitres,
 } from "./prefacture";
 import { enrichirFactureX, etatConnexionPdp, transmettre } from "./facturx-pont";
 import {
@@ -695,6 +698,9 @@ export function injecterSession() {
   w.refBonCommandeClient = refBonCommandeClient;
   w.lieuIntervention = lieuIntervention;
   w.lignesDocumentDirecteur = lignesDocumentDirecteur;
+  w.lignesAEnregistrer = lignesAEnregistrer;
+  w.placerTravauxDansChapitres = placerTravauxDansChapitres;
+  w.metierDuTravail = metierDuTravail;
   w.comptesRendusTerrain = comptesRendusTerrain;
   w.badgeOrigine = badgeOrigine;
 

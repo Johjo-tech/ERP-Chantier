@@ -124,6 +124,7 @@ declare global {
     libelleDocument: any;
     libelleDocumentRh: any;
     lieuIntervention: any;
+    lignesAEnregistrer: any;
     lignesDocumentDirecteur: any;
     lignesHaystack: any;
     lireExportArticles: any;
@@ -143,6 +144,7 @@ declare global {
     metierAffiche: any;
     metierDeLaLigne: any;
     metierDuChapitre: any;
+    metierDuTravail: any;
     metiersDesChapitres: any;
     modeReglementRetenu: any;
     monCompteId: any;
@@ -166,6 +168,7 @@ declare global {
     passerPretAChiffrer: any;
     pdfFacturX: any;
     pieceRecue: any;
+    placerTravauxDansChapitres: any;
     preparerPieceJointe: any;
     previsualiserImport: any;
     prochainActeur: any;

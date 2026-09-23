@@ -14,6 +14,7 @@
  */
 
 import { REGLAGES_DEFAUT } from "./reglages";
+import { memeMetier, metierDeLaLigne } from "../api/regles-metiers";
 import type { LigneChiffrable } from "../api/regles-bc";
 
 /** Ce qu'un travail vaut quand il n'a pas été mesuré : un forfait. */
@@ -49,9 +50,12 @@ export interface TravailAffichable {
   unite?: string | null;
   prix_vente_ht?: number | null;
   tva?: number | null;
+  /** La tâche pendant laquelle le travail a été constaté — d'où son métier. */
+  planning_tache_id?: string | null;
 }
 
 export interface TacheTerrain {
+  id?: string | null;
   libelle?: string | null;
   metier?: string | null;
   date_tache?: string | null;
@@ -101,8 +105,106 @@ function travailEnLigne(t: TravailAffichable, tvaDefaut: number): LigneAffichee 
 }
 
 /**
- * Document du directeur : les lignes du bon, puis les travaux supplémentaires
- * regroupés et surlignés.
+ * Le métier d'un travail supplémentaire : celui de la tâche pendant laquelle il
+ * a été constaté.
+ *
+ * `tache_travaux_supplementaires` ne porte PAS de colonne `metier`, et il n'en
+ * faut pas : la tâche en a un, et le travail la désigne par
+ * `planning_tache_id`. Une colonne de plus serait une seconde vérité à tenir
+ * d'accord avec la première.
+ */
+export function metierDuTravail(
+  travail: TravailAffichable,
+  taches: TacheTerrain[]
+): string | null {
+  const id = travail?.planning_tache_id;
+  if (!id) return null;
+  const tache = (taches ?? []).find((t) => t.id === id);
+  return (tache?.metier ?? "").trim() || null;
+}
+
+/** Un chapitre du bon : son métier, et l'index de sa dernière ligne. */
+interface BlocChapitre {
+  metier: string | null;
+  dernier: number;
+}
+
+/**
+ * Les chapitres d'un bon, chacun avec son métier.
+ *
+ * Le métier se lit SUR LE CHAPITRE — choisi, ou déduit de son titre. C'est
+ * `metierDeLaLigne` qui fait autorité, la même règle que l'écran et le planning
+ * lisent déjà : la recopier ici créerait une seconde vérité, et les 830 bons
+ * dont le chapitre ne porte aucun métier explicite la prendraient de plein
+ * fouet.
+ */
+function blocsDeChapitres(
+  lignes: LigneAffichee[],
+  connus: (string | null | undefined)[]
+): BlocChapitre[] {
+  const blocs: BlocChapitre[] = [];
+  lignes.forEach((l, i) => {
+    if (l.type === "chapitre") {
+      blocs.push({ metier: metierDeLaLigne(l, connus)?.metier ?? null, dernier: i });
+      return;
+    }
+    if (blocs.length) blocs[blocs.length - 1].dernier = i;
+  });
+  return blocs;
+}
+
+export interface PlacementTravaux {
+  /** Index d'une ligne du bon → les travaux à émettre juste après elle. */
+  apres: Map<number, TravailAffichable[]>;
+  /** Ceux qu'aucun chapitre ne réclame : ils garderont leur propre chapitre. */
+  restants: TravailAffichable[];
+}
+
+/**
+ * Chaque travail rejoint le chapitre du métier sur lequel il a été constaté.
+ *
+ * Un siphon remplacé pendant la tâche Plomberie appartient au corps d'état
+ * Plomberie : c'est là qu'il doit être chiffré, compté dans le sous-total, et
+ * facturé. Groupés à part, ils faussaient chaque sous-total par métier et
+ * tombaient sur la facture après le dernier chapitre du bon, silencieusement
+ * attribués à lui.
+ *
+ * Ce qui ne trouve pas son chapitre — un travail saisi par le conducteur au
+ * niveau du bon, donc sans tâche, ou dont le métier n'a pas de chapitre —
+ * reste groupé à la fin sous `CHAPITRE_TRAVAUX_SUP`. Le rattacher au hasard
+ * serait pire que de le laisser visible à part.
+ */
+export function placerTravauxDansChapitres(
+  lignes: LigneAffichee[],
+  travaux: TravailAffichable[],
+  taches: TacheTerrain[],
+  connus: (string | null | undefined)[]
+): PlacementTravaux {
+  const blocs = blocsDeChapitres(lignes ?? [], connus ?? []);
+  const apres = new Map<number, TravailAffichable[]>();
+  const restants: TravailAffichable[] = [];
+
+  for (const t of travaux ?? []) {
+    const metier = metierDuTravail(t, taches);
+    const bloc = metier
+      ? blocs.find((b) => !!b.metier && memeMetier(b.metier, metier))
+      : undefined;
+
+    if (!bloc) {
+      restants.push(t);
+      continue;
+    }
+    const liste = apres.get(bloc.dernier) ?? [];
+    liste.push(t);
+    apres.set(bloc.dernier, liste);
+  }
+
+  return { apres, restants };
+}
+
+/**
+ * Document du directeur : les lignes du bon, chaque travail supplémentaire
+ * glissé dans le chapitre de son métier, et le reste groupé à la fin.
  *
  * Le chapitre « Bon de commande » n'est ajouté que lorsqu'il y a des travaux
  * supplémentaires, et il est alors **obligatoire** : `printableLignesRows`
@@ -116,13 +218,19 @@ export function lignesDocumentDirecteur(
   travaux: TravailAffichable[],
   /* Le taux vient des réglages de la société : 20 % en neuf, 10 % en
      rénovation, 0 en autoliquidation. Le figer ici le rendrait faux ailleurs. */
-  tvaDefaut: number = REGLAGES_DEFAUT.documents.tvaDefaut
+  tvaDefaut: number = REGLAGES_DEFAUT.documents.tvaDefaut,
+  /* Les tâches donnent leur métier aux travaux ; les métiers connus servent à
+     lire celui d'un chapitre qui ne le déclare pas. Sans eux, la fonction se
+     comporte comme avant : tout est groupé à la fin. */
+  taches: TacheTerrain[] = [],
+  connus: (string | null | undefined)[] = []
 ): LigneAffichee[] {
   const origine = lignes ?? [];
   const ajouts = travaux ?? [];
 
   if (!ajouts.length) return [...origine];
 
+  const { apres, restants } = placerTravauxDansChapitres(origine, ajouts, taches, connus);
   const document: LigneAffichee[] = [];
 
   if (origine.length) {
@@ -133,13 +241,34 @@ export function lignesDocumentDirecteur(
     if (!origine.some((l) => l.type === "chapitre")) {
       document.push({ type: "chapitre", designation: CHAPITRE_BON_COMMANDE });
     }
-    document.push(...origine);
+    origine.forEach((l, i) => {
+      document.push(l);
+      for (const t of apres.get(i) ?? []) document.push(travailEnLigne(t, tvaDefaut));
+    });
   }
 
-  document.push({ type: "chapitre", designation: CHAPITRE_TRAVAUX_SUP });
-  document.push(...ajouts.map((t) => travailEnLigne(t, tvaDefaut)));
+  if (restants.length) {
+    document.push({ type: "chapitre", designation: CHAPITRE_TRAVAUX_SUP });
+    document.push(...restants.map((t) => travailEnLigne(t, tvaDefaut)));
+  }
 
   return document;
+}
+
+/**
+ * Le même document, débarrassé de ce qui n'est que de l'affichage.
+ *
+ * `classe` et `badge` surlignent l'ajout à l'écran du directeur ; ils n'ont ni
+ * colonne ni sens sur le bon enregistré. `colonnesDe()` les écarterait en
+ * silence — les retirer ici le dit à voix haute.
+ */
+export function lignesAEnregistrer(document: LigneAffichee[]): LigneAffichee[] {
+  return (document ?? []).map((l) => {
+    const ligne = { ...l };
+    delete ligne.classe;
+    delete ligne.badge;
+    return ligne;
+  });
 }
 
 function heures(t: TacheTerrain): string {
