@@ -11,7 +11,6 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "node",
       globals: true,
-      setupFiles: ["./src/__tests__/setup.ts"],
       /* Les suites d'intégration parlent à une base distante : un aller-retour
          réseau dépasse régulièrement le budget de 5 s par défaut, et l'échec
          qui en résulte ne dit rien du code. Les suites unitaires, elles,
@@ -28,7 +27,7 @@ export default defineConfig(({ mode }) => {
       coverage: {
         provider: "v8",
         reporter: ["text", "json", "html"],
-        exclude: ["node_modules/", "src/__tests__/"],
+        exclude: ["node_modules/"],
       },
     },
     resolve: {
