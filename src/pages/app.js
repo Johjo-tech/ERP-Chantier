@@ -13603,7 +13603,7 @@ function renderVehiculeListeHTML(list){
           const ctAlerte = jCT!=null && jCT<=30 && !v.vendu;
           const conducteurSal = v.conducteurSalarieId ? state.salaries.find(s=>s.id===v.conducteurSalarieId) : null;
           return `<tr class="vehicule-liste-row" onclick="openVehiculeDetail('${jsAttr(v.id)}')">
-            <td><strong>${esc(v.nom)}</strong></td>
+            <td><strong>${esc(libelleVehicule(v))}</strong></td>
             <td class="stats-num">${esc(v.immatriculation)||'—'}</td>
             <td>${v.typeVehicule? esc(vehiculeTypeLabel(v.typeVehicule)):'—'}</td>
             <td>${esc(v.motorisation)||'—'}</td>
@@ -13639,7 +13639,7 @@ function renderVehiculeDetail(id){
     <div class="page-head">
       <div style="display:flex; align-items:center; gap:14px;">
         <button class="btn small" onclick="closeVehiculeDetail()">← Retour aux véhicules</button>
-        <h1 style="margin:0;">${esc(v.nom)}</h1>
+        <h1 style="margin:0;">${esc(libelleVehicule(v))}</h1>
       </div>
       ${state.formOpen.vehicule? '' : `<button class="btn" onclick="editItem('vehicule','${jsAttr(v.id)}')">Modifier</button>`}
     </div>
@@ -13766,19 +13766,48 @@ function setVehiculeTva(withTva){
   document.getElementById('veh_tvaApplicable').value = withTva? 'true':'false';
   document.querySelectorAll('.tva-toggle-btn').forEach((btn,i)=> btn.classList.toggle('is-active', (i===0)===withTva));
 }
+/**
+ * Comment on désigne un véhicule.
+ *
+ * L'IMMATRICULATION FAIT FOI : c'est l'identifiant de la carte grise, celui
+ * des factures de garage et des contrats d'assurance, et deux véhicules ne
+ * peuvent pas le partager — un index d'unicité le garantit depuis le
+ * 23/09/2026. Marque et modèle décrivent, ils n'identifient pas : deux Trafic
+ * blancs portaient jusqu'ici le même « nom » sans que rien ne les distingue.
+ *
+ * `nom` est devenu facultatif et n'est plus demandé. On le rend quand même
+ * s'il est là : quelqu'un y a peut-être écrit un surnom d'usage — « Camion
+ * 3 » —, et l'effacer de l'affichage perdrait ce qu'il voulait dire.
+ */
+function libelleVehicule(v){
+  if(!v) return '';
+  const plaque = (v.immatriculation||'').trim();
+  const modele = [v.marque, v.modele].map(x=>(x||'').trim()).filter(Boolean).join(' ');
+  const surnom = (v.nom||'').trim();
+  const parts = [plaque || surnom || modele || 'Véhicule sans immatriculation'];
+  if(plaque && modele) parts.push(modele);
+  else if(plaque && surnom) parts.push(surnom);
+  return parts.join(' · ');
+}
+
 function vehiculeForm(){
   const e = state.editing;
   return `
   <div class="form-panel">
     <h3>${e.id? 'Modifier le véhicule' : 'Nouveau véhicule'}</h3>
     <div class="field-grid">
-      <div class="field"><label>Nom du véhicule</label><input type="text" id="veh_nom" value="${esc(e.nom)}" placeholder="Ex : Renault Trafic"></div>
+      ${/* La plaque EN PREMIER, et obligatoire : c'est elle qui identifie.
+            Le champ « Nom du véhicule » qui occupait cette place demandait de
+            retaper « Renault Trafic » à la main, alors que `marque` et
+            `modele` existaient en base sans être jamais saisis. */''}
+      <div class="field"><label>Immatriculation</label><input type="text" id="veh_immatriculation" value="${esc(e.immatriculation)}" placeholder="Ex : AB-123-CD" style="text-transform:uppercase;"></div>
+      <div class="field"><label>Marque</label><input type="text" id="veh_marque" value="${esc(e.marque)}" placeholder="Ex : Renault"></div>
+      <div class="field"><label>Modèle</label><input type="text" id="veh_modele" value="${esc(e.modele)}" placeholder="Ex : Trafic"></div>
       <div class="field"><label>Type de véhicule</label><select id="veh_typeVehicule">
         <option value="CTTE" ${e.typeVehicule==='CTTE'||!e.typeVehicule?'selected':''}>Véhicule CTTE</option>
         <option value="VP" ${e.typeVehicule==='VP'?'selected':''}>Véhicule VP</option>
         <option value="Tourisme" ${e.typeVehicule==='Tourisme'?'selected':''}>Véhicule de tourisme</option>
       </select></div>
-      <div class="field"><label>Immatriculation</label><input type="text" id="veh_immatriculation" value="${esc(e.immatriculation)}" placeholder="AB-123-CD"></div>
       <div class="field">
         <label>TVA sur ce véhicule</label>
         <div class="tva-toggle-row">
@@ -13814,12 +13843,22 @@ function vehiculeForm(){
 }
 async function saveVehicule(){
   const e = state.editing;
-  const nom = document.getElementById('veh_nom').value.trim();
-  if(!nom){ alert('Le nom du véhicule est requis.'); return; }
+  /* La plaque à la place du nom : c'est elle qui identifie, et deux véhicules
+     ne peuvent pas la partager — un index d'unicité le refuse en base. Mise en
+     capitales, parce qu'une plaque s'écrit ainsi et que « ab-123-cd » et
+     « AB-123-CD » désigneraient deux fiches pour un même camion. */
+  const immatriculation = document.getElementById('veh_immatriculation').value.trim().toUpperCase();
+  if(!immatriculation){ alert("L'immatriculation est requise : c'est elle qui identifie le véhicule."); return; }
   const id = e.id || uid();
   const obj = { id, societeId: state.societeId, createdAt: e.createdAt || new Date().toISOString(),
-    nom, typeVehicule: document.getElementById('veh_typeVehicule').value,
-    immatriculation: document.getElementById('veh_immatriculation').value,
+    /* `nom` n'est plus demandé mais reste REPOSÉ : un surnom d'usage y a
+       peut-être été écrit, et ne pas le renvoyer l'effacerait au premier
+       enregistrement. La colonne est facultative depuis le 23/09/2026. */
+    nom: e.nom || null,
+    marque: document.getElementById('veh_marque').value.trim(),
+    modele: document.getElementById('veh_modele').value.trim(),
+    typeVehicule: document.getElementById('veh_typeVehicule').value,
+    immatriculation,
     tvaApplicable: document.getElementById('veh_tvaApplicable').value === 'true',
     motorisation: document.getElementById('veh_motorisation').value,
     taillePneus: document.getElementById('veh_taillePneus').value,
@@ -14010,7 +14049,7 @@ function openVendreVehiculeModal(vehiculeId){
   const v = state.vehicules.find(x=>x.id===vehiculeId);
   if(!v) return;
   vendreVehiculeCtx = vehiculeId;
-  document.getElementById('vendreVehiculeInfo').textContent = `${v.nom} — ${v.immatriculation||''}`;
+  document.getElementById('vendreVehiculeInfo').textContent = libelleVehicule(v);
   document.getElementById('venteAcheteur').value = '';
   document.getElementById('venteDate').value = todayISO();
   document.getElementById('ventePrix').value = '';
@@ -14034,7 +14073,7 @@ async function confirmVendreVehicule(){
     v.kilometrage? `${Number(v.kilometrage).toLocaleString('fr-FR')} km` : null,
     v.dateAchat? `acheté le ${fmtDate(v.dateAchat)}` : null,
   ].filter(Boolean).join(' — ');
-  const designation = `Vente du véhicule ${v.nom}${details? ' (' + details + ')' : ''}`;
+  const designation = `Vente du véhicule ${libelleVehicule(v)}${details? ' (' + details + ')' : ''}`;
   const factureId = uid();
   // Émise d'emblée : la base attribue le numéro à l'enregistrement.
   const factureObj = { id: factureId, societeId: state.societeId, numero: '', createdAt: new Date().toISOString(),

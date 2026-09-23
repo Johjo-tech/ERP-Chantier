@@ -4987,7 +4987,7 @@ export type Database = {
           marque: string | null
           modele: string | null
           motorisation: string | null
-          nom: string
+          nom: string | null
           nombre_places: number | null
           notes: string | null
           numero_serie: string | null
@@ -5025,7 +5025,7 @@ export type Database = {
           marque?: string | null
           modele?: string | null
           motorisation?: string | null
-          nom: string
+          nom?: string | null
           nombre_places?: number | null
           notes?: string | null
           numero_serie?: string | null
@@ -5063,7 +5063,7 @@ export type Database = {
           marque?: string | null
           modele?: string | null
           motorisation?: string | null
-          nom?: string
+          nom?: string | null
           nombre_places?: number | null
           notes?: string | null
           numero_serie?: string | null
