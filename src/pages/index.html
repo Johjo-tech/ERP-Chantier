@@ -1525,12 +1525,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    référence — devis ou bon — se met donc à côté du tableau, pas au-dessus :
    au-dessus, il fallait faire défiler pour comparer. */
 .pf-colonnes{ display:flex; gap:16px; align-items:flex-start; }
-.pf-entete{ display:flex; gap:14px; flex-wrap:wrap; padding:10px 12px; margin-bottom:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; }
-.pf-entete-champ label{ display:block; font-size:11px; color:var(--text-dim); margin-bottom:4px; }
-.pf-entete-champ input{ width:100%; }
-/* Ce qui manque doit se voir sans se lire : sur 195 bons de la file, la
-   référence client est vide, et c'est ici qu'on la remarque ou jamais. */
-.pf-entete-manque{ color:var(--danger); font-weight:600; }
+/* Le document vient après le tableau dans le balisage, donc à droite : le
+   tableau est ce qu'on remplit, il garde le bord où commence la lecture.
+   Le bandeau de dossier qui coiffait la modale — lieu, occupant, logement,
+   références — a été retiré avec ses règles `.pf-entete*` : c'était de
+   l'information de fiche au milieu d'un écran de chiffrage, et elle se lit
+   désormais sur le document ouvert à côté. */
 .pf-reference{ flex:0 0 44%; max-height:68vh; overflow:auto; font-size:9pt; }
 /* Un document du client n'est pas du HTML de document : sans hauteur propre,
    l'iframe se replie à zéro dans un conteneur dimensionné par son contenu. */
@@ -1552,7 +1552,11 @@ img.pf-reference-fichier{ height:auto; max-height:66vh; object-fit:contain; }
 img.pf-plein-fichier{ height:auto; max-height:100%; object-fit:contain; margin:0 auto; display:block; }
 @media(max-width:900px){ .pf-plein{ padding:0; } .pf-plein-panneau{ border-radius:0; } }
 .pf-travail{ flex:1; min-width:0; }
-@media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; } }
+/* En pile, le document repasse devant : `order` contrarie l'ordre du balisage,
+   qui ne sert qu'à le poser à droite en deux colonnes. Sans cette ligne il
+   atterrirait sous le tableau, ses comptes rendus et son total — c'est-à-dire
+   hors de vue au moment où l'on commence à chiffrer. */
+@media(max-width:900px){ .pf-colonnes{ flex-direction:column; } .pf-reference{ flex:none; width:100%; max-height:40vh; order:-1; } }
 .print-preview table{ width:100%; border-collapse:collapse; }
 .wf-tour-moi{ background:var(--accent-soft); color:var(--accent-2); }
 .wf-clos{ display:inline-block; font-size:11.5px; font-weight:700; color:var(--success); }

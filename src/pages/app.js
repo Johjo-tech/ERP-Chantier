@@ -6183,17 +6183,13 @@ async function openValidationDirecteurModal(bcId){
        aujourd'hui sur le même rôle : c'est la base qui tranche, et elle les
        distingue par deux fonctions. */
     peutValiderHorsCircuit: !!droits.peutFacturerHorsCircuit,
-    /* Le lieu et la référence du client, saisissables ici : ils manquent sur la
-       quasi-totalité des bons de la file, et c'est au moment de chiffrer qu'on
-       s'en aperçoit. Copiés dans le contexte comme les lignes — l'objet du bon
-       ne bouge qu'à l'enregistrement, sinon une fermeture sans enregistrer
-       laisserait les cartes afficher ce qui n'est pas en base. */
-    adresse: b.adresse || '',
-    codePostal: b.codePostal || '',
-    ville: b.ville || '',
-    numeroBC: b.numeroBC || '',
-    // Rien d'ouvert au départ : le tableau des prix prend toute la largeur.
-    reference: null
+    /* Le document de référence est ouvert d'emblée, et sur le bon SIGNÉ par le
+       client dès qu'il existe : au moment de facturer, c'est lui qui fait foi,
+       pas notre re-rendu de ses lignes. Il ne s'ouvrait jusqu'ici que sur
+       demande, à gauche, et il fallait savoir qu'il était là pour le trouver.
+       Sans pièce jointe, la fiche interne prend la place — le panneau ne reste
+       jamais vide. */
+    reference: aUnBonDuClient(b) ? 'bonClient' : 'bonCommande'
   };
 
   document.getElementById('validationDirecteurTitre').textContent =
@@ -6211,7 +6207,11 @@ async function openValidationDirecteurModal(bcId){
   try{
     const [taches, travaux] = await Promise.all([
       window.listTachesBonCommande(bcId),
-      window.listTravauxSupplementaires(bcId)
+      window.listTravauxSupplementaires(bcId),
+      /* La signature part avec les deux autres lectures. Demandée après le
+         premier rendu, elle ferait afficher la fiche interne puis sauter sur
+         le PDF sous les yeux de l'utilisateur. */
+      chargerUrlBonDuClient(validationDirecteurCtx, b)
     ]);
     validationDirecteurCtx.taches = taches || [];
     validationDirecteurCtx.travaux = (travaux || []).filter(t=>t.statut !== 'integre');
@@ -6527,13 +6527,15 @@ function renderValidationDirecteur(){
   const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
   if(!b) return;
 
-  /* L'ordre suit celui du travail : ce qui a été commandé et ce que le terrain
-     a ajouté, ce qu'il en a dit, puis les prix. Ce qui bloque et le bouton
-     vivent dans le pied, toujours visible. */
-  /* Ce qu'on fait ici, c'est saisir des prix. Le tableau est donc le sujet, et
-     la pièce d'origine — devis ou bon de commande — s'ouvre à côté quand on
-     veut la consulter. Rendre la pré-facture elle-même n'apprenait rien : on
-     la regarde une fois émise, pas pendant qu'on la chiffre. */
+  /* Ce qu'on fait ici, c'est saisir des prix. Ne restent donc que les postes —
+     chapitres, lignes, travaux ajoutés sur le chantier — et ce que le terrain
+     en a dit. Le dossier lui-même (lieu, occupant, logement, références) a été
+     retiré : c'est de l'information de fiche, et elle se lit sur le document
+     ouvert à droite. Rendre la pré-facture elle-même n'apprendrait rien de
+     plus : on la regarde une fois émise, pas pendant qu'on la chiffre.
+
+     Le document vient APRÈS la colonne de travail : le tableau est le sujet,
+     il garde le bord gauche où commence la lecture. */
   document.getElementById('validationDirecteurCorps').innerHTML = `
     <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
       ${referencesPrefactureHTML(ctx, b)}
@@ -6542,85 +6544,54 @@ function renderValidationDirecteur(){
         <span>Afficher les prix${ctx.prixVisibles?'':' — masqués pour votre rôle'}</span>
       </label>
     </div>
-    ${enteteDossierHTML(ctx, b)}
     <div class="pf-colonnes">
-      ${ctx.reference? `<div class="print-preview pf-reference">${referenceDocumentHTML(ctx, b)}</div>` : ''}
       <div class="pf-travail">
         <div class="section-title" style="margin-top:0;">💶 Les prix — chaque poste, commandé ou ajouté</div>
         ${chiffrageDirecteurHTML(ctx)}
         <div class="section-title" style="margin-top:18px;">💬 Ce que le terrain a rapporté</div>
         ${comptesRendusHTML(ctx)}
       </div>
+      ${ctx.reference? `<div class="print-preview pf-reference">${referenceDocumentHTML(ctx, b)}</div>` : ''}
     </div>
   `;
   rafraichirChiffrageDirecteur();
 }
 
 /**
- * Où l'on est allé, et sous quelle référence le client connaît l'affaire.
+ * Le bon reçu du client est-il là ?
  *
- * Les deux figurent sur la carte de la file… et disparaissaient à l'ouverture
- * de la modale, c'est-à-dire au moment précis où l'on chiffre ce qu'ils vont
- * déterminer : le bloc « Lieu d'intervention » du document, et la référence de
- * commande que porte la facture électronique.
- *
- * Saisissables, et pas seulement affichés : sur les 211 bons de la file, 195
- * n'ont aucune référence client et 119 sur 120 des bons prêts à chiffrer n'ont
- * pas d'adresse. Renvoyer l'utilisateur au formulaire du bon pour les remplir,
- * c'est lui faire perdre le chiffrage en cours.
- *
- * L'occupant et le statut du logement restent en lecture : ils obéissent à des
- * règles de cohérence (`cleanLogementFields`) qui vivent dans le formulaire.
+ * Deux rangements coexistent : `pieceJointeChemin` depuis le 15/09/2026, et
+ * `pieceJointeData` — une data-URL — pour les bons d'avant, jamais reprise. Les
+ * cartes et `ouvrirBonDuClient` testent les deux depuis toujours ; la modale
+ * n'en regardait qu'un, si bien que sur un bon ancien le bouton « Bon du
+ * client » manquait ici alors qu'il s'affichait partout ailleurs.
  */
-function enteteDossierHTML(ctx, b){
-  const lieu = window.lieuIntervention(ctx);
-  const ref = window.refBonCommandeClient(ctx.numeroBC);
-  const occupant = [b.occupant, b.numeroLogement? 'Log. '+b.numeroLogement : '', b.etage? 'Étage '+b.etage : '']
-    .filter(Boolean).map(esc).join(' · ');
-
-  return `<div class="pf-entete">
-    <div class="pf-entete-champ" style="flex:2 1 320px;">
-      <label>Lieu d'intervention${lieu.renseigne? '' : ' <span class="pf-entete-manque">non renseigné</span>'}</label>
-      <input type="text" value="${esc(ctx.adresse)}" placeholder="Adresse des travaux" aria-label="Adresse d'intervention"
-             oninput="majEnteteDirecteur('adresse', this.value)">
-      <div style="display:flex; gap:6px; margin-top:6px;">
-        <input type="text" style="flex:0 0 90px;" maxlength="5" inputmode="numeric" value="${esc(ctx.codePostal)}" placeholder="CP" aria-label="Code postal"
-               oninput="majEnteteDirecteur('codePostal', this.value)">
-        <input type="text" style="flex:1;" value="${esc(ctx.ville)}" placeholder="Ville" aria-label="Ville"
-               oninput="majEnteteDirecteur('ville', this.value)">
-      </div>
-      ${occupant? `<div class="card-sub" style="margin-top:6px;">${occupant}</div>`:''}
-      ${b.logementStatut? `<div style="margin-top:6px;">${logementBadge(b.logementStatut)}</div>`:''}
-    </div>
-    <div class="pf-entete-champ" style="flex:1 1 220px;">
-      <label>N° de bon de commande du client</label>
-      <input type="text" value="${esc(ctx.numeroBC)}" placeholder="Numéro figurant sur le bon reçu" aria-label="Numéro de bon de commande du client"
-             oninput="majEnteteDirecteur('numeroBC', this.value)">
-      <div class="card-sub" id="pfEnteteRef" style="margin-top:6px;">${refPartanteHTML(ref)}</div>
-      ${b.numeroInterne? `<div class="card-sub" style="margin-top:4px;">Notre n° interne : ${esc(b.numeroInterne)}</div>`:''}
-    </div>
-  </div>`;
+function aUnBonDuClient(b){
+  return !!(b && (b.pieceJointeChemin || b.pieceJointeData));
 }
 
-/* Ce qui partira réellement sur la facture : « Sans BC » et les numéros de
-   notre série SAV sont écartés par la même règle que la base. Le dire ici évite
-   de découvrir le champ vide sur la facture électronique. */
-function refPartanteHTML(ref){
-  return ref
-    ? `Référence transmise au client : <b>${esc(ref)}</b>`
-    : `<span class="pf-entete-manque">Aucune référence ne partira sur la facture</span>`;
-}
-
-/* Le contexte seul est touché, et rien n'est redessiné : reconstruire le
-   bandeau à la frappe ferait sauter le curseur. C'est le patron de
-   `majLigneDirecteur`, pour la même raison. */
-function majEnteteDirecteur(champ, valeur){
-  const ctx = validationDirecteurCtx;
-  if(!ctx) return;
-  ctx[champ] = valeur;
-  if(champ === 'numeroBC'){
-    const zone = document.getElementById('pfEnteteRef');
-    if(zone) zone.innerHTML = refPartanteHTML(window.refBonCommandeClient(valeur));
+/**
+ * L'URL du bon du client, obtenue UNE fois et rangée dans le contexte.
+ *
+ * Le bucket `terrain` est privé : le chemin ne s'affiche pas, il se signe. Et
+ * la modale se redessine à chaque frappe dans un champ de prix — re-signer à
+ * chaque rendu rechargerait le document sous les yeux de l'utilisateur.
+ *
+ * Idempotente : appelée à l'ouverture et à chaque bascule, elle ne travaille
+ * que la première fois.
+ */
+async function chargerUrlBonDuClient(ctx, b){
+  if(!ctx || !b || ctx.urlBonClient) return;
+  /* La data-URL héritée est déjà une source affichable : rien à signer. */
+  if(!b.pieceJointeChemin){
+    if(b.pieceJointeData) ctx.urlBonClient = b.pieceJointeData;
+    return;
+  }
+  try{
+    ctx.urlBonClient = await window.urlPieceJointe(b.pieceJointeChemin);
+  }catch(err){
+    console.error('Bon du client illisible', b.pieceJointeChemin, err);
+    showToast("Le document du client n'a pas pu être ouvert — voici la fiche interne.");
   }
 }
 
@@ -6635,7 +6606,7 @@ function majEnteteDirecteur(champ, valeur){
 function referencesPrefactureHTML(ctx, b){
   const devis = b.devisId ? state.devis.find(d=>d.id===b.devisId) : null;
   const bouton = (cle, libelle) => `<button class="btn small ${ctx.reference===cle?'primary':'ghost'}" onclick="basculerReferencePrefacture('${jsAttr(cle)}')">${ctx.reference===cle?'✓ ':''}${libelle}</button>`;
-  const aLeDocument = !!b.pieceJointeChemin;
+  const aLeDocument = aUnBonDuClient(b);
   return `<div style="display:flex; gap:6px; flex-wrap:wrap;">
     <span class="card-sub" style="align-self:center;">Consulter :</span>
     ${aLeDocument? bouton('bonClient', '📎 Bon du client') : ''}
@@ -6699,19 +6670,10 @@ async function basculerReferencePrefacture(cle){
   if(!ctx) return;
   ctx.reference = ctx.reference === cle ? null : cle;
 
-  /* L'URL signée est demandée ici, une fois, et non au rendu : la modale se
-     redessine à chaque frappe dans un champ de prix, et re-signer à chaque fois
-     rechargerait le document sous les yeux de l'utilisateur. */
-  if(ctx.reference === 'bonClient' && !ctx.urlBonClient){
-    const b = state.bonsCommande.find(x=>x.id===ctx.bcId);
-    if(b && b.pieceJointeChemin){
-      try{
-        ctx.urlBonClient = await window.urlPieceJointe(b.pieceJointeChemin);
-      }catch(err){
-        console.error('Bon du client illisible', b.pieceJointeChemin, err);
-        showToast("Le document du client n'a pas pu être ouvert — voici la fiche interne.");
-      }
-    }
+  /* Signée ici et non au rendu — voir `chargerUrlBonDuClient`. Le cas courant
+     est déjà servi : l'ouverture de la modale l'a demandée. */
+  if(ctx.reference === 'bonClient'){
+    await chargerUrlBonDuClient(ctx, state.bonsCommande.find(x=>x.id===ctx.bcId));
   }
   renderValidationDirecteur();
 }
@@ -6862,14 +6824,10 @@ async function enregistrerChiffrageDirecteur(silencieux){
     }
     b.lignes = JSON.parse(JSON.stringify(ctx.lignes));
     b.montant = computeTotals(b.lignes).ht;
-    /* Le lieu et la référence du client partent dans la même écriture que les
-       prix : un seul geste pour l'utilisateur, une seule ligne touchée. Le
-       déclencheur `bons_commande_etat_reserve` ne se réveille que si
-       `statut_workflow` change — ce n'est pas le cas ici. */
-    b.adresse = ctx.adresse;
-    b.codePostal = ctx.codePostal;
-    b.ville = ctx.ville;
-    b.numeroBC = ctx.numeroBC;
+    /* Seuls les prix. Le lieu d'intervention et la référence du client étaient
+       réécrits ici du temps où la modale les faisait saisir ; sans formulaire,
+       ce n'était plus qu'un aller-retour, et la pré-facture n'a pas à faire
+       autorité sur l'adresse du chantier — c'est la fiche du bon qui la porte. */
     const r = await window.stSet('bonCommande:'+b.id, b);
     if(!r){ showToast(saveFailedMessage()); return false; }
 
@@ -16979,7 +16937,6 @@ Object.assign(window, {
   enregistrerChiffrageDirecteur,
   enregistrerDocumentRh,
   enteteDashboard,
-  enteteDossierHTML,
   entrepriseResults,
   entrepriseSearchTimer,
   entretienEditRowHTML,
@@ -17172,7 +17129,6 @@ Object.assign(window, {
   majCompteurRecherche,
   majContactsFicheTechnicien,
   majDelaiPaiementAide,
-  majEnteteDirecteur,
   majEquipeSalarie,
   majLigneDirecteur,
   majMentionFranchise,
@@ -17348,7 +17304,6 @@ Object.assign(window, {
   rechargerType,
   recomputeDpgfColRoles,
   redrawAnnotationCanvas,
-  refPartanteHTML,
   referenceDocumentHTML,
   referencePrefacture,
   referencesPrefactureHTML,
