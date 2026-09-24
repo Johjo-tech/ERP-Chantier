@@ -232,3 +232,145 @@ export function ciblesALeverLaPiece<T extends { id: string; piece_a_commander?: 
 ): string[] {
   return (taches ?? []).filter((t) => t.piece_a_commander).map((t) => t.id);
 }
+
+// ============ LE CRÉNEAU D'UNE JOURNÉE ============
+//
+// Une tâche occupe une plage horaire : `heure_debut` et `heure_fin`. L'écran,
+// lui, raisonne en « heure de début + durée en heures », parce que c'est ce
+// qu'on choisit sur une grille où une case vaut une heure.
+//
+// La conversion vit ici, et nulle part ailleurs : l'écriture et la lecture
+// doivent en donner la même lecture, sans quoi un créneau enregistré ne se
+// relirait pas tel qu'il a été posé.
+
+/** Ce que le modal propose quand personne n'a encore choisi. */
+export const HEURE_DEFAUT = "08:00";
+export const DUREE_DEFAUT_H = 1;
+/** Bornes de la liste de durées du modal, et de la poignée du planning. */
+export const DUREE_MIN_H = 1;
+export const DUREE_MAX_H = 8;
+
+export interface Creneau {
+  /** Heure de début, « HH:MM ». */
+  heure: string;
+  /** Nombre de cases d'une heure occupées sur la grille. */
+  duree: number;
+}
+
+/** Une plage telle que la table la range. */
+export interface PlageTache {
+  heure_debut?: string | null;
+  heure_fin?: string | null;
+}
+
+/** « 8:5 », « 08:00:00 » → « 08:00 ». Chaîne vide si rien d'exploitable. */
+function normaliserHeure(brut: string | null | undefined): string {
+  const [h, m] = String(brut ?? "").split(":");
+  const heures = Number(h);
+  const minutes = Number(m ?? 0);
+  if (!Number.isFinite(heures) || heures < 0 || heures > 23) return "";
+  if (!Number.isFinite(minutes) || minutes < 0 || minutes > 59) return "";
+  return `${String(heures).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function minutesDe(heure: string): number {
+  const [h, m] = heure.split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+/**
+ * Le créneau que l'écran déclare — ou rien du tout.
+ *
+ * REND `null` QUAND L'ÉCRAN NE DIT RIEN DES DEUX, et c'est la garde qui tient
+ * tout le reste. Les tâches déjà en base n'ont pas d'horaire : sans ce `null`,
+ * le premier enregistrement venu — un changement d'équipe, une pièce signalée —
+ * graverait « 08:00 » sur des journées dont personne n'a jamais dit l'heure, et
+ * l'invention deviendrait indiscernable d'une saisie.
+ *
+ * Un seul des deux suffit en revanche à déclarer un créneau : qui choisit
+ * « 3 h » regarde une vignette qui affiche déjà 08:00, et l'autre valeur prend
+ * donc son défaut plutôt que d'annuler le geste.
+ */
+export function creneauDeclare(
+  heure: string | null | undefined,
+  duree: number | string | null | undefined
+): Creneau | null {
+  const debut = normaliserHeure(heure);
+  const heures = Number(duree);
+  const dureeDite = Number.isFinite(heures) && heures > 0;
+  if (!debut && !dureeDite) return null;
+  return {
+    heure: debut || HEURE_DEFAUT,
+    duree: dureeDite
+      ? Math.min(DUREE_MAX_H, Math.max(DUREE_MIN_H, Math.round(heures)))
+      : DUREE_DEFAUT_H,
+  };
+}
+
+/**
+ * La fin d'un créneau : son début plus sa durée.
+ *
+ * LA PAUSE DE MIDI N'EST PAS DÉDUITE, volontairement. La grille du planning
+ * ajoute une case quand un créneau enjambe midi, et la durée que l'écran
+ * enregistre compte donc déjà cette case. « 10:00, 3 cases » finit bien à
+ * 13:00 — l'heure réelle à laquelle l'équipe repart. Retrancher la pause ici
+ * rendrait la conversion non réversible : relire donnerait 2 h là où on avait
+ * écrit 3, et écriture et lecture divergeraient dès le premier aller-retour.
+ *
+ * Bornée à la fin de journée : un créneau ne déborde pas sur le lendemain —
+ * un autre jour, c'est une autre date.
+ */
+export function finDuCreneau(heure: string, duree: number): string {
+  const debut = normaliserHeure(heure) || HEURE_DEFAUT;
+  const fin = minutesDe(debut) + Math.max(DUREE_MIN_H, duree) * 60;
+  const borne = Math.min(fin, 23 * 60 + 59);
+  return `${String(Math.floor(borne / 60)).padStart(2, "0")}:${String(borne % 60).padStart(2, "0")}`;
+}
+
+/** Ce qu'une tâche doit porter pour dire ce créneau. */
+export function colonnesDuCreneau(creneau: Creneau): {
+  heure_debut: string;
+  heure_fin: string;
+} {
+  return {
+    heure_debut: normaliserHeure(creneau.heure) || HEURE_DEFAUT,
+    heure_fin: finDuCreneau(creneau.heure, creneau.duree),
+  };
+}
+
+/**
+ * Le créneau que porte une tâche, ou `null` si elle n'en porte pas.
+ *
+ * Une fin sans début, ou une fin antérieure au début, ne décrit rien
+ * d'exploitable : mieux vaut « pas de créneau » qu'une durée négative posée sur
+ * la grille.
+ */
+export function creneauDeLaTache(tache: PlageTache): Creneau | null {
+  const debut = normaliserHeure(tache?.heure_debut);
+  const fin = normaliserHeure(tache?.heure_fin);
+  if (!debut) return null;
+  if (!fin) return { heure: debut, duree: DUREE_DEFAUT_H };
+  const heures = Math.round((minutesDe(fin) - minutesDe(debut)) / 60);
+  if (heures <= 0) return null;
+  return { heure: debut, duree: Math.min(DUREE_MAX_H, heures) };
+}
+
+/** Deux créneaux disent-ils la même chose ? Sert à ne pas écrire pour rien. */
+export function memeCreneau(a: Creneau | null, b: Creneau | null): boolean {
+  if (!a || !b) return a === b;
+  return (
+    (normaliserHeure(a.heure) || HEURE_DEFAUT) === (normaliserHeure(b.heure) || HEURE_DEFAUT) &&
+    a.duree === b.duree
+  );
+}
+
+/**
+ * Le créneau de cette journée est-il encore un plan, ou déjà un fait ?
+ *
+ * Une journée pointée réalisée ou validée par le terrain raconte ce qui s'est
+ * passé. En réécrire l'horaire depuis le planning falsifierait un constat.
+ */
+export function creneauModifiable(statut: string | null | undefined): boolean {
+  const etat = statutDe(statut);
+  return etat === "planifiee" || etat === "refusee";
+}
