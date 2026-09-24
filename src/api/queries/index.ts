@@ -7,6 +7,7 @@ export * from "./clients";
 export * from "./articles";
 export * from "./devis";
 export * from "./factures";
+export * from "./factures-import";
 export * from "./bonCommande";
 export * from "./interventions";
 export * from "./chantiers";
