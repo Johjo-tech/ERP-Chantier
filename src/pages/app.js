@@ -15595,6 +15595,20 @@ function documentRhRowHTML(doc){
 /* Le dossier d'un salarié : ce qu'il contient, ce qui lui manque, et de quoi
    compléter. Servi tel quel dans l'onglet Documents et dans la fiche. */
 function dossierRhHTML(salarie){
+  /* Une fiche qui n'existe pas encore n'a pas de dossier — mais elle doit
+     quand même MONTRER lequel elle aura. La section était purement masquée sur
+     une création, et ce vide se lisait comme une fonctionnalité absente.
+     On ne lance aucun chargement ici, pour la même raison que le registre des
+     visites : le `renderTab()` en queue repeindrait la fiche depuis un
+     `state.editing` incomplet et emporterait la saisie en cours. */
+  if(!salarie.id){
+    const attendus = (window.TYPES_DOCUMENT_RH||[]).filter(t=>t.obligatoire);
+    return `
+      <div class="card-sub">Enregistrez la fiche pour déposer ses pièces — un fichier se range sous l'identifiant du salarié, qui n'existe pas encore.</div>
+      ${attendus.length? `<div style="margin-top:10px;">${attendus.map(t=>`<div class="chantier-file-row"><span style="flex:1;">${t.icone} ${esc(t.libelle)}</span><span class="badge">à fournir</span></div>`).join('')}</div>`:''}
+      <button class="btn small" style="margin-top:10px;" disabled title="Disponible dès que la fiche est enregistrée">+ Ajouter un document</button>
+    `;
+  }
   if(!dossiersRhPrets()){
     chargerDossiersRh();
     return '<div class="empty">Chargement du dossier…</div>';
@@ -16080,16 +16094,24 @@ function salarieForm(){
       <div class="field"><label>Email</label><input type="email" id="sal_email" value="${esc(e.email)}"></div>
       <div class="field"><label>N° Carte BTP</label><input type="text" id="sal_carteBtpNumero" value="${esc(e.carteBtpNumero)}"></div>
       <div class="field"><label>Validité carte BTP</label><input type="date" id="sal_carteBtpValidite" value="${e.carteBtpValidite||''}"></div>
-      <div class="field"><label>Dernière visite médicale</label><input type="date" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate||''}" disabled style="background:var(--surface-2);"></div>
-      <div class="field"><label>Prochaine visite médicale</label><input type="date" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine||''}" disabled style="background:var(--surface-2);">
+      ${/* En `text` et non en `date` : vide, un champ date grisé se lit comme un
+            champ cassé — c'est ce que l'utilisateur a signalé. Une phrase se lit
+            comme une information, et une date en JJ/MM/AAAA comme partout
+            ailleurs. `disabled` et les deux identifiants sont conservés :
+            `resynchroniserDatesVisite` les repose à la main après une visite, et
+            `index.html` accroche son label flottant au motif `label + input`. */''}
+      <div class="field"><label>Dernière visite médicale</label><input type="text" id="sal_visiteMedicaleDate" value="${e.visiteMedicaleDate? fmtDate(e.visiteMedicaleDate) : 'Aucune visite au registre'}" disabled style="background:var(--surface-2);"></div>
+      <div class="field"><label>Prochaine visite médicale</label><input type="text" id="sal_visiteMedicaleProchaine" value="${e.visiteMedicaleProchaine? fmtDate(e.visiteMedicaleProchaine) : 'Aucune échéance — enregistrez une visite ci-dessous'}" disabled style="background:var(--surface-2);">
         <div style="margin-top:6px;">${e.id? badgeVisiteMedicaleListe(e.id) : '<span class="card-sub">Saisissez la première visite dans « Suivi médical », ci-dessous : elle sera enregistrée avec la fiche.</span>'}</div>
         <div class="card-sub" style="margin-top:4px;">Tenues par le registre des visites, plus bas — la base les réécrit à chaque enregistrement. L'échéance proposée suit le régime de suivi (art. R.4624-16 et suivants), et reste modifiable : c'est le médecin du travail qui arrête la date.</div></div>
     </div>
     <div class="section-title" style="margin-top:14px;">⚡ Habilitations & certifications</div>
     <div id="habilitationsZone">${habilitationsZoneHTML(e)}</div>
-    ${e.id? `
+    ${/* Toujours rendue, fiche neuve comprise : `dossierRhHTML` y annonce les
+          pièces attendues. Masquée, la section se lisait comme une fonction qui
+          n'existe pas — c'est le défaut que l'utilisateur a signalé. */''}
     <div class="section-title" style="margin-top:18px;">📁 Dossier documentaire</div>
-    ${dossierRhHTML(e)}` : ''}
+    ${dossierRhHTML(e)}
     <div class="section-title" style="margin-top:18px;">🩺 Suivi médical</div>
     <div id="suiviMedicalZone">${visitesMedicalesHTML(e)}</div>
     ${e.id? `
@@ -16599,8 +16621,18 @@ async function saveSalarie(){
     rafraichirZoneVisites();
     return;
   }
+  /* Une création garde la fiche ouverte, sur son identifiant réel. Le dossier
+     documentaire et les congés n'existent qu'à partir de là — les refermer
+     aussitôt obligeait à rouvrir la fiche pour déposer le contrat qu'on avait
+     sous la main. Une modification, elle, continue de refermer. */
+  if(creation){
+    state.editing.id = reel;
+    renderTab();
+    showToast('Salarié créé — son dossier documentaire est maintenant ouvert.', 'success');
+    return;
+  }
   closeForm('salarie');
-  showToast(creation? 'Salarié créé.' : 'Salarié modifié.', 'success');
+  showToast('Salarié modifié.', 'success');
 }
 function renderClients(){
   /* L'import prend l'écran entier : il a ses propres étapes, et laisser la

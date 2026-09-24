@@ -93,8 +93,13 @@ export function resynchroniserDatesVisite(salarieId){
   e.visiteMedicaleProchaine = s.visiteMedicaleProchaine || '';
   const derniere  = document.getElementById('sal_visiteMedicaleDate');
   const prochaine = document.getElementById('sal_visiteMedicaleProchaine');
-  if(derniere)  derniere.value  = e.visiteMedicaleDate;
-  if(prochaine) prochaine.value = e.visiteMedicaleProchaine;
+  /* Les deux champs sont en `text` depuis qu'un champ date vide et grisé se
+     lisait comme un champ cassé : on y repose donc ce que le gabarit y met,
+     mis en forme, et non la date ISO brute. */
+  if(derniere)  derniere.value  = e.visiteMedicaleDate
+    ? fmtDate(e.visiteMedicaleDate) : 'Aucune visite au registre';
+  if(prochaine) prochaine.value = e.visiteMedicaleProchaine
+    ? fmtDate(e.visiteMedicaleProchaine) : 'Aucune échéance — enregistrez une visite ci-dessous';
 }
 
 /* Une fiche neuve n'a pas d'identifiant, et le panneau de visite a pourtant
