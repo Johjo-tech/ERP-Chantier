@@ -4043,8 +4043,18 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
   /* Une facture émise porte l'identité de son émetteur au jour de l'émission.
      Les brouillons, eux, suivent les réglages courants. */
   const em = {
-    nom: doc.emetteurNom || socName,
+    /* La raison sociale AVANT le nom d'usage : « KTA PLOMBERIE » est ce que le
+       client doit lire sur une facture, pas « KTA Plomberie », qui n'est qu'un
+       libellé de navigation. `instantaneIdentite` fige déjà la première — on
+       retombait sur la seconde dès qu'un document ne la portait pas. */
+    nom: doc.emetteurNom || s.raisonSocialeLegale || socName,
     adresse: doc.emetteurAdresse || s.adresse,
+    /* Jamais relus, alors qu'ils sont enregistrés des deux côtés : l'en-tête
+       n'imprimait que la rue, et l'adresse de l'émetteur — mention obligatoire
+       — partait sans code postal ni ville, sur les devis comme sur les
+       factures. */
+    codePostal: doc.emetteurCodePostal || s.codePostal,
+    ville: doc.emetteurVille || s.ville,
     siret: doc.emetteurSiret || s.siret,
     tva: doc.emetteurTvaIntracom || s.tvaIntracom,
     /* Ni le téléphone ni l'e-mail ne sont figés à l'émission : ce ne sont pas
@@ -4065,7 +4075,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       ${logo? `<div class="p-logo-case">${logo}</div>` : ''}
       <div class="p-emetteur">
         <div class="p-emetteur-nom">${esc(em.nom)}</div>
-        <div class="p-emetteur-coord">${[em.adresse, [em.telephone, em.email].filter(Boolean).join(' · '), (r.siteWeb||'').trim()].filter(Boolean).map(esc).join('<br>')}</div>
+        <div class="p-emetteur-coord">${[em.adresse, [em.codePostal, em.ville].filter(Boolean).join(' '), [em.telephone, em.email].filter(Boolean).join(' · '), (r.siteWeb||'').trim()].filter(Boolean).map(esc).join('<br>')}</div>
       </div>
       <div class="p-titre-col"><div class="p-doctitre-grand">${title}<span></span></div></div>
       <div class="p-ident-fisc">${fisc}${em.tva? `${fisc?'<br>':''}<b>TVA intracommunautaire</b> ${esc(em.tva)}`:''}</div>
