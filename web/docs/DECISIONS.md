@@ -142,3 +142,39 @@ active (`GardeSociete`, relecture M-1).
 L'ancien écran n'offrait aucun geste pour passer un devis en envoyé / accepté /
 refusé (défaut DEV-51). `web/` propose le statut dans l'en-tête, sous le droit
 `devis / modifier`.
+
+## D-022 — Import d'articles : parité stricte, bizarreries comprises
+Le port (`articles/domain/import.ts`) rend exactement ce que rend
+`regles-import-articles.ts` (600 fichiers tirés, `tests/parite/import-articles.essai.ts`).
+Cela inclut une lecture des prix par `Number` : `1e3` vaut 1000, `0x10` vaut 16,
+`1 200,00` est illisible (prix à 0 et signalement). **Décision** : reproduit à
+l'identique tant que les deux applications importent le même fichier ; resserrer
+plus tard (refuser exposant et hexadécimal) se fera des deux côtés ou par un
+écart consigné ici.
+
+## D-023 — Recherche au catalogue : la saisie ne casse plus la requête
+L'ancien filtre `or=(code.ilike.%x%,designation.ilike.%x%)` n'entourait pas la
+valeur de guillemets : une virgule ou une parenthèse tapée (« Tube 1/2, cuivre »)
+rendait la requête invalide et la liste tombait en erreur. **Décision** : valeur
+entre guillemets, `\` et `"` échappés ; `%`, `_` et `\` restent des caractères
+(`tests/rls/articles.essai.ts`). Limite connue : PostgREST lit `*` comme un joker
+dans `ilike`, sans échappement possible — chercher « * » liste tout.
+
+## D-024 — Catalogue : familles complètes, page disparue, liste « Retirés »
+Trois écarts mineurs, tous dans le sens de l'exactitude : les familles du filtre
+se lisent par pages de 1 000 (l'ancien code n'en lisait qu'une, `max_rows`) ;
+une page qui n'existe plus (dernier article de la dernière page retiré) sert la
+dernière page au lieu d'une erreur 416 ; une liste « Retirés » vide dit « Aucun
+article ne correspond » et non « Le catalogue est vide ».
+
+## D-025 — `articles.metier` ni saisi ni recopié (ART-50)
+Comme l'ancien écran. L'import (`upsert`) n'envoie pas la colonne : une valeur
+posée ailleurs n'est donc pas effacée par un nouvel import. Toutes les colonnes
+NOT NULL (`prix_unitaire`, `tva`, `type_article`, `actif`, `gere_en_stock`) sont
+toujours données, à la création comme à l'import.
+
+## D-026 — Choisir un article : le commentaire écrit à la main l'emporte
+`appliquerArticle` suit `applyArticleObjectToLigne` : la description de
+l'article devient le commentaire de ligne **sauf** si un commentaire a déjà été
+saisi. La quantité et l'identifiant de ligne ne sont jamais touchés ; l'article
+est copié, pas lié (`articles/domain/article.essai.ts`).

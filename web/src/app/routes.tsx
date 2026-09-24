@@ -20,6 +20,9 @@ import { PageFactures } from "@/modules/facturation/components/PageFactures";
 import { PageSituation } from "@/modules/facturation/components/PageSituation";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
+import { PageArticles } from "@/modules/articles/components/PageArticles";
+import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
+import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -61,6 +64,11 @@ export const routes: RouteObject[] = [
       { path: "factures/nouvelle", element: <RouteModule module="factures" action="creer"><PageFacture /></RouteModule> },
       { path: "factures/:id", element: <RouteModule module="factures"><PageFacture /></RouteModule> },
       { path: "factures/:id/apercu", element: <RouteModule module="factures"><PageApercuFacture /></RouteModule> },
+      { path: "articles", element: <RouteModule module="articles"><PageArticles /></RouteModule> },
+      // Toute écriture au catalogue suit le droit « modifier », comme l'ancien écran (ART-06).
+      { path: "articles/nouveau", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
+      { path: "articles/:id/modifier", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
+      { path: "articles/import", element: <RouteModule module="articles" action="modifier"><PageImportArticles /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
