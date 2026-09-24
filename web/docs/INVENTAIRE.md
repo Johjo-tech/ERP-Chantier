@@ -295,7 +295,7 @@ qu'à l'interface (aucune politique RLS ne les cite).
 - [ ] **DEV-07** Remise saisie en %, en HT cible ou en TTC cible. _Source : `app.js:3253-3290`, RM-11_
 - [ ] **DEV-08** Unités : référentiel `unite`, repli `u, pièce, h, forfait, m, m², m³, ml, mm, jour` ; unité inconnue conservée. _Source : `app.js:2471, 2486`_
 - [ ] **DEV-09** Taux proposés : réglage `tauxTva`, sinon `[tvaDefaut()]` ; un taux enregistré absent de la liste reste proposé. _Source : `app.js:12572`_
-- [ ] **DEV-10** Code article dans la ligne : recherche au clavier (250 ms), sélection, création d'article depuis la ligne (voir ART-10). _Source : `app.js:2546-2690`_
+- [~] **DEV-10** Code article dans la ligne : recherche au clavier (250 ms), sélection, création d'article depuis la ligne (voir ART-10). _Source : `app.js:2546-2690`_ — Partiel : `articles/components/ChoixArticle` (clavier ↑ ↓ Entrée Tab Échap, 250 ms, création depuis la ligne) — reste à l'intégrer dans `LigneEditable`.
 - [ ] **DEV-11** Enregistrer / Enregistrer le brouillon (sans fermer). _Source : `app.js:2437, 4653`_
 - [ ] **DEV-12** Dupliquer → nouveau brouillon daté du jour. _Source : `app.js:4714`_
 - [ ] **DEV-13** Transformer en facture → facture brouillon préremplie, `echeance ''` ; refus si une facture porte déjà ce `devisId`. _Source : `app.js:4754`_
@@ -328,7 +328,7 @@ qu'à l'interface (aucune politique RLS ne les cite).
 - [ ] **DEV-40** `articleReference` passait par `parseFloat` (« PLB-001 » → 0) : c'est un champ texte, comme `designation`, `commentaire`, `unite`, `metier`. _Source : `app.js:3524`_
 - [ ] **DEV-41** Sous-totaux de chapitre figés (classe CSS inexistante) : recalcul à chaque saisie. _Source : `app.js:3300`_
 - [ ] **DEV-42** Quantité saisie « 1,5 » en chaîne → `parseFloat` = **1** (virgule tronque) ; l'ancien champ était `type=number`. La nouvelle saisie accepte la virgule (D-013). _Source : `app-1.md §4.3`_
-- [ ] **DEV-43** Choisir un article ne change **jamais** la quantité ; la description de l'article devient le commentaire de ligne ; copie, pas lien. _Source : `app.js:2546`_
+- [~] **DEV-43** Choisir un article ne change **jamais** la quantité ; la description de l'article devient le commentaire de ligne ; copie, pas lien. _Source : `app.js:2546`_ — Partiel : `articles/domain/ligne.ts#appliquerArticle` (quantité et id intouchés, copie, commentaire manuel préservé) testé — reste l'intégration.
 
 ### Défauts connus de l'ancienne app
 
@@ -343,31 +343,31 @@ qu'à l'interface (aucune politique RLS ne les cite).
 
 ### Écrans et fonctionnalités
 
-- [ ] **ART-01** Liste paginée **côté serveur** : recherche code/désignation (250 ms), filtres Actifs / Retirés / Tous, type (prestation / bien), famille. _Source : `app.js:18739-19105`, `queries/articles.ts`_
-- [ ] **ART-02** Fiche article : code et désignation obligatoires, famille, description, type, unité, PV HT, prix d'achat, TVA (défaut `tvaDefaut()`), géré en stock. _Source : `app.js:18739-19105`_
-- [ ] **ART-03** Retirer / Remettre — **jamais de suppression** (des documents citent le code). _Source : `queries/articles.ts#desactiverArticle`_
-- [ ] **ART-04** Code en double → « Le code « X » existe déjà dans le catalogue. » _Source : `app-3.md §1.3`_
-- [ ] **ART-05** Import du catalogue (voir IMP-01 à IMP-06), aperçu, rapport de rejets. _Source : `integrations/catalogue.ts`_
-- [ ] **ART-06** Écriture si `articles/modifier` (admin, secrétaire). _Source : `app-3.md §1.3`_
-- [ ] **ART-10** Depuis une ligne de document : chercher un article (`chercherArticlesLigne`), l'appliquer, ou créer l'article à partir de la ligne. _Source : `app.js:2610, 2655, 2679`_
+- [x] **ART-01** Liste paginée **côté serveur** : recherche code/désignation (250 ms), filtres Actifs / Retirés / Tous, type (prestation / bien), famille. _Source : `app.js:18739-19105`, `queries/articles.ts`_ — Preuve : `src/modules/articles/components/articles.essai.tsx` (« liste paginée côté serveur »), `tests/rls/articles.essai.ts` (« pagination serveur »).
+- [x] **ART-02** Fiche article : code et désignation obligatoires, famille, description, type, unité, PV HT, prix d'achat, TVA (défaut `tvaDefaut()`), géré en stock. _Source : `app.js:18739-19105`_ — Preuve : `domain/article.essai.ts`, `src/modules/articles/components/articles.essai.tsx` (« fiche article »).
+- [x] **ART-03** Retirer / Remettre — **jamais de suppression** (des documents citent le code). _Source : `queries/articles.ts#desactiverArticle`_ — Preuve : `src/modules/articles/components/articles.essai.tsx` (« retirer demande confirmation », « aucun bouton de suppression »), `tests/rls/articles.essai.ts` (« retirer cache l'article »).
+- [x] **ART-04** Code en double → « Le code « X » existe déjà dans le catalogue. » _Source : `app-3.md §1.3`_ — Preuve : `src/modules/articles/components/articles.essai.tsx` (« code en double »), `tests/rls/articles.essai.ts` (« crée, refuse le code en double »).
+- [x] **ART-05** Import du catalogue (voir IMP-01 à IMP-06), aperçu, rapport de rejets. _Source : `integrations/catalogue.ts`_ — Preuve : `components/import.essai.tsx`, `tests/parite/import-articles.essai.ts`, `tests/rls/articles.essai.ts` (« import par lots »).
+- [x] **ART-06** Écriture si `articles/modifier` (admin, secrétaire). _Source : `app-3.md §1.3`_ — Preuve : `src/modules/articles/components/articles.essai.tsx` (« catalogue — droits »), `tests/rls/articles.essai.ts` (« qui lit le catalogue »).
+- [~] **ART-10** Depuis une ligne de document : chercher un article (`chercherArticlesLigne`), l'appliquer, ou créer l'article à partir de la ligne. _Source : `app.js:2610, 2655, 2679`_ — Partiel : `ChoixArticle`, `appliquerArticle` et `brouillonDepuisLigne` livrés et testés (`saisie-ligne.essai.tsx`, `domain/article.essai.ts`) ; reste à les brancher dans l'éditeur de lignes du module `documents`.
 
 ### Règles métier
 
-- [ ] **ART-20** `getArticleParCode` ne rend que les articles **actifs**. _Source : `queries/articles.ts`_
-- [ ] **ART-21** Codes TVA de l'import : `INTER` → 10, `NORMA` → 20, `EXO` → 0, `"0"` → 0 (casse ignorée) ; inconnu → 20 **et** signalement ; colonne absente → 20 partout. RM-06. _Source : `api/regles-import-articles.ts`_
-- [ ] **ART-22** Unicité `(societe_id, code)` ; import par upsert sur ce couple, par lots de 200. _Source : schéma §2.1, `queries/articles.ts`_
+- [x] **ART-20** `getArticleParCode` ne rend que les articles **actifs**. _Source : `queries/articles.ts`_ — Preuve : `tests/rls/articles.essai.ts` (« retirer cache l'article à la saisie des lignes »).
+- [x] **ART-21** Codes TVA de l'import : `INTER` → 10, `NORMA` → 20, `EXO` → 0, `"0"` → 0 (casse ignorée) ; inconnu → 20 **et** signalement ; colonne absente → 20 partout. RM-06. _Source : `api/regles-import-articles.ts`_ — Preuve : `tests/parite/import-articles.essai.ts` (« codes TVA du catalogue »).
+- [x] **ART-22** Unicité `(societe_id, code)` ; import par upsert sur ce couple, par lots de 200. _Source : schéma §2.1, `queries/articles.ts`_ — Preuve : `tests/rls/articles.essai.ts` (« crée, puis met à jour », « un lot refusé n'arrête pas les autres »).
 
 ### Données
 
-- [ ] **ART-30** `articles` : code, designation (index trigramme), unite, `prix_unitaire numeric(14,4)`, `tva numeric(5,2)`, metier, description, `type_article` (`bien|service`, défaut service), `prix_achat`, actif, famille, gere_en_stock. RLS par la matrice `articles`. _Source : schéma §2.1_
+- [x] **ART-30** `articles` : code, designation (index trigramme), unite, `prix_unitaire numeric(14,4)`, `tva numeric(5,2)`, metier, description, `type_article` (`bien|service`, défaut service), `prix_achat`, actif, famille, gere_en_stock. RLS par la matrice `articles`. _Source : schéma §2.1_ — Preuve : schéma Zod `schemaArticle` (validé à chaque lecture), `tests/rls/articles.essai.ts`.
 
 ### Cas limites et corrections cachées
 
-- [ ] **ART-40** Le terrain n'a aucun accès aux articles (prix). _Source : schéma §6.4_
+- [x] **ART-40** Le terrain n'a aucun accès aux articles (prix). _Source : schéma §6.4_ — Preuve : `tests/rls/articles.essai.ts` (« le technicien et le sous-traitant ne lisent AUCUN article »), `src/modules/articles/components/articles.essai.tsx` (« le technicien n'a pas accès »).
 
 ### Défauts connus de l'ancienne app
 
-- [ ] **ART-50** `articles.metier` existe mais n'est ni saisi ni recopié sur la ligne. _Source : schéma §2.1 (à confirmer à l'usage)_
+- [-] **ART-50** `articles.metier` existe mais n'est ni saisi ni recopié sur la ligne. _Source : schéma §2.1 (à confirmer à l'usage)_ — Reproduit : ni saisi ni recopié ; l'import ne l'envoie pas, donc ne l'efface pas (DECISIONS D-025).
 
 ---
 
@@ -733,12 +733,12 @@ partagent avec les modules ci-dessus (tâches, prix masqués, numérotation) son
 
 ## 17. import / export
 
-- [ ] **IMP-01** Import d'articles : `;` uniquement, encodage constaté (BOM UTF-8/16, UTF-8 strict, sinon Windows-1252), colonnes par nom, requises `CodeArticle`, `Libelle1` ; nombre de champs = en-tête (sinon « les colonnes seraient décalées »). _Source : `regles-import-articles.ts`_
-- [ ] **IMP-02** Mapping articles : désignation = Libelle1 sinon 80 car. de BlocNote ; PV HT à virgule ; `BIEN` → bien ; `Actif = "1"` ; `GereEnStock = "1"` ; famille = FamilleArt1. _Source : idem_
-- [ ] **IMP-03** TVA `INTER`→10, `NORMA`→20, `EXO`/`0`→0, inconnu→20 signalé (RM-06). _Source : idem_
-- [ ] **IMP-04** Unités UNI→u, M→m, M2→m², M3→m³, HR→h, PC→pièce, MM→mm, JOUR→jour ; inconnue (`ML`) → vide + signalement. _Source : idem_
-- [ ] **IMP-05** Code répété dans le fichier : premier gardé ; créés / mis à jour comptés. _Source : idem_
-- [ ] **IMP-06** Rapport de rejets CSV. _Source : `regles-csv.ts#rapportRejetsCsv`_
+- [x] **IMP-01** Import d'articles : `;` uniquement, encodage constaté (BOM UTF-8/16, UTF-8 strict, sinon Windows-1252), colonnes par nom, requises `CodeArticle`, `Libelle1` ; nombre de champs = en-tête (sinon « les colonnes seraient décalées »). _Source : `regles-import-articles.ts`_ — Preuve : `tests/parite/import-articles.essai.ts`.
+- [x] **IMP-02** Mapping articles : désignation = Libelle1 sinon 80 car. de BlocNote ; PV HT à virgule ; `BIEN` → bien ; `Actif = "1"` ; `GereEnStock = "1"` ; famille = FamilleArt1. _Source : idem_ — Preuve : `tests/parite/import-articles.essai.ts`.
+- [x] **IMP-03** TVA `INTER`→10, `NORMA`→20, `EXO`/`0`→0, inconnu→20 signalé (RM-06). _Source : idem_ — Preuve : `tests/parite/import-articles.essai.ts` (cas nommés).
+- [x] **IMP-04** Unités UNI→u, M→m, M2→m², M3→m³, HR→h, PC→pièce, MM→mm, JOUR→jour ; inconnue (`ML`) → vide + signalement. _Source : idem_ — Preuve : `tests/parite/import-articles.essai.ts` (« unités du fichier »).
+- [x] **IMP-05** Code répété dans le fichier : premier gardé ; créés / mis à jour comptés. _Source : idem_ — Preuve : `tests/parite/import-articles.essai.ts`, `components/import.essai.tsx`, `tests/rls/articles.essai.ts`.
+- [x] **IMP-06** Rapport de rejets CSV. _Source : `regles-csv.ts#rapportRejetsCsv`_ — Preuve : `tests/parite/import-articles.essai.ts` (« le rapport téléchargé »), `components/import.essai.tsx`.
 - [ ] **IMP-10** Import de clients : CSV RFC 4180 `;`, colonnes type Vertuoza (« Nom de l'entreprise » requise), colonnes versées en notes, colonnes écartées (BIC, IBAN, TVA ambiguë…). _Source : `regles-import-clients.ts`_
 - [ ] **IMP-11** Pays FRANCE→FR, BELGIQUE/BELGIUM→BE, SUISSE→CH, LUXEMBOURG→LU, ALLEMAGNE→DE, ESPAGNE→ES, ITALIE→IT, défaut FR. _Source : idem_
 - [ ] **IMP-12** Conditions : « réception/comptant/immédiat » → 0 net ; sinon premier nombre ; « fin de mois »/« fdm » → fin de mois (« 30 jours fin de mois » → 30 fdm ; « 45j » → 45 net). _Source : idem_
