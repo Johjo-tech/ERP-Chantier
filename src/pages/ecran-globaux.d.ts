@@ -44,6 +44,8 @@ declare global {
     annulerInvitation: any;
     apercuDe: any;
     apercuNumero: any;
+    apportsDeLaFacture: any;
+    apportsDuBon: any;
     arrondiCentime: any;
     articleParCode: any;
     attenteAnnoncee: any;
@@ -56,6 +58,7 @@ declare global {
     blocagesChiffrage: any;
     blocagesValidationConducteur: any;
     bonEstFacture: any;
+    bonsDeLaFacture: any;
     cadreSuggere: any;
     catalogueComplet: any;
     chargerDocumentsRh: any;
@@ -66,9 +69,12 @@ declare global {
     chercherCatalogue: any;
     chiffrerTravailSupplementaire: any;
     choisirSociete: any;
+    cleRapprochement: any;
+    cloturerGratuit: any;
     completudeClient: any;
     completudeSociete: any;
     comptesRendusTerrain: any;
+    construireIndexFactureBC: any;
     correspond: any;
     correspondFiche: any;
     criteresDepuisRequete: any;
@@ -78,6 +84,7 @@ declare global {
     dateDocument: any;
     dateEcheance: any;
     definirMonNom: any;
+    definirRoleDuCompte: any;
     definirSocieteActive: any;
     delaiDeLaCle: any;
     delaiHorsPlafond: any;
@@ -106,6 +113,7 @@ declare global {
     etatVisite: any;
     exportAllData: any;
     extraireBonCommande: any;
+    facturesDuBon: any;
     famillesCatalogue: any;
     filtrerDocuments: any;
     filtrerReglements: any;
@@ -162,6 +170,7 @@ declare global {
     nomIntervenant: any;
     normaliserEntree: any;
     ongletsAutorises: any;
+    origineDeLaCorrespondance: any;
     oublierEchecsDeLecture: any;
     ouvrirAttestationVisite: any;
     ouvrirDocumentRh: any;
@@ -198,6 +207,7 @@ declare global {
     resteAImputer: any;
     resteAPayer: any;
     retirerArticle: any;
+    retirerDatesSupplementaires: any;
     roleEffectif: any;
     roleReel: any;
     sansAccents: any;

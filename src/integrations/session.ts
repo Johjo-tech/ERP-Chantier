@@ -175,10 +175,19 @@ import {
   grouperParClient,
   lignesHaystack,
   multiWordMatch,
+  origineDeLaCorrespondance,
   sansAccents,
   texteDocument,
   texteFiche,
 } from "./recherche";
+import {
+  apportsDeLaFacture,
+  apportsDuBon,
+  bonsDeLaFacture,
+  cleRapprochement,
+  construireIndexFactureBC,
+  facturesDuBon,
+} from "@/api/regles-liens-facture-bc";
 import {
   fusionnerReglages,
   LIBELLES_SEUILS,
@@ -516,6 +525,45 @@ export function listeIntervenants() {
 }
 
 /**
+ * Poser le rôle d'un compte dans la société active, depuis la fiche RH.
+ *
+ * La QUALIFICATION VIT EN RH : cocher « conducteur de travaux » sur une fiche
+ * y crée déjà la fiche conducteur et lui recopie le compte du salarié. Il
+ * manquait le dernier maillon — le rôle du compte —, qui ne se posait qu'à
+ * l'invitation. Un salarié invité comme administrateur le restait, et
+ * recevait le tableau de bord de pilotage quoi qu'on coche sur sa fiche.
+ *
+ * Rend :
+ *   'change'   le rôle a été posé
+ *   'inchange' il l'était déjà
+ *   'absent'   ce compte n'est pas membre de cette société
+ *   'refuse'   la base a dit non — seul un administrateur peut le faire
+ *
+ * Quatre issues et non un booléen : l'écran doit pouvoir dire POURQUOI rien
+ * n'a bougé. « Rôle non modifié » sans la raison enverrait chercher un défaut
+ * là où il n'y a qu'un droit manquant.
+ */
+export async function definirRoleDuCompte(
+  profileId: Uuid,
+  role: RoleMembre,
+): Promise<"change" | "inchange" | "absent" | "refuse"> {
+  const societe = societeActive();
+  if (!societe) return "absent";
+  if (annuaire?.get(profileId)?.role === role) return "inchange";
+  try {
+    const touche = await queries.definirRoleMembre(profileId, societe.uuid, role);
+    if (!touche) return "absent";
+  } catch (err) {
+    console.error("Rôle non modifié", err);
+    return "refuse";
+  }
+  /* L'annuaire porte le rôle : sans ce rechargement, l'écran continuerait
+     d'afficher l'ancien jusqu'à la prochaine ouverture de session. */
+  await chargerIntervenants();
+  return "change";
+}
+
+/**
  * Le nom sous lequel l'utilisateur veut être désigné.
  *
  * `profiles.nom` retombe sur l'email quand personne ne l'a renseigné, et la
@@ -645,11 +693,22 @@ export function injecterSession() {
   w.dansLaPeriode = dansLaPeriode;
   w.filtrerDocuments = filtrerDocuments;
   w.grouperParClient = grouperParClient;
+  w.origineDeLaCorrespondance = origineDeLaCorrespondance;
+  /* Rapprocher une facture de son bon : par la clé quand elle existe, par le
+     numéro en texte sinon — la clé manque sur la majorité des factures. Sert à
+     CHERCHER, jamais à affirmer un lien : ni verrou, ni badge « Facturé ». */
+  w.construireIndexFactureBC = construireIndexFactureBC;
+  w.bonsDeLaFacture = bonsDeLaFacture;
+  w.facturesDuBon = facturesDuBon;
+  w.apportsDuBon = apportsDuBon;
+  w.apportsDeLaFacture = apportsDeLaFacture;
+  w.cleRapprochement = cleRapprochement;
 
   w.chargerIntervenants = chargerIntervenants;
   w.nomIntervenant = nomIntervenant;
   w.definirMonNom = definirMonNom;
   w.listeIntervenants = listeIntervenants;
+  w.definirRoleDuCompte = definirRoleDuCompte;
   w.prochainActeur = prochainActeur;
   /* `validerPrefacture` n'est plus exposée au HTML : elle enchaîne le chiffrage
      et la génération de la facture sans jamais demander de prix. L'écran passe
@@ -690,6 +749,10 @@ export function injecterSession() {
   w.marquerRealisee = queries.marquerRealisee;
   w.validerTache = queries.validerTache;
   w.passerPretAChiffrer = queries.passerPretAChiffrer;
+  /* Écrite en base depuis le début du circuit, jamais appelée par l'écran :
+     une affaire sans suite facturable — un SAV, un geste commercial — n'avait
+     aucun moyen de se clore et restait « à facturer » indéfiniment. */
+  w.cloturerGratuit = queries.cloturerGratuit;
   w.listTachesBonCommande = queries.listTachesBonCommande;
 
   // Travaux constatés en plus du bon de commande
