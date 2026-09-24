@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { Session, SocieteAccessible } from "../api/session";
+import type { Session, SocieteAccessible } from "../domain/types";
 import type { RoleMembre } from "../domain/permissions";
 
 export type EtatSession =

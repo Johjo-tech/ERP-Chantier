@@ -1,28 +1,9 @@
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
-import { construireMatrice, estRole, type Matrice, type RoleMembre } from "../domain/permissions";
+import { construireMatrice, estRole, type RoleMembre } from "../domain/permissions";
+import type { Session } from "../domain/types";
 
-/** Une société où le compte est membre actif, avec son rôle. */
-export interface SocieteAccessible {
-  id: string;
-  code: string;
-  nom: string;
-  role: RoleMembre;
-  /** Niveau d'abonnement 1 à 5 ; absent en base aujourd'hui (voir DECISIONS D-009). */
-  niveauAbonnement: number | null;
-}
-
-export interface Utilisateur {
-  id: string;
-  email: string;
-  nom: string;
-}
-
-export interface Session {
-  utilisateur: Utilisateur;
-  societes: SocieteAccessible[];
-  matrice: Matrice;
-}
+export type { Session, SocieteAccessible, Utilisateur } from "../domain/types";
 
 const ligneMembre = z.object({
   role: z.string().refine(estRole, "Rôle inconnu"),

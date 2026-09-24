@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router";
-import type { SocieteAccessible } from "@/modules/auth-roles/api/session";
+import type { SocieteAccessible } from "@/modules/auth-roles/domain/types";
 import { construireMatrice, roleEffectif, type DroitAccorde, type RoleMembre } from "@/modules/auth-roles/domain/permissions";
 import { SessionContexte, type ValeurSession } from "@/modules/auth-roles/hooks/SessionContexte";
 import droits from "./fixtures/role_permissions.json";

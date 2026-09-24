@@ -1,4 +1,4 @@
-import type { SocieteAccessible } from "../api/session";
+import type { SocieteAccessible } from "./types";
 import { estRole, roleEffectif, type RoleMembre } from "./permissions";
 
 /**

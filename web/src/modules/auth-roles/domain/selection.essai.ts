@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SocieteAccessible } from "../api/session";
+import type { SocieteAccessible } from "./types";
 import { societeRetenue, simulationRetenue } from "./selection";
 
 const alpha: SocieteAccessible = { id: "a", code: "alpha", nom: "ALPHA", role: "admin", niveauAbonnement: null };

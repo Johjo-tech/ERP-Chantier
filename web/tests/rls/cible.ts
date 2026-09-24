@@ -12,12 +12,10 @@ const url = process.env.RLS_API_URL ?? "";
 const cle = process.env.RLS_ANON_KEY ?? "";
 
 export function verifierCibleLocale(): void {
-  let hote = "";
-  try {
-    hote = new URL(url).hostname;
-  } catch {
+  if (!URL.canParse(url)) {
     throw new Error(`Tests RLS : URL absente ou invalide (« ${url} »). Lancer « npm run test:rls ».`);
   }
+  const hote = new URL(url).hostname;
   if (!["127.0.0.1", "localhost", "::1"].includes(hote)) {
     throw new Error(`Tests RLS refusés : la cible « ${hote} » n'est pas la base locale.`);
   }

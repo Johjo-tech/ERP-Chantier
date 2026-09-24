@@ -37,7 +37,9 @@ export function messageErreur(e: unknown): string {
     }
     if (e.message === "Invalid login credentials") return "Adresse e-mail ou mot de passe incorrect.";
   }
-  if (e instanceof Error && e.message.startsWith("Configuration invalide")) return e.message;
+  if (e instanceof Error && (e.message.startsWith("Configuration invalide") || e.name === "ErreurFormat")) {
+    return e.message;
+  }
   return "Une erreur inattendue est survenue. Réessayez ; si elle persiste, signalez-la.";
 }
 
