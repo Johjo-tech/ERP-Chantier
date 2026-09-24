@@ -15362,7 +15362,7 @@ async function majEquipeSalarie(salarieId, equipeId){
 }
 function renderRegistreUniquePersonnel(){
   const list = state.salaries.filter(s=>s.societeId===state.societeId)
-    .slice().sort((a,b)=>(a.dateDebut||'9999').localeCompare(b.dateDebut||'9999'));
+    .slice().sort((a,b)=>(a.dateEntree||'9999').localeCompare(b.dateEntree||'9999'));
   return `
     <div class="page-head">
       <div style="display:flex; align-items:center; gap:14px;">
@@ -15385,8 +15385,8 @@ function renderRegistreUniquePersonnel(){
             <td>${s.sexe==='F'?'Femme':s.sexe==='M'?'Homme':'—'}</td>
             <td>${esc(s.poste)||'—'}</td>
             <td>${esc(s.typeContrat)||'—'}</td>
-            <td>${s.dateDebut? fmtDate(s.dateDebut):'—'}</td>
-            <td>${s.dateFin? fmtDate(s.dateFin):'—'}</td>
+            <td>${s.dateEntree? fmtDate(s.dateEntree):'—'}</td>
+            <td>${s.dateSortie? fmtDate(s.dateSortie):'—'}</td>
           </tr>`).join('') : '<tr><td colspan="10" class="empty">Aucun salarié enregistré.</td></tr>'}
         </tbody>
       </table>
@@ -15398,7 +15398,7 @@ function imprimerRegistrePersonnel(){
   if(!area) return;
   const societeNom = societeName(state.societeId);
   const list = state.salaries.filter(s=>s.societeId===state.societeId)
-    .slice().sort((a,b)=>(a.dateDebut||'9999').localeCompare(b.dateDebut||'9999'));
+    .slice().sort((a,b)=>(a.dateEntree||'9999').localeCompare(b.dateEntree||'9999'));
   area.innerHTML = `
     <div class="p-print-planning">
       <h1>${esc(societeNom)} — Registre unique du personnel</h1>
@@ -15412,8 +15412,8 @@ function imprimerRegistrePersonnel(){
             <td>${esc(s.nationalite)||'—'}</td>
             <td>${s.sexe==='F'?'F':s.sexe==='M'?'M':'—'}</td>
             <td>${esc(s.poste)||'—'}</td><td>${esc(s.typeContrat)||'—'}</td>
-            <td>${s.dateDebut? fmtDate(s.dateDebut):'—'}</td>
-            <td>${s.dateFin? fmtDate(s.dateFin):'—'}</td>
+            <td>${s.dateEntree? fmtDate(s.dateEntree):'—'}</td>
+            <td>${s.dateSortie? fmtDate(s.dateSortie):'—'}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -15851,7 +15851,7 @@ function ouvrirDossierRh(salarieId){
    voir l'en-tête de ce fichier-là, et `taille-ecran.test.ts`. */
 const TYPES_ABSENCE =['Congé payé','Arrêt maladie','Congé sans solde','Absence injustifiée','Accident du travail'];
 function soldeCPRestant(e){
-  const initial = parseFloat(e.soldeCPInitial) || 0;
+  const initial = parseFloat(e.soldeCpInitial) || 0;
   const pris = (e.absences||[]).filter(a=>a.type==='Congé payé').reduce((s,a)=>s+(parseFloat(a.nbJours)||0),0);
   return initial - pris;
 }
@@ -15867,11 +15867,11 @@ function nbJoursOuvres(dateDebut, dateFin){
   return n;
 }
 async function updateSoldeCPPreview(salarieId){
-  const val = document.getElementById('sal_soldeCPInitial').value;
-  state.editing.soldeCPInitial = val;
+  const val = document.getElementById('sal_soldeCpInitial').value;
+  state.editing.soldeCpInitial = val;
   const s = state.salaries.find(x=>x.id===salarieId);
   if(s){
-    s.soldeCPInitial = val;
+    s.soldeCpInitial = val;
     await window.stSet('salarie:'+salarieId, s);
   }
   renderTab();
@@ -16074,8 +16074,8 @@ function salarieForm(){
       <div class="field"><label>Type de contrat</label><select id="sal_typeContrat">${TYPES_CONTRAT.map(t=>`<option value="${t}" ${e.typeContrat===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Coût horaire chargé (HT, salaire + charges)</label><input type="number" step="0.01" id="sal_coutHoraireCharge" value="${e.coutHoraireCharge!=null?e.coutHoraireCharge:''}" placeholder="Ex : 32.50"></div>
       <div class="field"><label>Salaire mensuel net</label><input type="number" step="0.01" id="sal_salaireMensuelNet" value="${e.salaireMensuelNet!=null?e.salaireMensuelNet:''}" placeholder="Ex : 1850"></div>
-      <div class="field"><label>Date de début de contrat</label><input type="date" id="sal_dateDebut" value="${e.dateDebut||''}"></div>
-      <div class="field"><label>Date de fin de contrat (si applicable)</label><input type="date" id="sal_dateFin" value="${e.dateFin||''}"></div>
+      <div class="field"><label>Date de début de contrat</label><input type="date" id="sal_dateEntree" value="${e.dateEntree||''}"></div>
+      <div class="field"><label>Date de fin de contrat (si applicable)</label><input type="date" id="sal_dateSortie" value="${e.dateSortie||''}"></div>
       <div class="field"><label>Téléphone</label><input type="text" id="sal_telephone" value="${esc(e.telephone)}"></div>
       <div class="field"><label>Email</label><input type="email" id="sal_email" value="${esc(e.email)}"></div>
       <div class="field"><label>N° Carte BTP</label><input type="text" id="sal_carteBtpNumero" value="${esc(e.carteBtpNumero)}"></div>
@@ -16097,7 +16097,7 @@ function salarieForm(){
       <span>🏖️ Congés & Absences</span>
     </div>
     <div class="field-grid" style="margin-top:8px;">
-      <div class="field"><label>Solde de CP acquis (jours)</label><input type="number" step="0.5" id="sal_soldeCPInitial" value="${e.soldeCPInitial!=null?e.soldeCPInitial:''}" placeholder="Ex : 25" onchange="updateSoldeCPPreview('${jsAttr(e.id)}')"></div>
+      <div class="field"><label>Solde de CP acquis (jours)</label><input type="number" step="0.5" id="sal_soldeCpInitial" value="${e.soldeCpInitial!=null?e.soldeCpInitial:''}" placeholder="Ex : 25" onchange="updateSoldeCPPreview('${jsAttr(e.id)}')"></div>
       <div class="field"><label>Solde restant (calculé)</label><input type="text" value="${soldeCPRestant(e).toFixed(1)} jour(s)" disabled style="background:var(--surface-2); font-weight:700;"></div>
     </div>
     <div class="entretien-add-row">
@@ -16502,8 +16502,19 @@ async function saveSalarie(){
     typeContrat: document.getElementById('sal_typeContrat').value,
     coutHoraireCharge: parseFloat(document.getElementById('sal_coutHoraireCharge').value) || null,
     salaireMensuelNet: parseFloat(document.getElementById('sal_salaireMensuelNet').value) || null,
-    dateDebut: document.getElementById('sal_dateDebut').value,
-    dateFin: document.getElementById('sal_dateFin').value,
+    /* `dateEntree` / `dateSortie`, et surtout PAS `dateDebut` / `dateFin` :
+       le pont convertit automatiquement en snake_case, et les colonnes de
+       `salaries` s'appellent `date_entree` et `date_sortie`. Sous les anciens
+       noms, `colonnesDe()` écartait les deux EN SILENCE — les trois salariés de
+       production ont leurs dates de contrat vides, et le registre unique du
+       personnel, pourtant obligatoire, affichait « — » dans les deux colonnes
+       que la loi exige nommément.
+       Ne pas « simplifier » avec un alias dans SNAKE_OVERRIDES : cette table est
+       GLOBALE, et `date_debut` / `date_fin` sont des colonnes légitimes sur
+       chantiers, salarie_absences, salarie_formations, salarie_rdv,
+       materiel_prets et vehicule_prets. */
+    dateEntree: document.getElementById('sal_dateEntree').value,
+    dateSortie: document.getElementById('sal_dateSortie').value,
     telephone: document.getElementById('sal_telephone').value,
     email: document.getElementById('sal_email').value,
     carteBtpNumero: document.getElementById('sal_carteBtpNumero').value,
@@ -16524,7 +16535,7 @@ async function saveSalarie(){
        l'envoi, et les fichiers encodés en data-URL qu'ils portaient
        disparaissaient au rechargement suivant. Le dossier documentaire les
        remplace, dans `salarie_documents` et le bucket `terrain`. */
-    soldeCPInitial: document.getElementById('sal_soldeCPInitial')? document.getElementById('sal_soldeCPInitial').value : (e.soldeCPInitial||null),
+    soldeCpInitial: document.getElementById('sal_soldeCpInitial')? document.getElementById('sal_soldeCpInitial').value : (e.soldeCpInitial||null),
     absences: e.absences || [] };
   const r = await window.stSet('salarie:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
