@@ -12,6 +12,9 @@ import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
 import { PageApercuDevis } from "@/modules/devis/components/PageApercuDevis";
 import { ActionsDevis } from "@/modules/devis/components/ActionsDevis";
 import { DevisLies } from "@/modules/devis/components/DevisLies";
+import { PageArticles } from "@/modules/articles/components/PageArticles";
+import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
+import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -39,6 +42,11 @@ export const routes: RouteObject[] = [
       { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis /></RouteModule> },
       { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis actions={(d) => <ActionsDevis devis={d} />} /></RouteModule> },
       { path: "devis/:id/apercu", element: <RouteModule module="devis"><PageApercuDevis /></RouteModule> },
+      { path: "articles", element: <RouteModule module="articles"><PageArticles /></RouteModule> },
+      // Toute écriture au catalogue suit le droit « modifier », comme l'ancien écran (ART-06).
+      { path: "articles/nouveau", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
+      { path: "articles/:id/modifier", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
+      { path: "articles/import", element: <RouteModule module="articles" action="modifier"><PageImportArticles /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
