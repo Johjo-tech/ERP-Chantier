@@ -5116,6 +5116,12 @@ function renderFactures(){
     ${view==='reglements'? renderReglements(true) : ''}
     `;
   }
+  /* L'import prend l'écran entier : il a ses propres étapes, et laisser la
+     liste dessous inviterait à cliquer ailleurs au milieu d'un aperçu. */
+  if(state.facturesImport) return `
+    <div class="page-head"><h1>Reprendre un historique de facturation</h1></div>
+    ${importFacturesHTML()}
+  `;
   const list = state.factures.filter(f=>f.societeId===soc && !f.sousTraitantEmetteur);
   /* La file ne montrait que les bons entièrement validés — 122 sur 496 en
      production. Le directeur ne voyait donc rien venir : ni les 88 bons dont
@@ -5137,7 +5143,9 @@ function renderFactures(){
       <button class="plus-subnav-btn ${view==='afacturer'?'active':''}" onclick="setFacturesView('afacturer')">À facturer ${aFacturer.length? `(${aFacturer.length})`:''}</button>
       <button class="plus-subnav-btn ${view==='reglements'?'active':''}" onclick="setFacturesView('reglements')">Règlements</button>
     </div>
-    <div class="page-head"><h1>${view==='reglements'?'Règlements': view==='avoirs'?'Avoirs':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : '<button class="btn primary" onclick="openForm(\'facture\')">+ Nouvelle facture</button>'}</div>
+    <div class="page-head"><h1>${view==='reglements'?'Règlements': view==='avoirs'?'Avoirs':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : `<div style="display:flex; gap:8px;">
+      ${peutImporterFactures()? '<button class="btn" onclick="ouvrirImportFactures()">📥 Reprendre un historique</button>':''}
+      <button class="btn primary" onclick="openForm('facture')">+ Nouvelle facture</button></div>`}</div>
     ${(state.formOpen.facture || view==='reglements') ? '' : barreFiltresFactures(view)}
     ${view==='liste'? `<div id="formZoneFacture">${state.formOpen.facture? factureForm() : ''}</div>
     ${state.formOpen.facture ? '' : `<div id="factureListZone">${renderFacturesListHTML(list)}</div>`}` : ''}
@@ -5151,6 +5159,219 @@ function renderFactures(){
     ${view==='reglements'? renderReglements(true) : ''}
   `;
 }
+/* ---------- Reprise d'un historique de facturation ----------
+
+   Deux fichiers, pas un : l'export du logiciel comptable sépare les en-têtes
+   des lignes, et l'un sans l'autre ne dit rien — un en-tête seul donnerait des
+   factures à 0,00 €, des lignes seules n'auraient ni client ni date.
+
+   Ce que cet écran doit absolument montrer avant le clic : les totaux
+   reconstitués, à confronter au grand livre. Une facture numérotée ne se
+   corrige plus et ne se supprime plus ; c'est ici, et nulle part après, qu'on
+   peut encore constater qu'un chiffre ne tombe pas juste. */
+
+function peutImporterFactures(){
+  return !window.autorise
+    || (window.autorise('factures','creer') && window.autorise('factures','modifier'));
+}
+function ouvrirImportFactures(){
+  state.facturesImport = { nomE:'', nomL:'', octetsE:null, octetsL:null,
+    apercu:null, resultat:null, enCours:false, progres:'', erreur:'', categorieZero:'' };
+  renderTab();
+}
+async function fermerImportFactures(){
+  const aEcrit = !!(state.facturesImport && state.facturesImport.resultat);
+  state.facturesImport = null;
+  /* Les factures vivent en mémoire : sans ce rechargement la base serait juste
+     et la liste mentirait. */
+  if(aEcrit){ await recharger('facture'); await recharger('client'); }
+  renderTab();
+}
+async function choisirFichierFactures(quoi, fichier){
+  if(!fichier) return;
+  const i = state.facturesImport;
+  if(quoi === 'entetes'){ i.nomE = fichier.name; i.octetsE = await fichier.arrayBuffer(); }
+  else { i.nomL = fichier.name; i.octetsL = await fichier.arrayBuffer(); }
+  i.erreur = ''; i.apercu = null;
+  if(i.octetsE && i.octetsL) await relancerApercuFactures();
+  else renderTab();
+}
+async function relancerApercuFactures(categorie){
+  const i = state.facturesImport;
+  if(categorie !== undefined) i.categorieZero = categorie;
+  if(!i.octetsE || !i.octetsL) return;
+  i.enCours = true; i.erreur = ''; i.progres = 'Lecture des deux fichiers…';
+  renderTab();
+  try {
+    i.apercu = await window.previsualiserImportFactures(i.octetsE, i.octetsL,
+      i.categorieZero? { categorieTauxZero: i.categorieZero } : {});
+  } catch(err){
+    console.error('Import factures : aperçu impossible', err);
+    i.erreur = err.message || 'fichiers illisibles';
+  }
+  i.enCours = false; i.progres = '';
+  renderTab();
+}
+async function lancerImportFactures(){
+  const i = state.facturesImport;
+  i.enCours = true; i.progres = 'Écriture…'; renderTab();
+  try {
+    /* L'avancement se pose par `textContent` et JAMAIS par `renderTab()` :
+       redessiner reconstruirait les deux `<input type="file">` et perdrait les
+       fichiers choisis. Et 768 pièces font plus de deux mille allers-retours —
+       un écran figé si longtemps passe pour une panne. */
+    i.resultat = await window.ecrireImportFactures(i.apercu, (fait, total)=>{
+      i.progres = `Écriture : ${fait} / ${total} pièces`;
+      const z = document.getElementById('importFacturesProgres');
+      if(z) z.textContent = i.progres;
+    });
+  } catch(err){
+    console.error('Import factures : écriture refusée', err);
+    i.erreur = err.message || 'import refusé';
+  }
+  i.enCours = false; i.progres = '';
+  renderTab();
+}
+function telechargerRapportFactures(){
+  const i = state.facturesImport, a = i.apercu;
+  const lignes = [...(a? a.rejets : [])];
+  (a? a.signalements : []).forEach(sg => lignes.push({ ligne:sg.ligne, motif:sg.motif,
+    contenu: sg.code? 'pièce '+sg.code : 'en-tête du fichier' }));
+  (a? a.collisions : []).forEach(n => lignes.push({ ligne:0,
+    motif:'Numéro déjà présent en base : la pièce n\'est pas réécrite.', contenu:'pièce '+n }));
+  (a? a.clients : []).forEach(c => lignes.push({ ligne:0,
+    motif:`Client « ${c.nom} » — ${c.rapprochement === 'exact' ? 'fiche trouvée'
+      : c.rapprochement === 'prefixe' ? 'rapproché de « '+c.versNom+' »'
+      : 'aucune fiche : elle sera créée'} (${c.pieces} pièces)`, contenu:c.code||'' }));
+  lignes.sort((a2,b2)=>a2.ligne-b2.ligne);
+  const blob = new Blob(['﻿' + window.rapportRejetsCsv(lignes)], {type:'text/csv;charset=utf-8'});
+  telechargerBlob(blob, 'import-factures-rapport');
+}
+function importFacturesHTML(){
+  const i = state.facturesImport;
+  const retour = `<button class="btn" onclick="fermerImportFactures()">Retour</button>`;
+
+  if(i.erreur) return `<div class="form-panel">
+    <div class="wf-banner alerte"><b>Import impossible</b> — ${esc(i.erreur)}</div>
+    <div style="margin-top:14px;">${retour}</div>
+  </div>`;
+
+  if(i.enCours) return `<div class="form-panel">
+    <div class="empty">${esc(i.nomE||'')} ${esc(i.nomL||'')}<br><span id="importFacturesProgres">${esc(i.progres||'Traitement…')}</span></div>
+  </div>`;
+
+  if(i.resultat){
+    const r = i.resultat;
+    return `<div class="form-panel">
+      <div class="wf-banner ok"><b>Reprise terminée</b> — ${r.ecrites} pièce${r.ecrites>1?'s':''} et ${r.lignes} ligne${r.lignes>1?'s':''} écrites${r.clientsCrees? `, ${r.clientsCrees} fiche${r.clientsCrees>1?'s':''} client créée${r.clientsCrees>1?'s':''}`:''}.</div>
+      ${r.echecs.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">${r.echecs.length} pièce${r.echecs.length>1?'s':''} refusée${r.echecs.length>1?'s':''}</div>
+        <ul style="margin:0; padding-left:18px;">${r.echecs.slice(0,10).map(e=>`<li>${esc(e.numero)} — ${esc(e.motif)} <span class="card-sub">(à l'étape « ${esc(e.etape)} »)</span></li>`).join('')}</ul>
+      </div>`:''}
+      ${r.brouillonsOrphelins.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+        <b>${r.brouillonsOrphelins.length} brouillon${r.brouillonsOrphelins.length>1?'s':''} sans numéro</b> — ${esc(r.brouillonsOrphelins.map(b=>b.numero).slice(0,10).join(', '))}.
+        Ces pièces sont incomplètes et n'apparaissent pas dans la liste. Tant qu'elles n'ont pas de numéro, elles peuvent encore être supprimées.
+      </div>`:''}
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn" onclick="telechargerRapportFactures()">📄 Rapport</button>
+        ${retour}
+      </div>
+    </div>`;
+  }
+
+  if(!i.apercu) return `<div class="form-panel">
+    <h3>Reprendre un historique de facturation</h3>
+    <p class="card-sub">Les pièces déjà émises dans votre ancien logiciel, avec leurs numéros d'origine. Deux fichiers sont nécessaires : les <b>en-têtes</b> (une ligne par facture : numéro, date, client, HT, TVA, TTC) et les <b>lignes</b> (le détail par compte comptable). Le séparateur, l'encodage et les noms de colonnes sont reconnus tout seuls. Rien n'est écrit avant votre accord.</p>
+    <p class="card-sub"><b>Ces pièces ne pourront plus être modifiées ni supprimées</b> une fois écrites : une facture numérotée est figée par la base. L'aperçu est le seul moment où un écart peut encore se voir.</p>
+    <div style="margin:16px 0; display:flex; flex-direction:column; gap:12px;">
+      <label>En-têtes des factures${i.nomE? ` <span class="card-sub">— ${esc(i.nomE)}</span>`:''}<br>
+        <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('entetes', this.files[0])"></label>
+      <label>Lignes des factures${i.nomL? ` <span class="card-sub">— ${esc(i.nomL)}</span>`:''}<br>
+        <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('lignes', this.files[0])"></label>
+    </div>
+    ${retour}
+  </div>`;
+
+  const a = i.apercu, t = a.totauxAEcrire;
+  const tauxZero = a.rejets.some(x=>/0 %/.test(x.motif));
+  const CATEGORIES = [['E','Exonérée de TVA'],['AE','Autoliquidation (le preneur acquitte la taxe)'],['Z','Taux zéro'],['O','Hors champ d\'application']];
+
+  return `<div class="form-panel">
+    <h3>${esc(i.nomE)} <span class="card-sub">+ ${esc(i.nomL)}</span></h3>
+
+    <div style="display:flex; gap:18px; flex-wrap:wrap; margin:14px 0;">
+      <div><div class="hero-stat-value">${t.pieces}</div><div class="card-sub">pièces à écrire</div></div>
+      <div><div class="hero-stat-value">${t.factures}</div><div class="card-sub">factures</div></div>
+      <div><div class="hero-stat-value">${t.avoirs}</div><div class="card-sub">avoirs</div></div>
+      <div><div class="hero-stat-value">${t.lignes}</div><div class="card-sub">lignes</div></div>
+      <div><div class="hero-stat-value" style="color:${a.rejets.length?'var(--danger)':'inherit'};">${a.rejets.length}</div><div class="card-sub">écartées</div></div>
+      <div><div class="hero-stat-value" style="color:${a.collisions.length?'#C24E00':'inherit'};">${a.collisions.length}</div><div class="card-sub">déjà en base</div></div>
+    </div>
+
+    ${/* Le chiffre qui se confronte au grand livre. Il passe avant tout le
+          reste parce que c'est le seul que le comptable saura vérifier. */''}
+    <div class="wf-banner" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Totaux reconstitués — à confronter à votre grand livre</div>
+      <div style="display:flex; gap:24px; flex-wrap:wrap;">
+        <div><b>${moneyDisplay(t.ht)}</b><div class="card-sub">HT net</div></div>
+        <div><b>${moneyDisplay(t.tva)}</b><div class="card-sub">TVA</div></div>
+        <div><b>${moneyDisplay(t.ttc)}</b><div class="card-sub">TTC net</div></div>
+      </div>
+      <div class="card-sub" style="margin-top:8px;">Les avoirs comptent en négatif. Taux rencontrés :
+        ${t.parTaux.map(x=>`${x.taux} % sur ${x.pieces} pièce${x.pieces>1?'s':''} (${moneyDisplay(x.ht)})`).join(' · ')}</div>
+      ${(a.totaux.pieces !== t.pieces)? `<div class="card-sub" style="margin-top:6px;">Le fichier porte ${a.totaux.pieces} pièces pour ${moneyDisplay(a.totaux.ht)} HT ; l'écart vient des pièces écartées ou déjà présentes.</div>`:''}
+    </div>
+
+    ${a.incoherent? `<div class="wf-banner alerte" style="margin-top:10px;">
+      <b>Le fichier se contredit lui-même</b> — une TVA, un TTC, un signe ou une somme de lignes ne tombe pas juste. Rien ne sera écrit : ces pièces seraient définitives et fausses. Voyez le détail ci-dessous, et demandez un nouvel export.
+    </div>`:''}
+
+    ${tauxZero? `<div class="wf-banner alerte" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Des pièces sont à 0 % de TVA</div>
+      <div class="card-sub" style="margin-bottom:8px;">Le fichier ne dit pas pourquoi, et la raison change la facture électronique. Choisissez, ou laissez ces pièces de côté pour les saisir à la main.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${CATEGORIES.map(([c,lib])=>`<button class="btn small ${i.categorieZero===c?'primary':''}" onclick="relancerApercuFactures('${c}')">${esc(lib)}</button>`).join('')}
+        ${i.categorieZero? `<button class="btn small" onclick="relancerApercuFactures('')">Les laisser de côté</button>`:''}
+      </div>
+    </div>`:''}
+
+    ${a.clients.length? `<div class="wf-banner" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Clients</div>
+      <ul style="margin:0; padding-left:18px;">${a.clients.map(c=>`<li>${esc(c.nom)} <span class="card-sub">— ${c.pieces} pièce${c.pieces>1?'s':''}, ${moneyDisplay(c.ht)}</span> : ${
+        c.rapprochement==='exact'? 'fiche existante'
+        : c.rapprochement==='prefixe'? `rapproché de <b>${esc(c.versNom)}</b>`
+        : '<b>aucune fiche — elle sera créée</b>'}</li>`).join('')}</ul>
+      ${a.clientsACreer.length? `<div class="card-sub" style="margin-top:6px;">${a.clientsACreer.length>1
+        ? `${a.clientsACreer.length} fiches seront créées avec le seul nom du fichier. Complétez-les ensuite`
+        : `1 fiche sera créée avec le seul nom du fichier. Complétez-la ensuite`}, ou importez d'abord vos clients.</div>`:''}
+    </div>`:''}
+
+    ${a.collisions.length? `<div class="wf-banner" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Déjà en base, non réécrites</div>
+      <div class="card-sub">${esc(a.collisions.slice(0,20).join(', '))}${a.collisions.length>20? ` …et ${a.collisions.length-20} autres`:''}</div>
+    </div>`:''}
+
+    ${a.rejets.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Pièces écartées — l'import reste bloqué tant qu'il en reste</div>
+      <ul style="margin:0; padding-left:18px;">${a.rejets.slice(0,8).map(x=>`<li>Ligne ${x.ligne} — ${esc(x.motif)}</li>`).join('')}</ul>
+      ${a.rejets.length>8? `<div class="card-sub" style="margin-top:6px;">…et ${a.rejets.length-8} autres, dans le rapport.</div>`:''}
+      <div class="card-sub" style="margin-top:6px;">Un historique amputé ne se voit qu'à la révision des comptes : mieux vaut corriger l'export.</div>
+    </div>`:''}
+
+    ${a.signalements.length? `<div class="wf-banner" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Décidé à la place du fichier</div>
+      <ul style="margin:0; padding-left:18px;">${a.signalements.slice(0,6).map(x=>`<li>${x.code? esc(x.code)+' — ':''}${esc(x.motif)}</li>`).join('')}</ul>
+      ${a.signalements.length>6? `<div class="card-sub" style="margin-top:6px;">…et ${a.signalements.length-6} autres, dans le rapport.</div>`:''}
+    </div>`:''}
+
+    <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+      <button class="btn primary" ${a.ecriturePossible?'':'disabled'} onclick="lancerImportFactures()">Écrire ${t.pieces} pièce${t.pieces>1?'s':''} — définitif</button>
+      <button class="btn" onclick="telechargerRapportFactures()">📄 Rapport</button>
+      ${retour}
+    </div>
+  </div>`;
+}
+
 /* ---------- Barre de recherche et de filtres des Factures ----------
    Les trois vues partagent la même barre et le même état : basculer de
    Factures à À facturer conserve la lentille en cours. Le descripteur dit
@@ -18781,13 +19002,21 @@ Object.assign(window, {
   annulerLectureBC,
   annulerRappel,
   apercuCouleur,
+  choisirFichierFactures,
   fermerImportClients,
+  fermerImportFactures,
   importClientsHTML,
+  importFacturesHTML,
   lancerImportClients,
+  lancerImportFactures,
   lireFichierClients,
   ouvrirImportClients,
+  ouvrirImportFactures,
   paletteDeLaSociete,
+  peutImporterFactures,
+  relancerApercuFactures,
   telechargerRapportClients,
+  telechargerRapportFactures,
   viderFiltragesDifferes,
   valeurChamp,
   appartenanceTache,
