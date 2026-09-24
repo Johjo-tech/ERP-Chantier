@@ -299,19 +299,31 @@ function ouvrirFormVisiteRh(salarieId, visiteId){
   /* Le régime par défaut est celui de la visite précédente : il change
      rarement, et le resaisir à chaque fois inviterait à le laisser faux. */
   const precedente = v ? null : window.derniereVisite(visitesDuSalarie(salarieId));
+  /* Calculés avant l'objet : l'échéance proposée en dépend. */
+  const dateVisite = v? v.dateVisite : todayISO();
+  const type = v? v.type : (precedente? 'periodique' : 'embauche');
+  const suivi = v? v.suivi : (precedente? precedente.suivi : 'simple');
   state.rhVisiteForm = {
     salarieId, id: v? v.id : null,
     /* Renseignée quand on rouvre une visite encore en attente de dépôt : c'est
        elle qui distingue « modifier » de « ajouter une seconde ». */
     cleAttente: null,
-    dateVisite: v? v.dateVisite : todayISO(),
-    type: v? v.type : (precedente? 'periodique' : 'embauche'),
-    suivi: v? v.suivi : (precedente? precedente.suivi : 'simple'),
+    dateVisite, type, suivi,
     organisme: v? (v.organisme||'') : (precedente? (precedente.organisme||'') : ''),
     medecin: v? (v.medecin||'') : '',
     avis: v? (v.avis||'') : '',
     reserves: v? (v.reserves||'') : '',
-    prochaineVisite: v? (v.prochaineVisite||'') : '',
+    /* L'échéance est proposée DÈS L'OUVERTURE, et pas seulement quand on touche
+       une des trois listes. Sans cela, le chemin du moindre effort — accepter la
+       date du jour et les valeurs par défaut — laissait le champ vide, la base
+       écrivait `prochaine_visite = NULL`, et le salarié qui venait d'être examiné
+       affichait « 🩺 Aucun suivi ».
+       `prochaineVisiteSuggeree` rend `null` pour une préreprise ou une visite à
+       la demande : ces visites ne remettent aucun compteur à zéro, et le champ
+       doit alors rester vide. */
+    prochaineVisite: v
+      ? (v.prochaineVisite||'')
+      : (window.prochaineVisiteSuggeree(dateVisite, suivi, type) || ''),
     notes: v? (v.notes||'') : '',
     fichierNom: v? (v.fichierNom||'') : '',
     /* Une échéance déjà enregistrée a été décidée par quelqu'un : la
@@ -356,7 +368,10 @@ function formVisiteRhHTML(){
       </select></div>
       <div class="field"><label>Régime de suivi</label><select id="visRh_suivi" onchange="onVisiteRhEcheanceChange()">
         ${window.REGIMES_SUIVI.map(r=>`<option value="${r.code}" ${f.suivi===r.code?'selected':''}>${esc(r.libelle)}</option>`).join('')}
-      </select><div class="card-sub" id="visRh_reference" style="margin-top:4px;"></div></div>
+      ${/* La référence légale est rendue TOUT DE SUITE, et non au premier
+            `onchange` : c'est elle qui justifie le délai proposé, et qui n'y
+            touchait pas ne l'a jamais vue. Même cause que l'échéance vide. */''}
+      </select><div class="card-sub" id="visRh_reference" style="margin-top:4px;">${esc(window.regimeSuivi(f.suivi).reference)}</div></div>
       <div class="field"><label>Avis d'aptitude</label><select id="visRh_avis">
         <option value="">— Non rendu —</option>
         ${window.AVIS_APTITUDE.map(a=>`<option value="${a.code}" ${f.avis===a.code?'selected':''}>${esc(a.libelle)}</option>`).join('')}
@@ -364,7 +379,7 @@ function formVisiteRhHTML(){
       <div class="field"><label>Service de santé au travail</label><input type="text" id="visRh_organisme" value="${esc(f.organisme)}" placeholder="Ex : AIST, APST BTP…"></div>
       <div class="field"><label>Médecin</label><input type="text" id="visRh_medecin" value="${esc(f.medecin)}"></div>
       <div class="field"><label>Prochaine visite</label><input type="date" id="visRh_prochaineVisite" value="${f.prochaineVisite||''}" onchange="onVisiteRhEcheanceMain()">
-        <div class="card-sub" id="visRh_avertissement" style="margin-top:4px;"></div></div>
+        <div class="card-sub" id="visRh_avertissement" style="margin-top:4px;${depassementRhHTML(f).style}">${esc(depassementRhHTML(f).texte)}</div></div>
       <div class="field full"><label>Réserves et aménagements</label><input type="text" id="visRh_reserves" value="${esc(f.reserves)}" placeholder="Ex : pas de port de charge supérieure à 15 kg"></div>
       <div class="field full"><label>Notes</label><input type="text" id="visRh_notes" value="${esc(f.notes)}"></div>
     </div>
@@ -405,6 +420,24 @@ function onVisiteRhEcheanceChange(){
 function onVisiteRhEcheanceMain(){
   state.rhVisiteForm.echeanceSaisieMain = true;
   onVisiteRhEcheanceSaisie();
+}
+/**
+ * L'avertissement de dépassement, au RENDU et non au premier `onchange`.
+ *
+ * Une échéance désormais proposée d'emblée, c'est une échéance qu'il faut
+ * pouvoir juger d'emblée : sans cela, un délai au-delà du plafond légal
+ * s'afficherait sans un mot tant que personne ne toucherait un champ.
+ * `onVisiteRhEcheanceSaisie` dit la même chose après coup, et sur les mêmes
+ * règles — les deux ne peuvent pas diverger.
+ */
+function depassementRhHTML(f){
+  if(!f.dateVisite || !f.prochaineVisite) return { texte:'', style:'' };
+  const verdict = window.depasseLePlafondLegal(f.dateVisite, f.prochaineVisite, f.suivi);
+  if(!verdict.depasse) return { texte:'', style:'' };
+  return {
+    texte: `Au-delà du délai maximal (${fmtDate(verdict.plafond)}, ${verdict.regime.reference}).`,
+    style: ' color:#a30f22;'
+  };
 }
 function onVisiteRhEcheanceSaisie(){
   const date = document.getElementById('visRh_dateVisite').value;
