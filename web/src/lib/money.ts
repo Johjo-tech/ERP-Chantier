@@ -1,0 +1,75 @@
+import Big from "big.js";
+
+/**
+ * L'argent de l'application : décimal exact, jamais de flottant brut.
+ *
+ * `Big` conserve 0,1 + 0,2 = 0,3 exactement ; l'arrondi n'a lieu qu'aux points
+ * où l'ancien code et la base arrondissent (voir docs/regles-metier.md), par
+ * `arrondiCentimes`, et nulle part ailleurs.
+ */
+export type Montant = Big;
+
+/** Arrondi « commercial » : au plus proche, à égalité on s'éloigne de zéro. */
+export const ARRONDI_COMMERCIAL = 1 satisfies Big.RoundingMode;
+const DECIMALES_EURO = 2;
+
+export const ZERO: Montant = new Big(0);
+
+/**
+ * Convertit une saisie ou une valeur de base en montant.
+ *
+ * Contrat hérité : l'ancien écran lisait tout par `parseFloat`, si bien qu'une
+ * valeur vide ou illisible valait 0. La virgule décimale française est admise.
+ */
+export function montant(v: unknown): Montant {
+  if (v instanceof Big) return v;
+  if (typeof v === "number") return Number.isFinite(v) ? new Big(v) : ZERO;
+  const texte = String(v ?? "").trim().replace(/\s/g, "").replace(",", ".");
+  const m = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i.exec(texte);
+  return m ? new Big(m[0]) : ZERO;
+}
+
+/**
+ * Arrondi au centime, identique au `round(x, 2)` de Postgres sur `numeric`
+ * (demi s'éloignant de zéro, avoirs négatifs compris).
+ */
+export function arrondiCentimes(m: Montant): Montant {
+  return m.round(DECIMALES_EURO, ARRONDI_COMMERCIAL);
+}
+
+export function somme(valeurs: Iterable<Montant>): Montant {
+  let total = ZERO;
+  for (const v of valeurs) total = total.plus(v);
+  return total;
+}
+
+/** Montant en centimes entiers — la forme d'échange avec les écrans. */
+export function enCentimes(m: Montant): number {
+  return Number(arrondiCentimes(m).times(100).toFixed(0));
+}
+
+export function depuisCentimes(c: number): Montant {
+  return new Big(c).div(100);
+}
+
+const formatEuro = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: DECIMALES_EURO,
+  maximumFractionDigits: DECIMALES_EURO,
+});
+
+/**
+ * « 1 234,56 € ». L'arrondi est fait ici en décimal exact AVANT le formatage :
+ * `Intl` arrondirait le flottant, et 1,005 € s'y affiche 1,00 €.
+ */
+export function formatEuros(m: Montant): string {
+  const texte = arrondiCentimes(m).toFixed(DECIMALES_EURO);
+  // Intl accepte une chaîne décimale et la formate sans repasser par un flottant.
+  return formatEuro.format(texte as unknown as number).replace(/\u202f|\u00a0/g, " ");
+}
+
+/** Pourcentage « 20 % », « 5,5 % ». */
+export function formatTaux(taux: Montant): string {
+  return `${taux.toString().replace(".", ",")} %`;
+}

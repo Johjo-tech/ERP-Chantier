@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+*.tsbuildinfo
+.vite
+# Tout fichier d'environnement reste hors de git, sauf l'exemple documenté.
+.env
+.env.*
+!.env.example
