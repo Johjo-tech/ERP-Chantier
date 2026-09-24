@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { Navigate, NavLink, Outlet } from "react-router";
 import { Button } from "@/components/ui/button";
 import { BandeauSimulation } from "@/modules/auth-roles/components/BandeauSimulation";
 import { MenuUtilisateur } from "@/modules/auth-roles/components/MenuUtilisateur";
@@ -15,7 +15,8 @@ export function Layout() {
   const { etat, societeActive, roleEffectif } = useSession();
   const [menuOuvert, setMenuOuvert] = useState(false);
   if (etat.statut !== "connecte") return null;
-  if (!societeActive) return <PageSansSociete />;
+  // Un compte sans société mais avec un accès client travaille dans l'espace client.
+  if (!societeActive) return etat.session.accesClients.length ? <Navigate to="/espace-client" replace /> : <PageSansSociete />;
 
   const entrees = NAVIGATION.filter(
     (e) =>

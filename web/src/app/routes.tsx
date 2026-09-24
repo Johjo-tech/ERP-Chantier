@@ -24,12 +24,28 @@ import { PageArticles } from "@/modules/articles/components/PageArticles";
 import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
 import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";
 import { ReferenceArticleLigne } from "@/modules/articles/components/ReferenceArticleLigne";
+import { LayoutEspaceClient } from "@/modules/espace-client/components/LayoutEspaceClient";
+import { PageDocumentClient } from "@/modules/espace-client/components/PageDocumentClient";
+import { PageEspaceClient } from "@/modules/espace-client/components/PageEspaceClient";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
 
 export const routes: RouteObject[] = [
   { path: "/connexion", element: <PageConnexion /> },
+  {
+    path: "/espace-client",
+    element: (
+      <RouteConnectee>
+        <LayoutEspaceClient />
+      </RouteConnectee>
+    ),
+    children: [
+      { index: true, element: <PageEspaceClient /> },
+      { path: "devis/:id", element: <PageDocumentClient nature="devis" /> },
+      { path: "factures/:id", element: <PageDocumentClient nature="facture" /> },
+    ],
+  },
   {
     path: "/",
     element: (

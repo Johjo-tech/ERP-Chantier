@@ -70,3 +70,20 @@ test("remplissage automatique d'une ligne depuis le catalogue : la quantité n'e
   await expect(page.getByLabel("TVA, ligne 1")).toHaveValue("20");
   await expect(page.getByLabel("Quantité, ligne 1")).toHaveValue("3");
 });
+
+test("espace client : ses documents seulement, en lecture seule", async ({ page }) => {
+  await page.goto("/connexion");
+  await page.getByLabel("Adresse e-mail").fill("client.opac@erp.local");
+  await page.getByLabel("Mot de passe").fill("motdepasse-local");
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await expect(page).toHaveURL(/\/espace-client$/);
+  await expect(page.getByText("Réhabilitation bât. C")).toBeVisible();
+  await expect(page.getByText("Salle de bains Durand")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "DEV-2026-900001" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Menu principal" })).toHaveCount(0);
+  await page.getByRole("link", { name: "DEV-2026-900001" }).click();
+  await expect(page.getByRole("heading", { name: "DEVIS" })).toBeVisible();
+  await expect(page.getByLabel("Totaux du document")).toContainText("281,13 €");
+  await page.goto("/clients");
+  await expect(page).toHaveURL(/\/espace-client$/);
+});
