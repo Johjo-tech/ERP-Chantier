@@ -8237,14 +8237,25 @@ function bonCommandeForm(){
         <div class="field"><label>Interlocuteur</label><select id="bc_interlocuteur" onchange="refreshDevisLieSelect()">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
         ${isSAV? '' : `<div class="field"><label>Devis lié (si applicable)</label><select id="bc_devisId" onchange="applyDevisMontant(this.value)">${devisSelectOptions(e.client, e.devisId, e.id, e.interlocuteur)}</select></div>`}
       </div>
-      <p class="card-sub">Adresse de facturation : à remplir seulement si le bon en désigne une — service comptable, centre de gestion. Vide, c'est le siège du client qui sert.</p>
-      <div class="field-grid">
-        <div class="address-trio">
-          <div class="field"><label>Adresse de facturation</label><input type="text" id="bc_facturationAdresse" autocomplete="off" value="${esc(e.facturationAdresse)}" placeholder="Où envoyer la facture"></div>
-          <div class="field"><label>Code postal</label><input type="text" id="bc_facturationCodePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.facturationCodePostal)}" oninput="lookupVilleParCodePostal(this.value,'bc_facturationVille')"></div>
-          <div class="field"><label>Ville</label><input type="text" id="bc_facturationVille" autocomplete="off" value="${esc(e.facturationVille)}"></div>
+      ${/* Replié par défaut : trois champs vides sur les trois quarts des bons,
+            alors que le cas est rare — seuls les gros donneurs d'ordre facturent
+            ailleurs qu'au chantier. Mais DÉPLIÉ dès qu'une valeur existe, parce
+            que c'est l'OCR du bon client qui la remplit le plus souvent : elle
+            doit pouvoir être relue et corrigée, pas cachée.
+            Les trois champs restent dans le DOM même repliés — `saveBonCommande`
+            les lit par `getElementById`, et un rendu conditionnel les ferait
+            disparaître à l'enregistrement. */''}
+      <details style="margin-top:8px;" ${(e.facturationAdresse || e.facturationCodePostal || e.facturationVille)? 'open':''}>
+        <summary style="cursor:pointer; font-weight:700;">🧾 Adresse de facturation différente</summary>
+        <div class="card-sub" style="margin:8px 0;">À remplir seulement si le bon en désigne une — service comptable, centre de gestion. Vide, c'est le siège du client qui sert.</div>
+        <div class="field-grid">
+          <div class="address-trio">
+            <div class="field"><label>Adresse de facturation</label><input type="text" id="bc_facturationAdresse" autocomplete="off" value="${esc(e.facturationAdresse)}" placeholder="Où envoyer la facture"></div>
+            <div class="field"><label>Code postal</label><input type="text" id="bc_facturationCodePostal" autocomplete="off" maxlength="5" inputmode="numeric" value="${esc(e.facturationCodePostal)}" oninput="lookupVilleParCodePostal(this.value,'bc_facturationVille')"></div>
+            <div class="field"><label>Ville</label><input type="text" id="bc_facturationVille" autocomplete="off" value="${esc(e.facturationVille)}"></div>
+          </div>
         </div>
-      </div>
+      </details>
     </div>
     <div class="form-section">
       <div class="form-section-head">${isSAV? 'SAV' : 'Bon de commande'}</div>
