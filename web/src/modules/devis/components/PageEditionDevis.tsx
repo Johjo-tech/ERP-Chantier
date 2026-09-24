@@ -12,16 +12,17 @@ import { useFormulaire } from "@/lib/useFormulaire";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useClients } from "@/modules/clients/hooks/useClients";
 import { BlocTotaux } from "@/modules/documents/components/BlocTotaux";
+import { ChampsEnteteDocument } from "@/modules/documents/components/ChampsEnteteDocument";
+import { SectionLieu } from "@/modules/documents/components/SectionLieu";
+import { ChampChoix } from "@/components/formulaire/Champ";
 import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
 import { depuisBase, ligneVide, lignesPourEnregistrement, type ErreurLigne, type LigneEdition } from "@/modules/documents/domain/lignes";
 import { REGLAGES_DEFAUT, type ReglagesDocuments } from "@/modules/societes/domain/reglages";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
 import { EnregistrementPartiel } from "../api/devis";
-import { enteteAEnregistrer, schemaSaisieDevis, valeursDepuis, type Devis } from "../domain/devis";
+import { enteteAEnregistrer, LIBELLES_STATUT, schemaSaisieDevis, STATUTS_DEVIS, valeursDepuis, type Devis } from "../domain/devis";
 import { useDevis, useEnregistrerDevis } from "../hooks/useDevis";
 import { BadgeStatutDevis } from "./BadgeStatutDevis";
-import { ChampsEnteteDevis } from "./ChampsEnteteDevis";
-import { SectionLieu } from "./SectionLieu";
 
 export function PageEditionDevis({ actions }: { actions?: (d: Devis) => ReactNode }) {
   const { id } = useParams();
@@ -94,7 +95,22 @@ function FormulaireDevis({ devis, reglages, actions }: { devis: Devis | null; re
       {message && <Alert variant={message.startsWith("Devis") ? "succes" : "erreur"}>{message}</Alert>}
       <Card>
         <CardContent className="flex flex-col gap-4 pt-4">
-          <ChampsEnteteDevis valeurs={valeurs} erreurs={erreurs} changer={changer} conducteurCourant={devis?.conducteur_id ?? null} lectureSeule={lectureSeule} />
+          <ChampsEnteteDocument
+            valeurs={valeurs}
+            erreurs={erreurs}
+            changer={changer}
+            conducteurCourant={devis?.conducteur_id ?? null}
+            lectureSeule={lectureSeule}
+            enPlus={
+              <ChampChoix
+                libelle="Statut"
+                valeur={valeurs.statut}
+                desactive={lectureSeule}
+                onChange={(v) => changer("statut", v)}
+                options={STATUTS_DEVIS.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))}
+              />
+            }
+          />
           <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={lectureSeule} />
         </CardContent>
       </Card>

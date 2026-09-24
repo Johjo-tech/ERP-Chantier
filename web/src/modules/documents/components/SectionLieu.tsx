@@ -1,17 +1,21 @@
 import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
-import { STATUTS_LOGEMENT } from "@/modules/documents/domain/logement";
-import type { ValeursDevis } from "../domain/devis";
+import { STATUTS_LOGEMENT } from "../domain/logement";
+import type { ChampsLieu } from "../domain/logement";
+
+type ValeursLieu = Record<ChampsLieu, string>;
 
 interface Props {
-  valeurs: ValeursDevis;
-  changer: (champ: keyof ValeursDevis, v: string) => void;
+  valeurs: ValeursLieu;
+  changer: (champ: ChampsLieu, v: string) => void;
   lectureSeule: boolean;
+  /** Les factures n'ont pas de colonne pour le téléphone sur place. */
+  sansTelephone?: boolean;
 }
 
 /** Lieu d'intervention et logement : seuls les champs utiles au statut choisi s'affichent. */
-export function SectionLieu({ valeurs, changer, lectureSeule }: Props) {
+export function SectionLieu({ valeurs, changer, lectureSeule, sansTelephone = false }: Props) {
   const s = valeurs.logement_statut;
-  const t = (champ: keyof ValeursDevis, libelle: string) => (
+  const t = (champ: ChampsLieu, libelle: string) => (
     <ChampTexte libelle={libelle} valeur={valeurs[champ]} onChange={(v) => changer(champ, v)} desactive={lectureSeule} />
   );
   return (
@@ -20,7 +24,7 @@ export function SectionLieu({ valeurs, changer, lectureSeule }: Props) {
       <div className="sm:col-span-3">{t("adresse_locataire", "Adresse du lieu")}</div>
       {t("code_postal", "Code postal")}
       {t("ville", "Ville")}
-      {t("telephone_locataire", "Téléphone sur place")}
+      {!sansTelephone && t("telephone_locataire", "Téléphone sur place")}
       <ChampChoix
         libelle="Logement"
         valeur={s}

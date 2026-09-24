@@ -89,24 +89,27 @@ begin
     ('a4000000-0000-0000-0000-000000000002', v_alpha, 'DEV-2026-900002', 'a2000000-0000-0000-0000-000000000002', 'Mme Durand', 'a3000000-0000-0000-0000-000000000002', '2026-09-20', 10, 'brouillon')
   on conflict (id) do nothing;
 
+  -- Les lignes n'ont pas de clé fixe : on ne les pose que sur un devis qui n'en a aucune,
+  -- sans quoi chaque rejeu du seed les dupliquerait.
   insert into public.devis_lignes (devis_id, position, type, designation, quantite, prix_unitaire, unite, tva)
-  values
-    ('a4000000-0000-0000-0000-000000000001', 0, 'chapitre', 'Plomberie', 0, 0, null, 0),
+  select v.devis_id::uuid, v.position, v.type, v.designation, v.quantite, v.prix_unitaire, v.unite, v.tva from (values
+    ('a4000000-0000-0000-0000-000000000001', 0, 'chapitre'::public.ligne_type, 'Plomberie', 0, 0, null::text, 0),
     ('a4000000-0000-0000-0000-000000000001', 1, 'ligne', 'Remplacement colonne EU', 2, 85.50, 'u', 10),
     ('a4000000-0000-0000-0000-000000000001', 2, 'ligne', 'Robinet d''arrêt', 1, 45, 'u', 20),
     ('a4000000-0000-0000-0000-000000000001', 3, 'commentaire', 'Accès par la cour', 0, 0, null, 0),
     ('a4000000-0000-0000-0000-000000000001', 4, 'chapitre', 'Électricité', 0, 0, null, 0),
     ('a4000000-0000-0000-0000-000000000001', 5, 'ligne', 'Gaine ICTA', 3, 12.333, 'ml', 5.5),
     ('a4000000-0000-0000-0000-000000000002', 0, 'ligne', 'Dépose baignoire', 1, 180, 'forfait', 10),
-    ('a4000000-0000-0000-0000-000000000002', 1, 'ligne', 'Receveur extra-plat', 1, 420, 'u', 10)
-  on conflict do nothing;
+    ('a4000000-0000-0000-0000-000000000002', 1, 'ligne'::public.ligne_type, 'Receveur extra-plat', 1, 420, 'u', 10)
+  ) as v(devis_id, position, type, designation, quantite, prix_unitaire, unite, tva)
+  where not exists (select 1 from public.devis_lignes l where l.devis_id = v.devis_id::uuid);
 
   insert into public.articles (societe_id, code, designation, unite, prix_unitaire, tva, metier, famille)
   values
     (v_alpha, 'PLB-001', 'Robinet d''arrêt 1/2', 'u', 45, 20, 'plomberie', 'Robinetterie'),
     (v_alpha, 'PLB-002', 'Remplacement joint', 'u', 12.5, 10, 'plomberie', 'Main d''œuvre'),
     (v_alpha, 'ELE-001', 'Gaine ICTA 20 mm', 'ml', 1.9, 20, 'electricite', 'Fournitures')
-  on conflict do nothing;
+  on conflict (societe_id, code) do nothing;
 
   -- BETA : de quoi prouver qu'ALPHA n'en voit rien.
   insert into public.clients (id, societe_id, nom, ville)

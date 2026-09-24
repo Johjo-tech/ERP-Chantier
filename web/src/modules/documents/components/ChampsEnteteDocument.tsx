@@ -2,14 +2,18 @@ import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
 import { useChantiers } from "@/modules/chantiers/hooks/useChantiers";
 import { useClients, useInterlocuteurs } from "@/modules/clients/hooks/useClients";
 import { optionsConducteurs, useConducteurs } from "@/modules/societes/hooks/useConducteurs";
-import { LIBELLES_STATUT, STATUTS_DEVIS, type ValeursDevis } from "../domain/devis";
+import type { ReactNode } from "react";
+
+type ChampEntete = "client_id" | "interlocuteur" | "date" | "chantier_id" | "conducteur_id";
 
 interface Props {
-  valeurs: ValeursDevis;
+  valeurs: Record<ChampEntete, string>;
   erreurs: Record<string, string>;
-  changer: (champ: keyof ValeursDevis, v: string) => void;
+  changer: (champ: ChampEntete, v: string) => void;
   conducteurCourant: string | null;
   lectureSeule: boolean;
+  /** Champs propres au document (statut d'un devis, échéance d'une facture…). */
+  enPlus?: ReactNode;
 }
 
 function Interlocuteurs({ clientId, valeur, changer, lectureSeule }: { clientId: string; valeur: string; changer: (v: string) => void; lectureSeule: boolean }) {
@@ -22,7 +26,8 @@ function Interlocuteurs({ clientId, valeur, changer, lectureSeule }: { clientId:
   );
 }
 
-export function ChampsEnteteDevis({ valeurs, erreurs, changer, conducteurCourant, lectureSeule }: Props) {
+/** Client, interlocuteur, date, chantier, conducteur : l'en-tête commun aux documents. */
+export function ChampsEnteteDocument({ valeurs, erreurs, changer, conducteurCourant, lectureSeule, enPlus }: Props) {
   const clients = useClients();
   const chantiers = useChantiers();
   const conducteurs = useConducteurs();
@@ -60,13 +65,7 @@ export function ChampsEnteteDevis({ valeurs, erreurs, changer, conducteurCourant
         onChange={(v) => changer("conducteur_id", v)}
         options={[{ valeur: "", libelle: "— Aucun —" }, ...optionsConducteurs(conducteurs.data ?? [], conducteurCourant)]}
       />
-      <ChampChoix
-        libelle="Statut"
-        valeur={valeurs.statut}
-        desactive={lectureSeule}
-        onChange={(v) => changer("statut", v)}
-        options={STATUTS_DEVIS.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))}
-      />
+      {enPlus}
     </div>
   );
 }

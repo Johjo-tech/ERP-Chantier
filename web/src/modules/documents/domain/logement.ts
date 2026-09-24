@@ -33,3 +33,16 @@ export function nettoyerLogement<T extends ChampsLogement>(c: T): T {
     ancien_locataire: s === "vacant" ? c.ancien_locataire : null,
   };
 }
+
+/** Les champs du lieu d'intervention, communs aux devis, factures et bons. */
+export type ChampsLieu =
+  | "adresse_locataire"
+  | "code_postal"
+  | "ville"
+  | "telephone_locataire"
+  | "logement_statut"
+  | "occupant"
+  | "etage"
+  | "numero_logement"
+  | "precision_commune"
+  | "ancien_locataire";
