@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
 import { useFormulaire } from "@/lib/useFormulaire";
+import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { useClients } from "@/modules/clients/hooks/useClients";
 import { optionsConducteurs, useConducteurs } from "@/modules/societes/hooks/useConducteurs";
 import { saisieDepuis, schemaSaisieChantier, TYPES_CHANTIER, type Chantier } from "../domain/chantier";
@@ -17,7 +18,8 @@ export function PageFormulaireChantier() {
   const chantier = useChantier(id);
   if (id && chantier.isPending) return <Chargement />;
   if (id && chantier.isError) return <Erreur erreur={chantier.error} reessayer={() => void chantier.refetch()} />;
-  return <FormulaireChantier key={id ?? "nouveau"} chantier={chantier.data ?? null} />;
+  const f = <FormulaireChantier key={id ?? "nouveau"} chantier={chantier.data ?? null} />;
+  return chantier.data ? <GardeSociete societeId={chantier.data.societe_id} retour="/chantiers">{f}</GardeSociete> : f;
 }
 
 function FormulaireChantier({ chantier }: { chantier: Chantier | null }) {
@@ -44,7 +46,10 @@ function FormulaireChantier({ chantier }: { chantier: Chantier | null }) {
   function soumettre(e: FormEvent) {
     e.preventDefault();
     const s = valider(schemaSaisieChantier);
-    if (s) enregistrer.mutate(s, { onSuccess: (c) => void navigate(`/chantiers/${c.id}`) });
+    if (!s) return;
+    // Un client absent de la liste (autre société, lien fabriqué) n'est pas rattaché.
+    const clientConnu = !s.client_id || (clients.data ?? []).some((c) => c.id === s.client_id);
+    enregistrer.mutate({ ...s, client_id: clientConnu ? s.client_id : null }, { onSuccess: (c) => void navigate(`/chantiers/${c.id}`) });
   }
 
   const texte = (nom: keyof typeof valeurs, libelle: string, extra: { type?: string; requis?: boolean } = {}) => (
@@ -77,10 +82,9 @@ function FormulaireChantier({ chantier }: { chantier: Chantier | null }) {
           valeur={valeurs.type}
           onChange={(v) => changer("type", v)}
           options={[
-            { valeur: "", libelle: "—" },
-            ...TYPES_CHANTIER.map((t) => ({ valeur: t, libelle: t })),
+            ...TYPES_CHANTIER.map((t) => ({ valeur: t.code, libelle: t.libelle })),
             // Un type historique hors liste reste affiché plutôt que perdu.
-            ...(valeurs.type && !(TYPES_CHANTIER as readonly string[]).includes(valeurs.type) ? [{ valeur: valeurs.type, libelle: valeurs.type }] : []),
+            ...(valeurs.type && !TYPES_CHANTIER.some((t) => t.code === valeurs.type) ? [{ valeur: valeurs.type, libelle: valeurs.type }] : []),
           ]}
         />
         <div />

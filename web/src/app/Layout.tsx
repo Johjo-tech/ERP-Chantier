@@ -30,8 +30,12 @@ export function Layout() {
         <aside
           className={cn(
             "fixed inset-y-0 left-0 z-20 flex w-60 flex-col gap-4 border-r border-border bg-card p-3 transition-transform md:static md:translate-x-0",
-            menuOuvert ? "translate-x-0" : "-translate-x-full"
+            // Fermé sur mobile, le menu sort AUSSI de l'ordre de tabulation (invisible), pas seulement de l'écran.
+            menuOuvert ? "translate-x-0" : "-translate-x-full max-md:invisible"
           )}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setMenuOuvert(false);
+          }}
         >
           <SelecteurSociete />
           <nav aria-label="Menu principal" className="flex flex-1 flex-col gap-0.5">

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePermission, useSocieteActive, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
-import { avancementsChantiers, enregistrerChantier, listerChantiers, lireChantier, supprimerChantier } from "../api/chantiers";
+import { avancementsChantiers, enregistrerChantier, listerChantiers, lireChantier } from "../api/chantiers";
 import { ajouterLigneDpgf, listerDpgf, supprimerLigneDpgf, type NouvelleLigneDpgf } from "../api/dpgf";
 import type { SaisieChantier } from "../domain/chantier";
 
@@ -46,15 +46,6 @@ export function useEnregistrerChantier(id: string | undefined) {
       qc.setQueryData(clesChantiers.fiche(c.id), c);
       void qc.invalidateQueries({ queryKey: clesChantiers.liste(societe.id) });
     },
-  });
-}
-
-export function useSupprimerChantier() {
-  const societe = useSocieteActive();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: supprimerChantier,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: clesChantiers.liste(societe.id) }),
   });
 }
 

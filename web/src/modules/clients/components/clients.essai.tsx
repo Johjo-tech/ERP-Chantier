@@ -125,3 +125,27 @@ describe("formulaire client", () => {
     expect(screen.queryByLabelText("SIRET")).not.toBeInTheDocument();
   });
 });
+
+describe("délai de paiement libre", () => {
+  it("« Autre délai » permet de saisir 30, 40 ou 305 jours sans que la liste se referme", async () => {
+    api.creerClient.mockResolvedValue(client("X", { id: "x" }));
+    rendreAvecSession(
+      <Routes>
+        <Route path="/clients/nouveau" element={<PageFormulaireClient />} />
+        <Route path="/clients/:id" element={<p>fiche ouverte</p>} />
+      </Routes>,
+      { role: "secretaire", chemin: "/clients/nouveau" }
+    );
+    await userEvent.type(screen.getByLabelText(/Nom ou raison sociale/), "X");
+    await userEvent.selectOptions(screen.getByLabelText("Délai de paiement"), "autre");
+    const jours = screen.getByLabelText("Nombre de jours");
+    await userEvent.type(jours, "30");
+    expect(screen.getByLabelText("Nombre de jours")).toHaveValue("30");
+    await userEvent.type(screen.getByLabelText("Nombre de jours"), "5");
+    await userEvent.selectOptions(screen.getByLabelText("Décompte"), "fin_de_mois");
+    expect(screen.getByText(/Au-delà des 45 jours fin de mois/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.creerClient).toHaveBeenCalled());
+    expect(api.creerClient.mock.calls[0]?.[1]).toMatchObject({ delai_paiement_jours: 305, delai_paiement_mode: "fin_de_mois" });
+  });
+});

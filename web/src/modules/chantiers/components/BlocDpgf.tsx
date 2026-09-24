@@ -61,9 +61,9 @@ export function BlocDpgf({ chantierId, actions }: { chantierId: string; actions?
             </THead>
             <TBody>
               {lignes.map((l) =>
-                l.type === "chapitre" ? (
-                  <Tr key={l.id} className="bg-muted/60">
-                    <Td colSpan={6} className="font-semibold">{l.designation}</Td>
+                l.type !== "ligne" ? (
+                  <Tr key={l.id} className={l.type === "chapitre" ? "bg-muted/60" : ""}>
+                    <Td colSpan={6} className={l.type === "chapitre" ? "font-semibold" : "italic text-muted-foreground"}>{l.designation}</Td>
                   </Tr>
                 ) : (
                   <Tr key={l.id}>
@@ -84,7 +84,7 @@ export function BlocDpgf({ chantierId, actions }: { chantierId: string; actions?
             </TBody>
           </Table>
         )}
-        <form onSubmit={soumettre} noValidate className="grid gap-2 border-t border-border pt-3 sm:grid-cols-6">
+        <form onSubmit={soumettre} noValidate className="grid gap-2 border-t border-border pt-3 sm:grid-cols-7">
           <ChampChoix
             libelle="Type"
             valeur={valeurs.type}
@@ -95,6 +95,7 @@ export function BlocDpgf({ chantierId, actions }: { chantierId: string; actions?
             <ChampTexte libelle="Désignation" valeur={valeurs.designation} onChange={(v) => changer("designation", v)} erreur={erreurs.designation} />
           </div>
           <ChampTexte libelle="Quantité" inputMode="decimal" valeur={valeurs.quantite} onChange={(v) => changer("quantite", v)} erreur={erreurs.quantite} desactive={valeurs.type === "chapitre"} />
+          <ChampTexte libelle="Unité" valeur={valeurs.unite} onChange={(v) => changer("unite", v)} desactive={valeurs.type === "chapitre"} />
           <ChampTexte libelle="PU HT" inputMode="decimal" valeur={valeurs.prix_unitaire} onChange={(v) => changer("prix_unitaire", v)} erreur={erreurs.prix_unitaire} desactive={valeurs.type === "chapitre"} />
           <div className="flex items-end">
             <Button type="submit" variant="secondary" disabled={ajouter.isPending}>

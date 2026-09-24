@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ecrirePreference, lirePreference } from "@/lib/stockage";
 import { chargerSession, compteConnecte, seDeconnecter, surChangementDeSession } from "../api/session";
 import type { RoleMembre } from "../domain/permissions";
@@ -22,6 +22,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const uid = compte.data ?? null;
+
+  // Un AUTRE compte (session expirée, déconnexion depuis un autre onglet, puis
+  // nouvelle connexion) ne doit rien hériter du cache du précédent : les clés
+  // métier ne portent pas l'utilisateur, seulement la société.
+  const uidPrecedent = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (compte.isPending) return;
+    if (uidPrecedent.current !== undefined && uidPrecedent.current !== uid) {
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
+    }
+    uidPrecedent.current = uid;
+  }, [uid, compte.isPending, qc]);
   const session = useQuery({
     queryKey: ["auth", "session", uid],
     queryFn: () => chargerSession(uid as string),

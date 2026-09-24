@@ -1,16 +1,14 @@
 import type { ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { BoutonConfirme } from "@/components/ui/confirmation";
 import { formatDateFr } from "@/lib/dates";
-import { messageErreur } from "@/lib/erreurs";
 import { Can } from "@/modules/auth-roles/components/Can";
-import type { Chantier } from "../domain/chantier";
-import { useChantier, usePeutVoirDpgf, useSupprimerChantier } from "../hooks/useChantiers";
+import { GardeSociete } from "@/modules/societes/components/GardeSociete";
+import { libelleTypeChantier, type Chantier } from "../domain/chantier";
+import { useChantier, usePeutVoirDpgf } from "../hooks/useChantiers";
 import { BlocDpgf } from "./BlocDpgf";
 
 interface Props {
@@ -22,15 +20,14 @@ interface Props {
 export function PageFicheChantier({ complements, actionsDpgf }: Props) {
   const { id } = useParams();
   const chantier = useChantier(id);
-  const supprimer = useSupprimerChantier();
   const voitDpgf = usePeutVoirDpgf();
-  const navigate = useNavigate();
 
   if (chantier.isPending) return <Chargement />;
   if (chantier.isError) return <Erreur erreur={chantier.error} reessayer={() => void chantier.refetch()} />;
   const c = chantier.data;
 
   return (
+    <GardeSociete societeId={c.societe_id} retour="/chantiers">
     <div className="flex flex-col gap-4">
       <EnTetePage
         titre={c.nom}
@@ -43,7 +40,7 @@ export function PageFicheChantier({ complements, actionsDpgf }: Props) {
             ) : (
               c.client_nom || "Sans client"
             )}
-            {c.type && ` · ${c.type}`}
+            {` · ${libelleTypeChantier(c.type)}`}
           </>
         }
         actions={
@@ -53,18 +50,9 @@ export function PageFicheChantier({ complements, actionsDpgf }: Props) {
                 <Link to={`/chantiers/${c.id}/modifier`}>Modifier</Link>
               </Button>
             </Can>
-            <Can module="chantiers" action="supprimer">
-              <BoutonConfirme
-                libelle="Supprimer"
-                question="Supprimer ce chantier et son DPGF ?"
-                enCours={supprimer.isPending}
-                onConfirmer={() => supprimer.mutate(c.id, { onSuccess: () => void navigate("/chantiers") })}
-              />
-            </Can>
           </>
         }
       />
-      {supprimer.isError && <Alert variant="erreur">{messageErreur(supprimer.error)}</Alert>}
       <Card>
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-3">
           <div>
@@ -87,5 +75,6 @@ export function PageFicheChantier({ complements, actionsDpgf }: Props) {
       {voitDpgf && <BlocDpgf chantierId={c.id} actions={actionsDpgf?.(c)} />}
       {complements?.(c)}
     </div>
+    </GardeSociete>
   );
 }

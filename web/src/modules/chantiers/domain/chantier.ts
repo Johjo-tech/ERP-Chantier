@@ -22,8 +22,20 @@ export type Chantier = z.infer<typeof schemaChantier>;
 const texte = z.preprocess(videEnNull, z.string().trim().nullable());
 const date = z.preprocess(videEnNull, z.iso.date({ message: "Date invalide." }).nullable());
 
-/** Les types proposés par l'ancien écran (filtre « réhabilitation / neuf »). */
-export const TYPES_CHANTIER = ["Réhabilitation", "Neuf", "Rénovation", "Entretien", "Particulier"] as const;
+/**
+ * Les types de l'ancienne app, codes compris : les deux applications partagent
+ * la base, et l'ancienne lit `neuf` / `rehabilitation` (app.js l. 13157, 13192).
+ */
+export const TYPES_CHANTIER = [
+  { code: "rehabilitation", libelle: "Réhabilitation" },
+  { code: "neuf", libelle: "Chantier neuf" },
+] as const;
+export const TYPE_CHANTIER_DEFAUT = "rehabilitation";
+
+/** Comme l'ancien écran : tout ce qui n'est pas « neuf » se lit « Réhabilitation ». */
+export function libelleTypeChantier(type: string | null): string {
+  return type === "neuf" ? "Chantier neuf" : "Réhabilitation";
+}
 
 export const schemaSaisieChantier = z
   .object({
@@ -52,7 +64,7 @@ export function saisieDepuis(c: Chantier | null): Record<keyof SaisieChantier, s
     adresse: c?.adresse ?? "",
     code_postal: c?.code_postal ?? "",
     ville: c?.ville ?? "",
-    type: c?.type ?? "",
+    type: c ? (c.type ?? "") : TYPE_CHANTIER_DEFAUT,
     date_debut: c?.date_debut ?? "",
     date_fin: c?.date_fin ?? "",
     infos_diverses: c?.infos_diverses ?? "",

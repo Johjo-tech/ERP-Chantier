@@ -15,7 +15,7 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true }],
       "no-console": ["error", { allow: ["warn", "error"] }],
       // Les requêtes vivent dans modules/*/api : un composant n'appelle jamais
       // Supabase directement (voir CLAUDE.md).

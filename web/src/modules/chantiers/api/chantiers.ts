@@ -35,19 +35,15 @@ async function nomDuClient(clientId: string | null): Promise<string | null> {
 }
 
 export async function enregistrerChantier(societeId: string, id: string | null, s: SaisieChantier): Promise<Chantier> {
-  const ligne = { ...s, client_nom: await nomDuClient(s.client_id) };
+  // Sans fiche client, un nom saisi librement dans l'ancienne app reste en place :
+  // on ne réécrit client_nom que lorsqu'une fiche le fournit.
+  const ligne = s.client_id ? { ...s, client_nom: await nomDuClient(s.client_id) } : s;
   const requete = id
     ? supabase().from("chantiers").update(ligne).eq("id", id)
     : supabase().from("chantiers").insert({ ...ligne, societe_id: societeId });
   const { data, error } = await requete.select(COLONNES).single();
   if (error) throw error;
   return analyser(schemaChantier, data, "chantier enregistré");
-}
-
-export async function supprimerChantier(id: string): Promise<void> {
-  const { data, error } = await supabase().from("chantiers").delete().eq("id", id).select("id");
-  if (error) throw error;
-  if (!data?.length) throw { code: "42501", message: "Suppression refusée" };
 }
 
 const schemaAvancement = z.object({

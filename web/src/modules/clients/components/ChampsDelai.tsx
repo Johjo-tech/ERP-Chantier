@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
 import { Alert } from "@/components/ui/alert";
 import { DELAIS_PREREGLES, delaiHorsPlafond, delaiPreregle, MODES_REGLEMENT, type ModeDelaiPaiement } from "../domain/delais";
@@ -7,6 +8,7 @@ interface Props {
   mode: string;
   modePaiement: string;
   erreurJours?: string | undefined;
+  erreurMode?: string | undefined;
   onChange: (champ: "delai_paiement_jours" | "delai_paiement_mode" | "mode_paiement", v: string) => void;
 }
 
@@ -14,15 +16,19 @@ const AUTRE = "autre";
 const SOCIETE = "";
 
 /** Délai de paiement : un préréglage, « défaut de la société », ou un délai libre. */
-export function ChampsDelai({ jours, mode, modePaiement, erreurJours, onChange }: Props) {
+export function ChampsDelai({ jours, mode, modePaiement, erreurJours, erreurMode, onChange }: Props) {
   const modeSur: ModeDelaiPaiement = mode === "fin_de_mois" ? "fin_de_mois" : "net";
   const delai = jours === "" ? null : { jours: Number(jours), mode: modeSur };
-  const cle = delai === null ? SOCIETE : (delaiPreregle(delai)?.cle ?? AUTRE);
+  // Le choix de la liste est un état À PART, dérivé des valeurs seulement à
+  // l'ouverture : sinon choisir « Autre » puis taper 30 ramènerait la liste sur
+  // « Net 30 jours » et ferait disparaître le champ pendant la frappe.
+  const [cle, setCle] = useState(() => (delai === null ? SOCIETE : (delaiPreregle(delai)?.cle ?? AUTRE)));
   const avertissement = delai && Number.isFinite(delai.jours) ? delaiHorsPlafond(delai) : null;
 
   function choisir(c: string) {
+    setCle(c);
     if (c === SOCIETE) return onChange("delai_paiement_jours", "");
-    if (c === AUTRE) return onChange("delai_paiement_jours", jours === "" ? "30" : jours);
+    if (c === AUTRE) return;
     const p = DELAIS_PREREGLES.find((d) => d.cle === c);
     if (p) {
       onChange("delai_paiement_jours", String(p.jours));
@@ -46,7 +52,12 @@ export function ChampsDelai({ jours, mode, modePaiement, erreurJours, onChange }
         libelle="Mode de paiement"
         valeur={modePaiement}
         onChange={(v) => onChange("mode_paiement", v)}
-        options={[{ valeur: "", libelle: "Virement (défaut)" }, ...MODES_REGLEMENT.map((m) => ({ valeur: m.code, libelle: m.libelle }))]}
+        erreur={erreurMode}
+        options={[
+          { valeur: "", libelle: "Virement (défaut)" },
+          ...MODES_REGLEMENT.map((m) => ({ valeur: m.code, libelle: m.libelle })),
+          ...(["traite", "autre"].includes(modePaiement) ? [{ valeur: modePaiement, libelle: modePaiement === "traite" ? "Traite" : "Autre" }] : []),
+        ]}
       />
       {cle === AUTRE && (
         <>

@@ -101,3 +101,44 @@ saisie change, dans le sens attendu par un utilisateur français.
 ## D-014 — Navigation mobile filtrée par les droits
 L'ancienne barre mobile (`MOBILE_NAV`) n'était pas filtrée par rôle. Dans
 `web/`, un seul menu, filtré par la matrice et l'abonnement, sur tous les écrans.
+
+## D-015 — Un module `documents` partagé
+Le découpage demandé plaçait les lignes et les calculs dans `devis/`. L'ancienne
+app avait UN éditeur de lignes et UN calcul pour devis, factures et bons ; les
+recopier par module ferait diverger ce qui doit rester identique.
+**Décision** : `modules/documents/` porte lignes, totaux, TVA, remise, net à
+payer et lieu d'intervention ; `devis`, `facturation` et `commandes` s'en servent.
+
+## D-016 — Pas de suppression de chantier
+L'ancienne app n'en offrait pas ; la base supprimerait en cascade comptes rendus,
+documents, achats, planning et DPGF (et le conducteur en a le droit dans la
+matrice). **Décision** : aucun bouton dans `web/` (relecture I-5).
+
+## D-017 — Types de chantier : les codes de l'ancienne app
+Les deux applications partagent la base : `web/` écrit `rehabilitation` / `neuf`
+(défaut `rehabilitation`) et affiche « Réhabilitation » / « Chantier neuf »,
+comme `app.js` (relecture I-3). Un type historique hors liste reste affiché.
+
+## D-018 — Migrations proposées : prérequis de la mise en service
+Certaines politiques actuelles contredisent la matrice (la secrétaire ne peut
+pas ajouter un interlocuteur ni numéroter un devis ; le rôle lecture peut
+supprimer un interlocuteur). `web/` affiche selon la MATRICE, et les
+migrations de `supabase/propositions/` alignent la base sur elle. Elles sont
+appliquées en local (tests RLS marqués « [proposition] ») et **doivent l'être en
+production avant que `web/` y serve** — sinon la secrétaire verra un refus
+explicite là où l'ancienne app ne lui proposait rien (relecture I-6).
+
+## D-019 — Le cache ne survit pas à un changement de compte
+Au-delà de la déconnexion explicite, tout changement d'utilisateur (session
+expirée, autre onglet) vide le cache métier (relecture I-1, test
+`SessionProvider.essai.tsx`).
+
+## D-020 — Une fiche d'une autre société renvoie à la liste
+Changer de société garde l'URL ; une fiche (ou un lien fabriqué) d'une autre
+société renvoie à la liste au lieu de s'afficher sous les droits de la société
+active (`GardeSociete`, relecture M-1).
+
+## D-021 — Statut du devis modifiable dans le formulaire
+L'ancien écran n'offrait aucun geste pour passer un devis en envoyé / accepté /
+refusé (défaut DEV-51). `web/` propose le statut dans l'en-tête, sous le droit
+`devis / modifier`.

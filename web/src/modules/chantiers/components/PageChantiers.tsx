@@ -10,6 +10,7 @@ import { formatDateFr } from "@/lib/dates";
 import { formatEuros, montant } from "@/lib/money";
 import { correspond } from "@/lib/recherche";
 import { Can } from "@/modules/auth-roles/components/Can";
+import { libelleTypeChantier } from "../domain/chantier";
 import { useAvancements, useChantiers, usePeutVoirDpgf } from "../hooks/useChantiers";
 
 export function PageChantiers() {
@@ -29,7 +30,7 @@ export function PageChantiers() {
   );
   const filtres = (chantiers.data ?? []).filter(
     (c) =>
-      correspond(recherche, c.nom, c.client_nom, c.ville, c.adresse, c.type) && (!conducteur || c.conducteur === conducteur)
+      correspond(recherche, c.nom, c.client_nom, c.ville, c.adresse, libelleTypeChantier(c.type)) && (!conducteur || c.conducteur === conducteur)
   );
 
   return (
@@ -68,6 +69,7 @@ export function PageChantiers() {
       </div>
       {chantiers.isPending && <Chargement />}
       {chantiers.isError && <Erreur erreur={chantiers.error} reessayer={() => void chantiers.refetch()} />}
+      {avancements.isError && <Erreur erreur={avancements.error} reessayer={() => void avancements.refetch()} />}
       {chantiers.isSuccess && filtres.length === 0 && (
         <Vide message={recherche || conducteur ? "Aucun chantier ne correspond." : "Aucun chantier pour l'instant."} />
       )}
@@ -94,7 +96,7 @@ export function PageChantiers() {
                     <Link to={`/chantiers/${c.id}`} className="font-medium text-primary hover:underline">
                       {c.nom}
                     </Link>
-                    {c.type && <Badge variant="neutre" className="ml-2">{c.type}</Badge>}
+                    <Badge variant="neutre" className="ml-2">{libelleTypeChantier(c.type)}</Badge>
                     <span className="block text-xs text-muted-foreground">{[c.code_postal, c.ville].filter(Boolean).join(" ")}</span>
                   </Td>
                   <Td>{c.client_nom || "—"}</Td>

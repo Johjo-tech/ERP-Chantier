@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { messageErreur } from "@/lib/erreurs";
 import { Select } from "@/components/ui/input";
 import { ROLES, ROLES_LIBELLES, estRole, peutSimuler } from "../domain/permissions";
 import { useSession } from "../hooks/useSession";
@@ -6,6 +9,7 @@ import { useSession } from "../hooks/useSession";
 /** Identité, rôle, « voir en tant que » (admin seulement) et déconnexion. */
 export function MenuUtilisateur() {
   const { etat, roleReel, roleSimule, simulerRole, deconnecter } = useSession();
+  const [erreur, setErreur] = useState<unknown>(null);
   if (etat.statut !== "connecte") return null;
   const { utilisateur } = etat.session;
 
@@ -34,7 +38,8 @@ export function MenuUtilisateur() {
           </Select>
         </div>
       )}
-      <Button variant="outline" size="sm" onClick={() => void deconnecter()}>
+      {erreur !== null && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
+      <Button variant="outline" size="sm" onClick={() => deconnecter().catch(setErreur)}>
         Se déconnecter
       </Button>
     </div>

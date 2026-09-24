@@ -66,3 +66,24 @@ describe("DPGF : réservé à « chantiers / modifier »", () => {
     expect(error?.code).toBe("42501");
   });
 });
+
+describe("numérotation des devis", () => {
+  it("[proposition] la secrétaire obtient un numéro de devis", async () => {
+    const c = await connecte(COMPTES.secretaireAlpha);
+    const { data, error } = await c.rpc("prochain_numero", { p_societe: "a0000000-0000-0000-0000-00000000000a", p_type: "devis" });
+    expect(error).toBeNull();
+    expect(data).toMatch(/^DEV-\d{4}-\d{6}$/);
+  });
+
+  it("le rôle lecture n'en obtient pas", async () => {
+    const c = await connecte(COMPTES.lectureAlpha);
+    const { error } = await c.rpc("prochain_numero", { p_societe: "a0000000-0000-0000-0000-00000000000a", p_type: "devis" });
+    expect(error?.code).toBe("42501");
+  });
+
+  it("personne n'obtient à la demande un numéro de facture (attribué à l'émission)", async () => {
+    const c = await connecte(COMPTES.adminAlpha);
+    const { error } = await c.rpc("prochain_numero", { p_societe: "a0000000-0000-0000-0000-00000000000a", p_type: "facture" });
+    expect(error?.code).toBe("42501");
+  });
+});

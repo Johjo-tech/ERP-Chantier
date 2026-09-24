@@ -58,7 +58,7 @@ export const schemaSaisieClient = z
     adresse: texte,
     code_postal: texte,
     ville: texte,
-    email: z.preprocess(videEnNull, z.email("Adresse e-mail invalide.").nullable()),
+    email: z.preprocess((v) => videEnNull(typeof v === "string" ? v.trim() : v), z.email("Adresse e-mail invalide.").nullable()),
     telephone: texte,
     contact_nom: texte,
     facturation_adresse: texte,
@@ -66,13 +66,24 @@ export const schemaSaisieClient = z
     facturation_ville: texte,
     delai_paiement_jours: z.preprocess(
       videEnNull,
-      z.coerce.number({ message: "Nombre de jours invalide." }).int("Nombre de jours entier.").min(0).max(365).nullable()
+      z.coerce
+        .number({ message: "Nombre de jours invalide." })
+        .int("Nombre de jours entier.")
+        .min(0, "Le délai ne peut pas être négatif.")
+        .max(365, "365 jours au plus.")
+        .nullable()
     ),
     delai_paiement_mode: z.enum(["net", "fin_de_mois"]),
-    mode_paiement: z.preprocess(videEnNull, z.enum(["virement", "cheque", "especes", "carte", "prelevement"]).nullable()),
+    // `traite` et `autre` ne se proposent plus mais existent en base : une fiche qui les porte reste enregistrable.
+    mode_paiement: z.preprocess(
+      videEnNull,
+      z.enum(["virement", "cheque", "especes", "carte", "prelevement", "traite", "autre"], { message: "Mode de paiement inconnu." }).nullable()
+    ),
     notes: texte,
   })
   .superRefine((c, ctx) => {
+    // Un particulier n'a ni SIRET ni TVA à l'écran : des valeurs anciennes cachées ne bloquent pas.
+    if (c.cadre_facturation === "B2C") return;
     for (const a of verifierIdentifiants(c)) {
       ctx.addIssue({ code: "custom", path: [a.champ], message: a.libelle });
     }

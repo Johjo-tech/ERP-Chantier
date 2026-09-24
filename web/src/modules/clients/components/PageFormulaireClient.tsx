@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
 import { useFormulaire } from "@/lib/useFormulaire";
+import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { CADRES_FACTURATION, saisieDepuis, schemaSaisieClient, type Client } from "../domain/client";
 import { CLE_DELAI_PAR_CADRE, DELAIS_PREREGLES } from "../domain/delais";
 import { chiffres, sirenDuSiret, tvaIntracomFr } from "../domain/identifiants";
@@ -19,7 +20,8 @@ export function PageFormulaireClient() {
   const client = useClient(id);
   if (id && client.isPending) return <Chargement />;
   if (id && client.isError) return <Erreur erreur={client.error} reessayer={() => void client.refetch()} />;
-  return <FormulaireClient key={id ?? "nouveau"} client={client.data ?? null} />;
+  const f = <FormulaireClient key={id ?? "nouveau"} client={client.data ?? null} />;
+  return client.data ? <GardeSociete societeId={client.data.societe_id} retour="/clients">{f}</GardeSociete> : f;
 }
 
 function FormulaireClient({ client }: { client: Client | null }) {
@@ -119,10 +121,13 @@ function FormulaireClient({ client }: { client: Client | null }) {
         </CardHeader>
         <CardContent>
           <ChampsDelai
+            // Le type de client peut imposer un délai : la liste se recale alors dessus.
+            key={valeurs.cadre_facturation}
             jours={valeurs.delai_paiement_jours}
             mode={valeurs.delai_paiement_mode}
             modePaiement={valeurs.mode_paiement}
             erreurJours={erreurs.delai_paiement_jours}
+            erreurMode={erreurs.mode_paiement}
             onChange={(c, v) => changer(c, v)}
           />
         </CardContent>

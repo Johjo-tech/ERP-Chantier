@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BoutonConfirme } from "@/components/ui/confirmation";
 import { messageErreur } from "@/lib/erreurs";
 import { Can } from "@/modules/auth-roles/components/Can";
+import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { libelleCadre, type Client } from "../domain/client";
 import { delaiPaiementRetenu, libelleDelaiPaiement } from "../domain/delais";
 import { useClient, useSupprimerClient } from "../hooks/useClients";
@@ -34,6 +35,7 @@ export function PageFicheClient({ complements }: { complements?: (client: Client
   const delai = c.delai_paiement_jours == null ? "Celui de la société" : libelleDelaiPaiement(delaiPaiementRetenu(c));
 
   return (
+    <GardeSociete societeId={c.societe_id} retour="/clients">
     <div className="flex flex-col gap-4">
       <EnTetePage
         titre={c.nom}
@@ -76,5 +78,6 @@ export function PageFicheClient({ complements }: { complements?: (client: Client
       <BlocInterlocuteurs clientId={c.id} />
       {complements?.(c)}
     </div>
+    </GardeSociete>
   );
 }

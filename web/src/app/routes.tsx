@@ -7,6 +7,8 @@ import { PageFormulaireClient } from "@/modules/clients/components/PageFormulair
 import { PageChantiers } from "@/modules/chantiers/components/PageChantiers";
 import { PageFicheChantier } from "@/modules/chantiers/components/PageFicheChantier";
 import { PageFormulaireChantier } from "@/modules/chantiers/components/PageFormulaireChantier";
+import { PageDevis } from "@/modules/devis/components/PageDevis";
+import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -30,6 +32,9 @@ export const routes: RouteObject[] = [
       { path: "chantiers/nouveau", element: <RouteModule module="chantiers" action="creer"><PageFormulaireChantier /></RouteModule> },
       { path: "chantiers/:id", element: <RouteModule module="chantiers"><PageFicheChantier /></RouteModule> },
       { path: "chantiers/:id/modifier", element: <RouteModule module="chantiers" action="modifier"><PageFormulaireChantier /></RouteModule> },
+      { path: "devis", element: <RouteModule module="devis"><PageDevis /></RouteModule> },
+      { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis /></RouteModule> },
+      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
