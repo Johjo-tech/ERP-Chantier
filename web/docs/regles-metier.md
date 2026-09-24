@@ -8,8 +8,10 @@ Chaque exemple est un cas de test prêt à écrire : entrée → sortie exacte.
 Chaque règle se termine par sa **parité** :
 
 - **Identique** — la nouvelle app reproduit le comportement, exemples compris ;
-- **Écart proposé (D-xx)** — un défaut connu justifie de s'en écarter ; la décision prudente
-  proposée est au §12 et doit être inscrite dans `DECISIONS.md` avant d'être codée.
+- **Écart décidé (D-0xx)** — déjà tranché dans [`DECISIONS.md`](DECISIONS.md) ;
+- **Écart proposé (P-xx)** — un défaut connu justifie de s'en écarter ; la décision prudente
+  proposée est au §12 et doit être inscrite dans `DECISIONS.md` (numéro `D-0xx` suivant) avant
+  d'être codée.
 
 Rappel d'architecture (`CLAUDE.md`) : les calculs qui engagent (numérotation, totaux, soldes,
 transitions) **vivent en base**. Les règles ci-dessous décrivent aussi ce que l'écran calcule
@@ -37,7 +39,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | `{qte:"abc", pu:10}` | 0 |
 | chapitre ou commentaire 5 × 5 | 0 |
 
-- **Parité** : identique pour le calcul ; **écart proposé (D-12)** sur la saisie : accepter la virgule décimale à l'écran (l'ancien champ `type=number` empêchait « 1,5 » d'arriver en chaîne).
+- **Parité** : identique pour le calcul ; **écart décidé (D-013)** sur la saisie : la virgule est un séparateur décimal (`web/` lit 1,5).
 
 ### RM-02 — TVA multi-taux, calculée ligne par ligne
 
@@ -71,7 +73,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 - **Source** : `app.js:12563` (`tvaDefaut`), `app.js:12572` (`optionsTvaHTML`) ; `src/integrations/reglages.ts:65`.
 - **Règle** : taux d'une ligne neuve = `reglages.documents.tvaDefaut`, **10 par défaut**. Taux proposés = `reglages.tauxTva`, défaut `[0, 2.1, 5.5, 10, 20]`, sinon `[tvaDefaut]`. Un taux enregistré qui n'est plus dans la liste reste proposé (ajouté puis trié). Lignes créées automatiquement (pré-facture, situation, préconisations) : `tvaDefaut()`. Travaux supplémentaires : 10 par défaut en base.
 - **Exemples** : réglage absent → 10 ; `tvaDefaut` = `undefined` → `Number(undefined)` NaN → **0** ; `tvaDefaut` = `""` ou `null` → **0** sans erreur ; ligne existante à 7 % avec liste `[10, 20]` → `[7, 10, 20]`.
-- **Parité** : identique pour 10 % et la conservation du taux historique ; **écart proposé (D-13)** : un réglage vide ou non numérique retombe sur 10 (défaut documenté), jamais sur 0.
+- **Parité** : identique pour 10 % et la conservation du taux historique ; **écart proposé (P-13)** : un réglage vide ou non numérique retombe sur 10 (défaut documenté), jamais sur 0.
 
 ### RM-05 — Taux zéro, autoliquidation, franchise en base
 
@@ -95,14 +97,14 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 
 - **Source** : `regles-efacture.ts#mentionsLegales`, `app.js:4248`.
 - **Règle** : sur **facture seulement** (pas devis, pas BC) : pénalités de retard (défaut « …taux d'intérêt légal majoré de 10 points. »), « Indemnité forfaitaire pour frais de recouvrement : 40.00 € » (valeur société, défaut 40), franchise 293 B si régime, autoliquidation « article 283-2 nonies du CGI » si la case société, « TVA exigible à l'encaissement » si TVA sur encaissements, assurance décennale.
-- **Parité** : identique, sauf **écart proposé (D-14)** : « 40,00 € » avec virgule (l'ancien texte imprime `toFixed(2)` avec un point).
+- **Parité** : identique, sauf **écart proposé (P-14)** : « 40,00 € » avec virgule (l'ancien texte imprime `toFixed(2)` avec un point).
 
 ### RM-08 — TVA et remise dans la facture électronique (EN 16931)
 
 - **Source** : `regles-en16931.ts#deductionsDocument/ventilationTva/chargeEN16931`.
 - **Règle** : la remise devient une **déduction par taux** (BG-20, code 95) = `centimes(base × pct/100)` ; assiette par taux = `centimes(base − déduction)` ; TVA par taux = `centimes(assiette × taux/100)` ; avoir : tout multiplié par −1 ; BR-CO-10 toléré à 0,01 €. **Ici on arrondit par taux**, contrairement à l'écran (RM-09).
 - **Exemples** : lignes A 100 @20 et B 2 × 50 @10, remise 10 % → deux déductions de 10 (taux 10 puis 20) ; taux 10 : assiette 90.00, TVA 9.00 ; taux 20 : 90.00 / 18.00. Avoir identique → sum_lines −200.00, allowance −20.00, HT −180.00, TVA −27.00, TTC −207.00.
-- **Parité** : identique ; noter qu'un écart d'un centime entre PDF (TVA non arrondie par taux) et XML (arrondie par taux) est **possible** (voir D-01).
+- **Parité** : identique ; noter qu'un écart d'un centime entre PDF (TVA non arrondie par taux) et XML (arrondie par taux) est **possible** (voir D-006 et la ligne P-01 du §12).
 
 ---
 
@@ -118,7 +120,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
   - Conséquence assumée : la somme des montants **affichés** par ligne peut différer d'un centime du total affiché ; la ventilation, elle, somme exactement au total (même facteur de remise).
   - Stockage : `bons_commande.montant` et `reglements.montant` sont `numeric(14,2)` (Postgres arrondit à l'écriture) ; `quantite`, `prix_unitaire` en `numeric(14,4)` ; `montant_ht` des lignes non borné.
 - **Exemples** : `totauxDocument(C1, 10).ttc` = 253.02055049999998 → affiché « 253,02 € » ; `money(0.005)` = « 0,01 € » ; 3 × 0,1 @20 → ht 0.30000000000000004, ttc 0.36000000000000004.
-- **Parité** : identique pour les montants affichés ; **écart proposé (D-01)** sur la représentation interne.
+- **Parité** : identique pour les montants affichés ; **écart décidé (D-006)** : décimal exact (`big.js`), aucun arrondi dans les calculs, arrondi au centime demi s'éloignant de zéro à l'affichage et à l'enregistrement — `1,005 €` s'affiche `1,01 €` (l'ancien flottant affichait `1,00 €`).
 
 ### RM-10 — Deux arrondis au centime (règlements et avoirs)
 
@@ -137,7 +139,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | `"abc"` | 0 | — |
 | `"12,5"` | **12** (virgule non gérée) | — |
 
-- **Parité** : **écart proposé (D-02)** : une seule fonction d'arrondi au centime (`arrondiCentime`) partout.
+- **Parité** : **écart décidé (D-006)** : une seule règle d'arrondi au centime (demi s'éloignant de zéro, celle de `round(numeric, 2)`), qui donne les résultats de `arrondiCentime` ; `centimes` disparaît.
 
 ---
 
@@ -160,7 +162,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | 1 × 1000 HT @20, cible HT 900 | 10 % (exact) |
 | 1 × 1000 HT @20 (TTC 1 200), cible TTC 1 000 | **16,67 %** → TTC réel **999,96** |
 
-- **Parité** : identique (la colonne `numeric(5,2)` impose de toute façon 2 décimales) ; afficher le montant réellement obtenu à côté de la cible.
+- **Parité** : identique (la colonne `numeric(5,2)` impose de toute façon 2 décimales) ; voir P-03.
 
 ### RM-12 — Sous-totaux de chapitre
 
@@ -174,7 +176,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 - **Source** : `app.js:8431-8520` (`saveBonCommande`), `app.js:8065, 8121`.
 - **Règle** : montant = Σ des montants saisis par métier, ou montant global saisi ; **dès qu'une ligne est renseignée** (ligne avec désignation ou PU > 0), montant = HT des lignes (sans remise). Un bon **sans ligne garde son montant saisi**. Montant par métier sur le planning : `montantParMetier[metier]` sinon le montant du bon.
 - **Exemples** : lignes `[3 × 0,1]` → 0.30000000000000004 envoyé, stocké 0.30 (`numeric(14,2)`) ; aucun ligne, montant saisi 2 110,29 → 2 110,29 conservé (12 bons en production, 25 323,48 €).
-- **Parité** : identique ; arrondir au centime **avant** l'envoi (D-01) pour que l'écran et la base disent la même chose.
+- **Parité** : identique ; arrondir au centime **avant** l'envoi (D-006) pour que l'écran et la base disent la même chose.
 
 ---
 
@@ -198,7 +200,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | TTC 1 200, acompte 2 000 | net 0 |
 | TTC 1 200, retenue 150 % | bornée 100 → retenue 1 200, net 0 |
 
-- **Parité** : identique. À noter : `v_facture_solde` et le statut de règlement **ignorent** acomptes et retenue (le reste à payer porte sur le TTC entier) — voir D-07.
+- **Parité** : identique. À noter : `v_facture_solde` et le statut de règlement **ignorent** acomptes et retenue (le reste à payer porte sur le TTC entier) — voir P-07.
 
 ### RM-15 — Sens d'un document : avoirs signés au calcul, stockés positifs
 
@@ -213,7 +215,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | `estAvoir` : `avoir`, `Avoir`, `facture_avoir`, `facture`, `acompte`, `null` | vrai, vrai, vrai, faux, faux, faux |
 | `libelleDocument` : `avoir`, `acompte`, `facture`, `null` | AVOIR, FACTURE D'ACOMPTE, FACTURE, FACTURE |
 
-- **Parité** : identique sur le signe ; **écart proposé (D-04)** : une seule définition, `type_document === 'avoir'` (l'énumération `facture|avoir|acompte|note_frais` rend `includes` inutile).
+- **Parité** : identique sur le signe ; **écart proposé (P-04)** : une seule définition, `type_document === 'avoir'` (l'énumération `facture|avoir|acompte|note_frais` rend `includes` inutile).
 
 ---
 
@@ -257,7 +259,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | `refusImputation(1600, [300, 1000, 250,55])` | « …dépasse le total dû (1550,55 €)… » |
 | `statutEnBase('partiellement_reglee')` | `impayée` |
 
-- **Parité** : identique ; le statut stocké doit être posé **par la base** à terme (D-07).
+- **Parité** : identique ; le statut stocké doit être posé **par la base** à terme (P-07).
 
 ### RM-18 — Retard et échéance dépassée
 
@@ -276,7 +278,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
   - écriture : **deux règlements** de même montant et même date : sur la facture (mode `avoir`, référence = n° de l'avoir) et sur l'avoir (mode `imputation`, référence = n° de la facture) ; puis statut resynchronisé sur les deux pièces ;
   - lettrage : exactement 2 pièces sélectionnées, 1 avoir + 1 facture numérotée.
 - **Exemples** : `resteAImputer(-682, [])` = 682 ; `resteAImputer(-682, [200])` = 482 ; `statutImputation(-682, [])` / `[200]` / `[682]` = disponible / partiellement_impute (imputé 200, reste 482, ttc −682) / impute ; `montantImputable(500, 682)` = 500 ; `(900, 682)` = 682 ; `(1000, 682.4)` = 682.4.
-- **Parité** : identique (arrondi : D-02).
+- **Parité** : identique (arrondi : D-006).
 
 ---
 
@@ -306,7 +308,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | 2024-02-10, 0 fin de mois | 2024-02-29 |
 | `""` ou `15/01/2026` | `""` |
 
-- **Parité** : identique. La convention « fin de mois puis + N jours » est l'une des deux lectures admises de L441-10 ; ne pas la changer sans décision (D-15), la RPC SQL en dépend.
+- **Parité** : identique. La convention « fin de mois puis + N jours » est l'une des deux lectures admises de L441-10 ; ne pas la changer sans décision (P-15), la RPC SQL en dépend.
 
 ### RM-22 — Libellé et préréglages du délai
 
@@ -358,14 +360,14 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
   - RPC `prochain_numero(p_societe, p_type, p_annee = année courante)` : exige `peut_ecrire` ; **refuse** `facture`, `avoir`, `acompte` (« attribué à son émission, pas à la demande ») ;
   - **devis** : numéro demandé **à la première écriture**, brouillon compris (un trou dans la série est toléré) ; **intervention** : à la création ; **SAV** : à la création.
 - **Exemples** : aperçu `apercuNumero('FAC', 41, 2026)` → FAC-2026-000042 (valeur = dernier numéro attribué) ; premier devis 2026 → DEV-2026-000001.
-- **Parité** : identique (la numérotation reste en base) ; voir D-10 pour la secrétaire.
+- **Parité** : identique (la numérotation reste en base) ; voir P-10 pour la secrétaire.
 
 ### RM-41 — Numéros d'un bon de commande
 
 - **Source** : SQL `bc_attribuer_numero_interne`, `ref_bc_client` ; `regles-bc.ts#refBonCommandeClient` ; `app.js:8271, 8431`.
 - **Règle** : `numero_interne` = `BC-AAAA-NNNNNN`, posé par la base à l'INSERT, année = `date_reception` sinon `date` sinon aujourd'hui. `numero_bc` = **référence du client** (pas de série) ; vide → « En attente de BC » ou « Sans BC ». Référence client BT-13 = première ligne de `numero_bc`, en écartant `""`, `SAV-…`, « Sans BC », « En attente de BC ».
 - **Exemples** : `"  BC-123 \nautre"` → `BC-123` ; `SAV-4`, `Sans BC`, `En attente de BC`, `""`, `null` → `null` ; `numeroBCSaisissable(" En attente de BC ")` → `""`.
-- **Parité** : identique ; **écart proposé (D-16)** : la ligne de compteur `bon_commande` n'existe que pour 2026 (préfixe `BC`) → en 2027, `BON-2027-000001` ; ajouter `bon_commande → BC` aux préfixes par défaut.
+- **Parité** : identique ; **écart proposé (P-16)** : la ligne de compteur `bon_commande` n'existe que pour 2026 (préfixe `BC`) → en 2027, `BON-2027-000001` ; ajouter `bon_commande → BC` aux préfixes par défaut.
 
 ### RM-42 — Numéro de facture : à l'émission, par la base
 
@@ -391,7 +393,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 - **Source** : `app.js:5717-5800`.
 - **Règle actuelle** : unitaire `FST-` + `numeroBC` sans espaces (sinon `FST-` + 6 premiers caractères de l'id) ; groupée mensuelle `FST-M<AAAA-MM>` puis `-2`, `-3`… selon le nombre de factures déjà en mémoire commençant par ce préfixe ; naissent `impayée`.
 - **Exemples** : `numeroBC = "BC 45 12"` → `FST-BC4512` ; le 24/09/2026 avec 0 / 1 / 2 factures `FST-M2026-09*` → `FST-M2026-09` / `FST-M2026-09-2` / `FST-M2026-09-3`.
-- **Parité** : **écart proposé (D-05)** — numérotation côté client, non transactionnelle, comptée toutes sociétés confondues.
+- **Parité** : **écart proposé (P-05)** — numérotation côté client, non transactionnelle, comptée toutes sociétés confondues.
 
 ---
 
@@ -401,7 +403,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 
 - **Source** : `app.js:4514, 4653` ; énumération `devis_statut`.
 - **Règle** : `brouillon | envoyé | accepté | refusé`, défaut `brouillon`, reconduit à l'enregistrement. L'ancien écran n'offre **aucun geste** de transition. Transformer en facture est refusé si une facture porte déjà ce `devis_id` ; créer un BC est refusé si le devis est déjà lié. Taux de conversion du mois = acceptés / devis datés du mois (3 dont 1 → 33).
-- **Parité** : identique sur les valeurs ; **écart proposé (D-17)** : ajouter les gestes « Marquer envoyé / accepté / refusé » (additif, sans effet sur les calculs).
+- **Parité** : identique sur les valeurs ; **écart proposé (P-17)** : ajouter les gestes « Marquer envoyé / accepté / refusé » (additif, sans effet sur les calculs).
 
 ### RM-51 — Facture : statuts et verrous
 
@@ -441,7 +443,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 
 - **Source** : `app.js:7266-7330, 8041, 8121` ; CHECK `tache_travaux_supplementaires.statut`.
 - **Règle** : `a_chiffrer` → `chiffre` au premier prix (≥ 0, virgule acceptée, quantité 1 et unité `u` par défaut) → `integre` quand il devient une ligne du bon (écrire les lignes **d'abord**, le statut ensuite) ; `refuse` à la clôture gratuite. Origine `conducteur` si l'auteur est conducteur ou admin, sinon `technicien`.
-- **Parité** : identique ; **écart proposé (D-18)** : la validation hors circuit doit aussi intégrer les travaux chiffrés.
+- **Parité** : identique ; **écart proposé (P-18)** : la validation hors circuit doit aussi intégrer les travaux chiffrés.
 
 ---
 
@@ -468,13 +470,13 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 | 1 000 ; 25 % ; 0 | 25 ; 0 |
 | 1 000 ; 25 % ; 150 | 100 ; 750 |
 
-- **Parité** : formule identique ; **écart proposé (D-08)** sur l'arrondi et l'ordre des écritures.
+- **Parité** : formule identique ; **écart proposé (P-08)** sur l'arrondi et l'ordre des écritures.
 
 ### RM-62 — Facture de situation
 
 - **Source** : `app.js:13315`.
 - **Règle** : une ligne par ligne DPGF avancée : `{type: ligne, designation: "<désignation> (avancement X% → Y%)", qte: 1, prixUnitaire: à facturer, tva: tvaDefaut()}` ; facture **brouillon**, sans numéro (numérotée à l'émission), remise 0, échéance vide, `chantier_id`, notes « Situation de travaux — <nom du chantier> ». Pas de retenue de garantie, pas d'acompte, pas de rappel des situations antérieures ; le cumul vit dans `avancement_cumule`.
-- **Parité** : identique pour la facture ; **écart proposé (D-08)**.
+- **Parité** : identique pour la facture ; **écart proposé (P-08)**.
 
 ---
 
@@ -485,20 +487,20 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 - **Source** : `app-1.md §2.4`.
 - **Règle** : impayés = Σ des restes des factures non réglées, **avoirs exclus** ; taux encaissé = `max(0, round((1 − impayés / Σ TTC signés) × 100))` (Σ TTC inclut les avoirs négatifs ; 1 si nul).
 - **Exemple** : Σ TTC 10 000, impayés 2 500 → 75.
-- **Parité** : identique ; **écart proposé (D-19)** pour le CA (brouillons exclus).
+- **Parité** : identique ; **écart proposé (P-19)** pour le CA (brouillons exclus).
 
 ### RM-90 — Permissions
 
 - **Source** : `role_permissions`, `a_permission`, `voit_les_prix`, `peut_ecrire` ; `integrations/permissions.ts`, `session.ts:624`, `regles-taches.ts:121`. Matrice complète : `INVENTAIRE.md` §1.6.
 - **Règle** : un geste est permis si `a_permission(société, module, action)` ; la base refuse, l'écran masque ce qui serait refusé. Règles hors matrice : prix invisibles au technicien et au sous-traitant ; pré-facture modifiable par admin|secrétaire, validée par admin ; hors circuit, chiffrage validé, clôture gratuite : admin ; génération de facture : admin|secrétaire ; tâches : RM-54.
 - **Exemples** : conducteur → `factures` voir seulement (pas de bouton Émettre) ; secrétaire → `bons_commande` voir + modifier, pas créer ; technicien → aucun onglet Devis, Factures, Clients, Catalogue.
-- **Parité** : identique ; **écart proposé (D-10)** pour `peut_ecrire`.
+- **Parité** : identique ; **écart proposé (P-10)** pour `peut_ecrire`.
 
 ### RM-91 — « Voir en tant que »
 
 - **Source** : `session.ts:317` ; `app.js:101, 908`.
 - **Règle** : réservé à l'admin réel ; rôle effectif = simulé ?? réel ; tous les masquages utilisent le rôle effectif ; la base continue d'appliquer le rôle réel. Mémorisé par navigateur.
-- **Parité** : identique ; afficher un bandeau pendant la simulation (ajout).
+- **Parité** : identique, plus un bandeau permanent pendant la simulation ; simulation valable seulement si le compte est admin de la société active (**D-010**).
 
 ### RM-92 — Multi-sociétés
 
@@ -510,7 +512,7 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 
 - **Source** : `app.js:6529-6600, 12213` ; schéma §1.4, §6.5.
 - **Règle actuelle** : **aucune** en base (pas de rôle client, pas de politique). L'écran mort prévoyait : un client ne voit que ses bons (et un interlocuteur que les siens), 4 couleurs d'état (vert : faits ; jaune : pièce à commander ; orange : planifié ; rouge : sinon ; tri rouge, jaune, orange, vert puis numéro), recherche limitée à 13 champs, **aucun montant ni note interne**.
-- **Parité** : **écart proposé (D-09)**.
+- **Parité** : **écart décidé (D-008)** : pas de rôle de membre `client` (il verrait tout via `est_membre`) ; table `acces_clients(profile_id, client_id, societe_id)`, fonction `mes_clients()`, politiques de **lecture seule** dédiées (chantiers, devis, factures, bons). Migration proposée, non appliquée en production.
 
 ### RM-80 — Montants affichés
 
@@ -536,27 +538,33 @@ Notations : `parseFloat(String(v ?? ""))`, non fini → 0, est le parseur commun
 
 ## 12. Décisions proposées (à inscrire dans `DECISIONS.md`)
 
+Identifiants `P-xx` = propositions, à ne pas confondre avec les décisions `D-0xx` déjà
+prises. Une proposition retenue reçoit le numéro `D-0xx` suivant dans `DECISIONS.md` ; les
+lignes barrées sont déjà tranchées.
+
 Décisions **prudentes** : ne rien changer à ce qui est légal ou stocké sans nécessité, corriger ce
 qui perd des données ou contredit la base, et ajouter plutôt que modifier.
 
 | Id | Règle | Défaut constaté | Décision proposée |
 |---|---|---|---|
-| D-01 | RM-09, RM-13 | Totaux en flottants, arrondis nulle part ; montant de BC arrondi en silence par `numeric(14,2)` ; PDF et Factur-X peuvent différer d'un centime | Calculer comme la base (même formule, aucun arrondi intermédiaire) ; arrondir au centime **une fois**, à l'affichage et avant tout envoi d'un montant stocké en `numeric(14,2)` ; tests de parité contre `v_facture_totaux` à 0,005 près. Ne pas changer la formule. |
-| D-02 | RM-10 | Deux arrondis au centime (`arrondiCentime`, `centimes`) | Une seule fonction, `arrondiCentime`, partout (règlements, avoirs, filtres, métiers). Les cas ne diffèrent que sur les demi-centimes. |
-| D-04 | RM-15 | `estAvoir` (`includes`) vs `estAvoirDocument` (`===`) | Comparer l'énumération : `type_document === 'avoir'`. |
-| D-05 | RM-44 | Numéros `FST` calculés côté client, non transactionnels, toutes sociétés | Ne pas reproduire dans cette phase : afficher les factures ST existantes en lecture ; une série `FST` en base (compteur) sera décidée avec le module sous-traitant. |
-| D-06 | FAC-91 | « Marquer payée » écrit `payée` sans règlement | Ne pas reproduire : « payée » découle d'un règlement enregistré. |
-| D-07 | RM-14, RM-17 | Solde recalculé côté client ; `v_facture_solde` ignore acomptes, retenue et signe des avoirs | Reproduire `regles-reglements` à l'identique pour l'affichage ; ne pas reprendre `calculerSoldeFacture` ; ouvrir une migration pour que la base pose `factures.statut` (et que la vue traite les avoirs) avant d'en dépendre. |
-| D-08 | RM-61, RM-62 | Avancement écrit avant la facture, sans contrôle ; PU non arrondi ; `chantier_avancement_factures` jamais écrite | Créer la facture brouillon **puis** l'avancement, idéalement dans une RPC transactionnelle ; arrondir le montant à facturer au centime (nouvelle pièce, pas de pièce existante modifiée) ; écrire `chantier_avancement_factures`. |
-| D-09 | RM-93 | Portail client mort, sans rôle ni RLS | Écarter le module de cette phase (`[-]`) ; le concevoir plus tard **en base d'abord** (rôle ou table de rattachement compte ↔ client, vue sans montants), jamais par un sélecteur d'écran. |
-| D-10 | RM-40, RM-90 | Secrétaire hors `peut_ecrire` : ne peut pas numéroter un devis ni écrire plusieurs référentiels | Migration : `prochain_numero` contrôle `a_permission(<module du type>, 'creer')` au lieu de `peut_ecrire` ; revoir les politiques fondées sur `peut_ecrire` module par module. En attendant, la nouvelle app affiche le refus de la base. |
-| D-12 | RM-01 | Saisie « 1,5 » tronquée à 1 si elle arrive en chaîne | Accepter la virgule décimale à la saisie (conversion explicite) ; le calcul reste identique. |
-| D-13 | RM-04 | Réglage TVA vide → 0 % silencieux | Retomber sur 10 % (défaut documenté) quand le réglage est vide ou invalide. |
-| D-14 | RM-07 | « 40.00 € » avec un point dans les mentions | Formater en fr-FR (« 40,00 € »). Sans effet légal. |
-| D-15 | RM-21 | Convention « fin de mois + N jours » | Garder à l'identique (la RPC SQL `date_echeance` est la même) ; la documenter à l'écran. |
-| D-16 | RM-41 | Préfixe BC absent en 2027 (`BON-2027-…`) | Migration : préfixe par défaut `bon_commande → BC` dans `numero_suivant_interne`, avant le 01/01/2027. |
-| D-17 | RM-50 | Aucun geste de transition de devis | Ajouter les gestes Envoyé / Accepté / Refusé (additif). |
-| D-18 | RM-55 | Validation hors circuit sans intégration des travaux chiffrés | Intégrer les travaux chiffrés avant la validation hors circuit, comme la voie normale. |
-| D-19 | RM-70 | CA calculé brouillons compris, « encaissé » = statut `payée` daté de la facture | Exclure les brouillons du CA ; CA encaissé = Σ règlements datés de la période. Changement d'indicateur : à annoncer. |
-| D-20 | CHA-50, RH-20, VEH-20, VEH-21, PAR-20 | Données saisies sans colonne, perdues au rechargement (DPGF, to-do, prêts, entretiens, CT, absences, documents ST) | Écrire dans les tables filles qui existent déjà (`chantier_dpgf_lignes`, `chantier_todos`, `vehicule_prets`, `vehicule_entretiens`, `materiel_prets`, `salarie_absences`, `sous_traitant_documents`, `vehicules.date_controle_technique`) ; ne jamais filtrer un champ en silence. |
-| D-21 | BC-95 | `bc_generer_facture` force le virement, ne recopie pas `conducteur_id`, forfait TVA 10 | Migration : recopier `clients.mode_paiement` et `conducteur_id` ; forfait au taux `tvaDefaut` de la société. |
+| ~~P-01~~ | RM-09, RM-13 | Totaux en flottants, jamais arrondis ; montant de BC arrondi en silence par `numeric(14,2)` ; PDF et Factur-X peuvent différer d'un centime | **Tranché par D-006.** Reste à faire : tests de parité contre `v_facture_totaux` au centime, et signaler l'écart PDF / Factur-X (RM-08). |
+| ~~P-02~~ | RM-10 | Deux arrondis au centime | **Tranché par D-006.** |
+| P-03 | RM-11 | Remise saisie par montant : le % arrondi à 2 décimales n'atteint pas la cible (999,96 au lieu de 1 000) | Garder l'arrondi du % (imposé par `numeric(5,2)`) et afficher à côté de la cible le montant réellement obtenu. |
+| P-04 | RM-15 | `estAvoir` (`includes`) vs `estAvoirDocument` (`===`) | Comparer l'énumération : `type_document === 'avoir'`. |
+| P-05 | RM-44 | Numéros `FST` calculés côté client, non transactionnels, toutes sociétés | Ne pas reproduire dans cette phase : afficher les factures ST existantes en lecture ; une série `FST` en base (compteur) sera décidée avec le module sous-traitant. |
+| P-06 | FAC-91 | « Marquer payée » écrit `payée` sans règlement | Ne pas reproduire : « payée » découle d'un règlement enregistré. |
+| P-07 | RM-14, RM-17 | Solde recalculé côté client ; `v_facture_solde` ignore acomptes, retenue et signe des avoirs | Reproduire `regles-reglements` à l'identique pour l'affichage ; ne pas reprendre `calculerSoldeFacture` ; ouvrir une migration pour que la base pose `factures.statut` (et que la vue traite les avoirs) avant d'en dépendre. |
+| P-08 | RM-61, RM-62 | Avancement écrit avant la facture, sans contrôle ; PU non arrondi ; `chantier_avancement_factures` jamais écrite | Créer la facture brouillon **puis** l'avancement, idéalement dans une RPC transactionnelle ; arrondir le montant à facturer au centime (nouvelle pièce, pas de pièce existante modifiée) ; écrire `chantier_avancement_factures`. |
+| ~~P-09~~ | RM-93 | Portail client mort, sans rôle ni RLS | **Tranché par D-008** (table `acces_clients`, lecture seule, migration proposée). |
+| P-10 | RM-40, RM-90 | Secrétaire hors `peut_ecrire` : ne peut pas numéroter un devis ni écrire plusieurs référentiels | Migration : `prochain_numero` contrôle `a_permission(<module du type>, 'creer')` au lieu de `peut_ecrire` ; revoir les politiques fondées sur `peut_ecrire` module par module. En attendant, la nouvelle app affiche le refus de la base. |
+| P-11 | FAC-96 | Vente de véhicule : facture émise d'emblée, client en texte libre, TVA 20 ou 0 | Hors périmètre de cette phase ; à la reprise, passer par un brouillon relié à une fiche client, puis l'émission normale. |
+| ~~P-12~~ | RM-01 | Saisie « 1,5 » tronquée à 1 | **Tranché par D-013.** |
+| P-13 | RM-04 | Réglage TVA vide → 0 % silencieux | Retomber sur 10 % (défaut documenté) quand le réglage est vide ou invalide. |
+| P-14 | RM-07 | « 40.00 € » avec un point dans les mentions | Formater en fr-FR (« 40,00 € »). Sans effet légal. |
+| P-15 | RM-21 | Convention « fin de mois + N jours » | Garder à l'identique (la RPC SQL `date_echeance` est la même) ; la documenter à l'écran. |
+| P-16 | RM-41 | Préfixe BC absent en 2027 (`BON-2027-…`) | Migration : préfixe par défaut `bon_commande → BC` dans `numero_suivant_interne`, avant le 01/01/2027. |
+| P-17 | RM-50 | Aucun geste de transition de devis | Ajouter les gestes Envoyé / Accepté / Refusé (additif). |
+| P-18 | RM-55 | Validation hors circuit sans intégration des travaux chiffrés | Intégrer les travaux chiffrés avant la validation hors circuit, comme la voie normale. |
+| P-19 | RM-70 | CA calculé brouillons compris, « encaissé » = statut `payée` daté de la facture | Exclure les brouillons du CA ; CA encaissé = Σ règlements datés de la période. Changement d'indicateur : à annoncer. |
+| P-20 | CHA-50, RH-20, VEH-20, VEH-21, PAR-20 | Données saisies sans colonne, perdues au rechargement (DPGF, to-do, prêts, entretiens, CT, absences, documents ST) | Écrire dans les tables filles qui existent déjà (`chantier_dpgf_lignes`, `chantier_todos`, `vehicule_prets`, `vehicule_entretiens`, `materiel_prets`, `salarie_absences`, `sous_traitant_documents`, `vehicules.date_controle_technique`) ; ne jamais filtrer un champ en silence. |
+| P-21 | BC-95 | `bc_generer_facture` force le virement, ne recopie pas `conducteur_id`, forfait TVA 10 | Migration : recopier `clients.mode_paiement` et `conducteur_id` ; forfait au taux `tvaDefaut` de la société. |

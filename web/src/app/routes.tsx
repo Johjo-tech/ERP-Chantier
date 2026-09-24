@@ -4,6 +4,9 @@ import { RouteConnectee, RouteModule } from "@/modules/auth-roles/components/Rou
 import { PageClients } from "@/modules/clients/components/PageClients";
 import { PageFicheClient } from "@/modules/clients/components/PageFicheClient";
 import { PageFormulaireClient } from "@/modules/clients/components/PageFormulaireClient";
+import { PageChantiers } from "@/modules/chantiers/components/PageChantiers";
+import { PageFicheChantier } from "@/modules/chantiers/components/PageFicheChantier";
+import { PageFormulaireChantier } from "@/modules/chantiers/components/PageFormulaireChantier";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -23,6 +26,10 @@ export const routes: RouteObject[] = [
       { path: "clients/nouveau", element: <RouteModule module="clients" action="creer"><PageFormulaireClient /></RouteModule> },
       { path: "clients/:id", element: <RouteModule module="clients"><PageFicheClient /></RouteModule> },
       { path: "clients/:id/modifier", element: <RouteModule module="clients" action="modifier"><PageFormulaireClient /></RouteModule> },
+      { path: "chantiers", element: <RouteModule module="chantiers"><PageChantiers /></RouteModule> },
+      { path: "chantiers/nouveau", element: <RouteModule module="chantiers" action="creer"><PageFormulaireChantier /></RouteModule> },
+      { path: "chantiers/:id", element: <RouteModule module="chantiers"><PageFicheChantier /></RouteModule> },
+      { path: "chantiers/:id/modifier", element: <RouteModule module="chantiers" action="modifier"><PageFormulaireChantier /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

@@ -51,7 +51,7 @@ avec l'entrée `DECISIONS.md`). Aucune ligne n'est cochée à ce jour.
 - [ ] **AUTH-11** Déconnexion depuis le menu utilisateur. _Source : `app.js:1308` (`logOut` → `seDeconnecter`)_
 - [ ] **AUTH-12** Menu utilisateur : nom, rôle, version construite copiable. _Source : `app.js:895, 902, 908`_
 - [ ] **AUTH-13** « Voir en tant que » : l'**admin réel** seul simule un autre rôle (6 rôles, icônes) ; mémorisé dans `localStorage["erp.role.simule"]`, restauré au changement de société, effacé si le rôle réel n'est pas admin. _Source : `app.js:101, 908` ; `session.ts:317`_
-- [ ] **AUTH-14** Le rôle simulé ne change **rien** en base (RLS au rôle réel) : il ne sert qu'à masquer. Bandeau visible quand on simule (absent de l'ancienne app — à ajouter). _Source : `session.ts:317`_
+- [ ] **AUTH-14** Le rôle simulé ne change **rien** en base (RLS au rôle réel) : il ne sert qu'à masquer. Bandeau visible quand on simule (absent de l'ancienne app — décidé : D-010). _Source : `session.ts:317`_
 - [ ] **AUTH-15** Menu latéral filtré : onglet visible ⇔ `voir` sur son module (table §1.6). _Source : `app.js:93` (`navPourRole`), `integrations/permissions.ts#MODULE_PAR_NAV`_
 - [ ] **AUTH-16** Onglet courant non autorisé après changement de rôle/société → premier onglet autorisé. _Source : `app.js:19126-19187`_
 - [ ] **AUTH-17** « Mon nom » (Réglages › Mon compte) → `profiles.nom` (politique `profiles_update_self`). _Source : `app.js:12277`, `queries/acces.ts#definirMonNom`_
@@ -100,7 +100,7 @@ avec l'entrée `DECISIONS.md`). Aucune ligne n'est cochée à ce jour.
 - [ ] **AUTH-75** Fonctions de déclencheur créées après le 24/09 : `EXECUTE` rendu à `PUBLIC` faute d'`ALTER DEFAULT PRIVILEGES`. _Source : schéma §5.4, §10.3-12_
 - [ ] **AUTH-76** `v_salaries_annuaire` a probablement perdu `security_barrier` (recréée sans `WITH` le 21/09) — à vérifier par `pg_class.reloptions`. _Source : schéma §4.2_
 - [ ] **AUTH-77** `inviter-salarie` cherche le compte par `listUsers()` sur **une seule page** (50) : un compte existant peut ne pas être trouvé. _Source : schéma §8.3_
-- [ ] **AUTH-78** Barre mobile (`MOBILE_NAV`) **non filtrée** par les droits. _Source : `app.js:114`_
+- [ ] **AUTH-78** Barre mobile (`MOBILE_NAV`) **non filtrée** par les droits (décidé : un seul menu filtré, D-014). _Source : `app.js:114`_
 - [ ] **AUTH-79** Un sous-traitant ne peut pas être invité par l'écran (Edge refuse `sous_traitant`) alors que `invitations.sous_traitant_id` existe : comment un sous-traitant obtient-il son compte ? _Source : schéma §1.3, §8.3_
 - [ ] **AUTH-80** `docs/AUTHENTICATION.md` périmé (`membres_societe.user_id`, `created_at`, 4 rôles) : ne pas s'en servir. _Source : schéma §10.2_
 
@@ -327,7 +327,7 @@ qu'à l'interface (aucune politique RLS ne les cite).
 
 - [ ] **DEV-40** `articleReference` passait par `parseFloat` (« PLB-001 » → 0) : c'est un champ texte, comme `designation`, `commentaire`, `unite`, `metier`. _Source : `app.js:3524`_
 - [ ] **DEV-41** Sous-totaux de chapitre figés (classe CSS inexistante) : recalcul à chaque saisie. _Source : `app.js:3300`_
-- [ ] **DEV-42** Quantité saisie « 1,5 » en chaîne → `parseFloat` = **1** (virgule tronque) ; l'ancien champ était `type=number`. La nouvelle saisie doit accepter la virgule. _Source : `app-1.md §4.3`_
+- [ ] **DEV-42** Quantité saisie « 1,5 » en chaîne → `parseFloat` = **1** (virgule tronque) ; l'ancien champ était `type=number`. La nouvelle saisie accepte la virgule (D-013). _Source : `app-1.md §4.3`_
 - [ ] **DEV-43** Choisir un article ne change **jamais** la quantité ; la description de l'article devient le commentaire de ligne ; copie, pas lien. _Source : `app.js:2546`_
 
 ### Défauts connus de l'ancienne app
@@ -554,7 +554,7 @@ qu'à l'interface (aucune politique RLS ne les cite).
 - [ ] **FAC-92** `calculerSoldeFacture` / `ajouterReglementEtMajStatut` recalculent le solde **côté client** (remise appliquée au TTC, `toFixed(2)`) au lieu de lire la base ; `efacture.preparerEmission` s'en sert pour BT-113. _Source : `operations/workflows.ts`, ts §0-3_
 - [ ] **FAC-93** `v_facture_solde` ignore acomptes, retenue, escompte et le **signe des avoirs**. _Source : schéma §4.1, §10.3-7_
 - [ ] **FAC-94** Deux définitions de l'avoir : `estAvoir` (`includes("avoir")`) vs `estAvoirDocument` (`trim() === "avoir"`). _Source : `regles-avoir.ts`, `regles-verrouillage.ts`_
-- [ ] **FAC-95** Deux arrondis au centime : `arrondiCentime` (1,005 → 1,01) vs `centimes` (1,005 → 1). RM-10. _Source : `regles-reglements.ts`, `regles-avoir.ts`_
+- [ ] **FAC-95** Deux arrondis au centime : `arrondiCentime` (1,005 → 1,01) vs `centimes` (1,005 → 1). RM-10, décidé : D-006. _Source : `regles-reglements.ts`, `regles-avoir.ts`_
 - [ ] **FAC-96** Vente de véhicule : facture **émise d'emblée** (`impayée`), client en texte libre sans fiche, TVA 20 ou 0 seulement. _Source : `app.js:15344`_
 - [ ] **FAC-97** Situation : avancement du chantier écrit **avant** la facture, sans contrôle ; PU non arrondi (4074.0710999999997) ; saisie 0 = revient au déjà facturé ; ni retenue ni rappel des situations ; `chantier_avancement_factures` jamais écrite. _Source : `app.js:13315`, schéma §2.4_
 - [ ] **FAC-98** `note_frais` numérotée `NOT-AAAA-…` faute de préfixe. _Source : schéma §10.3-5_
@@ -614,7 +614,7 @@ pour un tiers, aucun lien de partage. L'ancien `app.js` contient un **portail mo
 ### Règles métier
 
 - [ ] **ESP-10** Un client ne voit **que ses** bons (et, par interlocuteur, que les siens), sans aucun montant ni note interne — à garantir **en base** (RLS ou vue dédiée), pas par l'écran. _Source : `app.js:12213` (intention), schéma §6.5_
-- [ ] **ESP-11** Il n'y a pas de rôle client : créer un rôle, une table de rattachement compte ↔ client (et interlocuteur), des politiques, ou écarter le module. Décision à inscrire dans `DECISIONS.md`. _Source : schéma §1.4, ts §2.2_
+- [ ] **ESP-11** Il n'y a pas de rôle client : créer un rôle, une table de rattachement compte ↔ client (et interlocuteur), des politiques, ou écarter le module. Décidé : table `acces_clients` + `mes_clients()`, lecture seule, pas de rôle de membre (D-008). _Source : schéma §1.4, ts §2.2_
 
 ### Données
 
@@ -622,7 +622,7 @@ pour un tiers, aucun lien de partage. L'ancien `app.js` contient un **portail mo
 
 ### Défauts connus de l'ancienne app
 
-- [ ] **ESP-30** Le portail n'est atteignable par aucun chemin, et s'il l'était, le cloisonnement ne tiendrait que par un sélecteur libre. Ne pas reproduire tel quel. _Source : `app-1.md §4.2-7`, `app-2.md §4`_
+- [ ] **ESP-30** Le portail n'est atteignable par aucun chemin, et s'il l'était, le cloisonnement ne tiendrait que par un sélecteur libre. Ne pas reproduire tel quel (D-008). _Source : `app-1.md §4.2-7`, `app-2.md §4`_
 
 ---
 
