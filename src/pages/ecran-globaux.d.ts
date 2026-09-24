@@ -172,6 +172,7 @@ declare global {
     montantsParMetier: any;
     motifLectureSeule: any;
     multiWordMatch: any;
+    natureDuFichier: any;
     nextNumero: any;
     nextSAVNumero: any;
     nomIntervenant: any;

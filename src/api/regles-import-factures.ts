@@ -198,6 +198,56 @@ export const RACINE_VERS_DESIGNATION: Record<string, string> = {
 /** Le libellé d'une ligne fabriquée faute de fichier de lignes. */
 export const DESIGNATION_SANS_LIGNES = "Facturation (historique)";
 
+/**
+ * Ce fichier, c'est lequel des deux ?
+ *
+ * Question posée parce que l'utilisateur n'a pas à la trancher : déposer
+ * l'export des factures dans la case « lignes » le faisait accepter — il porte
+ * bien un `numero_facture` et un `montant_ht` — puis échouer sur chaque ligne.
+ * Un message d'erreur pour une case interchangeable, c'est le programme qui
+ * devrait s'en charger.
+ *
+ * On ne se fie qu'aux colonnes qui n'existent que d'un côté. `taux_tva`,
+ * `montant_tva`, `client` et `code_client` figurent dans LES DEUX exports du
+ * client : les prendre pour indices désignerait n'importe quoi.
+ */
+const MARQUEURS_ENTETES = [
+  "montant_ttc",
+  "total_ttc",
+  "date_echeance",
+  "echeance",
+  "type",
+  "type_document",
+  "fichier_pdf",
+  "pdf_origine",
+  "statut",
+];
+const MARQUEURS_LIGNES = [
+  "compte_produit",
+  "compte_comptable",
+  "compte",
+  "num_ligne",
+  "ordre",
+  "libelle_compte",
+  "designation",
+];
+
+export type NatureFichier = "entetes" | "lignes" | "indecis";
+
+export function natureDuFichier(donnees: ArrayBuffer | Uint8Array): NatureFichier {
+  const texte = decoderTexte(donnees).texte;
+  const premiere = lireCsv(texte.split(/\r?\n/, 1)[0] ?? "", separateurDe(texte))[0];
+  const noms = new Set(
+    (premiere?.champs ?? []).map((c) => c.trim().replace(/^﻿/, "").toLowerCase())
+  );
+
+  const cotéEntetes = MARQUEURS_ENTETES.filter((m) => noms.has(m)).length;
+  const cotéLignes = MARQUEURS_LIGNES.filter((m) => noms.has(m)).length;
+  if (cotéEntetes > cotéLignes) return "entetes";
+  if (cotéLignes > cotéEntetes) return "lignes";
+  return "indecis";
+}
+
 export function designationDuCompte(compte: string): string | null {
   const racine = RACINE_VERS_DESIGNATION[compte.slice(0, 3)];
   return racine ? `${racine} (historique)` : null;
@@ -404,6 +454,7 @@ function lireLignes(
 
   const parNumero = new Map<string, LigneBrute[]>();
   let sansDesignation = 0;
+  let sansLibelleNiCompte = 0;
 
   for (const l of lignes.slice(1)) {
     if (l.champs.every((c) => !c.trim())) continue;
@@ -433,22 +484,19 @@ function lireLignes(
       continue;
     }
 
+    /* Le libellé, par ordre de préférence : celui du fichier, celui que le
+       compte comptable désigne, puis un libellé neutre.
+       ── AUCUN DE CES CAS N'EST UN REJET. Un compte inconnu ou absent ne dit
+       rien sur le MONTANT, qui est la seule chose qui engage. Écarter une
+       ligne juste parce qu'on ne sait pas comment l'intituler reviendrait à
+       fausser un total pour une question d'étiquette. */
     const compte = champ(LIGNE_COMPTE).trim();
     let designation = champ(LIGNE_DESIGNATION).trim();
     if (!designation) {
       const duCompte = compte ? designationDuCompte(compte) : null;
-      if (!duCompte) {
-        rejets.push({
-          ligne: l.numero,
-          motif: compte
-            ? `Compte ${compte} inconnu : aucune désignation ne peut en être tirée, et on n'en invente pas.`
-            : "Ni désignation ni compte comptable : la ligne serait sans libellé.",
-          contenu: l.champs.join(";").slice(0, 200),
-        });
-        continue;
-      }
-      designation = duCompte;
-      sansDesignation++;
+      designation = duCompte ?? DESIGNATION_SANS_LIGNES;
+      if (duCompte) sansDesignation++;
+      else sansLibelleNiCompte++;
     }
 
     const bloc = parNumero.get(numero) ?? [];
@@ -471,6 +519,14 @@ function lireLignes(
         `${sansDesignation} ligne(s) sans libellé dans le fichier : la désignation vient du compte ` +
         `comptable (706x → « Prestations de services », 707x → « Ventes de marchandises »). ` +
         `Le compte est conservé sur chaque ligne.`,
+    });
+  }
+  if (sansLibelleNiCompte) {
+    signalements.push({
+      ligne: 1,
+      motif:
+        `${sansLibelleNiCompte} ligne(s) sans libellé ni compte comptable : intitulées ` +
+        `« ${DESIGNATION_SANS_LIGNES} ». Les montants ne changent pas.`,
     });
   }
 

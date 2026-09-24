@@ -27,6 +27,7 @@ import {
   DESIGNATION_SANS_LIGNES,
   estPieceHistorique,
   legacyDuNumero,
+  natureDuFichier,
   rapprocherClient,
   totauxDe,
   type CategorieTva,
@@ -305,6 +306,8 @@ export async function ecrireImportFactures(
 export function injecterImportFactures() {
   if (typeof window === "undefined") return;
   const w = window as unknown as Record<string, unknown>;
+  /* L'écran n'a pas à savoir lire un en-tête de CSV : il demande. */
+  w.natureDuFichier = natureDuFichier;
   w.previsualiserImportFactures = previsualiserImportFactures;
   w.ecrireImportFactures = ecrireImportFactures;
   w.supprimerBrouillonsImport = queries.supprimerBrouillonsImport;

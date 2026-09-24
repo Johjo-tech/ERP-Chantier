@@ -5187,16 +5187,34 @@ async function fermerImportFactures(){
   if(aEcrit){ await recharger('facture'); await recharger('client'); }
   renderTab();
 }
-async function choisirFichierFactures(quoi, fichier){
-  if(!fichier) return;
+/* Un seul champ, un ou deux fichiers, et c'est le programme qui reconnaît
+   lequel est lequel. Demander à l'utilisateur de ranger chaque export dans la
+   bonne case, c'est lui faire porter une question qu'une ligne d'en-tête
+   suffit à trancher — et déposer les factures dans la case « lignes » les
+   faisait toutes échouer, sur un défaut de libellé qui ne regardait personne. */
+async function choisirFichiersFactures(fichiers){
+  const liste = fichiers? Array.from(fichiers) : [];
+  if(!liste.length) return;
   const i = state.facturesImport;
-  if(quoi === 'entetes'){ i.nomE = fichier.name; i.octetsE = await fichier.arrayBuffer(); }
-  else { i.nomL = fichier.name; i.octetsL = await fichier.arrayBuffer(); }
-  i.erreur = ''; i.apercu = null;
-  /* L'aperçu part dès l'en-tête : c'est lui qui porte HT, TVA et TTC. Le
-     fichier de lignes n'ajoute que la ventilation comptable, et il peut
-     arriver après — l'aperçu se refait alors tout seul. */
-  if(i.octetsE) await relancerApercuFactures();
+  i.erreur = ''; i.apercu = null; i.enCours = true; i.progres = 'Lecture…'; renderTab();
+  try {
+    for(const f of liste){
+      const octets = await f.arrayBuffer();
+      const nature = window.natureDuFichier(octets);
+      /* « indécis » va aux factures, sauf si la place est déjà prise : c'est
+         le fichier indispensable, et le second n'est qu'un complément. */
+      if(nature === 'lignes' || (nature === 'indecis' && i.octetsE)){ i.nomL = f.name; i.octetsL = octets; }
+      else { i.nomE = f.name; i.octetsE = octets; }
+    }
+  } catch(err){
+    console.error('Import factures : fichier illisible', err);
+    i.erreur = err.message || 'fichier illisible';
+  }
+  i.enCours = false; i.progres = '';
+  /* L'aperçu part dès les factures : c'est ce fichier qui porte HT, TVA et
+     TTC. Le détail des lignes n'ajoute que la ventilation comptable, et il
+     peut arriver après — l'aperçu se refait alors tout seul. */
+  if(!i.erreur && i.octetsE) await relancerApercuFactures();
   else renderTab();
 }
 async function relancerApercuFactures(categorie){
@@ -5286,12 +5304,9 @@ function importFacturesHTML(){
     <h3>Reprendre un historique de facturation</h3>
     <p class="card-sub">Les pièces déjà émises dans votre ancien logiciel, avec leurs numéros d'origine. Le séparateur, l'encodage et les noms de colonnes sont reconnus tout seuls. Rien n'est écrit avant votre accord.</p>
     <p class="card-sub"><b>Ces pièces ne pourront plus être modifiées ni supprimées</b> une fois écrites : une facture numérotée est figée par la base. L'aperçu est le seul moment où un écart peut encore se voir.</p>
-    <div style="margin:16px 0; display:flex; flex-direction:column; gap:14px;">
-      <label><b>Les factures</b> — une ligne par pièce : numéro, date, client, HT, TVA, TTC${i.nomE? ` <span class="card-sub">— ${esc(i.nomE)}</span>`:''}<br>
-        <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('entetes', this.files[0])"></label>
-      <label><b>Le détail des lignes</b> <span class="card-sub">— facultatif</span> : le montant par compte comptable${i.nomL? ` <span class="card-sub">— ${esc(i.nomL)}</span>`:''}<br>
-        <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('lignes', this.files[0])"></label>
-      <div class="card-sub">Le second fichier n'est pas obligatoire : le premier porte déjà tous les montants. Il sert à ventiler les factures qui comptent plusieurs postes — sans lui, chacune n'en portera qu'un, pour son total.</div>
+    <div style="margin:16px 0;">
+      <input type="file" accept=".csv,.txt,text/csv" multiple onchange="choisirFichiersFactures(this.files)">
+      <div class="card-sub" style="margin-top:10px;">Déposez <b>le fichier des factures</b> — une ligne par pièce : numéro, date, client, HT, TVA, TTC. Si votre logiciel exporte aussi <b>le détail des lignes</b> par compte comptable, ajoutez-le en même temps : je reconnais tout seul lequel est lequel. Ce second fichier est facultatif — le premier porte déjà tous les montants ; il sert seulement à ventiler les factures qui comptent plusieurs postes.</div>
     </div>
     ${retour}
   </div>`;
@@ -5329,7 +5344,7 @@ function importFacturesHTML(){
     ${!i.octetsL? `<div class="wf-banner" style="margin-top:10px;">
       <div style="font-weight:700; margin-bottom:6px;">Sans le détail des lignes</div>
       <div class="card-sub" style="margin-bottom:8px;">Les montants ci-dessus sont exacts — ils viennent du fichier des factures. Chaque pièce portera un seul poste, libellé « ${esc(window.DESIGNATION_SANS_LIGNES||'Facturation (historique)')} ». Si votre logiciel sait aussi exporter le détail par compte comptable, ajoutez-le ici : l'aperçu se refera.</div>
-      <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('lignes', this.files[0])">
+      <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichiersFactures(this.files)">
     </div>`:''}
 
     ${a.incoherent? `<div class="wf-banner alerte" style="margin-top:10px;">
@@ -19012,7 +19027,7 @@ Object.assign(window, {
   annulerLectureBC,
   annulerRappel,
   apercuCouleur,
-  choisirFichierFactures,
+  choisirFichiersFactures,
   fermerImportClients,
   fermerImportFactures,
   importClientsHTML,
