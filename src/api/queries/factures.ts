@@ -32,6 +32,11 @@ import type {
   Uuid,
 } from "../types";
 import {
+  identiteEmetteur,
+  identiteManquante,
+  type IdentiteEmetteur,
+} from "../regles-emetteur";
+import {
   MODE_REGLEMENT_AVOIR,
   MODE_REGLEMENT_IMPUTATION,
   refusAvoir,
@@ -138,8 +143,15 @@ export async function createFacture(
   const statutVoulu = input.statut ?? STATUT_PAR_DEFAUT;
   const emiseDEmblee = statutVoulu !== "brouillon" && !input.numero;
 
+  /* L'identité de l'émetteur naît avec la pièce et ne bouge plus : rouvrir une
+     facture dans six mois ne doit pas lui donner l'adresse du jour. Ce que
+     l'appelant a déjà posé l'emporte — l'avoir recopie celle de la facture
+     qu'il rectifie. */
+  const societe = await getOne("societes", societeId);
+
   const facture = await insertOne("factures", {
     ...input,
+    ...identiteManquante(input, identiteEmetteur(societe)),
     statut: emiseDEmblee ? "brouillon" : input.statut,
     societe_id: societeId,
   });
@@ -197,10 +209,21 @@ export async function emettreFacture(
     throw new Error(`Facture déjà émise sous le numéro ${facture.numero}.`);
   }
 
+  /* Un brouillon né avant que l'identité soit figée n'en porte pas. L'émission
+     est le dernier moment où on peut la lui donner : `factures_entete_figee`
+     ne laisse l'en-tête libre que tant que le numéro est vide. */
+  const identite = facture.emetteur_nom
+    ? {}
+    : identiteManquante(
+        facture,
+        identiteEmetteur(await getOne("societes", facture.societe_id))
+      );
+
   /* Le numéro naît de ce passage même : le trigger le pose en voyant le statut
      quitter « brouillon ». La ligne rendue par PostgREST le porte déjà — il n'y
      a rien à relire ensuite. */
   return updateFacture(id, {
+    ...identite,
     ...corrections,
     statut: "impayée",
   });
@@ -218,6 +241,21 @@ export function deleteFacture(id: Uuid) {
  * `chargeEN16931` à l'export). Le numéro naît du déclencheur, dans la série
  * « AV » : la base tient la continuité des deux séries, pas l'appelant.
  */
+/** Les neuf colonnes telles que la pièce les porte — vides comprises. */
+function identiteEmetteurFigee(facture: Facture): IdentiteEmetteur {
+  return {
+    emetteur_nom: facture.emetteur_nom,
+    emetteur_adresse: facture.emetteur_adresse,
+    emetteur_code_postal: facture.emetteur_code_postal,
+    emetteur_ville: facture.emetteur_ville,
+    emetteur_siret: facture.emetteur_siret,
+    emetteur_siren: facture.emetteur_siren,
+    emetteur_tva_intracom: facture.emetteur_tva_intracom,
+    emetteur_pays_code: facture.emetteur_pays_code,
+    emetteur_iban: facture.emetteur_iban,
+  };
+}
+
 export async function createAvoir(
   societeId: Uuid,
   factureId: Uuid,
@@ -267,6 +305,10 @@ export async function createAvoir(
       precision_commune: facture.precision_commune,
       ancien_locataire: facture.ancien_locataire,
       adresse_locataire: facture.adresse_locataire,
+      /* L'avoir est le miroir de sa facture : il doit porter l'émetteur qu'elle
+         portait, même si la société a déménagé depuis. `createFacture` comble
+         d'après les réglages ce qu'une facture reprise n'aurait pas. */
+      ...identiteEmetteurFigee(facture),
       ...overrides,
     },
     facture.lignes.map(({ id, cree_le, facture_id, ...ligne }) => ligne)
