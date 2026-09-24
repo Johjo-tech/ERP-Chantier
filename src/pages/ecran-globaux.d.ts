@@ -71,6 +71,7 @@ declare global {
     chiffrerTravailSupplementaire: any;
     choisirSociete: any;
     cleRapprochement: any;
+    cleSiret: any;
     cloturerGratuit: any;
     completudeClient: any;
     completudeSociete: any;
@@ -97,6 +98,7 @@ declare global {
     docx: any;
     dossierSalarie: any;
     echecsDeLecture: any;
+    ecrireImportClients: any;
     emettreFacture: any;
     enregistrerArticle: any;
     entreesDuDomaine: any;
@@ -138,6 +140,7 @@ declare global {
     lignesDocumentDirecteur: any;
     lignesHaystack: any;
     lireExportArticles: any;
+    lireExportClients: any;
     listCompteurs: any;
     listTachesBonCommande: any;
     listTravauxSupplementaires: any;
@@ -184,6 +187,7 @@ declare global {
     placerTravauxDansChapitres: any;
     preparerPieceJointe: any;
     previsualiserImport: any;
+    previsualiserImportClients: any;
     prochainActeur: any;
     prochainePosition: any;
     prochaineVisiteSuggeree: any;

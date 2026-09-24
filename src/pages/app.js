@@ -16271,8 +16271,18 @@ async function saveSalarie(){
   showToast(creation? 'Salarié créé.' : 'Salarié modifié.', 'success');
 }
 function renderClients(){
+  /* L'import prend l'écran entier : il a ses propres étapes, et laisser la
+     liste dessous inviterait à cliquer ailleurs au milieu d'un aperçu. */
+  if(state.clientsImport) return `
+    <div class="page-head"><h1>Importer des clients</h1></div>
+    ${importClientsHTML()}
+  `;
+  const peutImporter = !window.autorise
+    || (window.autorise('clients','creer') && window.autorise('clients','modifier'));
   return `
-    <div class="page-head"><h1>Clients</h1>${state.formOpen.client? '' : '<button class="btn primary" onclick="openForm(\'client\')">+ Nouveau client</button>'}</div>
+    <div class="page-head"><h1>Clients</h1><div style="display:flex; gap:8px;">${state.formOpen.client? '' : `
+      ${peutImporter? '<button class="btn" onclick="ouvrirImportClients()">📥 Importer un fichier</button>':''}
+      <button class="btn primary" onclick="openForm('client')">+ Nouveau client</button>`}</div></div>
     ${renderClientsSection()}
   `;
 }
@@ -16282,6 +16292,171 @@ function renderClientsSection(){
     <div id="formZoneClient">${state.formOpen.client? clientForm() : ''}</div>
     <div id="liste-client">${listeClientsHTML()}</div>
   `;
+}
+
+/* ---------- Import de clients ----------
+
+   Même circuit que l'import du catalogue : choisir un fichier, voir ce qui
+   sera écrit, puis accepter. Rien n'atteint la base avant le clic final.
+
+   Une différence de fond : les clients vivent EN MÉMOIRE (`state.clients`),
+   là où les articles sont relus à chaque écran. D'où le `recharger('client')`
+   à la fermeture — sans lui la base serait juste et la liste mentirait. */
+function ouvrirImportClients(){
+  state.clientsImport = { etape:'fichier', nom:'', rapport:null, apercu:null, resultat:null, enCours:false, progres:'', erreur:'' };
+  renderTab();
+}
+async function fermerImportClients(){
+  const aEcrit = !!(state.clientsImport && state.clientsImport.resultat);
+  state.clientsImport = null;
+  if(aEcrit) await recharger('client');
+  renderTab();
+}
+async function lireFichierClients(fichier){
+  if(!fichier) return;
+  const i = state.clientsImport;
+  i.nom = fichier.name; i.enCours = true; i.erreur = ''; i.progres = 'Lecture du fichier…';
+  renderTab();
+  try {
+    const octets = await fichier.arrayBuffer();
+    const rapport = window.lireExportClients(octets);
+    i.rapport = rapport;
+    /* L'avancement se pose par `textContent` et JAMAIS par `renderTab()` :
+       redessiner reconstruirait l'`<input type="file">` et perdrait le
+       fichier choisi. */
+    const zone = () => document.getElementById('importClientsProgres');
+    i.progres = 'Annuaire des entreprises…';
+    const z = zone(); if(z) z.textContent = i.progres;
+    i.apercu = rapport.clients.length
+      ? await window.previsualiserImportClients(rapport, (fait, total)=>{
+          i.progres = `Annuaire des entreprises : ${fait} / ${total}`;
+          const e = zone(); if(e) e.textContent = i.progres;
+        })
+      : { aCreer:0, aMettreAJour:0, ambigus:[], annuaire:{interroges:0,repondus:0,muets:0,quota:false}, corrections:[], cadres:{}, lignes:[] };
+    i.etape = 'apercu';
+  } catch(err){
+    console.error('Import clients : lecture impossible', err);
+    i.erreur = err.message || 'fichier illisible';
+  }
+  i.enCours = false; i.progres = '';
+  renderTab();
+}
+async function lancerImportClients(){
+  const i = state.clientsImport;
+  i.enCours = true; i.progres = 'Écriture…'; renderTab();
+  try {
+    i.resultat = await window.ecrireImportClients(i.apercu);
+    i.etape = 'termine';
+  } catch(err){
+    console.error('Import clients : écriture refusée', err);
+    i.erreur = err.message || 'import refusé';
+  }
+  i.enCours = false; i.progres = '';
+  renderTab();
+}
+function telechargerRapportClients(){
+  const i = state.clientsImport;
+  const lignes = [...i.rapport.rejets];
+  i.rapport.signalements.forEach(sg => lignes.push({ ligne:sg.ligne, motif:sg.motif,
+    contenu: sg.code ? 'client '+sg.code : 'en-tête du fichier' }));
+  (i.apercu? i.apercu.corrections : []).forEach(c => lignes.push({ ligne:0,
+    motif:`Annuaire — ${c.champ} : « ${c.avant} » devient « ${c.apres} »`, contenu:'client '+c.nom }));
+  lignes.sort((a,b)=>a.ligne-b.ligne);
+  const csv = window.rapportRejetsCsv(lignes);
+  const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
+  telechargerBlob(blob, 'import-clients-rapport');
+}
+function importClientsHTML(){
+  const i = state.clientsImport;
+  const retour = `<button class="btn" onclick="fermerImportClients()">Retour</button>`;
+
+  if(i.erreur) return `<div class="form-panel">
+    <div class="wf-banner alerte"><b>Import impossible</b> — ${esc(i.erreur)}</div>
+    <div style="margin-top:14px;">${retour}</div>
+  </div>`;
+
+  if(i.enCours) return `<div class="form-panel">
+    <div class="empty">${esc(i.nom||'votre fichier')}<br><span id="importClientsProgres">${esc(i.progres||'Traitement…')}</span></div>
+  </div>`;
+
+  if(i.etape === 'fichier') return `<div class="form-panel">
+    <h3>Importer des clients</h3>
+    <p class="card-sub">Fichier exporté d'un logiciel de gestion, colonnes séparées par des points-virgules. L'encodage est reconnu tout seul et les colonnes le sont par leur nom — un export partiel passe. Chaque SIRET est vérifié <b>avant</b> tout appel à l'annuaire, puis les fiches sont complétées auprès de l'annuaire des entreprises. Rien n'est écrit avant votre accord.</p>
+    <div style="margin:16px 0;">
+      <input type="file" accept=".csv,.txt,text/csv" onchange="lireFichierClients(this.files[0])">
+    </div>
+    ${retour}
+  </div>`;
+
+  if(i.etape === 'apercu'){
+    const r = i.rapport, a = i.apercu;
+    const an = a.annuaire;
+    const cadres = Object.keys(a.cadres).map(code=>{
+      const lib = (window.CADRES_FACTURATION||[]).find(c=>c.code===code);
+      return `<li><b>${a.cadres[code].compte}</b> ${esc(lib? lib.libelle : code)} — ${esc(a.cadres[code].noms.slice(0,6).join(', '))}${a.cadres[code].noms.length>6? '…':''}</li>`;
+    }).join('');
+    return `<div class="form-panel">
+      <h3>${esc(i.nom)}</h3>
+      <div style="display:flex; gap:18px; flex-wrap:wrap; margin:14px 0;">
+        <div><div class="hero-stat-value">${a.aCreer}</div><div class="card-sub">à créer</div></div>
+        <div><div class="hero-stat-value">${a.aMettreAJour}</div><div class="card-sub">à mettre à jour</div></div>
+        <div><div class="hero-stat-value" style="color:${r.rejets.length?'var(--danger)':'inherit'};">${r.rejets.length}</div><div class="card-sub">rejetés</div></div>
+        <div><div class="hero-stat-value" style="color:${a.ambigus.length?'#C24E00':'inherit'};">${a.ambigus.length}</div><div class="card-sub">ambigus</div></div>
+        <div><div class="hero-stat-value">${r.signalements.length}</div><div class="card-sub">signalés</div></div>
+      </div>
+
+      ${an.quota? `<div class="wf-banner alerte"><b>L'annuaire a refusé des requêtes</b> — ${an.muets} fiche${an.muets>1?'s n\'ont':' n\'a'} pas été complétée${an.muets>1?'s':''}. Vous pouvez importer quand même, ou réessayer dans un instant.</div>`:''}
+
+      <div class="card-sub" style="margin:10px 0;">Annuaire : ${an.interroges} interrogé${an.interroges>1?'s':''}, ${an.repondus} répondu${an.repondus>1?'s':''}, ${an.muets} muet${an.muets>1?'s':''}.</div>
+
+      ${a.corrections.length? `<div class="wf-banner" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Ce que l'annuaire corrige</div>
+        <ul style="margin:0; padding-left:18px;">${a.corrections.slice(0,10).map(c=>`<li>${esc(c.nom)} — ${esc(c.champ)} : « ${esc(c.avant)} » devient « ${esc(c.apres)} »</li>`).join('')}</ul>
+        ${a.corrections.length>10? `<div class="card-sub" style="margin-top:6px;">…et ${a.corrections.length-10} autres, dans le rapport.</div>`:''}
+      </div>`:''}
+
+      ${cadres? `<div class="wf-banner" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Types de clients déduits</div>
+        <ul style="margin:0; padding-left:18px;">${cadres}</ul>
+      </div>`:''}
+
+      ${a.ambigus.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Laissés de côté — plusieurs clients portent déjà ce nom</div>
+        <ul style="margin:0; padding-left:18px;">${a.ambigus.map(x=>`<li>${esc(x.nom)} — déjà : ${esc(x.homonymes.join(', '))}</li>`).join('')}</ul>
+      </div>`:''}
+
+      ${r.rejets.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Lignes écartées</div>
+        <ul style="margin:0; padding-left:18px;">${r.rejets.slice(0,8).map(x=>`<li>Ligne ${x.ligne} — ${esc(x.motif)}</li>`).join('')}</ul>
+        ${r.rejets.length>8? `<div class="card-sub" style="margin-top:6px;">…et ${r.rejets.length-8} autres, dans le rapport.</div>`:''}
+      </div>`:''}
+
+      ${r.signalements.length? `<div class="wf-banner" style="margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Décidé à la place du fichier</div>
+        <ul style="margin:0; padding-left:18px;">${r.signalements.slice(0,6).map(x=>`<li>Ligne ${x.ligne}${x.code? ' ('+esc(x.code)+')':''} — ${esc(x.motif)}</li>`).join('')}</ul>
+        ${r.signalements.length>6? `<div class="card-sub" style="margin-top:6px;">…et ${r.signalements.length-6} autres.</div>`:''}
+      </div>`:''}
+
+      <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+        <button class="btn primary" ${(a.aCreer+a.aMettreAJour)?'':'disabled'} onclick="lancerImportClients()">Importer ${a.aCreer+a.aMettreAJour} client${(a.aCreer+a.aMettreAJour)>1?'s':''}</button>
+        <button class="btn" onclick="telechargerRapportClients()">📄 Rapport</button>
+        ${retour}
+      </div>
+    </div>`;
+  }
+
+  const res = i.resultat || { crees:0, misAJour:0, echecs:[] };
+  return `<div class="form-panel">
+    <div class="wf-banner ok"><b>Import terminé</b> — ${res.crees} créé${res.crees>1?'s':''}, ${res.misAJour} mis à jour.</div>
+    ${res.echecs.length? `<div class="wf-banner alerte" style="margin-top:10px;">
+      <div style="font-weight:700;">${res.echecs.length} refus</div>
+      <ul style="margin:0; padding-left:18px;">${res.echecs.map(e=>`<li>${esc(e.noms.slice(0,4).join(', '))}${e.noms.length>4?'…':''} — ${esc(e.motif)}</li>`).join('')}</ul>
+    </div>`:''}
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn" onclick="telechargerRapportClients()">📄 Rapport</button>
+      ${retour}
+    </div>
+  </div>`;
 }
 const listeClientsHTML = declarerListing('client',
   ()=> state.clients.filter(c=>c.societeId===state.societeId),
@@ -18600,7 +18775,13 @@ Object.assign(window, {
   annulerLectureBC,
   annulerRappel,
   apercuCouleur,
+  fermerImportClients,
+  importClientsHTML,
+  lancerImportClients,
+  lireFichierClients,
+  ouvrirImportClients,
   paletteDeLaSociete,
+  telechargerRapportClients,
   viderFiltragesDifferes,
   valeurChamp,
   appartenanceTache,

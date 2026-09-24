@@ -64,7 +64,7 @@ export type ResultatEntreprise =
   | { type: "nom"; etablissements: EtablissementTrouve[] }
   | {
       type: "erreur";
-      code: "NON_TROUVE" | "ETABLISSEMENT_FERME" | "API";
+      code: "NON_TROUVE" | "ETABLISSEMENT_FERME" | "API" | "QUOTA";
       message: string;
     };
 
@@ -192,17 +192,141 @@ function identiteEntreprise(siren: string, e: EntrepriseApi | undefined) {
 
 const BASE = "https://recherche-entreprises.api.gouv.fr/search";
 
-async function interroger(query: string, perPage: number): Promise<EntrepriseApi[] | null> {
-  try {
-    const rep = await fetch(`${BASE}?q=${encodeURIComponent(query)}&page=1&per_page=${perPage}`, {
-      headers: { Accept: "application/json" },
-    });
-    if (!rep.ok) return null;
-    const json = (await rep.json()) as { results?: EntrepriseApi[] };
-    return json.results ?? [];
-  } catch {
-    return null;
+/* ---------- Tenir le débit, et savoir pourquoi on a échoué ----------
+
+   L'annuaire publie 7 appels par seconde et par IP, et se réserve d'abaisser
+   cette limite. Ce module n'en tenait aucun compte : `if (!rep.ok) return null`
+   confondait un quota dépassé avec une panne réseau, et l'utilisateur partait
+   chercher du côté de sa connexion.
+
+   La file vit ICI, et pas dans l'import qui l'a rendue nécessaire, pour une
+   raison de fond : le quota est par IP, et le formulaire client partage cette
+   IP. Deux files séparées ne borneraient rien. Et `rep.status` n'est lisible
+   que dans le module qui possède le `fetch`. */
+
+/** Sous le plafond de 7 : la limite se franchit avec la taille d'un fichier,
+ *  pas avec un changement de code, et la franchir coûte une erreur muette. */
+const APPELS_PAR_SECONDE = 6;
+const ESPACEMENT_MS = Math.ceil(1000 / APPELS_PAR_SECONDE);
+/** En vol simultanément : une API lente ne doit pas ouvrir 39 connexions. */
+const CONCURRENCE_MAX = 3;
+const TENTATIVES_MAX = 3;
+/** Attente par défaut quand l'annuaire ne dit pas `Retry-After`. Doublée. */
+const ATTENTE_QUOTA_MS = 1000;
+/** Le formulaire redemande la même saisie à chaque reprise de focus, et un
+ *  fichier porte deux fois le même numéro. Succès seulement : mettre un échec
+ *  en cache figerait une panne passagère pour toute la session. */
+const CACHE_MS = 5 * 60 * 1000;
+const CACHE_MAX = 500;
+
+const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+let dernierDepart = 0;
+let enVol = 0;
+const attente: (() => void)[] = [];
+
+/**
+ * Espace les départs et borne les connexions.
+ *
+ * Le seau percé (`dernierDepart`) borne le DÉBIT quelle que soit la
+ * concurrence — ce qu'un simple sémaphore ne fait pas : trois appels
+ * simultanés mais instantanés dépasseraient le plafond sans qu'il s'en
+ * aperçoive.
+ */
+async function place(): Promise<void> {
+  if (enVol >= CONCURRENCE_MAX) await new Promise<void>((r) => attente.push(r));
+  enVol++;
+  const maintenant = Date.now();
+  const tot = Math.max(0, dernierDepart + ESPACEMENT_MS - maintenant);
+  dernierDepart = maintenant + tot;
+  if (tot > 0) await dormir(tot);
+}
+
+function liberer(): void {
+  enVol--;
+  attente.shift()?.();
+}
+
+const cache = new Map<string, { a: number; v: EntrepriseApi[] }>();
+
+/** Secondes, ou date HTTP : les deux formes existent dans la nature. */
+function attenteDemandee(rep: Response): number | null {
+  const brut = rep.headers.get("retry-after");
+  if (!brut) return null;
+  const secondes = Number(brut.trim());
+  if (Number.isFinite(secondes) && secondes >= 0) return secondes * 1000;
+  const date = Date.parse(brut);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+export type RaisonEchec = "quota" | "reseau" | "api";
+
+async function interroger(
+  query: string,
+  perPage: number
+): Promise<{ ok: true; results: EntrepriseApi[] } | { ok: false; raison: RaisonEchec }> {
+  const cle = `${query}|${perPage}`;
+  const garde = cache.get(cle);
+  if (garde && Date.now() - garde.a < CACHE_MS) return { ok: true, results: garde.v };
+
+  let attenteQuota = ATTENTE_QUOTA_MS;
+
+  for (let tentative = 1; tentative <= TENTATIVES_MAX; tentative++) {
+    await place();
+    try {
+      const rep = await fetch(`${BASE}?q=${encodeURIComponent(query)}&page=1&per_page=${perPage}`, {
+        headers: { Accept: "application/json" },
+      });
+
+      if (rep.status === 429) {
+        const patienter = attenteDemandee(rep) ?? attenteQuota;
+        attenteQuota *= 2;
+        if (tentative < TENTATIVES_MAX) {
+          await dormir(patienter);
+          continue;
+        }
+        return { ok: false, raison: "quota" };
+      }
+
+      if (rep.status >= 500) {
+        if (tentative < TENTATIVES_MAX) {
+          await dormir(attenteQuota);
+          attenteQuota *= 2;
+          continue;
+        }
+        return { ok: false, raison: "api" };
+      }
+
+      if (!rep.ok) {
+        console.warn(`Annuaire des entreprises : réponse ${rep.status} pour « ${query} ».`);
+        return { ok: false, raison: "api" };
+      }
+
+      const json = (await rep.json()) as { results?: EntrepriseApi[] };
+      const results = json.results ?? [];
+      if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
+      cache.set(cle, { a: Date.now(), v: results });
+      return { ok: true, results };
+    } catch (err) {
+      /* Le `catch {}` muet d'origine avalait tout : réseau coupé, CORS, DNS.
+         Tracer coûte une ligne et fait gagner une heure de diagnostic. */
+      console.warn(`Annuaire des entreprises injoignable pour « ${query} » :`, err);
+      return { ok: false, raison: "reseau" };
+    } finally {
+      liberer();
+    }
   }
+  return { ok: false, raison: "quota" };
+}
+
+/** Le message d'un échec, selon sa cause. Un quota n'est pas une panne. */
+function messageEchec(raison: RaisonEchec): { code: "QUOTA" | "API"; message: string } {
+  return raison === "quota"
+    ? {
+        code: "QUOTA",
+        message: "Annuaire saturé (trop de requêtes) : réessayez dans un instant.",
+      }
+    : { code: "API", message: "Annuaire des entreprises injoignable" };
 }
 
 /**
@@ -220,11 +344,9 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
 
   // Recherche par nom : on rend simplement les établissements correspondants
   if (!estNumero) {
-    const results = await interroger(brut, 5);
-    if (results === null) {
-      return { type: "erreur", code: "API", message: "Annuaire des entreprises injoignable" };
-    }
-    const etablissements = results
+    const rep = await interroger(brut, 5);
+    if (!rep.ok) return { type: "erreur", ...messageEchec(rep.raison) };
+    const etablissements = rep.results
       .filter((e) => e.siege)
       .map((e) =>
         mapper(e.siege!, e.siren ?? "", e.nom_complet ?? "", true, e.nature_juridique ?? "", e)
@@ -234,12 +356,10 @@ export async function rechercherEntreprise(saisie: string): Promise<ResultatEntr
       : { type: "erreur", code: "NON_TROUVE", message: "Aucun résultat" };
   }
 
-  const results = await interroger(chiffres, 1);
-  if (results === null) {
-    return { type: "erreur", code: "API", message: "Annuaire des entreprises injoignable" };
-  }
+  const rep = await interroger(chiffres, 1);
+  if (!rep.ok) return { type: "erreur", ...messageEchec(rep.raison) };
 
-  const ent = results[0];
+  const ent = rep.results[0];
   if (!ent) return { type: "erreur", code: "NON_TROUVE", message: "Entreprise introuvable" };
 
   const siren = ent.siren ?? "";
