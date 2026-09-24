@@ -6458,6 +6458,21 @@ async function confirmerImputation(){
   }
 }
 function reglementStatutFacture(f){
+  /* Une pièce reprise d'un exercice clos n'a AUCUN règlement en base : ils sont
+     restés dans l'ancien logiciel, et personne ne les ressaisira un par un.
+     Or ce calcul ne lit que les règlements — jamais `statut`. Sans cette règle,
+     l'écran annonçait 362 792 € de créances ouvertes sur des factures encaissées
+     il y a deux ans, et le statut « payée » posé à l'import ne servait à rien.
+     On ne fabrique pas de règlement pour autant : inventer une date et un mode
+     de paiement serait écrire une contrevérité dans une pièce comptable. Le
+     libellé dit donc ce qu'on sait, et seulement cela. */
+  if(window.estPieceHistorique && window.estPieceHistorique(f.legacyId) && f.statut === 'payée'){
+    const ttcH = computeDocTotals(f).ttc;
+    const estAv = window.estAvoir && window.estAvoir(f.typeDocument);
+    return estAv
+      ? { cle:'impute', label:'Imputé (reprise)', cls:'success', paye:Math.abs(ttcH), reste:0, ttc:ttcH, avoir:true }
+      : { cle:'reglee', label:'Réglée (reprise)', cls:'success', paye:ttcH, reste:0, ttc:ttcH };
+  }
   /* Un avoir ne se règle pas, il s'impute — et il faut le mesurer avec SA règle.
      Mesuré avec celle des factures, `resteAPayer` calculait -682, le ramenait à
      0, et l'écran annonçait « RÉGLÉE, reste 0,00 € » sur un avoir dont la
