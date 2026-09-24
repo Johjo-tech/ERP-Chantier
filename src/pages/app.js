@@ -10596,6 +10596,14 @@ function renderReglements(embedded){
     </div>
     ${vue==='factures' ? renderFacturesParReglement() : vue==='tous' ? renderTousLesReglements() : `
       ${barreRecherche('reglementClient', 'Rechercher : client, n° de facture…')}
+      ${/* Le même filtre que dans « Par facture », et le même état : passer
+            d'une vue à l'autre garde la question posée. Il manquait ici, sur la
+            vue d'ARRIVÉE, ce qui faisait croire que l'onglet entier ne savait
+            pas trier les impayés. */''}
+      <div style="display:flex; gap:10px; margin:0 0 14px; flex-wrap:wrap; align-items:center;">
+        ${selectEtatReglementHTML()}
+        ${state.reglementEtatFiltre? `<button class="btn small ghost" onclick="majEtatReglement('')" title="Tout réafficher">✕ Effacer</button>` : ''}
+      </div>
       <div id="liste-reglementClient">${listeDossiersReglementsHTML()}</div>`}
   `;
 }
@@ -10735,6 +10743,32 @@ const ETATS_REGLEMENT = [
   ['en_retard', 'En retard'],
 ];
 
+/**
+ * Cette facture répond-elle à l'état demandé ?
+ *
+ * Une seule définition pour les DEUX vues de l'onglet — « Par client » et
+ * « Par facture ». Elles posaient la même question, et seule la seconde savait
+ * la poser : on arrivait sur la première, qui n'avait qu'une recherche, et le
+ * filtre paraissait absent de l'écran entier.
+ *
+ * Les avoirs ne répondent à aucun de ces états : ils ne se règlent pas, ils
+ * s'imputent, et leur « reste » est un crédit disponible et non une dette.
+ */
+function factureRepondALEtat(f, etat){
+  if(!etat) return true;
+  if(estAvoirDoc(f)) return false;
+  const e = etatReglementFacture(f);
+  return etat === 'en_retard' ? e.enRetard : e.cle === etat;
+}
+
+/** La liste déroulante des états, identique dans les deux vues. */
+function selectEtatReglementHTML(){
+  const etat = state.reglementEtatFiltre || '';
+  return `<select style="width:auto; min-width:210px;" onchange="majEtatReglement(this.value)">`
+    + ETATS_REGLEMENT.map(([k,l])=>`<option value="${k}" ${k===etat?'selected':''}>${l}</option>`).join('')
+    + `</select>`;
+}
+
 const TRIS_REGLEMENT = [
   ['retard', 'Les plus en retard d\'abord'],
   ['reste', 'Reste dû décroissant'],
@@ -10762,7 +10796,7 @@ function facturesParEtatReglement(){
     .filter(f => !du || terme(f) >= du)
     .filter(f => !au || terme(f) <= au)
     .map(f => ({ f, e: etatReglementFacture(f) }))
-    .filter(({e}) => !etat || (etat === 'en_retard' ? e.enRetard : e.cle === etat));
+    .filter(({f}) => factureRepondALEtat(f, etat));
 
   const comparateurs = {
     retard:   (a, b) => (b.e.enRetard - a.e.enRetard) || (b.e.jours - a.e.jours),
@@ -10801,7 +10835,7 @@ function renderFacturesParReglement(){
 
   return `
     <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
-      <select style="width:auto; min-width:210px;" onchange="majEtatReglement(this.value)">${opt(ETATS_REGLEMENT, etat)}</select>
+      ${selectEtatReglementHTML()}
       <select style="width:auto; min-width:200px;" onchange="majFiltreFactureReglement('client', this.value)">${optionsClientsFactureReglement(state.reglementClientFiltre||'')}</select>
       <label class="card-sub" style="margin:0;" title="Échéance à partir du">Échéance du <input type="date" style="width:auto;" value="${esc(state.reglementDuFiltre||'')}" onchange="majFiltreFactureReglement('du', this.value)"></label>
       <label class="card-sub" style="margin:0;" title="Échéance jusqu'au">au <input type="date" style="width:auto;" value="${esc(state.reglementAuFiltre||'')}" onchange="majFiltreFactureReglement('au', this.value)"></label>
@@ -10882,8 +10916,16 @@ function facturesDesReglements(){
 
 const listeDossiersReglementsHTML = declarerListing('reglementClient',
   ()=> {
+    /* Le dossier ne garde que les factures qui répondent à l'état demandé, et
+       le client disparaît s'il n'en a plus aucune. Filtrer seulement la liste
+       des clients, en laissant leurs totaux inchangés, aurait affiché « 2 200 €
+       dû » sous un filtre « Réglées » — le compte et le montant doivent sortir
+       de la même liste que celle qu'on montre. */
+    const etat = state.reglementEtatFiltre || '';
     const groups = {};
-    facturesDesReglements().forEach(f=>{ (groups[f.client] = groups[f.client] || []).push(f); });
+    facturesDesReglements()
+      .filter(f => factureRepondALEtat(f, etat))
+      .forEach(f=>{ (groups[f.client] = groups[f.client] || []).push(f); });
     return Object.keys(groups).sort().map(nom=>({ nom, factures: groups[nom] }));
   },
   list => list.map(({nom, factures: facturesDuClient})=>{
