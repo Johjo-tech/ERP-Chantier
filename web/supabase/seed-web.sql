@@ -56,6 +56,13 @@ begin
     on conflict (profile_id, societe_id) do nothing;
   end loop;
 
+  -- `amorcer_premier_admin` fait du tout premier profil créé l'admin de TOUTES
+  -- les sociétés (amorçage d'une base vide). Ici ce serait admin.alpha dans
+  -- BETA, et l'isolement entre sociétés ne se prouverait plus : on retire ce
+  -- rattachement que personne n'a demandé.
+  delete from public.membres_societe
+  where profile_id = 'a1000000-0000-0000-0000-000000000001' and societe_id = v_beta;
+
   -- ALPHA : trois clients, deux chantiers, deux devis multi-TVA.
   insert into public.clients (id, societe_id, nom, adresse, code_postal, ville, email, telephone)
   values
@@ -69,6 +76,12 @@ begin
     ('a3000000-0000-0000-0000-000000000001', v_alpha, 'Réhabilitation bât. C', 'a2000000-0000-0000-0000-000000000001', 'OPAC du Rhône', '14 rue Garibaldi', '69003', 'Lyon', 'Rénovation', '2026-09-01', '2026-12-18'),
     ('a3000000-0000-0000-0000-000000000002', v_alpha, 'Salle de bains Durand', 'a2000000-0000-0000-0000-000000000002', 'Mme Durand', '5 impasse des Lilas', '69100', 'Villeurbanne', 'Particulier', '2026-10-05', null)
   on conflict (id) do nothing;
+
+  -- Le terrain ne voit que les chantiers où il est affecté (est_affecte_au_chantier).
+  insert into public.chantier_affectations (chantier_id, profile_id, societe_id)
+  values ('a3000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000004', v_alpha),
+         ('a3000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000006', v_alpha)
+  on conflict do nothing;
 
   insert into public.devis (id, societe_id, numero, client_id, client_nom, chantier_id, date, remise_pourcentage, statut)
   values
