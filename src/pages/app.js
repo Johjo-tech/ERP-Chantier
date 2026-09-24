@@ -16539,6 +16539,17 @@ async function saveSalarie(){
     absences: e.absences || [] };
   const r = await window.stSet('salarie:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
+
+  /* L'identifiant que la BASE a attribué, et non celui que l'écran a fabriqué.
+     `uid()` produit du base36 ; le pont le range dans `legacy_id` et laisse
+     Postgres générer la clé primaire. Or les trois écritures filles qui suivent
+     — fiche conducteur, habilitations, visite d'embauche — visent des colonnes
+     `salarie_id uuid not null`, qui refusaient le base36 en 22P02. Sur une
+     fiche NEUVE, la visite d'embauche n'entrait donc jamais au registre, le
+     déclencheur ne posait jamais les deux dates médicales, et la case
+     « conducteur de travaux » restait sans effet. */
+  let reel = window.uuidDeLaCle('salarie:'+id) || id;
+  obj.id = reel;
   /* La fiche enregistrée devient la fiche en cours. Sans cela, `state.editing`
      reste le clone pris à l'ouverture — vide sur une création — et le moindre
      redessin repeindrait le formulaire à blanc sous les yeux de qui vient de le
@@ -16548,6 +16559,24 @@ async function saveSalarie(){
   /* Le salarié doit d'abord entrer dans `state.salaries` : `chargerVisitesRh`
      y prend les identifiants dont il interroge le registre. */
   await recharger('salarie');
+
+  /* Repli, si le cache du pont n'a rien : la ligne relue porte le base36 dans
+     `legacyId`, ce qui permet de retrouver son uuid. On ne l'utilise qu'en
+     second, parce qu'il suppose que le rechargement a réussi — il conserve la
+     valeur précédente en cas d'échec — là où le cache est toujours juste. */
+  if(reel === id){
+    const relu = state.salaries.find(s=>s.legacyId === id);
+    if(relu && relu.id){ reel = relu.id; obj.id = reel; state.editing.id = reel; }
+  }
+  /* Aucun des deux n'a répondu : les lignes filles seraient refusées en 22P02.
+     On ne dépose rien, on garde le formulaire ouvert avec ce qui y est saisi,
+     et on le DIT — perdre une visite d'embauche en silence est exactement ce
+     que ce correctif répare. */
+  if(creation && reel === id){
+    showToast("Salarié enregistré. Ses habilitations et sa visite n'ont pas pu être rattachées : rouvrez la fiche pour les saisir.");
+    state.editing.id = id;
+    return;
+  }
 
   /* APRÈS l'enregistrement du salarié, jamais avant : la fiche conducteur
      porte `salarie_id` en clé étrangère, et la créer d'abord échouerait sur
@@ -16560,12 +16589,12 @@ async function saveSalarie(){
   } else {
     await recharger('conducteur');
   }
-  await deposerHabilitationsEnAttente(id);
-  await deposerVisitesEnAttente(id);
+  await deposerHabilitationsEnAttente(reel);
+  await deposerVisitesEnAttente(reel);
   /* Ce qui n'a pas pu être déposé garde le formulaire ouvert : refermer
      ferait disparaître les pièces choisies sans que personne ne le voie. */
   if((state.editing.habilitationsAJoindre||[]).length || (state.editing.visitesAJoindre||[]).length){
-    state.editing.id = id;
+    state.editing.id = reel;
     rafraichirZoneHabilitations();
     rafraichirZoneVisites();
     return;

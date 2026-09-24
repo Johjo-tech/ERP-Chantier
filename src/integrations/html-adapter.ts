@@ -1960,6 +1960,23 @@ export async function stSet(
 }
 
 /** Retrouve l'uuid d'une ligne à partir de son identifiant hérité. */
+/**
+ * L'uuid que la base a réellement attribué à une clé d'écran.
+ *
+ * L'écran fabrique ses identifiants en base36 (`uid()`), et le pont les range
+ * dans `legacy_id` en laissant Postgres générer la vraie clé primaire. Celle-ci
+ * est connue dès l'upsert — `stSet` la met dans `uuidParCle` — mais rien ne la
+ * rendait lisible : l'écran continuait donc de manipuler son base36 et
+ * l'envoyait à des colonnes `uuid not null`, qui le refusaient.
+ *
+ * Lecture pure, sans aller-retour réseau : la valeur est déjà là. Le cache est
+ * purgé au changement de société (`viderCache`) et ligne à ligne par
+ * `stDelete`, donc elle ne peut pas être périmée.
+ */
+export function uuidDeLaCle(cle: string): Uuid | null {
+  return uuidParCle.get(cle) ?? null;
+}
+
 async function chercherUuid(table: TableName, legacyId: string): Promise<Uuid | null> {
   if (!legacyId) return null;
   const { data } = await dyn()
@@ -2358,6 +2375,9 @@ export function injectGlobalFunctions() {
   w.oublierEchecsDeLecture = oublierEchecsDeLecture;
   w.stDelete = stDelete;
   w.stListKeys = stListKeys;
+  /* Ce que la base a réellement écrit comme clé primaire : une fiche neuve doit
+     pouvoir rattacher ses lignes filles, qui l'attendent en `uuid`. */
+  w.uuidDeLaCle = uuidDeLaCle;
   /* Retirer une journée du planning supprime des tâches : c'est un geste
      explicite, jamais déduit d'un enregistrement de bon. */
   w.retirerDatesSupplementaires = retirerDatesSupplementaires;

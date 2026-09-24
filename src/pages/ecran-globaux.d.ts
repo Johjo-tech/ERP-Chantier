@@ -265,6 +265,7 @@ declare global {
     urlPieceJointe: any;
     urlTelechargementPieceJointe: any;
     utilisateurCourant: any;
+    uuidDeLaCle: any;
     validerAffaireConducteur: any;
     validerChiffrage: any;
     validerChiffrageHorsCircuit: any;
