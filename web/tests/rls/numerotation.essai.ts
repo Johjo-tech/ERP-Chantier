@@ -29,3 +29,27 @@ describe("[proposition] prochain_numero ne sert que les membres autorisés", () 
     expect((await c.rpc("prochain_numero", { p_societe: BETA, p_type: "devis" })).error?.code).toBe("42501");
   });
 });
+
+describe("[proposition] le numéro d'une facture ne se fournit pas", () => {
+  it("un INSERT « émis » avec son propre numéro est refusé", async () => {
+    const c = await connecte(COMPTES.secretaireAlpha);
+    const { error } = await c.from("factures").insert({ societe_id: ALPHA, client_nom: "Intrus", numero: "FAC-2026-999999", statut: "impayée" });
+    expect(error?.message).toMatch(/ne se fournit pas/);
+  });
+
+  it("poser un numéro à la main sur un brouillon est refusé", async () => {
+    const c = await connecte(COMPTES.secretaireAlpha);
+    const { data } = await c.from("factures").insert({ societe_id: ALPHA, client_nom: "Essai numéro", statut: "brouillon" }).select("id").single();
+    const { error } = await c.from("factures").update({ numero: "FAC-2026-888888" }).eq("id", data?.id ?? "");
+    expect(error?.message).toMatch(/ne se fournit pas/);
+    await c.from("factures").delete().eq("id", data?.id ?? "");
+  });
+
+  it("la reprise de l'historique comptable garde son numéro d'origine", async () => {
+    const c = await connecte(COMPTES.secretaireAlpha);
+    const legacy = `compta:essai-${Date.now()}`;
+    const { data, error } = await c.from("factures").insert({ societe_id: ALPHA, client_nom: "Reprise", numero: `HIST-${Date.now()}`, statut: "brouillon", legacy_id: legacy }).select("id").single();
+    expect(error).toBeNull();
+    await c.from("factures").delete().eq("id", data?.id ?? "");
+  });
+});

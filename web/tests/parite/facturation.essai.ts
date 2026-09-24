@@ -138,11 +138,24 @@ describe("situation de travaux (formules d'app.js l. 13305)", () => {
     const n = situation.nouvelAvancement(deja, saisie);
     const a = ancien(m, deja, saisie);
     expect(Number(n)).toBe(a.nouveau);
-    expect(Number(situation.montantAFacturer(ligne, n))).toBeCloseTo(a.aFacturer, 6);
+    // Écart assumé (D-027) : web/ arrondit au centime ce que l'ancien laissait en flottant brut.
+    expect(Number(situation.montantAFacturer(ligne, n))).toBeCloseTo(a.aFacturer, 2);
   });
-  it("exact là où l'ancien rendait 4074.0710999999997", () => {
+  it("au centime là où l'ancien rendait 4074.0710999999997 (D-027)", () => {
     const ligne = { type: "ligne" as const, quantite: 1, prix_unitaire: 12345.67, avancement_cumule: 0 };
-    expect(situation.montantAFacturer(ligne, situation.nouvelAvancement(0, "33")).toString()).toBe("4074.0711");
+    expect(situation.montantAFacturer(ligne, situation.nouvelAvancement(0, "33")).toString()).toBe("4074.07");
+  });
+  it("un avancement saisi à 3 décimales est ramené aux 2 que garde la base (relecture 2, I-3)", () => {
+    expect(situation.nouvelAvancement(0, "33,333").toString()).toBe("33.33");
+    const ligne = { type: "ligne" as const, quantite: 1, prix_unitaire: 10000, avancement_cumule: 0 };
+    const trois = ["33,333", "66,666", "100"].reduce(
+      (acc, saisie) => {
+        const n = situation.nouvelAvancement(acc.deja, saisie);
+        return { deja: Number(n), total: acc.total + Number(situation.montantAFacturer({ ...ligne, avancement_cumule: acc.deja }, n)) };
+      },
+      { deja: 0, total: 0 }
+    );
+    expect(trois.total).toBe(10000);
   });
 });
 

@@ -59,6 +59,14 @@ export const schemaEnteteFacture = z.object({
   emetteur_siret: z.string().nullable(),
   emetteur_tva_intracom: z.string().nullable(),
   emetteur_iban: z.string().nullable(),
+  // Recopiés tels quels sur un avoir : il est émis aussitôt, une omission serait définitive.
+  emetteur_siren: z.string().nullable(),
+  emetteur_pays_code: z.string().nullable(),
+  tva_categorie: z.enum(["S", "Z", "E", "AE", "K", "G", "O"]).nullable(),
+  tva_motif_exoneration: z.string().nullable(),
+  ref_contrat: z.string().nullable(),
+  devise: z.string(),
+  intervention_id: z.string().nullable(),
 });
 export type EnteteFacture = z.infer<typeof schemaEnteteFacture>;
 

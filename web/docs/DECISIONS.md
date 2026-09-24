@@ -178,3 +178,29 @@ toujours données, à la création comme à l'import.
 l'article devient le commentaire de ligne **sauf** si un commentaire a déjà été
 saisi. La quantité et l'identifiant de ligne ne sont jamais touchés ; l'article
 est copié, pas lié (`articles/domain/article.essai.ts`).
+
+## D-027 — Situation de travaux : au centime, avancement à 2 décimales, concurrence gardée
+L'ancien écran facturait `montant × Δ% / 100` en flottant brut (4074.0710999999997)
+et acceptait tout pourcentage. `web/` arrondit le montant de chaque ligne au
+centime, ramène l'avancement aux 2 décimales que garde la base (sinon 3 situations
+à 33,333 % facturaient 10 000,30 € pour 10 000 €), écrit le cumul SOUS CONDITION
+de l'avancement lu (deux onglets ne facturent pas deux fois), défait tout si une
+ligne a bougé, et rend l'avancement quand on supprime le brouillon (relecture 2,
+I-1 à I-3). Tests : `tests/parite/facturation.essai.ts`.
+
+## D-028 — « Émettre » émet ce qui est à l'écran
+Émettre enregistre d'abord la saisie en cours, puis émet cette version : une
+modification non enregistrée ne peut plus être perdue sous un numéro définitif
+(relecture 2, I-4).
+
+## D-029 — Espace client : vues restreintes, pas de politique sur les fiches
+Des politiques de lecture sur `clients` et `chantiers` ouvraient la ligne entière
+(notes internes, informations diverses). La proposition sert au client deux vues
+réduites aux colonnes publiques (`v_mes_acces_clients`, `v_espace_client_chantiers`)
+et n'ajoute de politique que sur les devis envoyés et factures émises, avec une
+cohérence de société obligatoire (`est_mon_client(client, societe)`) (relecture 2, I-6, M-2, M-3).
+
+## D-030 — Les parcours e2e ne visent que la base locale
+Ils émettent des factures, qui ne se suppriment pas : `tests/e2e/preparation.ts`
+refuse toute autre cible, et Playwright ne réutilise jamais un serveur déjà lancé
+(l'application historique écoute aussi sur 5173) (relecture 2, I-7).

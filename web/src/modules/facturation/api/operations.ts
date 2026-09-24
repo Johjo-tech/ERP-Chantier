@@ -108,6 +108,23 @@ export async function facturerSituation(
     lignesFacture
   );
   const db = supabase();
+  // Cumul du DPGF, ligne par ligne, CONDITIONNÉ à l'avancement lu : si un autre
+  // onglet a facturé entre-temps, la ligne ne correspond plus et rien n'est
+  // écrit deux fois (relecture 2, I-2). Un refus défait ce qui précède.
+  const faits: LigneSituation[] = [];
+  for (const l of utiles) {
+    const { data, error } = await db
+      .from("chantier_dpgf_lignes")
+      .update({ avancement_cumule: Number(l.apres.toString()) })
+      .eq("id", l.dpgfId)
+      .eq("avancement_cumule", Number(l.avant.toString()))
+      .select("id");
+    if (error || !data?.length) {
+      await defaireSituation(factureId, faits);
+      throw error ?? { code: "P0001", message: `« ${l.designation} » a été facturée entre-temps : rechargez la page avant de recommencer.` };
+    }
+    faits.push(l);
+  }
   const trace = await db.from("chantier_avancement_factures").insert(
     utiles.map((l) => ({
       facture_id: factureId,
@@ -117,10 +134,48 @@ export async function facturerSituation(
       montant_facture: Number(montant(l.aFacturer).toString()),
     }))
   );
-  if (trace.error) throw trace.error;
-  for (const l of utiles) {
-    const { error } = await db.from("chantier_dpgf_lignes").update({ avancement_cumule: Number(l.apres.toString()) }).eq("id", l.dpgfId);
-    if (error) throw error;
+  if (trace.error) {
+    await defaireSituation(factureId, faits);
+    throw trace.error;
   }
   return factureId;
+}
+
+/** Remet le DPGF où il était et supprime le brouillon : une situation ne reste jamais à moitié écrite. */
+async function defaireSituation(factureId: string, faits: readonly LigneSituation[]) {
+  const db = supabase();
+  for (const l of faits) {
+    const { error } = await db
+      .from("chantier_dpgf_lignes")
+      .update({ avancement_cumule: Number(l.avant.toString()) })
+      .eq("id", l.dpgfId)
+      .eq("avancement_cumule", Number(l.apres.toString()));
+    if (error) console.error("Situation : avancement non rétabli", l.dpgfId, error);
+  }
+  const { error } = await db.from("factures").delete().eq("id", factureId).is("numero", null);
+  if (error) console.error("Situation : brouillon non supprimé", factureId, error);
+}
+
+/**
+ * Supprimer le brouillon d'une situation rend au DPGF l'avancement qu'elle
+ * avait pris (relecture 2, I-1) — sans quoi il serait consommé sans facture.
+ * Refusé si une situation plus récente s'appuie déjà sur celle-ci.
+ */
+export async function rendreAvancementDuBrouillon(factureId: string): Promise<void> {
+  const db = supabase();
+  const { data, error } = await db
+    .from("chantier_avancement_factures")
+    .select("dpgf_ligne_id, avancement_avant, avancement_apres")
+    .eq("facture_id", factureId);
+  if (error) throw error;
+  for (const t of data ?? []) {
+    const r = await db
+      .from("chantier_dpgf_lignes")
+      .update({ avancement_cumule: t.avancement_avant })
+      .eq("id", t.dpgf_ligne_id)
+      .eq("avancement_cumule", t.avancement_apres)
+      .select("id");
+    if (r.error) throw r.error;
+    if (!r.data?.length) throw { code: "P0001", message: "Une situation plus récente s'appuie sur ce brouillon : supprimez-la d'abord." };
+  }
 }

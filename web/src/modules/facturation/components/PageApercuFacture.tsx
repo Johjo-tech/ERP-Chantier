@@ -36,17 +36,18 @@ export function PageApercuFacture() {
         titre={libelleDocument(f.type_document)}
         numero={f.numero ?? "—"}
         date={f.date}
-        emetteur={{
-          nom: f.emetteur_nom ?? s.raison_sociale_legale ?? s.nom,
-          lignes: [
-            f.emetteur_adresse ?? s.adresse,
-            [f.emetteur_code_postal ?? s.code_postal, f.emetteur_ville ?? s.ville].filter(Boolean).join(" "),
-            s.telephone,
-            s.email,
-            (f.emetteur_siret ?? s.siret) && `SIRET ${f.emetteur_siret ?? s.siret}`,
-            (f.emetteur_tva_intracom ?? s.tva_intracom) && `TVA ${f.emetteur_tva_intracom ?? s.tva_intracom}`,
-          ],
-        }}
+        emetteur={
+          // Identité figée ENTIÈRE si la pièce en porte une, sinon celle du jour — jamais un mélange des deux.
+          f.emetteur_nom
+            ? {
+                nom: f.emetteur_nom,
+                lignes: [f.emetteur_adresse, [f.emetteur_code_postal, f.emetteur_ville].filter(Boolean).join(" "), s.telephone, s.email, f.emetteur_siret && `SIRET ${f.emetteur_siret}`, f.emetteur_tva_intracom && `TVA ${f.emetteur_tva_intracom}`],
+              }
+            : {
+                nom: s.raison_sociale_legale ?? s.nom,
+                lignes: [s.adresse, [s.code_postal, s.ville].filter(Boolean).join(" "), s.telephone, s.email, s.siret && `SIRET ${s.siret}`, s.tva_intracom && `TVA ${s.tva_intracom}`],
+              }
+        }
         destinataire={{ nom: f.client_nom, lignes: [f.interlocuteur && `À l'attention de ${f.interlocuteur}`, f.adresse] }}
         meta={[
           ...(f.echeance && !avoir ? [{ libelle: "Échéance :", valeur: formatDateFr(f.echeance) }] : []),
@@ -64,7 +65,7 @@ export function PageApercuFacture() {
               <p>
                 {f.conditions_reglement ?? ""}
                 {f.mode_paiement ? ` — règlement par ${LIBELLE_MODE[f.mode_paiement] ?? f.mode_paiement}` : ""}
-                {(f.emetteur_iban ?? s.iban) && ` — IBAN ${f.emetteur_iban ?? s.iban}`}
+                {(f.emetteur_nom ? f.emetteur_iban : s.iban) && ` — IBAN ${f.emetteur_nom ? f.emetteur_iban : s.iban}`}
               </p>
             )}
             {/* Mentions légales : sur la facture seulement (jamais sur un devis). */}

@@ -5,7 +5,7 @@ import type { Database } from "./database.types";
  * types générés depuis la production tant qu'elles n'y sont pas appliquées.
  * À supprimer d'ici dès que `database.types.ts` les porte.
  */
-interface AccesClientsLigne {
+type AccesClientsLigne = {
   id: string;
   profile_id: string;
   client_id: string;
@@ -13,12 +13,35 @@ interface AccesClientsLigne {
   actif: boolean;
   cree_le: string;
   maj_le: string;
-}
+};
 
 type Public = Database["public"];
 
+type VueMesAcces = {
+  client_id: string;
+  client_nom: string;
+  societe_id: string;
+  societe_nom: string;
+};
+
+type VueChantierClient = {
+  id: string;
+  societe_id: string;
+  client_id: string;
+  nom: string;
+  adresse: string | null;
+  code_postal: string | null;
+  ville: string | null;
+  date_debut: string | null;
+  date_fin: string | null;
+};
+
 export type DatabaseAvecPropositions = Omit<Database, "public"> & {
-  public: Omit<Public, "Tables"> & {
+  public: Omit<Public, "Tables" | "Views"> & {
+    Views: Public["Views"] & {
+      v_mes_acces_clients: { Row: VueMesAcces; Relationships: [] };
+      v_espace_client_chantiers: { Row: VueChantierClient; Relationships: [] };
+    };
     Tables: Public["Tables"] & {
       acces_clients: {
         Row: AccesClientsLigne;

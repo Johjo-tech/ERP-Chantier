@@ -6,7 +6,7 @@ import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import { schemaEnteteDevis, schemaLigneDevis, type Devis, type EnteteAEnregistrer } from "../domain/devis";
 
 const ENTETE =
-  "id, societe_id, numero, client_id, client_nom, interlocuteur, chantier_id, adresse, adresse_locataire, code_postal, ville, logement_statut, occupant, etage, numero_logement, precision_commune, ancien_locataire, telephone_locataire, date, remise_pourcentage, statut, conducteur_id, conducteur";
+  "id, societe_id, numero, client_id, client_nom, interlocuteur, chantier_id, intervention_id, adresse, adresse_locataire, code_postal, ville, logement_statut, occupant, etage, numero_logement, precision_commune, ancien_locataire, telephone_locataire, date, remise_pourcentage, statut, conducteur_id, conducteur";
 const LIGNES = "id, position, type, designation, quantite, prix_unitaire, unite, tva, article_reference, commentaire, metier";
 
 const schemaListe = z.array(

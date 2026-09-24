@@ -52,41 +52,71 @@ as $$
   join clients c on c.id = a.client_id and c.societe_id = a.societe_id
   where a.profile_id = auth.uid() and a.actif;
 $$;
-revoke all on function public.mes_clients() from public;
+
+-- Une pièce n'est montrée que si elle cite un client de l'accès ET appartient à
+-- la société de ce client : un uuid de client cité par une autre société ne
+-- suffit pas (relecture 2, M-2).
+create or replace function public.est_mon_client(p_client uuid, p_societe uuid)
+returns boolean
+language sql stable security definer
+set search_path to 'public', 'pg_temp'
+as $$
+  select coalesce(exists (
+    select 1 from acces_clients a
+    join profiles p on p.id = a.profile_id and p.actif
+    join clients c on c.id = a.client_id and c.societe_id = a.societe_id
+    where a.profile_id = auth.uid() and a.actif and a.client_id = p_client and a.societe_id = p_societe
+  ), false);
+$$;
+
+revoke all on function public.mes_clients() from public, anon;
+revoke all on function public.est_mon_client(uuid, uuid) from public, anon;
 grant execute on function public.mes_clients() to authenticated;
+grant execute on function public.est_mon_client(uuid, uuid) to authenticated;
 
--- Lecture seule, limitée aux lignes de SES clients.
-drop policy if exists espace_client_societes on public.societes;
-create policy espace_client_societes on public.societes for select to authenticated
-  using (id in (select c.societe_id from clients c where c.id in (select public.mes_clients())));
-
+-- Clients et chantiers : PAS de politique sur les tables — elles ouvriraient la
+-- ligne entière, notes internes et informations diverses comprises (relecture 2,
+-- I-6). Le client lit des VUES réduites aux colonnes qu'il peut voir. Ces vues
+-- s'exécutent avec les droits de leur propriétaire et filtrent elles-mêmes.
 drop policy if exists espace_client_clients on public.clients;
-create policy espace_client_clients on public.clients for select to authenticated
-  using (id in (select public.mes_clients()));
-
 drop policy if exists espace_client_chantiers on public.chantiers;
-create policy espace_client_chantiers on public.chantiers for select to authenticated
-  using (client_id in (select public.mes_clients()));
+drop policy if exists espace_client_societes on public.societes;
+
+create or replace view public.v_mes_acces_clients with (security_barrier = true) as
+  select a.client_id, c.nom as client_nom, a.societe_id, s.nom as societe_nom
+  from acces_clients a
+  join profiles p on p.id = a.profile_id and p.actif
+  join clients c on c.id = a.client_id and c.societe_id = a.societe_id
+  join societes s on s.id = a.societe_id
+  where a.profile_id = auth.uid() and a.actif;
+
+create or replace view public.v_espace_client_chantiers with (security_barrier = true) as
+  select ch.id, ch.societe_id, ch.client_id, ch.nom, ch.adresse, ch.code_postal, ch.ville, ch.date_debut, ch.date_fin
+  from chantiers ch
+  where public.est_mon_client(ch.client_id, ch.societe_id);
+
+revoke all on public.v_mes_acces_clients, public.v_espace_client_chantiers from anon;
+grant select on public.v_mes_acces_clients, public.v_espace_client_chantiers to authenticated;
 
 -- Un brouillon de devis n'est pas encore une offre : le client ne le voit pas.
 drop policy if exists espace_client_devis on public.devis;
 create policy espace_client_devis on public.devis for select to authenticated
-  using (client_id in (select public.mes_clients()) and statut <> 'brouillon');
+  using (statut <> 'brouillon' and public.est_mon_client(client_id, societe_id));
 
 drop policy if exists espace_client_devis_lignes on public.devis_lignes;
 create policy espace_client_devis_lignes on public.devis_lignes for select to authenticated
   using (exists (select 1 from devis d where d.id = devis_lignes.devis_id
-                 and d.client_id in (select public.mes_clients()) and d.statut <> 'brouillon'));
+                 and d.statut <> 'brouillon' and public.est_mon_client(d.client_id, d.societe_id)));
 
 -- Une facture non émise n'existe pas pour le client.
 drop policy if exists espace_client_factures on public.factures;
 create policy espace_client_factures on public.factures for select to authenticated
-  using (client_id in (select public.mes_clients()) and numero is not null);
+  using (numero is not null and public.est_mon_client(client_id, societe_id));
 
 drop policy if exists espace_client_facture_lignes on public.facture_lignes;
 create policy espace_client_facture_lignes on public.facture_lignes for select to authenticated
   using (exists (select 1 from factures f where f.id = facture_lignes.facture_id
-                 and f.client_id in (select public.mes_clients()) and f.numero is not null));
+                 and f.numero is not null and public.est_mon_client(f.client_id, f.societe_id)));
 
 grant select on public.acces_clients to authenticated;
 grant insert, update, delete on public.acces_clients to authenticated;

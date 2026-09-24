@@ -7,7 +7,7 @@ import {
   ajouterReglement, creerFacture, emettreFacture, imputerAvoirSurFacture, listerFactures, lireFacture, modifierBrouillon,
   reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, synchroniserStatut, totauxDesFactures,
 } from "../api/factures";
-import { etablirAvoir, factureDepuisDevis, facturerSituation } from "../api/operations";
+import { etablirAvoir, factureDepuisDevis, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
 import type { EnteteAEnregistrer } from "../domain/facture";
 import type { LigneSituation } from "../domain/situation";
 
@@ -70,7 +70,13 @@ export function useEmettre() {
 
 export function useSupprimerBrouillon() {
   const invalider = useInvalider();
-  return useMutation({ mutationFn: supprimerBrouillon, onSuccess: () => invalider() });
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await rendreAvancementDuBrouillon(id);
+      await supprimerBrouillon(id);
+    },
+    onSettled: () => invalider(),
+  });
 }
 
 /** Ajouter ou retirer un règlement recale le statut stocké de la facture (écrit seulement s'il change). */

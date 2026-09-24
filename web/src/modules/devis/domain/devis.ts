@@ -23,6 +23,7 @@ export const schemaEnteteDevis = z.object({
   client_nom: z.string(),
   interlocuteur: z.string().nullable(),
   chantier_id: z.string().nullable(),
+  intervention_id: z.string().nullable(),
   adresse: z.string().nullable(),
   adresse_locataire: z.string().nullable(),
   code_postal: z.string().nullable(),

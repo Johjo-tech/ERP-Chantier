@@ -87,7 +87,7 @@ export async function chargerSession(userId: string): Promise<Session> {
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
   const droits = z.array(ligneDroit).parse(droitsR.data);
-  const accesClients = await chargerAccesClients(userId);
+  const accesClients = await chargerAccesClients();
   return {
     utilisateur: { id: p.id, email: p.email ?? "", nom: p.nom || p.email || "" },
     societes,
@@ -98,20 +98,17 @@ export async function chargerSession(userId: string): Promise<Session> {
 
 const ligneAcces = z.object({
   client_id: z.string(),
+  client_nom: z.string(),
   societe_id: z.string(),
-  client: z.object({ nom: z.string() }).nullable(),
-  societe: z.object({ nom: z.string() }).nullable(),
+  societe_nom: z.string(),
 });
 
-/** Table absente (migration proposée non appliquée) : pas d'espace client, sans erreur. */
+/** Vue absente (migration proposée non appliquée) : pas d'espace client, sans erreur. */
 const TABLE_ABSENTE = new Set(["42P01", "PGRST205", "PGRST200"]);
 
-async function chargerAccesClients(userId: string): Promise<AccesClient[]> {
-  const { data, error } = await supabasePropositions()
-    .from("acces_clients")
-    .select("client_id, societe_id, client:clients(nom), societe:societes(nom)")
-    .eq("profile_id", userId)
-    .eq("actif", true);
+async function chargerAccesClients(): Promise<AccesClient[]> {
+  // La vue ne rend que les accès du compte connecté, avec les seuls noms utiles.
+  const { data, error } = await supabasePropositions().from("v_mes_acces_clients").select("client_id, client_nom, societe_id, societe_nom");
   if (error) {
     if (TABLE_ABSENTE.has(error.code)) return [];
     throw error;
@@ -119,5 +116,5 @@ async function chargerAccesClients(userId: string): Promise<AccesClient[]> {
   return z
     .array(ligneAcces)
     .parse(data)
-    .map((a) => ({ clientId: a.client_id, clientNom: a.client?.nom ?? "", societeId: a.societe_id, societeNom: a.societe?.nom ?? "" }));
+    .map((a) => ({ clientId: a.client_id, clientNom: a.client_nom, societeId: a.societe_id, societeNom: a.societe_nom }));
 }

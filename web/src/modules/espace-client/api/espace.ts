@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabasePropositions } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 
 /**
@@ -20,8 +20,9 @@ const schemaChantier = z.object({
 const schemaDoc = z.object({ id: z.string(), numero: z.string().nullable(), date: z.string(), client_nom: z.string() });
 
 export async function chantiersDuClient(clientIds: readonly string[]) {
-  const { data, error } = await supabase()
-    .from("chantiers")
+  // Par la vue restreinte : le client ne lit jamais la ligne entière (notes internes).
+  const { data, error } = await supabasePropositions()
+    .from("v_espace_client_chantiers")
     .select("id, nom, adresse, code_postal, ville, date_debut, date_fin")
     .in("client_id", [...clientIds])
     .order("date_debut", { ascending: false });

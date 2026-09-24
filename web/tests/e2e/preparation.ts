@@ -7,7 +7,18 @@ import { join } from "node:path";
  * d'essai, pour qu'ils se rejouent à l'identique. Passe par le conteneur local
  * (docker exec) : aucune autre cible n'est possible.
  */
+/** Les parcours émettent des factures, que rien ne supprime : jamais ailleurs qu'en local. */
+function verifierBaseLocale() {
+  const env = readFileSync(join(import.meta.dirname, "../../.env.local"), "utf8");
+  const url = /^VITE_SUPABASE_URL="?([^"\n]+)"?/m.exec(env)?.[1] ?? "";
+  const hote = URL.canParse(url) ? new URL(url).hostname : "";
+  if (!["127.0.0.1", "localhost", "::1"].includes(hote)) {
+    throw new Error(`Parcours e2e refusés : .env.local vise « ${hote || url} », pas la base locale.`);
+  }
+}
+
 export default function preparation() {
+  verifierBaseLocale();
   const psql = (sql: string) =>
     execFileSync("docker", ["exec", "-i", "supabase_db_erp-chantier-web", "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-q"], { input: sql });
   psql(`

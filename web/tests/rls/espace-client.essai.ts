@@ -28,14 +28,27 @@ afterAll(async () => {
 });
 
 describe("[proposition] espace client : ne voit que ce qui est à lui", () => {
-  it("un seul client : le sien", async () => {
-    const { data } = await client.from("clients").select("id");
-    expect(data?.map((c) => c.id)).toEqual([OPAC]);
+  it("ne lit AUCUNE fiche client ni chantier entière (notes internes) — relecture 2, I-6", async () => {
+    expect((await client.from("clients").select("id, notes")).data ?? []).toEqual([]);
+    expect((await client.from("chantiers").select("id, infos_diverses")).data ?? []).toEqual([]);
   });
 
-  it("ses chantiers seulement", async () => {
-    const { data } = await client.from("chantiers").select("id, client_id");
+  it("son accès : son client et sa société, par la vue", async () => {
+    const { data } = await avecPropositions(client).from("v_mes_acces_clients").select("client_id, societe_id");
+    expect(data).toEqual([{ client_id: OPAC, societe_id: ALPHA }]);
+  });
+
+  it("ses chantiers seulement, colonnes publiques seulement", async () => {
+    const { data } = await avecPropositions(client).from("v_espace_client_chantiers").select("id, nom");
     expect(data?.map((c) => c.id)).toEqual([CHANTIER_OPAC]);
+    // La colonne interne n'existe pas dans la vue : la demander est une erreur.
+    const interne = await client.from("v_espace_client_chantiers" as "chantiers").select("infos_diverses");
+    expect(interne.error).not.toBeNull();
+  });
+
+  it("un membre ne tire rien des vues de l'espace client", async () => {
+    const admin = await connecte(COMPTES.adminAlpha);
+    expect((await avecPropositions(admin).from("v_espace_client_chantiers").select("id")).data ?? []).toEqual([]);
   });
 
   it("ses devis ENVOYÉS, jamais un brouillon ni le devis d'un autre client", async () => {
@@ -66,7 +79,7 @@ describe("[proposition] espace client : ne voit que ce qui est à lui", () => {
 
   it("rien de BETA, rien d'interne (articles, membres, bons, salariés)", async () => {
     const { data: societes } = await client.from("societes").select("id");
-    expect(societes?.map((s) => s.id)).toEqual([ALPHA]);
+    expect(societes ?? []).toEqual([]);
     // Les noms de tables en union épuisent l'inférence de supabase-js : on les passe un à un.
     const tables = ["articles", "membres_societe", "v_bons_commande_terrain", "v_salaries_annuaire", "interlocuteurs", "reglements"];
     for (const table of tables) {
@@ -86,9 +99,9 @@ describe("[proposition] espace client : lecture seule", () => {
     expect(maj.data ?? []).toEqual([]);
     const sup = await client.from("chantiers").delete().eq("id", CHANTIER_OPAC).select("id");
     expect(sup.data ?? []).toEqual([]);
-    // Insertion non typée : l'inférence de supabase-js sur une table ajoutée à la main s'effondre en `never`.
-    const nouvelAcces = { profile_id: "c1000000-0000-0000-0000-000000000001", client_id: "a2000000-0000-0000-0000-000000000002", societe_id: ALPHA };
-    const acces = await avecPropositions(client).from("acces_clients").insert(nouvelAcces as never);
+    const acces = await avecPropositions(client)
+      .from("acces_clients")
+      .insert({ profile_id: "c1000000-0000-0000-0000-000000000001", client_id: "a2000000-0000-0000-0000-000000000002", societe_id: ALPHA });
     expect(acces.error?.code).toBe("42501");
   });
 

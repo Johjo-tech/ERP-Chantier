@@ -1,5 +1,5 @@
 import Big from "big.js";
-import { montant, type Montant } from "@/lib/money";
+import { arrondiCentimes, montant, type Montant } from "@/lib/money";
 import { schemaNombreFr } from "@/lib/nombres";
 import { montantLigneDpgf, type LigneDpgf } from "@/modules/chantiers/domain/dpgf";
 
@@ -18,13 +18,16 @@ export function nouvelAvancement(deja: unknown, saisie: string): Big {
   const d = montant(deja);
   const lu = schemaNombreFr.safeParse(saisie);
   if (!lu.success || lu.data === 0) return d;
-  const borne = new Big(lu.data);
+  // La base garde l'avancement à 2 décimales : saisir 33,333 % ferait facturer
+  // un peu plus que la ligne au fil des situations (relecture 2, I-3).
+  const borne = new Big(lu.data).round(2, Big.roundHalfUp);
   const plafonne = borne.gt(CENT) ? CENT : borne;
   return plafonne.lt(d) ? d : plafonne;
 }
 
+/** Arrondi au centime : c'est un prix unitaire facturé, et la somme des situations ne doit pas dépasser la ligne. */
 export function montantAFacturer(ligne: LigneDpgf, nouveau: Big): Montant {
-  return montantLigneDpgf(ligne).times(nouveau.minus(montant(ligne.avancement_cumule))).div(CENT);
+  return arrondiCentimes(montantLigneDpgf(ligne).times(nouveau.minus(montant(ligne.avancement_cumule))).div(CENT));
 }
 
 export interface LigneSituation {

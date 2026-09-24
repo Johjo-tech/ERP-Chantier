@@ -46,27 +46,43 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
   const echeanceCalculee = dateEcheance(valeurs.date, delai);
   const echeance = valeurs.echeance_manuelle === "oui" ? valeurs.echeance : echeanceCalculee;
 
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
+  /** Valide et enregistre ce qui est à l'écran ; rend l'id, ou null si la saisie est refusée. */
+  async function enregistrerEcran(): Promise<string | null> {
     setMessage(null);
     const saisie = valider(schemaSaisieFacture);
     const remise = schemaNombreFr.safeParse(valeurs.remise_pourcentage);
     const l = lignesPourEnregistrement(lignes);
     setErreursLignes(l.erreurs);
-    if (!saisie || !remise.success || l.erreurs.length || !client) return;
+    if (!saisie || !remise.success || l.erreurs.length) return null;
+    if (!client) {
+      setMessage("Client introuvable : rechargez la page (la liste des clients n'a pas pu être lue).");
+      return null;
+    }
     const entete = enteteAEnregistrer(saisie, client, Math.min(100, Math.max(0, remise.data)), delai, libelleDelaiPaiement(delai), echeance || null);
-    enregistrer.mutate(
-      { entete, lignes: l.lignes },
-      {
-        onSuccess: (id) => {
-          setMessage("Brouillon enregistré.");
-          if (!facture) void navigate(`/factures/${id}`, { replace: true, state: { message: "Brouillon enregistré." } });
-        },
-        onError: (err) => {
-          if (err instanceof FacturePartielle && !facture) void navigate(`/factures/${err.factureId}`, { replace: true });
-        },
-      }
-    );
+    try {
+      return await enregistrer.mutateAsync({ entete, lignes: l.lignes });
+    } catch (err) {
+      if (err instanceof FacturePartielle && !facture) void navigate(`/factures/${err.factureId}`, { replace: true });
+      return null;
+    }
+  }
+
+  async function soumettre(e: FormEvent) {
+    e.preventDefault();
+    const id = await enregistrerEcran();
+    if (!id) return;
+    setMessage("Brouillon enregistré.");
+    if (!facture) void navigate(`/factures/${id}`, { replace: true, state: { message: "Brouillon enregistré." } });
+  }
+
+  /** Émettre la version À L'ÉCRAN : elle est d'abord enregistrée (relecture 2, I-4). */
+  async function emettreEcran() {
+    const id = await enregistrerEcran();
+    if (!id) return;
+    emettre.mutate(id, {
+      // La page bascule sur la vue « émise » : le message voyage avec la navigation.
+      onSuccess: (n) => void navigate(`/factures/${id}`, { replace: true, state: { message: `Facture émise sous le numéro ${n}.` } }),
+    });
   }
 
   const erreur = enregistrer.error ?? emettre.error ?? supprimer.error;
@@ -77,7 +93,7 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
       {!peutEcrire && <Alert>Lecture seule : votre rôle ne permet pas de modifier cette facture.</Alert>}
       {erreur && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
       {(Object.keys(erreurs).length > 0 || erreursLignes.length > 0) && <Alert variant="erreur">La facture contient des erreurs : corrigez les champs signalés.</Alert>}
-      {message && <Alert variant="succes">{message}</Alert>}
+      {message && <Alert variant={message.startsWith("Client introuvable") ? "erreur" : "succes"}>{message}</Alert>}
       <Card>
         <CardContent className="flex flex-col gap-4 pt-4">
           <ChampsEnteteDocument valeurs={valeurs} erreurs={erreurs} changer={changer} conducteurCourant={facture?.conducteur_id ?? null} lectureSeule={!peutEcrire} />
@@ -117,12 +133,7 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
             libelle="Émettre la facture"
             question="Émettre ? Le numéro est définitif et la facture ne sera plus modifiable."
             enCours={emettre.isPending}
-            onConfirmer={() =>
-              emettre.mutate(facture.id, {
-                // La page bascule sur la vue « émise » : le message voyage avec la navigation.
-                onSuccess: (n) => void navigate(`/factures/${facture.id}`, { replace: true, state: { message: `Facture émise sous le numéro ${n}.` } }),
-              })
-            }
+            onConfirmer={() => void emettreEcran()}
           />
         )}
         {facture && peutSupprimer && (
