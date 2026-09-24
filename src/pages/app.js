@@ -8137,6 +8137,25 @@ async function confirmerValidationDirecteur(){
   const ctx = validationDirecteurCtx;
   if(!ctx) return;
 
+  /* Ce bon attend encore le numéro de son client, et la facture qui va naître
+     ne pourra plus le recevoir : `ref_bon_commande_client` n'est ni dans
+     `v_libres` ni dans `v_completables` du déclencheur de figement — elle est
+     gelée dès que la facture porte un numéro, MÊME VIDE. Un bailleur ou une
+     collectivité refusera la facture, et la corriger demandera un avoir.
+     On avertit, on ne refuse pas : il arrive qu'il faille facturer sans, et
+     c'est au conducteur de trancher — mais en le sachant. */
+  const bonAttendu = state.bonsCommande.find(x=>x.id===ctx.bcId);
+  if(bonAttendu && bonAttendu.enAttenteBC){
+    const suite = confirm(
+      "Ce bon attend encore le numéro de commande du client.\n\n"
+      + "La facture partira SANS cette référence, et ne pourra plus la recevoir : "
+      + "une fois la facture émise, ce champ est définitivement figé. "
+      + "Un bailleur ou une collectivité la refusera, et la corriger demandera un avoir.\n\n"
+      + "Saisissez le numéro sur le bon (bouton « ✓ BC reçu ») si vous l'avez reçu.\n\n"
+      + "Valider quand même la pré-facture ?");
+    if(!suite) return;
+  }
+
   const enregistre = await enregistrerChiffrageDirecteur(true);
   if(!enregistre){
     showToast("Les prix n'ont pas pu être enregistrés : rien n'a été validé.");
