@@ -94,10 +94,22 @@ export function lignesHaystack(lignes: unknown): string {
  * formatés, qui dépendent des totaux et de la remise. Les faire passer en
  * paramètre évite de dupliquer ici un calcul qui vit déjà ailleurs.
  */
-export function texteDocument(doc: Document, extras: unknown[] = []): string {
+export function texteDocument(
+  doc: Document,
+  extras: unknown[] = [],
+  champsIgnores: readonly string[] = []
+): string {
   if (!doc) return "";
 
-  const morceaux: unknown[] = CHAMPS_CHERCHES.map((c) => doc[c]);
+  /* Le module reste indifférent au TYPE du document — c'est ce qui lui permet
+     de servir devis, factures, bons et rapports avec une seule liste de champs.
+     Mais un même nom peut y désigner deux choses : `adresse` est le chantier
+     sur un bon de commande et le siège du client sur une facture. C'est donc à
+     l'APPELANT de déclarer ce qui n'a pas de sens à chercher chez lui, comme il
+     déclare déjà ses `extras`. */
+  const morceaux: unknown[] = CHAMPS_CHERCHES.filter((c) => !champsIgnores.includes(c)).map(
+    (c) => doc[c]
+  );
 
   if (Array.isArray(doc.metiers)) morceaux.push(doc.metiers.join(" "));
 
@@ -113,10 +125,43 @@ export function texteDocument(doc: Document, extras: unknown[] = []): string {
 export function correspond(
   doc: Document,
   requete: string,
-  extras: unknown[] = []
+  extras: unknown[] = [],
+  champsIgnores: readonly string[] = []
 ): boolean {
   if (!requete || !requete.trim()) return true;
-  return multiWordMatch(texteDocument(doc, extras), requete);
+  return multiWordMatch(texteDocument(doc, extras, champsIgnores), requete);
+}
+
+/**
+ * D'où vient la correspondance, quand elle ne vient pas du document lui-même.
+ *
+ * Un apport n'est cité que s'il porte un mot de la requête que le texte PROPRE
+ * du document ne contient pas. Un nom de locataire recopié du bon sur la facture
+ * n'est donc jamais annoncé comme un apport : il est des deux côtés.
+ *
+ * Appelée au RENDU et non au filtrage : le filtrage voit toute la collection,
+ * le rendu la dizaine de cartes qui restent. L'attribution y est gratuite, et
+ * elle coûterait cher ailleurs.
+ */
+export function origineDeLaCorrespondance(
+  doc: Document,
+  requete: string,
+  apports: { etiquette: string; valeur: string }[],
+  champsIgnores: readonly string[] = []
+): { etiquette: string; valeur: string }[] {
+  const mots = sansAccents((requete ?? "").trim().toLowerCase())
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!mots.length || !apports?.length) return [];
+
+  const propre = sansAccents(texteDocument(doc, [], champsIgnores));
+  const inedits = mots.filter((m) => !propre.includes(m));
+  if (!inedits.length) return [];
+
+  return apports.filter((a) => {
+    const texte = sansAccents((a.valeur ?? "").toLowerCase());
+    return inedits.some((m) => texte.includes(m));
+  });
 }
 
 /**
@@ -256,6 +301,8 @@ export interface ContexteDocument {
    */
   reglements?: string[];
   metiers?: string[];
+  /** Champs dont le NOM ment sur ce type de document — voir `texteDocument`. */
+  champsIgnores?: readonly string[];
 }
 
 /**
@@ -274,7 +321,7 @@ export function filtrerDocuments<T extends Document>(
   return (liste ?? []).filter((doc) => {
     const ctx = contexte(doc);
 
-    if (!correspond(doc, c.recherche ?? "", ctx.extras)) return false;
+    if (!correspond(doc, c.recherche ?? "", ctx.extras, ctx.champsIgnores)) return false;
     if (c.client && doc.client !== c.client) return false;
     if (c.interlocuteur && (doc.interlocuteur ?? "") !== c.interlocuteur) {
       return false;
