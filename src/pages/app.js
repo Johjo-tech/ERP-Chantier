@@ -18337,7 +18337,10 @@ function telechargerRejetsCatalogue(){
   const lignes = [...i.rapport.rejets];
   // Les signalements ne sont pas des rejets, mais ils s'expliquent de la même
   // façon : on les joint pour n'avoir qu'un fichier à relire.
-  i.rapport.signalements.forEach(sg => lignes.push({ ligne:sg.ligne, motif:sg.motif, contenu:'article '+sg.code }));
+  i.rapport.signalements.forEach(sg => lignes.push({ ligne:sg.ligne, motif:sg.motif,
+    /* Un signalement sans code porte sur le FICHIER — une colonne absente —
+       et non sur un article : « article undefined » serait un faux. */
+    contenu: sg.code ? 'article '+sg.code : 'en-tête du fichier' }));
   lignes.sort((a,b)=>a.ligne-b.ligne);
   const csv = window.rapportRejetsCsv(lignes);
   // Windows-1252 pour être relu par le même tableur que le fichier d'origine.
@@ -18357,7 +18360,7 @@ function importCatalogueHTML(c){
 
   if(i.etape === 'fichier') return `<div class="form-panel">
     <h3>Importer un catalogue</h3>
-    <p class="card-sub">Fichier exporté du logiciel de gestion : colonnes séparées par des points-virgules, encodage Windows‑1252. Rien n'est écrit avant votre accord.</p>
+    <p class="card-sub">Fichier exporté du logiciel de gestion : colonnes séparées par des points-virgules, encodage Windows‑1252. Les colonnes sont reconnues par leur nom — un export partiel passe, ce qui manque vous sera dit avant d'écrire. Rien n'est écrit avant votre accord.</p>
     <div style="margin:16px 0;">
       <input type="file" accept=".csv,.txt,text/csv" onchange="lireFichierCatalogue(this.files[0])">
     </div>
@@ -18382,7 +18385,7 @@ function importCatalogueHTML(c){
       </div>`:''}
       ${r.signalements.length? `<div class="wf-banner" style="margin-top:10px;">
         <div style="font-weight:700; margin-bottom:6px;">Décidé à la place du fichier</div>
-        <ul style="margin:0; padding-left:18px;">${r.signalements.slice(0,6).map(x=>`<li>Ligne ${x.ligne} (${esc(x.code)}) — ${esc(x.motif)}</li>`).join('')}</ul>
+        <ul style="margin:0; padding-left:18px;">${r.signalements.slice(0,6).map(x=>`<li>Ligne ${x.ligne}${x.code? ' ('+esc(x.code)+')':''} — ${esc(x.motif)}</li>`).join('')}</ul>
         ${r.signalements.length>6? `<div class="card-sub" style="margin-top:6px;">…et ${r.signalements.length-6} autres.</div>`:''}
       </div>`:''}
       <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
