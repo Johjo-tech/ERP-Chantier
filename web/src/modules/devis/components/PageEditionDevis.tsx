@@ -16,6 +16,7 @@ import { ChampsEnteteDocument } from "@/modules/documents/components/ChampsEntet
 import { SectionLieu } from "@/modules/documents/components/SectionLieu";
 import { ChampChoix } from "@/components/formulaire/Champ";
 import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
+import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import { depuisBase, ligneVide, lignesPourEnregistrement, type ErreurLigne, type LigneEdition } from "@/modules/documents/domain/lignes";
 import { REGLAGES_DEFAUT, type ReglagesDocuments } from "@/modules/societes/domain/reglages";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
@@ -24,17 +25,24 @@ import { enteteAEnregistrer, LIBELLES_STATUT, schemaSaisieDevis, STATUTS_DEVIS, 
 import { useDevis, useEnregistrerDevis } from "../hooks/useDevis";
 import { BadgeStatutDevis } from "./BadgeStatutDevis";
 
-export function PageEditionDevis({ actions }: { actions?: (d: Devis) => ReactNode }) {
+export function PageEditionDevis({ actions, ChampReference }: { actions?: (d: Devis) => ReactNode; ChampReference?: ChampReferenceLigne }) {
   const { id } = useParams();
   const devis = useDevis(id);
   const reglages = useReglages();
   if ((id && devis.isPending) || reglages.isPending) return <Chargement />;
   if (id && devis.isError) return <Erreur erreur={devis.error} reessayer={() => void devis.refetch()} />;
   // Des réglages illisibles ne bloquent pas la saisie : on travaille avec les défauts.
-  return <FormulaireDevis key={id ?? "nouveau"} devis={devis.data ?? null} reglages={reglages.data ?? REGLAGES_DEFAUT} actions={actions} />;
+  return <FormulaireDevis key={id ?? "nouveau"} devis={devis.data ?? null} reglages={reglages.data ?? REGLAGES_DEFAUT} actions={actions} ChampReference={ChampReference} />;
 }
 
-function FormulaireDevis({ devis, reglages, actions }: { devis: Devis | null; reglages: ReglagesDocuments; actions?: ((d: Devis) => ReactNode) | undefined }) {
+interface PropsFormulaire {
+  devis: Devis | null;
+  reglages: ReglagesDocuments;
+  actions?: ((d: Devis) => ReactNode) | undefined;
+  ChampReference?: ChampReferenceLigne | undefined;
+}
+
+function FormulaireDevis({ devis, reglages, actions, ChampReference }: PropsFormulaire) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const clients = useClients();
@@ -122,6 +130,7 @@ function FormulaireDevis({ devis, reglages, actions }: { devis: Devis | null; re
         taux={reglages.tauxTva}
         erreurs={erreursLignes}
         lectureSeule={lectureSeule}
+        ChampReference={ChampReference}
       />
       <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={lectureSeule ? undefined : (v) => changer("remise_pourcentage", v)} />
       <div className="flex flex-wrap gap-2">

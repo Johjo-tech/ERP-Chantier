@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatEuros } from "@/lib/money";
 import { deplacer, dupliquer, ligneVide, modifier, retirer, type ErreurLigne, type LigneEdition } from "../domain/lignes";
+import type { ChampReferenceLigne } from "./reference";
 import { sousTotauxChapitres } from "../domain/totaux";
 import { LigneEditable } from "./LigneEditable";
 
@@ -14,10 +15,12 @@ interface Props {
   taux: readonly number[];
   erreurs?: readonly ErreurLigne[];
   lectureSeule?: boolean;
+  /** Champ de référence (choix d'article), branché par app/. */
+  ChampReference?: ChampReferenceLigne | undefined;
 }
 
 /** L'éditeur de lignes commun aux devis, factures et bons : lignes, chapitres, commentaires. */
-export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreurs = [], lectureSeule = false }: Props) {
+export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreurs = [], lectureSeule = false, ChampReference }: Props) {
   const sousTotaux = sousTotauxChapitres(lignes);
   // Le sous-total d'un chapitre s'affiche à la fin du chapitre : avant le suivant, ou en bas.
   const finsDeChapitre = new Map<number, number>();
@@ -67,6 +70,8 @@ export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreu
                   erreurs={erreurs}
                   lectureSeule={lectureSeule}
                   onChange={(champ, v) => onChange(modifier(lignes, i, champ, v))}
+                  onRemplacer={(nouvelle) => onChange(lignes.map((x, j) => (j === i ? nouvelle : x)))}
+                  ChampReference={ChampReference}
                   onAction={(a) => agir(i, a)}
                 />
                 {st && (

@@ -23,6 +23,7 @@ import { Link } from "react-router";
 import { PageArticles } from "@/modules/articles/components/PageArticles";
 import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
 import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";
+import { ReferenceArticleLigne } from "@/modules/articles/components/ReferenceArticleLigne";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -56,13 +57,13 @@ export const routes: RouteObject[] = [
           </RouteModule> },
       { path: "chantiers/:id/modifier", element: <RouteModule module="chantiers" action="modifier"><PageFormulaireChantier /></RouteModule> },
       { path: "devis", element: <RouteModule module="devis"><PageDevis /></RouteModule> },
-      { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis /></RouteModule> },
-      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis actions={(d) => (<><BoutonFacturerDevis devisId={d.id} /><ActionsDevis devis={d} /></>)} /></RouteModule> },
+      { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis ChampReference={ReferenceArticleLigne} /></RouteModule> },
+      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis ChampReference={ReferenceArticleLigne} actions={(d) => (<><BoutonFacturerDevis devisId={d.id} /><ActionsDevis devis={d} /></>)} /></RouteModule> },
       { path: "devis/:id/apercu", element: <RouteModule module="devis"><PageApercuDevis /></RouteModule> },
       { path: "chantiers/:id/situation", element: <RouteModule module="factures" action="creer"><PageSituation /></RouteModule> },
       { path: "factures", element: <RouteModule module="factures"><PageFactures /></RouteModule> },
-      { path: "factures/nouvelle", element: <RouteModule module="factures" action="creer"><PageFacture /></RouteModule> },
-      { path: "factures/:id", element: <RouteModule module="factures"><PageFacture /></RouteModule> },
+      { path: "factures/nouvelle", element: <RouteModule module="factures" action="creer"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
+      { path: "factures/:id", element: <RouteModule module="factures"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id/apercu", element: <RouteModule module="factures"><PageApercuFacture /></RouteModule> },
       { path: "articles", element: <RouteModule module="articles"><PageArticles /></RouteModule> },
       // Toute écriture au catalogue suit le droit « modifier », comme l'ancien écran (ART-06).

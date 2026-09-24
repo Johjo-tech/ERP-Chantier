@@ -17,13 +17,14 @@ import { BlocTotaux } from "@/modules/documents/components/BlocTotaux";
 import { ChampsEnteteDocument } from "@/modules/documents/components/ChampsEnteteDocument";
 import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
 import { SectionLieu } from "@/modules/documents/components/SectionLieu";
+import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import { depuisBase, ligneVide, lignesPourEnregistrement, type ErreurLigne, type LigneEdition } from "@/modules/documents/domain/lignes";
 import type { ReglagesDocuments } from "@/modules/societes/domain/reglages";
 import { FacturePartielle } from "../api/factures";
 import { enteteAEnregistrer, schemaSaisieFacture, valeursDepuis, type Facture } from "../domain/facture";
 import { useEmettre, useEnregistrerFacture, useSupprimerBrouillon } from "../hooks/useFactures";
 
-export function FormulaireFacture({ facture, reglages }: { facture: Facture | null; reglages: ReglagesDocuments }) {
+export function FormulaireFacture({ facture, reglages, ChampReference }: { facture: Facture | null; reglages: ReglagesDocuments; ChampReference?: ChampReferenceLigne | undefined }) {
   const navigate = useNavigate();
   const location = useLocation();
   const clients = useClients();
@@ -107,7 +108,7 @@ export function FormulaireFacture({ facture, reglages }: { facture: Facture | nu
           <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={!peutEcrire} sansTelephone />
         </CardContent>
       </Card>
-      <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} unites={reglages.unites} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} />
+      <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} unites={reglages.unites} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} ChampReference={ChampReference} />
       <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={peutEcrire ? (v) => changer("remise_pourcentage", v) : undefined} deductions={facture ? { acomptes: facture.acomptes_deduits, retenuePct: facture.retenue_garantie_pourcentage } : undefined} />
       <div className="flex flex-wrap gap-2">
         {peutEcrire && <Button type="submit" disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer le brouillon"}</Button>}

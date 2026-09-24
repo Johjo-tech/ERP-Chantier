@@ -3,6 +3,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Td, Tr } from "@/components/ui/table";
 import { formatEuros, formatTaux, montant } from "@/lib/money";
 import type { ErreurLigne, LigneEdition } from "../domain/lignes";
+import type { ChampReferenceLigne } from "./reference";
 import { montantLigneHt, montantLigneTtc } from "../domain/totaux";
 
 interface Props {
@@ -14,12 +15,14 @@ interface Props {
   erreurs: readonly ErreurLigne[];
   lectureSeule: boolean;
   onChange: (champ: keyof LigneEdition, valeur: string) => void;
+  onRemplacer: (ligne: LigneEdition) => void;
+  ChampReference?: ChampReferenceLigne | undefined;
   onAction: (action: "monter" | "descendre" | "dupliquer" | "retirer") => void;
 }
 
 const versLigne = (l: LigneEdition) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva });
 
-export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lectureSeule, onChange, onAction }: Props) {
+export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lectureSeule, onChange, onRemplacer, ChampReference, onAction }: Props) {
   const n = index + 1;
   const erreur = (champ: ErreurLigne["champ"]) => erreurs.find((e) => e.index === index && e.champ === champ)?.message;
   const invalide = (champ: ErreurLigne["champ"]) => (erreur(champ) ? { "aria-invalid": true, title: erreur(champ) } : {});
@@ -58,8 +61,9 @@ export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lec
   return (
     <Tr>
       <Td className="min-w-48">
+        {ChampReference && <ChampReference ligne={ligne} index={index} remplacer={onRemplacer} desactive={lectureSeule} />}
         <Input aria-label={`Désignation, ligne ${n}`} value={ligne.designation} readOnly={lectureSeule} onChange={(e) => onChange("designation", e.target.value)} {...invalide("designation")} />
-        {ligne.article_reference && <span className="text-xs text-muted-foreground">Réf. {ligne.article_reference}</span>}
+        {!ChampReference && ligne.article_reference && <span className="text-xs text-muted-foreground">Réf. {ligne.article_reference}</span>}
       </Td>
       <Td className="w-20">
         <Input aria-label={`Quantité, ligne ${n}`} inputMode="decimal" className="text-right" value={ligne.quantite} readOnly={lectureSeule} onChange={(e) => onChange("quantite", e.target.value)} {...invalide("quantite")} />

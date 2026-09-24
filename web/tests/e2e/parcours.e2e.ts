@@ -58,3 +58,15 @@ test("la secrétaire crée un devis multi-TVA ; totaux et numéro viennent de la
   await page.getByRole("link", { name: "Retour à la liste" }).click();
   await expect(page.getByRole("row", { name: /SCI Les Tilleuls/ }).first()).toContainText("216,00 €");
 });
+
+test("remplissage automatique d'une ligne depuis le catalogue : la quantité n'est jamais écrasée", async ({ page }) => {
+  await connexion(page, "secretaire.alpha@erp.local");
+  await page.goto("/devis/nouveau");
+  await page.getByLabel("Quantité, ligne 1").fill("3");
+  await page.getByRole("combobox", { name: "Code article, ligne 1" }).fill("PLB-001");
+  await page.getByRole("combobox", { name: "Code article, ligne 1" }).press("Enter");
+  await expect(page.getByLabel("Désignation, ligne 1")).toHaveValue("Robinet d'arrêt 1/2");
+  await expect(page.getByLabel("Prix unitaire HT, ligne 1")).toHaveValue("45");
+  await expect(page.getByLabel("TVA, ligne 1")).toHaveValue("20");
+  await expect(page.getByLabel("Quantité, ligne 1")).toHaveValue("3");
+});
