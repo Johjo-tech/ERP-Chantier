@@ -15,6 +15,7 @@ import * as queries from "@/api/queries";
 import {
   analyserExportArticles,
   decoderFichierArticles,
+  encodageDuFichier,
   rapportRejetsCsv,
 } from "@/api/regles-import-articles";
 import type { Article, ArticleInsert, Uuid } from "@/api/types";
@@ -191,7 +192,16 @@ export function injecterCatalogue() {
   w.catalogueComplet = catalogueComplet;
   /* La lecture du fichier vit dans un module de règles, sans base ni DOM :
      l'écran ne fait que la déclencher. */
-  w.lireExportArticles = (donnees: ArrayBuffer | Uint8Array) =>
-    analyserExportArticles(decoderFichierArticles(donnees));
+  w.lireExportArticles = (donnees: ArrayBuffer | Uint8Array) => {
+    const rapport = analyserExportArticles(decoderFichierArticles(donnees));
+    /* L'encodage n'est plus supposé, il est constaté : le DIRE, une fois pour
+       le fichier. Un export rouvert par un tableur repasse en UTF-8, et c'est
+       la seule trace qui permettra de comprendre un accent de travers. */
+    rapport.signalements.unshift({
+      ligne: 1,
+      motif: `Fichier lu en ${encodageDuFichier(donnees)}.`,
+    });
+    return rapport;
+  };
   w.rapportRejetsCsv = rapportRejetsCsv;
 }

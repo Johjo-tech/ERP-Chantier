@@ -36,6 +36,15 @@
  * l'éprouver sur des cas tordus sans rien démarrer.
  */
 
+import { decoderTexte, libelleEncodage } from "./regles-encodage";
+import type { RejetImport, SignalementImport } from "./regles-csv";
+
+/* Les deux formes de compte rendu et leur mise en CSV n'ont rien
+   d'articulaire : elles servent aussi à l'import de clients. Ré-exportées ici
+   pour ne pas dérouter les appelants qui les tenaient de ce module. */
+export type { RejetImport, SignalementImport };
+export { rapportRejetsCsv } from "./regles-csv";
+
 /** L'export complet, dans son ordre d'origine. Référence, non exigence. */
 export const COLONNES_ATTENDUES = [
   "Actif",
@@ -128,26 +137,6 @@ export interface ArticleImporte {
   famille: string | null;
 }
 
-/** Une ligne écartée, et pourquoi. Le numéro est celui du fichier. */
-export interface RejetImport {
-  ligne: number;
-  motif: string;
-  contenu: string;
-}
-
-/**
- * Une décision prise à la place du fichier.
- *
- * `code` est absent quand la décision porte sur le FICHIER et non sur une
- * ligne — une colonne manquante, par exemple. Sans quoi le même avertissement
- * se répéterait sur chaque article et noierait les vrais cas.
- */
-export interface SignalementImport {
-  ligne: number;
-  code?: string;
-  motif: string;
-}
-
 export interface RapportImport {
   articles: ArticleImporte[];
   rejets: RejetImport[];
@@ -155,15 +144,23 @@ export interface RapportImport {
 }
 
 /**
- * Décode l'octet à octet en Windows-1252.
+ * Décode le fichier — l'encodage est CONSTATÉ, il n'est plus supposé.
  *
- * `TextDecoder` connaît cet encodage nativement ; on ne recopie pas la table
- * des caractères. Le drapeau `fatal` reste à faux : un octet aberrant doit
- * donner un caractère de remplacement visible, pas faire échouer l'import de
- * mille articles.
+ * Cette fonction tenait Windows-1252 pour acquis. C'est vrai de l'export brut
+ * du logiciel de gestion, et faux dès qu'un tableur l'a rouvert et
+ * réenregistré : le fichier repassait alors en UTF-8 et « Réfection » devenait
+ * « RÃ©fection », sans que rien ne le dise.
+ *
+ * La signature ne bouge pas — `analyserExportArticles` n'a besoin que du
+ * texte. L'encodage retenu ressort par `encodageDuFichier`, pour être annoncé.
  */
 export function decoderFichierArticles(donnees: ArrayBuffer | Uint8Array): string {
-  return new TextDecoder("windows-1252").decode(donnees);
+  return decoderTexte(donnees).texte;
+}
+
+/** L'encodage constaté, en clair, pour le dire dans le rapport. */
+export function encodageDuFichier(donnees: ArrayBuffer | Uint8Array): string {
+  return libelleEncodage(decoderTexte(donnees).encodage);
 }
 
 /** Découpe sur `;` seulement : les guillemets du fichier ne délimitent rien. */
@@ -393,13 +390,4 @@ export function analyserExportArticles(texte: string): RapportImport {
   });
 
   return { articles, rejets, signalements };
-}
-
-/** Le rapport des rejets, en CSV, pour être relu dans un tableur. */
-export function rapportRejetsCsv(rejets: RejetImport[]): string {
-  const echapper = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  return [
-    "Ligne;Motif;Contenu",
-    ...rejets.map((r) => [r.ligne, echapper(r.motif), echapper(r.contenu)].join(";")),
-  ].join("\r\n");
 }
