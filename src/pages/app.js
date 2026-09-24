@@ -305,6 +305,12 @@ function cadreDuDocument(doc){
 
 /** Ce document emprunte-t-il une plateforme, ou relève-t-il de l'e-reporting ? */
 function passeParUnePlateforme(doc){
+  /* Une pièce reprise d'un exercice clos n'emprunte rien : elle a déjà été
+     émise, déclarée et réglée dans l'ancien logiciel. Ses clients sont des
+     bailleurs et des OPH, donc B2G ou B2B — le bouton s'afficherait, et un
+     dépôt est irréversible. La règle vient de la couche TS pour que l'écran
+     n'en ait pas une seconde version. */
+  if(window.estPieceHistorique && window.estPieceHistorique(doc && doc.legacyId)) return false;
   return !window.relveDeLaFactureElectronique
     || window.relveDeLaFactureElectronique(cadreDuDocument(doc));
 }

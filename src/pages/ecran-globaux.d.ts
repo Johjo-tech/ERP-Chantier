@@ -99,10 +99,12 @@ declare global {
     dossierSalarie: any;
     echecsDeLecture: any;
     ecrireImportClients: any;
+    ecrireImportFactures: any;
     emettreFacture: any;
     enregistrerArticle: any;
     entreesDuDomaine: any;
     estAvoir: any;
+    estPieceHistorique: any;
     estRapproche: any;
     estSociete: any;
     etablirAvoir: any;
@@ -188,6 +190,7 @@ declare global {
     preparerPieceJointe: any;
     previsualiserImport: any;
     previsualiserImportClients: any;
+    previsualiserImportFactures: any;
     prochainActeur: any;
     prochainePosition: any;
     prochaineVisiteSuggeree: any;
@@ -235,6 +238,7 @@ declare global {
     statutEnBase: any;
     statutImputation: any;
     statutReglement: any;
+    supprimerBrouillonsImport: any;
     supprimerDocumentRh: any;
     supprimerTravailSupplementaire: any;
     supprimerVisiteMedicale: any;

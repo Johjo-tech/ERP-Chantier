@@ -70,11 +70,23 @@ Deno.serve(async (req) => {
       .toISOString()
       .slice(0, 10);
 
+    /* Les pièces reprises d'un exercice clos sont exclues, et c'est la seule
+       chose qui les en tienne à l'écart : cette requête ne filtre ni sur le
+       cadre de facturation, ni sur le statut. Un historique importé porte une
+       `date` et un `numero` comme n'importe quelle facture — il serait agrégé
+       dans la déclaration d'une période déjà déclarée par le comptable, et
+       l'administration verrait le chiffre d'affaires deux fois. */
     const { data: factures } = await supabase
       .from("factures")
       .select("id, numero, date, type_document, devise")
       .eq("societe_id", societeId)
       .not("numero", "is", null)
+      /* `legacy_id.is.null` EN PREMIER, et ce n'est pas un détail de style :
+         `NOT (NULL LIKE 'compta:%')` vaut NULL et non vrai, si bien qu'un
+         `not.like` seul écarterait toutes les factures ordinaires — elles ont
+         un `legacy_id` vide — et rendrait une déclaration à zéro sans que rien
+         ne le signale. */
+      .or("legacy_id.is.null,legacy_id.not.like.compta:*")
       .gte("date", debutPeriode)
       .lt("date", finExclusive)
       .order("date");
