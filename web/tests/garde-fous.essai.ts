@@ -53,7 +53,8 @@ describe("garde-fous", () => {
   it("aucun secret ni URL de production dans le code", () => {
     const tout = code.map((f) => [f, readFileSync(f, "utf8")] as const);
     const fautifs = tout.filter(([, t]) => /\.supabase\.co\b|service_role|sb_secret_|eyJhbGciOi/.test(t)).map(([f]) => rel(f));
-    expect(fautifs.filter((f) => !f.endsWith("garde-fous.essai.ts"))).toEqual([]);
+    // Les tests des garde-fous citent ces motifs pour prouver qu’ils sont refusés.
+    expect(fautifs.filter((f) => !/garde-(fous|prod)\.essai\.ts$/.test(f))).toEqual([]);
   });
 
   it("aucun catch muet", () => {
