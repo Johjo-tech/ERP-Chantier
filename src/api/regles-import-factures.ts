@@ -195,6 +195,9 @@ export const RACINE_VERS_DESIGNATION: Record<string, string> = {
   "705": "Études",
 };
 
+/** Le libellé d'une ligne fabriquée faute de fichier de lignes. */
+export const DESIGNATION_SANS_LIGNES = "Facturation (historique)";
+
 export function designationDuCompte(compte: string): string | null {
   const racine = RACINE_VERS_DESIGNATION[compte.slice(0, 3)];
   return racine ? `${racine} (historique)` : null;
@@ -482,17 +485,26 @@ function lireLignes(
  */
 export function analyserExportFactures(
   octetsEntetes: ArrayBuffer | Uint8Array,
-  octetsLignes: ArrayBuffer | Uint8Array,
+  octetsLignes: ArrayBuffer | Uint8Array | null | undefined,
   options: OptionsImportFactures = {}
 ): RapportImportFactures {
   const { texte: texteEntetes, encodage } = decoderTexte(octetsEntetes);
-  const { texte: texteLignes } = decoderTexte(octetsLignes);
 
   const brutesEntetes = lireCsv(texteEntetes, separateurDe(texteEntetes));
-  const brutesLignes = lireCsv(texteLignes, separateurDe(texteLignes));
-
   if (!brutesEntetes.length) return echec("Fichier d'en-têtes vide.", encodage);
-  if (!brutesLignes.length) return echec("Fichier de lignes vide.", encodage);
+
+  /* Le fichier de lignes est FACULTATIF, et il faut dire pourquoi : l'en-tête
+     porte déjà le HT, la TVA et le TTC de chaque pièce. Sans lui, on fabrique
+     une ligne unique par facture — les totaux restent exacts, seule la
+     ventilation par compte comptable se perd. Sur l'export 2025, cela ne
+     concerne que 39 pièces sur 768 ; les 729 autres n'ont qu'une ligne, dont
+     le fichier de lignes ne fait que répéter le total. */
+  let brutesLignes: LigneCsv[] | null = null;
+  if (octetsLignes) {
+    const texteLignes = decoderTexte(octetsLignes).texte;
+    brutesLignes = lireCsv(texteLignes, separateurDe(texteLignes));
+    if (!brutesLignes.length) return echec("Fichier de lignes vide.", encodage);
+  }
 
   const entete = resoudreEntete(brutesEntetes[0].champs, ENTETE_REQUISES, [
     ENTETE_NUMERO,
@@ -538,10 +550,21 @@ export function analyserExportFactures(
     });
   }
 
-  const parNumero = lireLignes(brutesLignes, rejets, signalements);
-  if (!parNumero) {
-    return { factures: [], rejets, signalements, totaux: vide, encodage, incoherent: true };
+  let parNumero: Map<string, LigneBrute[]> | null = new Map();
+  if (brutesLignes) {
+    parNumero = lireLignes(brutesLignes, rejets, signalements);
+    if (!parNumero) {
+      return { factures: [], rejets, signalements, totaux: vide, encodage, incoherent: true };
+    }
+  } else {
+    signalements.push({
+      ligne: 1,
+      motif:
+        "Fichier de lignes absent : chaque facture reçoit une ligne unique portant son total. " +
+        "Les montants et la TVA restent exacts ; c'est la ventilation par compte comptable qui se perd.",
+    });
   }
+  const avecLignes = brutesLignes !== null;
 
   const factures: FactureImportee[] = [];
   const vues = new Map<string, number>();
@@ -634,14 +657,34 @@ export function analyserExportFactures(
       continue;
     }
 
-    // ── Les lignes de cette pièce.
-    const sesLignes = parNumero.get(numero) ?? [];
+    /* ── Les lignes de cette pièce.
+       Sans fichier de lignes, on en fabrique une qui porte le total : une
+       facture sans ligne s'afficherait à 0,00 € partout, parce que l'écran et
+       `v_facture_totaux` recalculent depuis `quantite × prix_unitaire` et
+       ignorent les colonnes `total_*`. */
+    let sesLignes = parNumero.get(numero) ?? [];
     if (!sesLignes.length) {
-      refuser(
-        "Aucune ligne dans le fichier de lignes : une facture sans ligne s'afficherait à 0,00 € partout."
-      );
-      incoherent = true;
-      continue;
+      if (avecLignes) {
+        refuser(
+          "Aucune ligne dans le fichier de lignes : une facture sans ligne s'afficherait à 0,00 € partout."
+        );
+        incoherent = true;
+        continue;
+      }
+      sesLignes = [
+        {
+          ligne: l.numero,
+          numero,
+          position: 1,
+          /* Libellé neutre et visiblement générique : sans le compte, on ne
+             sait pas s'il s'agit d'une prestation ou d'une vente, et
+             l'affirmer serait inventer. */
+          designation: DESIGNATION_SANS_LIGNES,
+          compte: "",
+          montantHt: ht,
+          tauxTva: taux,
+        },
+      ];
     }
     utilises.add(numero);
 

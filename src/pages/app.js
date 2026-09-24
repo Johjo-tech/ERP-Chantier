@@ -5193,13 +5193,16 @@ async function choisirFichierFactures(quoi, fichier){
   if(quoi === 'entetes'){ i.nomE = fichier.name; i.octetsE = await fichier.arrayBuffer(); }
   else { i.nomL = fichier.name; i.octetsL = await fichier.arrayBuffer(); }
   i.erreur = ''; i.apercu = null;
-  if(i.octetsE && i.octetsL) await relancerApercuFactures();
+  /* L'aperçu part dès l'en-tête : c'est lui qui porte HT, TVA et TTC. Le
+     fichier de lignes n'ajoute que la ventilation comptable, et il peut
+     arriver après — l'aperçu se refait alors tout seul. */
+  if(i.octetsE) await relancerApercuFactures();
   else renderTab();
 }
 async function relancerApercuFactures(categorie){
   const i = state.facturesImport;
   if(categorie !== undefined) i.categorieZero = categorie;
-  if(!i.octetsE || !i.octetsL) return;
+  if(!i.octetsE) return;
   i.enCours = true; i.erreur = ''; i.progres = 'Lecture des deux fichiers…';
   renderTab();
   try {
@@ -5281,13 +5284,14 @@ function importFacturesHTML(){
 
   if(!i.apercu) return `<div class="form-panel">
     <h3>Reprendre un historique de facturation</h3>
-    <p class="card-sub">Les pièces déjà émises dans votre ancien logiciel, avec leurs numéros d'origine. Deux fichiers sont nécessaires : les <b>en-têtes</b> (une ligne par facture : numéro, date, client, HT, TVA, TTC) et les <b>lignes</b> (le détail par compte comptable). Le séparateur, l'encodage et les noms de colonnes sont reconnus tout seuls. Rien n'est écrit avant votre accord.</p>
+    <p class="card-sub">Les pièces déjà émises dans votre ancien logiciel, avec leurs numéros d'origine. Le séparateur, l'encodage et les noms de colonnes sont reconnus tout seuls. Rien n'est écrit avant votre accord.</p>
     <p class="card-sub"><b>Ces pièces ne pourront plus être modifiées ni supprimées</b> une fois écrites : une facture numérotée est figée par la base. L'aperçu est le seul moment où un écart peut encore se voir.</p>
-    <div style="margin:16px 0; display:flex; flex-direction:column; gap:12px;">
-      <label>En-têtes des factures${i.nomE? ` <span class="card-sub">— ${esc(i.nomE)}</span>`:''}<br>
+    <div style="margin:16px 0; display:flex; flex-direction:column; gap:14px;">
+      <label><b>Les factures</b> — une ligne par pièce : numéro, date, client, HT, TVA, TTC${i.nomE? ` <span class="card-sub">— ${esc(i.nomE)}</span>`:''}<br>
         <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('entetes', this.files[0])"></label>
-      <label>Lignes des factures${i.nomL? ` <span class="card-sub">— ${esc(i.nomL)}</span>`:''}<br>
+      <label><b>Le détail des lignes</b> <span class="card-sub">— facultatif</span> : le montant par compte comptable${i.nomL? ` <span class="card-sub">— ${esc(i.nomL)}</span>`:''}<br>
         <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('lignes', this.files[0])"></label>
+      <div class="card-sub">Le second fichier n'est pas obligatoire : le premier porte déjà tous les montants. Il sert à ventiler les factures qui comptent plusieurs postes — sans lui, chacune n'en portera qu'un, pour son total.</div>
     </div>
     ${retour}
   </div>`;
@@ -5297,7 +5301,7 @@ function importFacturesHTML(){
   const CATEGORIES = [['E','Exonérée de TVA'],['AE','Autoliquidation (le preneur acquitte la taxe)'],['Z','Taux zéro'],['O','Hors champ d\'application']];
 
   return `<div class="form-panel">
-    <h3>${esc(i.nomE)} <span class="card-sub">+ ${esc(i.nomL)}</span></h3>
+    <h3>${esc(i.nomE)}${i.nomL? ` <span class="card-sub">+ ${esc(i.nomL)}</span>`:''}</h3>
 
     <div style="display:flex; gap:18px; flex-wrap:wrap; margin:14px 0;">
       <div><div class="hero-stat-value">${t.pieces}</div><div class="card-sub">pièces à écrire</div></div>
@@ -5321,6 +5325,12 @@ function importFacturesHTML(){
         ${t.parTaux.map(x=>`${x.taux} % sur ${x.pieces} pièce${x.pieces>1?'s':''} (${moneyDisplay(x.ht)})`).join(' · ')}</div>
       ${(a.totaux.pieces !== t.pieces)? `<div class="card-sub" style="margin-top:6px;">Le fichier porte ${a.totaux.pieces} pièces pour ${moneyDisplay(a.totaux.ht)} HT ; l'écart vient des pièces écartées ou déjà présentes.</div>`:''}
     </div>
+
+    ${!i.octetsL? `<div class="wf-banner" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Sans le détail des lignes</div>
+      <div class="card-sub" style="margin-bottom:8px;">Les montants ci-dessus sont exacts — ils viennent du fichier des factures. Chaque pièce portera un seul poste, libellé « ${esc(window.DESIGNATION_SANS_LIGNES||'Facturation (historique)')} ». Si votre logiciel sait aussi exporter le détail par compte comptable, ajoutez-le ici : l'aperçu se refera.</div>
+      <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichierFactures('lignes', this.files[0])">
+    </div>`:''}
 
     ${a.incoherent? `<div class="wf-banner alerte" style="margin-top:10px;">
       <b>Le fichier se contredit lui-même</b> — une TVA, un TTC, un signe ou une somme de lignes ne tombe pas juste. Rien ne sera écrit : ces pièces seraient définitives et fausses. Voyez le détail ci-dessous, et demandez un nouvel export.

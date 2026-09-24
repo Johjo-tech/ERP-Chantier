@@ -1,5 +1,5 @@
 /**
- * L'import de facturation historique : du couple de fichiers jusqu'à l'écriture.
+ * L'import de facturation historique : du fichier jusqu'à l'écriture.
  *
  * Calqué sur `clients-import.ts`, et pour les mêmes raisons : la société vient
  * de la session, l'écran n'a pas à la passer et ne peut donc pas se tromper de
@@ -24,6 +24,7 @@
 import * as queries from "@/api/queries";
 import {
   analyserExportFactures,
+  DESIGNATION_SANS_LIGNES,
   estPieceHistorique,
   legacyDuNumero,
   rapprocherClient,
@@ -154,13 +155,16 @@ const APERCU_VIDE: Omit<ApercuImportFactures, "totaux" | "rejets" | "signalement
   };
 
 /**
- * Lit les deux fichiers, confronte à la base, et rend ce qui sera écrit.
+ * Lit le ou les fichiers, confronte à la base, et rend ce qui sera écrit.
  *
  * Rien n'est écrit ici.
  */
 export async function previsualiserImportFactures(
   octetsEntetes: ArrayBuffer | Uint8Array,
-  octetsLignes: ArrayBuffer | Uint8Array,
+  /* Facultatif : l'en-tête porte déjà HT, TVA et TTC. Sans lui, chaque facture
+     reçoit une ligne unique — les totaux restent exacts, la ventilation par
+     compte comptable se perd. */
+  octetsLignes: ArrayBuffer | Uint8Array | null | undefined,
   options: { categorieTauxZero?: CategorieTva; statut?: FactureStatut } = {}
 ): Promise<ApercuImportFactures> {
   const societe = societeUuid();
@@ -307,4 +311,7 @@ export function injecterImportFactures() {
   /* L'écran doit pouvoir reconnaître une pièce historique sans redéfinir la
      règle : c'est elle qui masque le bouton de transmission. */
   w.estPieceHistorique = estPieceHistorique;
+  /* Le libellé annoncé à l'aperçu doit être CELUI qui sera écrit : deux
+     définitions du même texte divergeraient à la première retouche. */
+  w.DESIGNATION_SANS_LIGNES = DESIGNATION_SANS_LIGNES;
 }
