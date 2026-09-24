@@ -28,7 +28,16 @@ import {
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import { montantLigneHt } from "@/api/regles-totaux";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
-import { cibleAPoserLaPiece, ciblesALeverLaPiece } from "@/api/regles-taches";
+import {
+  cibleAPoserLaPiece,
+  ciblesALeverLaPiece,
+  colonnesDuCreneau,
+  creneauDeclare,
+  creneauDeLaTache,
+  creneauModifiable,
+  memeCreneau,
+  type Creneau,
+} from "@/api/regles-taches";
 import { fusionnerReglages } from "./reglages";
 import { supprimerPieceJointe, televerserPieceJointeBC } from "./pieces-jointes";
 import * as queries from "@/api/queries";
@@ -840,6 +849,11 @@ export interface TacheBC {
   piece_recue_le: string | null;
   sous_traitant_id: Uuid | null;
   date_tache: string | null;
+  /* La plage horaire de la journée. Les colonnes existaient depuis l'origine
+     et n'étaient ni écrites ni relues : l'écran affichait « 08:00 (1h) » pour
+     toute date supplémentaire, une valeur inventée. */
+  heure_debut: string | null;
+  heure_fin: string | null;
 }
 
 /**
@@ -976,11 +990,38 @@ function equipeDuMetier(
   return (valeur.technicien as string | undefined) || undefined;
 }
 
+/**
+ * Le créneau du jour d'origine, pour ce métier.
+ *
+ * Même patron que l'équipe juste au-dessus : la planification part dans
+ * `scheduleParMetier` dès que le bon porte plus d'un métier, et reste sur les
+ * colonnes du bon sinon.
+ *
+ * Sans lui, la tâche du jour d'origine naissait sans horaire alors que le bon
+ * en portait un — et le compte rendu de pré-facture, qui lit `heure_debut` et
+ * `heure_fin`, n'affichait jamais rien.
+ */
+function creneauDuMetier(valeur: Record<string, unknown>, metier: string | null): Creneau | null {
+  const planning = valeur.scheduleParMetier as
+    | Record<string, { heurePlanifiee?: string; dureeHeures?: number } | undefined>
+    | undefined;
+
+  if (metier && planning) {
+    for (const [cle, reglage] of Object.entries(planning)) {
+      if (!memeMetier(cle, metier) || !reglage) continue;
+      const propre = creneauDeclare(reglage.heurePlanifiee, reglage.dureeHeures);
+      if (propre) return propre;
+    }
+  }
+  return creneauDeclare(valeur.heurePlanifiee as string, valeur.dureeHeures as number);
+}
+
 /** Colonnes du circuit, lues d'un bloc pour toute la collection. */
 const CHAMPS_TACHE =
   "id, bon_commande_id, metier, statut, validee_le, realisee_le, commentaire," +
   " croquis, piece_a_commander, piece_description, piece_fournisseur," +
-  " piece_date_commande, piece_recue_le, sous_traitant_id, technicien_id, date_tache";
+  " piece_date_commande, piece_recue_le, sous_traitant_id, technicien_id, date_tache," +
+  " heure_debut, heure_fin";
 
 /** Complète les bons de commande chargés avec l'état réel du circuit. */
 async function reconstituerWorkflow(
@@ -1078,23 +1119,123 @@ async function reconstituerWorkflow(
 export function datesSupplementairesDuBon(
   taches: TacheBC[],
   dateOrigine: string | undefined | null
-): { date: string; heure: string; duree: number; fait: boolean }[] {
+): { date: string; heure: string; duree: number | null; fait: boolean }[] {
+  /* Sans rendez-vous, il n'y a pas de « journée en plus » : le bon est non
+     planifié. La comparaison `d !== (dateOrigine || undefined)` laissait
+     passer TOUTES les dates quand `datePlanifiee` valait la chaîne vide — un
+     bon déplanifié réaffichait ses anciennes journées en vignettes « Suppl. ». */
+  if (!dateOrigine) return [];
+
   const autresDates = [
     ...new Set(
-      taches
-        .map((t) => t.date_tache)
-        .filter((d): d is string => !!d && d !== (dateOrigine || undefined))
+      taches.map((t) => t.date_tache).filter((d): d is string => !!d && d !== dateOrigine)
     ),
   ].sort();
 
-  return autresDates.map((date) => ({
-    date,
-    heure: "08:00",
-    duree: 1,
-    fait: taches
-      .filter((t) => t.date_tache === date)
-      .every((t) => t.statut === "realisee" || t.statut === "validee"),
-  }));
+  return autresDates.map((date) => {
+    const duJour = taches.filter((t) => t.date_tache === date);
+    /* Le créneau qui commence le plus tôt, et non « celui de la première
+       tâche » : la requête n'a aucun tri, et PostgREST rend les lignes dans
+       l'ordre qui l'arrange. Le même piège a déjà mordu ailleurs dans ce
+       fichier. */
+    const creneau = duJour
+      .map((t) => creneauDeLaTache(t))
+      .filter((c): c is Creneau => !!c)
+      .sort((a, b) => a.heure.localeCompare(b.heure))[0];
+
+    return {
+      date,
+      /* Chaîne vide et `null` plutôt qu'un horaire inventé : les tâches
+         d'avant ce correctif n'en portent aucun, et l'affichage du planning
+         applique déjà ses propres défauts pour savoir où poser la vignette. */
+      heure: creneau?.heure ?? "",
+      duree: creneau?.duree ?? null,
+      fait: duJour.every((t) => t.statut === "realisee" || t.statut === "validee"),
+    };
+  });
+}
+
+/**
+ * Retire des journées supplémentaires d'un bon, en supprimant leurs tâches.
+ *
+ * APPELÉE EXPLICITEMENT, jamais déduite. Inférer « cette date a disparu du
+ * tableau, donc supprime ses tâches » obligerait à distinguer « l'écran n'en
+ * parle pas » de « l'écran dit qu'il n'y en a plus » — sur un pont où n'importe
+ * quel formulaire peut enregistrer un bon de commande. Un écran qui
+ * reconstruirait un bon sans ses dates effacerait du planning sans le vouloir.
+ *
+ * `deleteTache` existait dans la couche requêtes depuis l'origine sans un seul
+ * appelant : le ✕ d'une date supplémentaire retirait la ligne de l'écran, la
+ * tâche survivait, et la date revenait au rechargement puisqu'elle en est
+ * dérivée.
+ *
+ * Rend le compte de ce qui a été fait et de ce qui a été refusé, pour que
+ * l'écran puisse le DIRE plutôt que de laisser croire.
+ */
+export async function retirerDatesSupplementaires(
+  bcId: string,
+  dates: string[]
+): Promise<{ supprimees: number; refusees: string[] }> {
+  const refusees: string[] = [];
+  const voulues = (dates ?? []).filter(Boolean);
+  if (!voulues.length) return { supprimees: 0, refusees };
+
+  /* L'identifiant que porte l'écran EST l'uuid de la ligne : les clés primaires
+     sont générées par la base, `legacy_id` ne sert qu'à la reprise. */
+  const { data, error } = await dyn()
+    .from("planning_taches")
+    .select("id, date_tache, statut, commentaire, croquis, piece_a_commander")
+    .eq("bon_commande_id", bcId)
+    .in("date_tache", voulues);
+
+  if (error) {
+    console.error("Retrait d'une date supplémentaire : lecture des tâches impossible", error);
+    throw new Error("Les tâches de cette journée n'ont pas pu être lues.");
+  }
+
+  const taches = (data ?? []) as {
+    id: Uuid;
+    date_tache: string | null;
+    statut: string | null;
+    commentaire: string | null;
+    croquis: string | null;
+    piece_a_commander: boolean | null;
+  }[];
+
+  /* Un travail supplémentaire pointe sur sa tâche par une clé en
+     `ON DELETE SET NULL` : supprimer la tâche l'orphelinerait en silence, et la
+     pré-facture perdrait le métier auquel le rattacher. */
+  const { data: rattaches } = await dyn()
+    .from("tache_travaux_supplementaires")
+    .select("planning_tache_id")
+    .in(
+      "planning_tache_id",
+      taches.map((t) => t.id)
+    );
+  const avecTravaux = new Set(
+    ((rattaches ?? []) as { planning_tache_id: Uuid | null }[])
+      .map((r) => r.planning_tache_id)
+      .filter(Boolean)
+  );
+
+  let supprimees = 0;
+  for (const tache of taches) {
+    const constate =
+      !creneauModifiable(tache.statut) ||
+      !!tache.commentaire ||
+      !!tache.croquis ||
+      !!tache.piece_a_commander ||
+      avecTravaux.has(tache.id);
+    if (constate) {
+      if (tache.date_tache && !refusees.includes(tache.date_tache)) {
+        refusees.push(tache.date_tache);
+      }
+      continue;
+    }
+    await queries.deleteTache(tache.id);
+    supprimees += 1;
+  }
+  return { supprimees, refusees };
 }
 
 /**
@@ -1168,15 +1309,22 @@ async function appliquerWorkflow(
       (valeur.scheduleParMetier as Record<string, { technicien?: string }> | undefined) ?? {}
     ).some((r) => !!r?.technicien);
 
-  /* Dates supplémentaires ajoutées depuis la vignette du planning. */
-  const datesAvant = new Set(
-    ((avant.datesSupplementaires as { date: string }[]) ?? []).map((d) => d.date)
-  );
-  const datesAjoutees = (
-    (valeur.datesSupplementaires as { date: string }[]) ?? []
-  )
-    .map((d) => d.date)
-    .filter((d) => d && !datesAvant.has(d));
+  /* Les journées supplémentaires voulues, avec leur créneau.
+     NON COMPARATIF, comme `equipeDeclaree` juste au-dessus et pour la même
+     raison : `avant` et `valeur` sont SOUVENT LE MÊME OBJET. `stGet` rend
+     l'objet du cache sans copie, l'écran le range tel quel dans son état, et
+     `confirmerAjoutDateSuppl` y pousse la date EN PLACE avant d'enregistrer —
+     si bien que « ce qui a changé depuis avant » était calculé depuis le
+     tableau qu'on venait de modifier, et ressortait vide. La date ne partait
+     qu'au coup d'après, quand le cache s'était désynchronisé : c'est tout le
+     « ça ne marche qu'une fois sur deux ».
+     Les tâches en base sont la seule mesure qui survive à ce piège, et
+     `tachesAcreer` s'en charge plus bas. */
+  const creneauxVoulus = new Map<string, Creneau | null>();
+  for (const d of (valeur.datesSupplementaires as { date: string; heure?: string; duree?: number }[]) ??
+    []) {
+    if (d?.date) creneauxVoulus.set(d.date, creneauDeclare(d.heure, d.duree));
+  }
 
   /* Un bon qui repasse de « non planifié » à « planifié » peut traîner des
      tâches dé-datées, laissées par « pièce arrivée » : elles attendent ce
@@ -1191,7 +1339,7 @@ async function appliquerWorkflow(
     !terrainModifie &&
     !stModifie &&
     !equipeDeclaree &&
-    !datesAjoutees.length &&
+    !creneauxVoulus.size &&
     !bonReplanifie
   ) {
     return;
@@ -1202,7 +1350,9 @@ async function appliquerWorkflow(
      pas de colonne et étant lui-même dérivé des tâches. */
   const { data, error } = await dyn()
     .from("planning_taches")
-    .select("id, metier, statut, date_tache, technicien_id, piece_a_commander")
+    .select(
+      "id, metier, statut, date_tache, technicien_id, piece_a_commander, heure_debut, heure_fin"
+    )
     .eq("bon_commande_id", bcUuid)
     /* Sans tri, PostgREST rend les lignes dans l'ordre qui l'arrange : la
        « première tâche » désignait donc une tâche différente d'un appel à
@@ -1221,6 +1371,8 @@ async function appliquerWorkflow(
     date_tache: string | null;
     technicien_id: Uuid | null;
     piece_a_commander: boolean | null;
+    heure_debut: string | null;
+    heure_fin: string | null;
   }[];
 
   /* L'app historique ne crée pas de tâche : elle coche un métier sur le bon.
@@ -1233,8 +1385,17 @@ async function appliquerWorkflow(
     (valeur.datePlanifiee as string) || (valeur.dateReception as string) || todayISO();
 
   /** Crée la tâche du jour et du métier demandés, si elle n'existe pas déjà. */
-  async function materialiser(metier: string | null, date: string): Promise<Uuid | null> {
+  async function materialiser(
+    metier: string | null,
+    date: string,
+    creneau?: Creneau | null
+  ): Promise<Uuid | null> {
     if (!societeUuid) return null;
+
+    /* Étalé seulement si l'écran a dit quelque chose : envoyer
+       `heure_debut: null` sur une journée dont personne n'a donné l'horaire
+       reviendrait à affirmer qu'elle n'en a pas, alors qu'on l'ignore. */
+    const plage = creneau ? colonnesDuCreneau(creneau) : null;
 
     const creee = await queries.planifierTache(societeUuid, {
       bon_commande_id: bcUuid,
@@ -1246,7 +1407,10 @@ async function appliquerWorkflow(
       // L'équipe est choisie à la planification, sur le bon ; c'est ici qu'elle
       // rejoint la tâche, seul endroit où la garde saura la lire.
       technicien_id: await uuidEquipe(equipeDuMetier(valeur, metier)),
+      ...(plage ?? {}),
     });
+    /* Reporté dans la liste locale, sinon la passe de réconciliation qui suit
+       reverrait cette tâche comme « sans créneau » et la réécrirait aussitôt. */
     taches.push({
       id: creee.id,
       metier: metier || null,
@@ -1254,6 +1418,8 @@ async function appliquerWorkflow(
       date_tache: date,
       technicien_id: (creee.technicien_id as Uuid | null) ?? null,
       piece_a_commander: false,
+      heure_debut: plage?.heure_debut ?? null,
+      heure_fin: plage?.heure_fin ?? null,
     });
     return creee.id;
   }
@@ -1264,7 +1430,7 @@ async function appliquerWorkflow(
        métier vide inatteignable sur un bon qui déclarait ses métiers. */
     const existante = taches.find((t) => memeMetier(t.metier, metier));
     if (existante) return existante.id;
-    return materialiser(metier, dateTache);
+    return materialiser(metier, dateTache, creneauDuMetier(valeur, metier));
   }
 
   try {
@@ -1406,18 +1572,54 @@ async function appliquerWorkflow(
        seule fois.
 
        `datesSupplementaires` n'a pas de colonne : il est dérivé des tâches à la
-       lecture et écarté en silence à l'écriture. `datesAjoutees`, qui le compare
-       à un état jamais persisté, tenait donc chaque enregistrement pour un ajout
-       et recréait une tâche par métier à chaque fois — quatre tâches en double
-       sur BC-2026-0866, toutes le même jour. On se compare désormais aux tâches
-       elles-mêmes, seule mesure qui survive au rechargement. */
-    if (datesAjoutees.length && societeUuid) {
+       lecture et écarté en silence à l'écriture. Un ancien calcul, qui le
+       comparait à un état jamais persisté, tenait chaque enregistrement pour un
+       ajout et recréait une tâche par métier à chaque fois — quatre tâches en
+       double sur BC-2026-0866, toutes le même jour. On se compare désormais aux
+       tâches elles-mêmes, seule mesure qui survive au rechargement : on passe
+       donc TOUTES les journées voulues, et `tachesAcreer` écarte celles qui ont
+       déjà leur tâche. */
+    if (creneauxVoulus.size && societeUuid) {
       const metiers = (valeur.metiers as string[])?.length
         ? (valeur.metiers as string[])
         : [(valeur.metier as string) || null];
-      for (const { date, metier } of tachesAcreer(taches, datesAjoutees, metiers)) {
-        await materialiser(metier, date);
+      for (const { date, metier } of tachesAcreer(taches, [...creneauxVoulus.keys()], metiers)) {
+        await materialiser(metier, date, creneauxVoulus.get(date));
       }
+    }
+
+    /* Le créneau d'une journée déjà posée a pu changer — on déplace la vignette
+       ou on tire sa poignée. Rien ne le portait jusqu'ici : la journée n'étant
+       pas nouvelle, plus aucun code ne la regardait, et l'heure comme la durée
+       revenaient à leur valeur d'avant au rechargement suivant.
+
+       La boucle porte sur les TÂCHES et non sur les dates : les N tâches d'une
+       même journée — une par métier — reçoivent ainsi le même créneau sans
+       traitement particulier. */
+    for (const tache of taches) {
+      if (!tache.date_tache) continue;
+      /* Le jour d'origine n'entre PAS dans `creneauxVoulus` : cette carte pilote
+         la création de tâches, et y ajouter la date du rendez-vous ferait naître
+         les tâches de tous les métiers dès la planification, au lieu du premier
+         pointage. On se contente donc de tenir son créneau à jour sur les tâches
+         qui existent déjà. */
+      const voulu =
+        creneauxVoulus.get(tache.date_tache) ??
+        (tache.date_tache === valeur.datePlanifiee
+          ? creneauDuMetier(valeur, tache.metier)
+          : null);
+      if (!voulu) continue;
+      if (memeCreneau(voulu, creneauDeLaTache(tache))) continue;
+      if (!creneauModifiable(tache.statut)) {
+        console.warn(
+          `Créneau non modifiable, journée déjà pointée : ${libelleBase} du ${tache.date_tache}`
+        );
+        continue;
+      }
+      const plage = colonnesDuCreneau(voulu);
+      await queries.updateTache(tache.id, plage);
+      tache.heure_debut = plage.heure_debut;
+      tache.heure_fin = plage.heure_fin;
     }
 
   } catch (err) {
@@ -2156,6 +2358,9 @@ export function injectGlobalFunctions() {
   w.oublierEchecsDeLecture = oublierEchecsDeLecture;
   w.stDelete = stDelete;
   w.stListKeys = stListKeys;
+  /* Retirer une journée du planning supprime des tâches : c'est un geste
+     explicite, jamais déduit d'un enregistrement de bon. */
+  w.retirerDatesSupplementaires = retirerDatesSupplementaires;
   /* Le chargement ne ramène que la société sur laquelle on travaille : la RLS
      laisse passer toutes celles dont on est membre, et rien ne servait à
      l'écran de les recevoir. */
