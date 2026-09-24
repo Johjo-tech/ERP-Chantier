@@ -162,3 +162,33 @@ export async function renommerMonCompte(id: Uuid, nom: string): Promise<void> {
     .eq("id", id);
   if (error) throw new SupabaseError("Nom du compte non enregistré", error.code, error);
 }
+
+/**
+ * Le rôle d'un membre dans une société.
+ *
+ * `membres_societe.role` décide de tout : navigation, droits, et jusqu'au
+ * tableau de bord que la personne reçoit. Jusqu'ici il ne se posait qu'à
+ * l'invitation, une seule fois — si bien qu'un salarié invité comme
+ * administrateur le restait, quoi qu'on coche ensuite sur sa fiche RH.
+ *
+ * La politique `membres_update` exige `est_admin(societe_id)` : la base
+ * refuse déjà la demande à qui n'en a pas le droit. Aucune migration.
+ *
+ * Rend `false` quand aucune ligne n'a été touchée — la personne n'est pas
+ * membre de cette société. Sans ce contrôle, l'appel réussirait en silence
+ * et l'écran annoncerait un changement qui n'a pas eu lieu.
+ */
+export async function definirRoleMembre(
+  profileId: Uuid,
+  societeId: Uuid,
+  role: RoleMembre,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("membres_societe")
+    .update({ role })
+    .eq("profile_id", profileId)
+    .eq("societe_id", societeId)
+    .select("id");
+  if (error) throw new SupabaseError("Rôle non modifié", error.code, error);
+  return (data ?? []).length > 0;
+}
