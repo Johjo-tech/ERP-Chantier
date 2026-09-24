@@ -983,6 +983,78 @@ function renderShell(){
     </button>`;
   }).join('');
 }
+
+/* ---------- La bulle de la barre de navigation ----------
+   Le gonflement au survol est en CSS (`navBulleEntre`, index.html). Restent
+   ici les deux choses que le CSS ne sait pas faire : relancer une animation
+   au moment où la souris SORT — une règle `:hover` n'a plus prise à cet
+   instant —, et semer une gerbe de gouttes, quand un élément ne dispose que
+   de deux pseudo-éléments.
+
+   `renderShell()` remplace tout le contenu de `#navDesktop` à chaque
+   changement d'onglet : des écouteurs posés sur les boutons eux-mêmes
+   partiraient avec eux. D'où la délégation sur le conteneur, qui, lui, est
+   écrit en dur dans la page. */
+const NAV_BULLE = { gouttes: 10, portee: 44 };
+
+/* La course est déclarée UNE fois, en CSS (`--nav-bulle`). La relire évite
+   qu'un réglage changé dans la feuille de style laisse les gouttes à
+   l'ancienne cadence. */
+function courseBulleNavigation(){
+  const brut = getComputedStyle(document.documentElement).getPropertyValue('--nav-bulle');
+  const ms = parseFloat(brut);
+  return Number.isFinite(ms) && ms > 0 ? ms : 480;
+}
+
+function installerBulleNavigation(){
+  const nav = document.getElementById('navDesktop');
+  if(!nav) return;
+  // Un réglage système posé pour de vraies raisons : la case se remplit, sans
+  // course ni gouttes. Le CSS coupe le reste.
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  /* `mouseout`, pas `mouseleave` : seul le premier remonte jusqu'au conteneur.
+     Il se déclenche aussi en passant du <svg> au <span> à l'intérieur d'un
+     même bouton — `relatedTarget` distingue ce passage d'une vraie sortie. */
+  nav.addEventListener('mouseout', (ev)=>{
+    const item = ev.target.closest('.nav-item');
+    if(!item || !nav.contains(item)) return;
+    if(ev.relatedTarget && item.contains(ev.relatedTarget)) return;
+    eclaterBulleNavigation(nav, item);
+  });
+}
+
+function eclaterBulleNavigation(nav, item){
+  const course = courseBulleNavigation();
+
+  /* Retirer puis remettre la classe ne relance rien : le navigateur compare
+     l'état avant et après le tour de boucle, et n'y voit aucun changement.
+     Lire une mesure de mise en page le force à trancher entre les deux. */
+  item.classList.remove('nav-sort');
+  void item.offsetWidth;
+  item.classList.add('nav-sort');
+  setTimeout(()=>item.classList.remove('nav-sort'), course * 0.55 + 40);
+
+  const gauche = item.offsetLeft, largeur = item.offsetWidth;
+  const milieu = item.offsetTop + item.offsetHeight / 2;
+  for(let i = 0; i < NAV_BULLE.gouttes; i++){
+    const goutte = document.createElement('span');
+    goutte.className = 'nav-goutte';
+    // Vers le haut, avec un arc large : une gerbe, pas une étoile régulière.
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.6;
+    const rayon = NAV_BULLE.portee * (0.45 + Math.random() * 0.85);
+    goutte.style.left = (gauche + largeur * (0.08 + Math.random() * 0.84)).toFixed(1) + 'px';
+    goutte.style.top = milieu.toFixed(1) + 'px';
+    goutte.style.setProperty('--dx', (Math.cos(angle) * rayon).toFixed(1) + 'px');
+    goutte.style.setProperty('--dy', (Math.sin(angle) * rayon * 0.7).toFixed(1) + 'px');
+    goutte.style.setProperty('--t', (2.5 + Math.random() * 4.5).toFixed(1) + 'px');
+    goutte.style.opacity = (0.4 + Math.random() * 0.6).toFixed(2);
+    nav.appendChild(goutte);
+    // Elle se retire elle-même : sans quoi la barre accumulerait une goutte
+    // morte par survol, indéfiniment.
+    goutte.addEventListener('animationend', ()=>goutte.remove());
+  }
+}
 /* ---------- Historique du navigateur ----------
    Sans entrée d'historique, « Précédent » sort de l'application. On en pose
    une à chaque changement d'onglet et à chaque ouverture de formulaire : le
@@ -1704,46 +1776,176 @@ function maFicheConducteur(){
   return state.conducteurs.find(c => c.profileId === moi && c.societeId === state.societeId) || null;
 }
 
+/* Ce qu'un conducteur de travaux mesure.
+
+   `periodeJours` : fenêtre glissante de ses chiffres. Plus court, un seul SAV
+   fait bondir le taux ; plus long, un progrès met un trimestre à se voir.
+   `tentativesInjoignable` : au-delà, ce n'est plus un rappel à faire mais un
+   locataire qu'on n'arrive pas à joindre — et cela se traite autrement. */
+const CONDUCTEUR = { periodeJours: 90, tentativesInjoignable: 3 };
+
+/** Un SAV est un bon rattaché à un autre bon. */
+function estSAV(b){ return !!b.bonCommandeId; }
+
+/**
+ * La date à laquelle les travaux ont réellement fini.
+ *
+ * Elle se lit sur LES TÂCHES, pas sur `dateInterventionTerminee` : ce champ
+ * est saisi à la main dans le formulaire du bon et rien ne l'écrit tout seul.
+ * S'y fier ferait apparaître comme « en retard » des chantiers terminés
+ * depuis des semaines. Il ne sert donc que de repli, quand aucune tâche n'est
+ * datée.
+ */
+function dateFinReelleDuBon(b){
+  if(!bcInterventionFaite(b)) return null;
+  const faites = bcToutesDatesDuBC(b).filter(d=>d.fait && d.dayIso).map(d=>d.dayIso).sort();
+  return faites.length ? faites[faites.length-1] : (b.dateInterventionTerminee || null);
+}
+
+/** Fin de travaux dépassée, et le terrain n'a pas fini. */
+function bonHorsDelai(b, today){
+  return !!b.dateFinTravaux && b.dateFinTravaux < today && !bcInterventionFaite(b);
+}
+
+/** Écart moyen en jours entre deux dates d'un même bon, sur la période. */
+function moyenneJours(bons, dateDebut, dateFin, depuis){
+  const ecarts = [];
+  for(const b of bons){
+    const d = dateDebut(b), f = dateFin(b);
+    if(!d || !f || f < depuis) continue;
+    const n = Math.round((new Date(f+'T00:00:00').getTime() - new Date(d+'T00:00:00').getTime()) / 86400000);
+    if(Number.isFinite(n) && n >= 0) ecarts.push(n);
+  }
+  return ecarts.length ? ecarts.reduce((s,n)=>s+n, 0) / ecarts.length : null;
+}
+
+/**
+ * Les indicateurs du conducteur, sur ses seules affaires.
+ *
+ * AUCUN MONTANT, délibérément : le chiffre d'affaires, les impayés et le
+ * montant à facturer sont le métier de l'administration. Ce qui se joue chez
+ * lui, ce sont des délais tenus, des réclamations, et des affaires qui
+ * attendent quelqu'un.
+ */
+function statsConducteur(bons){
+  const today = todayISO();
+  const jour = 86400000;
+  const seuilRdv = reglagesCourants().seuils.conducteurSansRdv;
+  const depuis = dateLocaleISO(new Date(Date.now() - CONDUCTEUR.periodeJours * jour));
+  const limiteRdv = dateLocaleISO(new Date(Date.now() - seuilRdv * jour));
+
+  const ouverts = bons.filter(b=>!circuitTermine(b));
+  const sav = ouverts.filter(estSAV);
+  const horsDelai = ouverts.filter(b=>bonHorsDelai(b, today));
+  /* Un SAV ne passe pas par le chiffrage : le compter ici ferait attendre une
+     validation qui n'est jamais demandée. */
+  const aValider = ouverts.filter(b=>!b.valideConducteur && !estSAV(b));
+  const chezDirecteur = ouverts.filter(b=>b.valideConducteur && !b.valideDirecteur);
+  const sansRdv = ouverts.filter(b=>!b.datePlanifiee && b.dateReception && b.dateReception <= limiteRdv);
+  const aRappeler = ouverts.filter(b=>b.rappelDate && b.rappelDate <= today);
+  const injoignables = ouverts.filter(b=>!b.datePlanifiee
+    && (parseInt(b.tentativesContact, 10) || 0) >= CONDUCTEUR.tentativesInjoignable);
+  const pieces = ouverts.filter(b=>b.pieceACommander && !b.pieceACommanderDateCommande);
+
+  /* Les chiffres de la période ne portent que sur ce qui s'est TERMINÉ : une
+     affaire en cours n'a ni délai tenu ni durée d'exécution, et la compter
+     ferait baisser les deux sans qu'il se soit rien passé. */
+  const terminees = bons.filter(b=>{ const f = dateFinReelleDuBon(b); return f && f >= depuis; });
+  const savNes = bons.filter(b=>estSAV(b) && (b.dateReception || b.date || '') >= depuis);
+  const dansLeDelai = terminees.filter(b=>!b.dateFinTravaux || dateFinReelleDuBon(b) <= b.dateFinTravaux);
+
+  /* Les deux se recouvrent — un locataire injoignable porte souvent un rappel.
+     Compter les bons, pas les motifs : sinon le même chantier s'annonce deux
+     fois, et le total « à traiter » gonfle sans que rien ne s'ajoute. */
+  const aContacter = ouverts.filter(b=>aRappeler.includes(b) || injoignables.includes(b));
+
+  return {
+    sav, horsDelai, aValider, chezDirecteur, sansRdv, aRappeler, injoignables, aContacter, pieces,
+    seuilRdv, terminees: terminees.length,
+    tauxSAV:   terminees.length ? (savNes.length / terminees.length) * 100 : null,
+    delaiTenu: terminees.length ? (dansLeDelai.length / terminees.length) * 100 : null,
+    priseEnCharge: moyenneJours(bons, b=>b.dateReception, b=>b.datePlanifiee, depuis),
+    execution:     moyenneJours(bons, b=>b.datePlanifiee, b=>dateFinReelleDuBon(b), depuis),
+  };
+}
+
+/** Une mesure de la période : un chiffre, son unité, et une jauge. */
+function mesureConducteur(libelle, precision, valeur, unite, part, bon){
+  const vide = valeur === null || valeur === undefined;
+  const teinte = vide ? 'var(--text-dim)' : (bon ? 'var(--success)' : 'var(--accent-2)');
+  return `<div class="card mesure-conducteur">
+    <div class="card-sub" style="margin-bottom:6px;">${esc(libelle)}<br><span style="font-size:11px;">${esc(precision)}</span></div>
+    <div class="stat-num" style="font-size:22px;">${vide ? '—' : esc(valeur)}<span style="font-size:12px; font-weight:600; color:var(--text-dim);">${vide ? '' : ' ' + unite}</span></div>
+    <div class="mesure-jauge"><i style="width:${vide ? 0 : Math.max(0, Math.min(100, part))}%; background:${teinte};"></i></div>
+  </div>`;
+}
+
 function renderDashboardConducteur(){
   const soc = state.societeId;
-  const today = todayISO();
   const fiche = maFicheConducteur();
   /* Sans fiche rattachée, on ne peut pas distinguer ses affaires : on montre
      tout, et on le DIT — un écran qui filtre en silence ferait croire à un
      conducteur qu'il n'a rien à valider. */
   const bons = state.bonsCommande.filter(b=>b.societeId===soc
     && (!fiche || b.conducteurId === fiche.id));
-  const traiter = computeDashTraiter(soc, fiche);
-  const enRetard = bons.filter(b=>b.dateFinTravaux && b.dateFinTravaux < today
-    && !state.factures.some(f=>f.bonCommandeId===b.id));
-  const piecesAttendues = bons.filter(b=>b.pieceACommander && !b.pieceACommanderDateCommande);
-  const nonPlanifies = bons.filter(b=>!b.datePlanifiee && !circuitTermine(b));
+  const s = statsConducteur(bons);
+  const aTraiter = s.sav.length + s.horsDelai.length + s.aValider.length
+    + s.sansRdv.length + s.aContacter.length + s.pieces.length;
+
+  const ligne = (destination, fond, picto, libelle, precision, nombre, teinte) => nombre
+    ? `<div class="traiter-row" role="button" tabindex="0" onclick="ouvrirDepuisDashboard('${jsAttr(destination)}')"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('${jsAttr(destination)}');}">
+        <span class="traiter-ico" style="background:${fond};">${picto}</span>
+        <span class="traiter-label">${esc(libelle)}<small style="display:block; color:var(--text-dim); font-weight:400;">${esc(precision)}</small></span>
+        <span class="traiter-count"${teinte ? ` style="background:${teinte};"` : ''}>${nombre}</span>
+        <span class="traiter-chev">›</span>
+      </div>`
+    : '';
 
   return `
     ${enteteDashboard(salutation(), fiche
-      ? 'Vos chantiers en cours — ' + societeName(soc)
+      ? 'Vos chantiers — ' + societeName(soc) + ' · ' + bons.length + ' affaire' + (bons.length>1?'s':'')
       : 'Tous les chantiers — ' + societeName(soc))}
-    ${fiche? '' : `<div class="card" style="border-color:var(--accent); background:var(--accent-soft); margin-bottom:16px;">👤 Votre compte n'est rattaché à aucune fiche de conducteur : cet écran montre les affaires de <b>toute la société</b>. Un administrateur peut faire le lien dans <b>Réglages › Intervenants</b>.</div>`}
+    ${fiche? '' : `<div class="card" style="border-color:var(--accent); background:var(--accent-soft); margin-bottom:16px;">👤 Votre compte n'est rattaché à aucune fiche de conducteur : cet écran montre les affaires de <b>toute la société</b>. Cochez « Conducteur de travaux » sur votre fiche dans <b>RH</b>, une fois votre compte créé.</div>`}
+
     <div class="grid-stats grid-stats-4">
-      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Bons à valider', valeur:traiter.enAttenteConducteur,
-        ton: traiter.enAttenteConducteur?'warn':'', destination:'aValider', titre:'Voir les bons en attente de validation'})}
-      ${tuileDashboard({icone:ICONS.planning, libelle:'Travaux en retard', valeur:enRetard.length,
-        ton: enRetard.length?'danger':'', destination:'planning', titre:'Ouvrir le planning'})}
-      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'Pièces à commander', valeur:piecesAttendues.length,
-        destination:'pieces', titre:'Voir les pièces en commande'})}
-      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'À facturer', valeur:traiter.aFacturer,
-        sous: moneyDisplay(traiter.aFacturerMontant) + ' HT', destination:'aFacturer',
-        titre:'Voir les bons de commande à facturer'})}
+      ${tuileDashboard({icone:ICONS.planning, libelle:'Hors délai', valeur:s.horsDelai.length,
+        sous:'fin de travaux dépassée', ton: s.horsDelai.length?'danger':'', destination:'horsDelai',
+        titre:'Ouvrir le planning'})}
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'SAV ouverts', valeur:s.sav.length,
+        sous:'réclamations en cours', ton: s.sav.length?'danger':'', destination:'sav',
+        titre:'Voir les SAV'})}
+      ${tuileDashboard({icone:ICONS.bonsCommande, libelle:'En attente de ma validation', valeur:s.aValider.length,
+        ton: s.aValider.length?'warn':'', destination:'aValider',
+        titre:'Voir les bons à valider'})}
+      ${tuileDashboard({icone:ICONS.planning, libelle:'Sans rendez-vous', valeur:s.sansRdv.length,
+        sous:'reçus depuis plus de ' + s.seuilRdv + ' j', destination:'sansRdv',
+        titre:'Ouvrir le planning'})}
     </div>
-    <div class="section-title-row"><span class="section-title" style="margin:0;">À traiter</span></div>
+
+    <div class="section-title-row"><span class="section-title" style="margin:0;">À traiter ${aTraiter? `<span class="dossier-badge" style="margin-left:6px;">${aTraiter}</span>`:''}</span></div>
     <div class="card traiter-card">
-      ${traiter.enAttenteConducteur || traiter.aValiderDirecteur || nonPlanifies.length || traiter.rappelsAujourdhui ? `
-      ${traiter.enAttenteConducteur? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('aValider')"><span class="traiter-ico" style="background:var(--info-soft);">🦺</span><span class="traiter-label">Bons de commande à valider</span><span class="traiter-count">${traiter.enAttenteConducteur}</span><span class="traiter-chev">›</span></div>`:''}
-      ${nonPlanifies.length? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('planning')"><span class="traiter-ico" style="background:var(--accent-soft);">📅</span><span class="traiter-label">Bons non planifiés</span><span class="traiter-count">${nonPlanifies.length}</span><span class="traiter-chev">›</span></div>`:''}
-      ${traiter.rappelsAujourdhui? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('planning')"><span class="traiter-ico" style="background:#EDE4FF;">🔄</span><span class="traiter-label">Locataires à rappeler</span><span class="traiter-count">${traiter.rappelsAujourdhui}</span><span class="traiter-chev">›</span></div>`:''}
-      ${traiter.aValiderDirecteur? `<div class="traiter-row" onclick="ouvrirDepuisDashboard('impayees')"><span class="traiter-ico" style="background:var(--success-soft);">✍️</span><span class="traiter-label">En attente du directeur</span><span class="traiter-count">${traiter.aValiderDirecteur}</span><span class="traiter-chev">›</span></div>`:''}
+      ${aTraiter || s.chezDirecteur.length ? `
+      ${ligne('sav', 'var(--danger-soft)', '⚠', 'SAV ouverts', s.sav.map(b=>b.problemeDescription).filter(Boolean).slice(0,3).join(' · ') || 'Réclamations en cours', s.sav.length, 'var(--danger)')}
+      ${ligne('horsDelai', 'var(--danger-soft)', '⏰', 'Travaux hors délai', 'Fin de travaux dépassée, intervention non terminée', s.horsDelai.length, 'var(--danger)')}
+      ${ligne('aValider', 'var(--info-soft)', '🦺', 'Bons à valider', 'Le chiffrage attend mon accord', s.aValider.length, '')}
+      ${ligne('sansRdv', 'var(--accent-soft)', '📅', 'Sans rendez-vous', 'Reçus depuis plus de ' + s.seuilRdv + ' jours, jamais planifiés', s.sansRdv.length, '')}
+      ${ligne('planning', '#EDE4FF', '🔄', 'Locataires à contacter', s.injoignables.length? s.injoignables.length + ' injoignable' + (s.injoignables.length>1?'s':'') + ' après ' + CONDUCTEUR.tentativesInjoignable + ' tentatives' : 'Rappel prévu aujourd\'hui ou dépassé', s.aContacter.length, '#6B46C1')}
+      ${ligne('pieces', 'var(--accent-soft)', '📦', 'Pièces à commander', 'Le chantier attend tant qu\'elles manquent', s.pieces.length, '')}
+      ${ligne('aFacturer', 'var(--surface-2)', '✍️', 'En attente du directeur', 'Validés de mon côté — la balle n\'est plus chez moi', s.chezDirecteur.length, 'var(--text-dim)')}
       ` : '<div class="empty">🎉 Rien à traiter — tout est à jour.</div>'}
     </div>
+
+    <div class="section-title-row"><span class="section-title" style="margin:0;">Mes chiffres — ${CONDUCTEUR.periodeJours} derniers jours</span></div>
+    ${s.terminees === 0
+      ? '<div class="card"><div class="empty">Aucune affaire terminée sur la période : rien à mesurer pour l\'instant.</div></div>'
+      : `<div class="grid-stats grid-stats-4">
+      ${mesureConducteur('Taux de SAV', 'SAV nés / affaires terminées', s.tauxSAV===null?null:s.tauxSAV.toFixed(1).replace('.', ','), '%', s.tauxSAV===null?0:s.tauxSAV*5, s.tauxSAV !== null && s.tauxSAV < 10)}
+      ${mesureConducteur('Délai tenu', 'terminé avant la fin de travaux', s.delaiTenu===null?null:Math.round(s.delaiTenu), '%', s.delaiTenu||0, s.delaiTenu !== null && s.delaiTenu >= 80)}
+      ${mesureConducteur('Prise en charge', 'réception → rendez-vous posé', s.priseEnCharge===null?null:s.priseEnCharge.toFixed(1).replace('.', ','), 'j', (s.priseEnCharge||0)*10, s.priseEnCharge !== null && s.priseEnCharge <= s.seuilRdv)}
+      ${mesureConducteur('Exécution', 'rendez-vous → travaux terminés', s.execution===null?null:s.execution.toFixed(1).replace('.', ','), 'j', (s.execution||0)*5, false)}
+    </div>`}
+    <div class="card-sub" style="margin-top:10px;">Calculé sur ${s.terminees} affaire${s.terminees>1?'s':''} terminée${s.terminees>1?'s':''} ${fiche? 'dont vous êtes le conducteur' : 'de la société'}.</div>
   `;
 }
 
@@ -1783,6 +1985,14 @@ const DESTINATIONS_DASHBOARD = {
   aValider:      { tab:'planning',  etat:{ planningView:'attente' } },
   planning:      { tab:'planning',  etat:{} },
   pieces:        { tab:'piecesCommande', etat:{} },
+  /* Les SAV se filtrent déjà dans la liste des bons : la tuile ouvre ce
+     filtre plutôt qu'un écran où il faudrait le reposer à la main. */
+  sav:           { tab:'bonsCommande', etat:{ bonCommandeTypeFilter:'sav', bonCommandeSearch:'' } },
+  /* « Hors délai » et « sans rendez-vous » n'ont pas de filtre à eux dans la
+     liste : le planning est l'écran où l'on agit dessus — on y reprend un
+     rendez-vous ou on en pose un. */
+  horsDelai:     { tab:'planning', etat:{} },
+  sansRdv:       { tab:'planning', etat:{} },
   chantiers:     { tab:'chantiers', etat:{} },
 };
 
@@ -1925,6 +2135,118 @@ function montantsCherchables(doc){
   return [money(t.ht), money(t.ttc), t.ht.toFixed(2), t.ttc.toFixed(2)];
 }
 function devisSearchHaystack(d){ return window.texteDocument(d, montantsCherchables(d)); }
+
+/* ---------- Le croisement factures ↔ bons de commande ----------
+
+   Sur une FACTURE, `adresse` est le siège du client — `saveDocument` y écrit
+   `resolveClientAdresse(client)`. Sur un bon, c'est le chantier. Chercher une
+   rue dans les factures ramenait donc toutes les factures du bailleur dont le
+   siège est là, alors qu'on cherche le lieu des travaux : celui-ci vit dans
+   `adresseLocataire`, que le module lit déjà. */
+const CHAMPS_NON_CHERCHES_FACTURE = ['adresse'];
+
+/**
+ * L'index de croisement, construit une fois par chargement.
+ *
+ * La garde compare l'IDENTITÉ des tableaux, et c'est exact : `recharger()`
+ * réaffecte `state.factures` et `state.bonsCommande` avec des tableaux neufs
+ * venus du pont — aucun chemin du dépôt ne les mute en place. L'identité change
+ * donc dès que les données changent, et pas avant.
+ *
+ * Sans cet index, résoudre le bon de chaque facture coûtait un parcours de tous
+ * les bons par facture, à chaque frappe. Il porte aussi les montants formatés,
+ * qui cessent ainsi d'être recalculés document par document.
+ */
+let indexCroisementCache = null;
+function indexCroisement(){
+  /* Restreint à la société AVANT l'indexation : deux bailleurs peuvent employer
+     la même série de numéros, et un index qui les mélangerait rapprocherait la
+     facture de l'un du bon de l'autre. */
+  const soc = state.societeId;
+  if(indexCroisementCache
+    && indexCroisementCache.factures === state.factures
+    && indexCroisementCache.bons === state.bonsCommande
+    && indexCroisementCache.societeId === soc){
+    return indexCroisementCache;
+  }
+
+  const factures = (state.factures||[]).filter(f=>f.societeId===soc);
+  const bons = (state.bonsCommande||[]).filter(b=>b.societeId===soc);
+  const index = window.construireIndexFactureBC({ factures, bons });
+
+  const apportsFacture = new Map();
+  for(const f of factures){
+    const venusDuBon = window.bonsDeLaFacture(f, index).flatMap(b=>window.apportsDuBon(b));
+    apportsFacture.set(f.id, [
+      ...montantsCherchables(f).map(v=>({ etiquette:'Montant', valeur:v })),
+      ...venusDuBon,
+    ]);
+  }
+
+  const apportsBon = new Map();
+  for(const b of bons){
+    const montant = parseFloat(b.montant) || 0;
+    const venusDeLaFacture = window.facturesDuBon(b, index)
+      .flatMap(f=>window.apportsDeLaFacture(f, b, montantsCherchables(f)));
+    apportsBon.set(b.id, [
+      { etiquette:'Montant', valeur: money(montant) },
+      { etiquette:'Montant', valeur: montant.toFixed(2) },
+      ...venusDeLaFacture,
+    ]);
+  }
+
+  indexCroisementCache = { factures: state.factures, bons: state.bonsCommande,
+    societeId: soc, index, apportsFacture, apportsBon };
+  return indexCroisementCache;
+}
+
+/** Les apports d'une facture, en paires — l'étiquette sert à dire ce qui a matché. */
+function apportsFacture(f){
+  return indexCroisement().apportsFacture.get(f && f.id) || montantsCherchables(f).map(v=>({ etiquette:'Montant', valeur:v }));
+}
+function apportsBonCommande(b){
+  const montant = parseFloat((b||{}).montant) || 0;
+  return indexCroisement().apportsBon.get(b && b.id)
+    || [{ etiquette:'Montant', valeur: money(montant) }, { etiquette:'Montant', valeur: montant.toFixed(2) }];
+}
+const valeursDesApports = (apports) => apports.map(a=>a.valeur);
+
+/**
+ * Dire d'où vient la correspondance, quand elle ne vient pas du document.
+ *
+ * Calculée au RENDU : le filtrage voit toute la collection, le rendu la dizaine
+ * de cartes qui restent. L'attribution y est gratuite, et elle coûterait cher
+ * à l'autre bout.
+ *
+ * Le module n'annonce un apport que s'il porte un mot que le texte propre du
+ * document ne contient pas : un locataire recopié du bon sur la facture n'est
+ * donc jamais présenté comme venu d'ailleurs.
+ */
+function origineRechercheHTML(doc, requete, apports, champsIgnores){
+  if(!(requete||'').trim()) return '';
+  const origines = window.origineDeLaCorrespondance(doc, requete, apports, champsIgnores||[]);
+  if(!origines.length) return '';
+  const texte = origines.map(o=>`${o.etiquette} ${o.valeur}`).join(' · ');
+  return `<div class="recherche-origine" title="${esc(texte)}">🔎 ${esc(texte)}</div>`;
+}
+
+/**
+ * La requête qui s'applique aux cartes de bon sur l'écran courant.
+ *
+ * La même carte sert quatre écrans — la liste des bons, Facturation ›
+ * Validation et › À facturer, le planning et les pièces en commande —, et
+ * chacun a sa propre recherche. `bonCommandeCardHTML` doit la RECALCULER plutôt
+ * que la recevoir : `toggleBonCommandeCard` redessine une carte isolée, et une
+ * mention passée en argument disparaîtrait au premier dépli.
+ */
+function requeteCouranteBons(){
+  if(state.tab === 'bonsCommande') return state.bonCommandeSearch || '';
+  const vue = state.facturesView || 'liste';
+  if(state.tab === 'factures' && (vue === 'validation' || vue === 'afacturer')){
+    return state.factureSearch || '';
+  }
+  return '';
+}
 /**
  * Les numéros de bon de commande que porte une facture.
  *
@@ -1937,19 +2259,25 @@ function devisSearchHaystack(d){ return window.texteDocument(d, montantsCherchab
  *    ne lit que la facture ne pouvait donc pas le trouver.
  */
 function numerosBCdeLaFacture(f){
-  const bon = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
+  /* Par la CLÉ seulement, délibérément : ce libellé s'AFFICHE sur la carte
+     (« 📋 N° BC … »), il affirme donc un lien. Les bons rapprochés par numéro
+     en texte alimentent la recherche, jamais cette mention-là. */
+  const bon = f.bonCommandeId ? indexCroisement().index.bonsParId.get(f.bonCommandeId) : null;
   return [f.refBonCommandeClient, bon && bon.numeroBC, bon && bon.numeroInterne].filter(Boolean);
 }
+/* Le même texte doit répondre pareil dans la barre, sous la touche Entrée et
+   dans la recherche du tableau de bord : les trois lisent donc les mêmes
+   apports. Ils divergeaient — taper un n° de bon dans la liste des factures ne
+   trouvait rien alors qu'Entrée, dans le même champ, le trouvait. */
 function factureSearchHaystack(f){
-  return window.texteDocument(f, [...montantsCherchables(f), ...numerosBCdeLaFacture(f)]);
+  return window.texteDocument(f, valeursDesApports(apportsFacture(f)), CHAMPS_NON_CHERCHES_FACTURE);
 }
 function interventionSearchHaystack(i){
   const metierLabel = (METIERS.find(m=>m.value===i.typePanne)||{}).label || '';
   return window.texteDocument(i, [metierLabel]);
 }
 function bonCommandeSearchHaystack(b){
-  const montant = parseFloat(b.montant) || 0;
-  return window.texteDocument(b, [money(montant), montant.toFixed(2)]);
+  return window.texteDocument(b, valeursDesApports(apportsBonCommande(b)));
 }
 function globalSearchResultsList(q){
   const query = (q||'').trim().toLowerCase();
@@ -2695,6 +3023,35 @@ function cleDelaiDuClient(client){
   return p ? p.cle : 'autre';
 }
 
+/**
+ * Le délai que le type de client appelle.
+ *
+ * Un particulier paie À RÉCEPTION : le crédit de 30 ou 60 jours est un usage
+ * entre professionnels, et le proposer par défaut à un particulier revient à
+ * lui accorder un délai que personne n'a voulu. Les autres cadres retombent
+ * sur le réglage de la société.
+ */
+const DELAI_PAR_CADRE = { B2C: 'reception' };
+
+/**
+ * Reposer le délai quand le type de client change.
+ *
+ * NE TOUCHE QU'À CE QUE PERSONNE N'A CHOISI : la valeur de départ, ou celle
+ * qu'un précédent changement de type avait posée. Un délai saisi à la main
+ * survit au changement — sans quoi ouvrir la liste des types effacerait un
+ * arbitrage commercial sans rien dire.
+ */
+function appliquerDelaiDuCadre(cadre){
+  const preset = document.getElementById('c_delaiPreset');
+  if(!preset) return;
+  const voulu = DELAI_PAR_CADRE[cadre] || 'societe';
+  const posePourVous = preset.value === 'societe' || preset.dataset.pose === '1';
+  if(!posePourVous || preset.value === voulu) return;
+  preset.value = voulu;
+  preset.dataset.pose = voulu === 'societe' ? '' : '1';
+  choisirDelaiPreregle();
+}
+
 function optionsDelaiHTML(client){
   const courante = cleDelaiDuClient(client);
   const sel = (c) => c===courante ? ' selected' : '';
@@ -2714,8 +3071,13 @@ function optionsModeReglementHTML(courant){
  * pour un délai hors liste. Ce sont eux que `saveClient` lit — la clé de liste
  * ne s'enregistre jamais, elle n'est qu'une façon de saisir.
  */
-function choisirDelaiPreregle(){
-  const cle = (document.getElementById('c_delaiPreset')||{}).value || 'societe';
+function choisirDelaiPreregle(parLUtilisateur){
+  const preset = document.getElementById('c_delaiPreset');
+  /* Choisi à la main : plus aucun changement de type de client ne le
+     reprendra. C'est la seule marque qui distingue une valeur voulue d'une
+     valeur posée pour vous. */
+  if(parLUtilisateur && preset) preset.dataset.pose = '';
+  const cle = (preset||{}).value || 'societe';
   const jours = document.getElementById('c_delaiPaiementJours');
   const mode = document.getElementById('c_delaiPaiementMode');
   const libre = cle === 'autre';
@@ -3568,8 +3930,37 @@ function bonCommandeDocMetaLignes(b){
   ].filter(Boolean);
 }
 /** Le bloc numéro/dates de l'en-tête, en paires libellé/valeur. */
+/**
+ * Jusqu'à quand ce devis engage.
+ *
+ * Aucune date n'est stockée sur le devis : elle se déduit de sa date
+ * d'émission et de la validité réglée dans Réglages › Devis & factures. Un
+ * champ de plus à saisir aurait fini vide ou faux, alors que le réglage
+ * existe déjà et n'était lu par aucun document.
+ *
+ * L'arithmétique est déléguée à `dateEcheance`, qui compte en UTC : additionner
+ * des jours sur une date locale fait basculer la veille avant 1 h à Paris.
+ */
+function validiteDevis(doc){
+  const jours = Number(reglagesCourants().documents.validiteDevisJours);
+  if(!doc.date || !Number.isFinite(jours) || jours <= 0) return null;
+  return { jours, date: window.dateEcheance(doc.date, { jours, mode: 'net' }) };
+}
+
 function metaDocHTML(type, doc){
   const l = [['Numéro', esc(doc.numero)], ["Date d'émission", fmtDate(doc.date)]];
+  if(type==='devis'){
+    const v = validiteDevis(doc);
+    /* La durée EN PLUS de la date : « 24/10/2026 » ne dit pas si l'offre tenait
+       un mois ou trois, et c'est ce que le client demande au téléphone.
+       Deux entrées et non une seule : la colonne méta fait la largeur d'un
+       numéro de devis, et « 24/10/2026 · 30 jours » y retombait à la ligne sur
+       le mot « jours ». */
+    if(v){
+      l.push(["Valable jusqu'au", fmtDate(v.date)]);
+      l.push(['Durée de validité', v.jours + ' jours']);
+    }
+  }
   if(type==='facture' && doc.echeance) l.push(["Date d'échéance", fmtDate(doc.echeance)]);
   if(type==='facture') l.push(...factureDocMetaLignes(doc));
   if(type==='bonCommande') l.push(...bonCommandeDocMetaLignes(doc));
@@ -3688,7 +4079,11 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
          le bon de commande de la validation de sa pré-facture. */
       type === 'facture' ? '' : `<table class="p-sign"><tr>
       <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
-      <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
+      ${/* Le devis ne recueille QUE la signature du client : l'émetteur
+           s'engage en l'envoyant, et une seconde ligne laissée vierge fait
+           douter que le document soit complet. La validation de pré-facture,
+           elle, se signe bien des deux côtés — c'est un arbitrage interne. */
+        type === 'devis' ? '' : `<td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>`}
     </tr></table>`}
     <div class="p-bas-de-page">
       ${blocMentionsHTML(type, s)}
@@ -4044,16 +4439,41 @@ function searchEnterCycle(ev, type){
     if(state.tab==='factures' && (vue==='validation' || vue==='afacturer')) return bonsDeLaVue(vue);
     return state.bonsCommande.filter(b=>b.societeId===state.societeId);
   };
+  /* `matches(q)` plutôt qu'un prédicat : la liste réellement affichée dépend de
+     l'écran, et les bons n'ont pas les mêmes filtres selon qu'on les regarde
+     depuis l'onglet Bons ou depuis Facturation › Validation. */
+  const vueFactures = state.facturesView || 'liste';
+  const bonsDansFacturation = state.tab==='factures'
+    && (vueFactures==='validation' || vueFactures==='afacturer');
   const configs = {
-    bonCommande: { list: bonsVisibles(), matchFn: bonCommandeMatchesSearch, prefix: 'bonCommande-card-' },
-    devis: { list: state.devis.filter(d=>d.societeId===state.societeId), matchFn: devisMatchesSearch, prefix: 'devis-card-' },
-    facture: { list: state.factures.filter(f=>f.societeId===state.societeId), matchFn: factureMatchesSearch, prefix: 'facture-card-' },
-    intervention: { list: state.interventions.filter(i=>i.societeId===state.societeId), matchFn: interventionMatchesSearch, prefix: 'intervention-card-' }
+    bonCommande: {
+      prefix: 'bonCommande-card-',
+      matches: (q) => bonsDansFacturation
+        ? window.filtrerDocuments(bonsDeLaVue(vueFactures), criteresFactures(vueFactures), contexteBonCommande)
+        : bonCommandeListItems().filter(item => bonCommandeItemRetenu(item, q)).map(item => item.data),
+    },
+    devis: { prefix: 'devis-card-',
+      matches: (q) => state.devis.filter(d=>d.societeId===state.societeId && devisMatchesSearch(d, q)) },
+    facture: {
+      prefix: 'facture-card-',
+      matches: () => window.filtrerDocuments(
+        state.factures.filter(f=>f.societeId===state.societeId),
+        criteresFactures(vueFactures), contexteFacture),
+    },
+    intervention: { prefix: 'intervention-card-',
+      matches: (q) => state.interventions.filter(i=>i.societeId===state.societeId && interventionMatchesSearch(i, q)) },
   };
   const cfg = configs[type];
   if(!cfg) return;
+  /* La frappe peut encore attendre son délai : sans ce vidage, Entrée viserait
+     une carte que la liste n'a pas encore rendue, et ne ferait rien — un
+     silence, sans message, le pire des cas. */
+  viderFiltragesDifferes();
   const q = (ev.target.value||'').trim().toLowerCase();
-  const matches = cfg.list.filter(item => cfg.matchFn(item, q));
+  /* Les MÊMES critères que la liste, et pas la seule recherche : on ne testait
+     que celle-ci, en ignorant les filtres client, conducteur, métier et
+     période — Entrée pouvait donc viser une carte retirée du DOM. */
+  const matches = cfg.matches(q);
   if(!matches.length) return;
   if(!state.searchCycle || state.searchCycle.type !== type || state.searchCycle.query !== q){
     state.searchCycle = {type, query:q, index:0};
@@ -4428,6 +4848,45 @@ function removeBCAttachment(){
    existe toujours, mais il a un nom, un rôle et une ligne au journal : c'est
    la pré-facture validée hors circuit. Un seul drapeau fait foi ici,
    `valideDirecteur`, dérivé de l'état réel du bon. */
+/**
+ * Clore une affaire sans la facturer.
+ *
+ * Le motif n'est pas décoratif : `bc_cloturer_gratuit` l'inscrit dans
+ * `workflow_journal` et sur le bon (`gratuite_motif`). Six mois plus tard,
+ * « pourquoi ce chantier n'a-t-il rien rapporté » se lit sur la fiche au lieu
+ * de se reconstituer.
+ *
+ * La base garde la décision : seul un administrateur peut clore, et un bon
+ * déjà facturé est refusé. L'écran ne fait que présenter le geste — un refus
+ * remonte avec son message plutôt qu'en silence.
+ */
+async function cloturerSansFacturation(bcId){
+  const b = state.bonsCommande.find(x=>x.id===bcId);
+  if(!b) return;
+  if(state.factures.some(f=>f.bonCommandeId===bcId)){
+    showToast('Ce bon de commande est déjà facturé : il ne peut plus être clôturé sans facturation.');
+    return;
+  }
+  const motif = prompt(
+    `Clôturer ${b.numeroBC||'ce SAV'} sans facturation ?\n\n`
+    + `Motif (facultatif, conservé sur la fiche et dans le journal) :`,
+    'Reprise sous garantie');
+  if(motif === null) return;   // annulé : `''` reste un motif vide accepté
+
+  try{
+    await window.cloturerGratuit(bcId, motif.trim());
+  }catch(err){
+    console.error('Clôture sans facturation refusée', err);
+    showToast(err.message || "La clôture a été refusée. Seul un administrateur peut clore une affaire sans facturation.");
+    return;
+  }
+  /* `statutWorkflow` vient de la collection, pas de la réponse : sans ce
+     rechargement la carte garderait son ancien état et le bouton resterait. */
+  await recharger('bonCommande');
+  showToast('Affaire clôturée sans facturation.', 'success');
+  renderTab();
+}
+
 function transformerBonCommandeEnFacture(bcId){
   const b = state.bonsCommande.find(x=>x.id===bcId);
   if(!b) return;
@@ -4748,13 +5207,30 @@ function filtrageFacturesActif(vue){
     || c.metier || c.reglement || (c.periode && c.periode !== 'tout'));
 }
 
+/* Ce que la barre cherche vraiment, dit dans l'ordre où on le tape. */
+function placeholderRechercheFactures(vue){
+  return (vue === 'validation' || vue === 'afacturer')
+    ? 'Rechercher : n° de BC, client, locataire, adresse du bien, n° de facture…'
+    : 'Rechercher : n° de facture, n° de BC, client, locataire, adresse du bien…';
+}
+function aideRechercheFactures(vue){
+  return placeholderRechercheFactures(vue).replace('…', '')
+    + ', nature des travaux, référence chantier, montant, prestation.';
+}
+
 function champFiltreFactures(cle, vue){
   const v = critereFactures(cle, vue);
   switch(cle){
     case 'recherche':
+      /* Le même champ sert quatre vues, et sur deux d'entre elles il filtre des
+         BONS et non des factures : un texte unique mentirait la moitié du
+         temps. Le champ s'élide, d'où le `title` qui porte la liste entière. */
       return `<input type="text" id="factureSearchInput" style="flex:1; min-width:240px;" value="${esc(v)}"
-        placeholder="Rechercher : client, n°, adresse, locataire, prestation, montant…"
-        oninput="filterFacturesList(this.value)" onkeydown="searchEnterCycle(event,'${vue==='liste'?'facture':'bonCommande'}')">`;
+        placeholder="${esc(placeholderRechercheFactures(vue))}"
+        title="${esc(aideRechercheFactures(vue))}"
+        oninput="filterFacturesList(this.value)"
+        onblur="viderFiltragesDifferes()"
+        onkeydown="searchEnterCycle(event,'${vue==='liste'?'facture':'bonCommande'}')">`;
     case 'client':
       return `<select style="width:auto; min-width:170px;" onchange="filterFactureClient(this.value)">${planningUnschedClientOptions(v)}</select>`;
     case 'interlocuteur':
@@ -4817,11 +5293,50 @@ function contexteFacture(f){
     : [st.cle==='reglee'? 'payee' : st.cle==='partiellement_reglee'? 'partiel' : 'impayee'];
   // Une facture en retard reste impayée : les deux filtres doivent la trouver
   if(!st.avoir && st.reste > 0.01 && (joursDepuisEcheance(f)||0) > 0) etiquettes.push('retard');
-  return { extras: montantsCherchables(f), reglements: etiquettes };
+  /* `extras` portait les seuls montants : taper un n° de bon ici ne trouvait
+     rien, alors que le croisement existait deux fonctions plus haut. */
+  return {
+    extras: valeursDesApports(apportsFacture(f)),
+    champsIgnores: CHAMPS_NON_CHERCHES_FACTURE,
+    reglements: etiquettes,
+  };
 }
 function contexteBonCommande(b){
-  const montant = parseFloat(b.montant) || 0;
-  return { extras: [money(montant), montant.toFixed(2)], metiers: bcMetiersDuBC(b) };
+  return { extras: valeursDesApports(apportsBonCommande(b)), metiers: bcMetiersDuBC(b) };
+}
+
+/* ---------- Le redessin différé ----------
+
+   Une frappe ne redessine plus la liste à chaque lettre. L'ÉTAT, lui, est posé
+   tout de suite : la touche Entrée, les compteurs et tout `renderTab()`
+   déclenché par ailleurs liraient sinon un texte périmé.
+
+   Le focus et le curseur survivent par construction, pas grâce au délai : les
+   fonctions de rafraîchissement ne réécrivent que la zone des cartes, jamais
+   le champ de saisie. */
+const DELAI_FILTRAGE_MS = 300;
+let filtrageDiffere = null;
+
+/**
+ * Exécute le redessin après le délai, ou tout de suite si `maintenant`.
+ *
+ * Tout redessin ANNULE le différé en cours : changer une liste déroulante
+ * pendant qu'une frappe attend ne doit pas laisser l'ancien minuteur repasser
+ * derrière et voler la position de défilement.
+ */
+function redessinerApresFrappe(rendu, maintenant){
+  if(filtrageDiffere){ clearTimeout(filtrageDiffere); filtrageDiffere = null; }
+  if(maintenant){ rendu(); return; }
+  filtrageDiffere = setTimeout(()=>{ filtrageDiffere = null; rendu(); }, DELAI_FILTRAGE_MS);
+}
+
+/** Vide un redessin en attente et l'exécute : ce qu'on regarde doit être à jour. */
+function viderFiltragesDifferes(){
+  if(!filtrageDiffere) return;
+  clearTimeout(filtrageDiffere);
+  filtrageDiffere = null;
+  rafraichirZoneFactures();
+  rafraichirZoneBonsCommande();
 }
 
 /* Une seule injection ciblée pour tous les filtres : le champ de recherche
@@ -4850,7 +5365,9 @@ function rafraichirZoneFactures(){
 
 function filterFactureCritere(cle, valeur){
   state[CLE_ETAT_FILTRE[cle]] = valeur;
-  rafraichirZoneFactures();
+  /* Une liste déroulante se choisit d'un geste : la différer ferait attendre
+     trois dixièmes de seconde pour rien. Seule la frappe est temporisée. */
+  redessinerApresFrappe(rafraichirZoneFactures, cle !== 'recherche');
 }
 function filterFacturesList(valeur){ filterFactureCritere('recherche', valeur); }
 
@@ -5074,7 +5591,17 @@ function factureMatchesSearch(f, q){
 function renderFacturesListHTML(list, vue){
   const criteres = criteresFactures(vue || 'liste');
   const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
-  return filtered.map(f=>{
+  if(!filtered.length){
+    /* « Aucune facture pour cette société » sur une recherche infructueuse
+       envoyait chercher un problème de données là où il n'y avait qu'un mot mal
+       tapé. Le fichier connaissait déjà la distinction, ailleurs. */
+    return `<div class="empty">${list.length && filtrageFacturesActif(vue || 'liste')
+      ? 'Aucune facture ne correspond à vos filtres.'
+      : 'Aucune facture pour cette société.'}</div>`;
+  }
+  return syntheseListe(filtered.length, list.length, 'facture',
+      filtrageFacturesActif(vue || 'liste'))
+    + filtered.map(f=>{
     const t = computeDocTotals(f);
     /* L'état de règlement se déduit des règlements enregistrés ; le `statut`
        stocké ne distingue pas le partiel du non-réglé, et une facture réglée à
@@ -5089,6 +5616,7 @@ function renderFacturesListHTML(list, vue){
     const bonCommandeOrigine = f.bonCommandeId ? state.bonsCommande.find(b=>b.id===f.bonCommandeId) : null;
     return `<div class="card" id="facture-card-${f.id}" style="cursor:pointer;" onclick="cardRowClick(event,'facture','${jsAttr(f.id)}')"><div class="card-row">
       <div style="flex:1; min-width:0;"><div class="card-title">${esc(f.client)} ${estUnAvoir?'<span class="badge warn" title="Avoir : il rectifie une facture émise">AVOIR</span>':''}${f.verrouillee?'<span title="Facture verrouillée (déjà téléchargée/envoyée)">🔒</span>':''}</div><div class="card-sub"><span class="numref-lg">${f.numero? esc(f.numero) : 'Brouillon — non émise'}</span> · ${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance)+(f.conditionsReglement? ' ('+esc(f.conditionsReglement)+')':''):''}${f.modePaiement? ' · 💶 '+esc(libelleModePaiement(f.modePaiement)):''}${f.interlocuteur? ' · 👤 '+esc(f.interlocuteur):''}${f.conducteur? ' · 🦺 '+esc(f.conducteur):''}${numerosBC.length? ' · 📋 N° BC '+esc(numerosBC.join(' / ')):''}</div>${locataireCardLine(f)}
+      ${origineRechercheHTML(f, criteres.recherche, apportsFacture(f), CHAMPS_NON_CHERCHES_FACTURE)}
       ${devisOrigine? `<div class="card-sub">Devis d'origine : <a href="javascript:void(0)" onclick="goToDevis('${jsAttr(devisOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(devisOrigine.numero)}</a></div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${jsAttr(rapportOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
       ${rectifiee? `<div class="card-sub">Rectifie la facture : <a href="javascript:void(0)" onclick="event.stopPropagation(); goToFacture('${jsAttr(rectifiee.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rectifiee.numero)}</a>${f.motifRectification? ' · '+esc(f.motifRectification):''}</div>`:''}
@@ -5148,7 +5676,7 @@ function renderFacturesListHTML(list, vue){
         ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
         : `<button class="btn small danger" onclick="deleteItem('facture','${jsAttr(f.id)}')">Supprimer</button>`}
     </div></div>`;
-  }).join('') || '<div class="empty">Aucune facture pour cette société.</div>';
+  }).join('');
 }
 function factureForm(){
   const e = state.editing;
@@ -5721,6 +6249,28 @@ function statutClientBC(b){
   if(b.datePlanifiee) return { cle:'orange', label:'🟠 Planifié le '+fmtDate(b.datePlanifiee)+(b.heurePlanifiee? ' à '+b.heurePlanifiee:''), couleur:'#C24E00', fond:'#FFEDE0' };
   return { cle:'rouge', label:'🔴 Pas encore planifié', couleur:'#C0303C', fond:'#FDE7E9' };
 }
+/**
+ * Ce qu'un CLIENT peut chercher dans ses propres bons.
+ *
+ * VOLONTAIREMENT plus étroit que la recherche interne, et sans aucun
+ * croisement. `texteDocument` lit `notes`, `problemeDescription`, `statut` et
+ * `conducteur` : un bailleur pourrait y sonder l'existence d'un mot dans nos
+ * notes internes — filtrer n'affiche rien, mais la présence ou l'absence d'une
+ * carte EST une réponse. Et le croisement lui rendrait cherchables nos numéros
+ * et nos montants de facture, que la mention d'origine afficherait.
+ *
+ * La liste vivait écrite dans l'expression du filtre, cinquième copie du même
+ * besoin dans ce fichier. Nommée ici, on voit ce qu'elle contient — et ce
+ * qu'elle ne contient pas.
+ */
+const CHAMPS_CHERCHES_PORTAIL = ['numeroBC', 'adresse', 'adresseLocataire', 'codePostal',
+  'ville', 'numeroLogement', 'etage', 'precisionCommune', 'occupant', 'ancienLocataire',
+  'interlocuteur', 'natureTravaux', 'pieceACommanderDetail'];
+
+function bonCommandeClientHaystack(b){
+  return CHAMPS_CHERCHES_PORTAIL.map(c=>b[c]).filter(Boolean).join(' ').toLowerCase();
+}
+
 function setClientSearch(valeur){
   state.clientSearch = valeur;
   const zone = document.getElementById('clientBCZone');
@@ -5734,7 +6284,7 @@ function renderBonsCommandeClient(){
   return `
     <div class="page-head"><h1>Suivi de vos bons de commande</h1></div>
     <div class="card-sub" style="margin-bottom:14px;">${esc(clientNom)}${interloc? ' — '+esc(interloc):''} · Suivi en temps réel par ${esc(societeName(state.societeId))}.</div>
-    <input type="text" value="${esc(state.clientSearch||'')}" placeholder="🔍 Rechercher : n° BC, adresse, n° de logement, nom du locataire…" oninput="setClientSearch(this.value)" style="width:100%; margin-bottom:14px;">
+    <input type="text" value="${esc(state.clientSearch||'')}" placeholder="🔍 Rechercher : n° BC, adresse, n° de logement, locataire, nature des travaux…" oninput="setClientSearch(this.value)" style="width:100%; margin-bottom:14px;">
     <div id="clientBCZone">${renderClientBCZoneHTML()}</div>
   `;
 }
@@ -5743,7 +6293,7 @@ function renderClientBCZoneHTML(){
   const interloc = state.currentInterlocuteur || '';
   const q = (state.clientSearch||'').trim().toLowerCase();
   let list = state.bonsCommande.filter(b=>b.societeId===state.societeId && b.client===clientNom && (!interloc || (b.interlocuteur||'')===interloc) &&
-    (!q || window.multiWordMatch([b.numeroBC, b.adresse, b.adresseLocataire, b.codePostal, b.ville, b.numeroLogement, b.occupant, b.ancienLocataire, b.interlocuteur, b.pieceACommanderDetail].filter(Boolean).join(' ').toLowerCase(), q)));
+    (!q || window.multiWordMatch(bonCommandeClientHaystack(b), q)));
   const compteurs = { rouge:0, orange:0, jaune:0, vert:0 };
   list.forEach(b=>{ compteurs[statutClientBC(b).cle]++; });
   const filtre = state.clientStatutFiltre || '';
@@ -5793,7 +6343,7 @@ function renderBonsCommande(){
         <button class="btn primary" onclick="openForm('bonCommande')">+ Nouveau bon de commande</button>
       </div>`}</div>
     ${state.formOpen.bonCommande ? '' : `<div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
-      <input type="text" id="bonCommandeSearchInput" style="flex:1; min-width:220px;" value="${esc(state.bonCommandeSearch||'')}" placeholder="Rechercher : client, n° BC, adresse, montant…" oninput="filterBonsCommandeList(this.value)" onkeydown="searchEnterCycle(event,'bonCommande')">
+      <input type="text" id="bonCommandeSearchInput" style="flex:1; min-width:220px;" value="${esc(state.bonCommandeSearch||'')}" placeholder="Rechercher : n° BC ou interne, client, locataire, adresse, n° de facture…" title="Cherche aussi par nature des travaux, référence chantier, métier, montant du bon et montant de la facture liée." oninput="filterBonsCommandeList(this.value)" onblur="viderFiltragesDifferes()" onkeydown="searchEnterCycle(event,'bonCommande')">
       <select style="width:auto; min-width:180px;" onchange="filterBonCommandeConducteur(this.value)">${conducteurFilterOptions(state.bonCommandeConducteurFilter)}</select>
       <select style="width:auto; min-width:170px;" onchange="filterBonCommandeType(this.value)">
         <option value="" ${!state.bonCommandeTypeFilter?'selected':''}>Type</option>
@@ -5832,33 +6382,27 @@ function bonCommandeMatchesSearch(b, q){
 }
 function filterBonsCommandeList(value){
   state.bonCommandeSearch = value;
-  const zone = document.getElementById('bonCommandeListZone');
-  if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
+  redessinerApresFrappe(rafraichirZoneBonsCommande, false);
 }
 function filterBonCommandeConducteur(value){
   state.bonCommandeConducteurFilter = value;
-  const zone = document.getElementById('bonCommandeListZone');
-  if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
+  redessinerApresFrappe(rafraichirZoneBonsCommande, true);
 }
 function filterBonCommandeType(value){
   state.bonCommandeTypeFilter = value;
-  const zone = document.getElementById('bonCommandeListZone');
-  if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
+  redessinerApresFrappe(rafraichirZoneBonsCommande, true);
 }
 function filterBonCommandeCreationType(value){
   state.bonCommandeCreationTypeFilter = value;
-  const zone = document.getElementById('bonCommandeListZone');
-  if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
+  redessinerApresFrappe(rafraichirZoneBonsCommande, true);
 }
 function filterBonCommandeLogement(value){
   state.bonCommandeLogementFilter = value;
-  const zone = document.getElementById('bonCommandeListZone');
-  if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
+  redessinerApresFrappe(rafraichirZoneBonsCommande, true);
 }
 function filterBonCommandeMetier(value){
   state.bonCommandeMetierFilter = value;
-  const zone = document.getElementById('bonCommandeListZone');
-  if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
+  redessinerApresFrappe(rafraichirZoneBonsCommande, true);
 }
 function filterBonCommandeClient(value){
   state.bonCommandeClientFilter = value;
@@ -5867,9 +6411,16 @@ function filterBonCommandeClient(value){
 }
 function filterBonCommandeInterlocuteur(value){
   state.bonCommandeInterlocuteurFilter = value;
+  redessinerApresFrappe(rafraichirZoneBonsCommande, true);
+}
+/* Le seul endroit qui redessine la liste des bons. Sept fonctions de filtrage
+   en recopiaient les trois lignes, ce qui laissait sept endroits où poser — ou
+   oublier — la temporisation. */
+function rafraichirZoneBonsCommande(){
   const zone = document.getElementById('bonCommandeListZone');
   if(zone) zone.innerHTML = renderBonsCommandeListHTML(bonCommandeListItems());
 }
+
 function renderBonsCommandeListHTML(list){
   const q = (state.bonCommandeSearch||'').trim().toLowerCase();
   const cf = state.bonCommandeConducteurFilter||'';
@@ -5879,20 +6430,53 @@ function renderBonsCommandeListHTML(list){
   const metierFilter = state.bonCommandeMetierFilter||'';
   const clientFilter = state.bonCommandeClientFilter||'';
   const interlocuteurFilter = state.bonCommandeInterlocuteurFilter||'';
-  const filtered = list.filter(item => {
-    if(typeFilter && item.kind !== typeFilter) return false;
-    if(creationTypeFilter==='sansBC' && !item.data.sansBC) return false;
-    if(creationTypeFilter==='attenteBC' && !item.data.enAttenteBC) return false;
-    if(creationTypeFilter==='normal' && (item.data.sansBC || item.data.enAttenteBC)) return false;
-    if(logementFilter && item.data.logementStatut !== logementFilter) return false;
-    if(metierFilter && !bcMetiersDuBC(item.data).includes(metierFilter)) return false;
-    if(clientFilter && item.data.client !== clientFilter) return false;
-    if(interlocuteurFilter && (item.data.interlocuteur||'') !== interlocuteurFilter) return false;
-    if(!bonCommandeItemMatchesSearch(item, q)) return false;
-    if(cf && item.data.conducteur !== cf) return false;
-    return true;
-  });
-  return filtered.map(item => bonCommandeCardHTML(item.data, false)).join('') || '<div class="empty">Aucun bon de commande ni SAV pour cette société.</div>';
+  const filtered = list.filter(item => bonCommandeItemRetenu(item, q));
+  if(!filtered.length){
+    /* « Aucun bon pour cette société » sur une recherche infructueuse envoyait
+       chercher un problème de données là où il n'y avait qu'un mot mal tapé. */
+    return `<div class="empty">${list.length && filtrageBonsCommandeActif()
+      ? 'Aucun bon de commande ne correspond à vos filtres.'
+      : 'Aucun bon de commande ni SAV pour cette société.'}</div>`;
+  }
+  return syntheseListe(filtered.length, list.length, 'bon de commande', filtrageBonsCommandeActif())
+    + filtered.map(item => bonCommandeCardHTML(item.data, false)).join('');
+}
+
+/**
+ * Le prédicat COMPLET de la liste des bons : les huit filtres et la recherche.
+ *
+ * Extrait pour que la touche Entrée vise exactement les cartes présentes à
+ * l'écran. Elle ne testait que la recherche, et pouvait donc désigner une carte
+ * qu'un filtre avait retirée du DOM — le défilement ne se passait alors nulle
+ * part, sans rien dire.
+ */
+function bonCommandeItemRetenu(item, q){
+  const typeFilter = state.bonCommandeTypeFilter||'';
+  const creationTypeFilter = state.bonCommandeCreationTypeFilter||'';
+  if(typeFilter && item.kind !== typeFilter) return false;
+  if(creationTypeFilter==='sansBC' && !item.data.sansBC) return false;
+  if(creationTypeFilter==='attenteBC' && !item.data.enAttenteBC) return false;
+  if(creationTypeFilter==='normal' && (item.data.sansBC || item.data.enAttenteBC)) return false;
+  if(state.bonCommandeLogementFilter && item.data.logementStatut !== state.bonCommandeLogementFilter) return false;
+  if(state.bonCommandeMetierFilter && !bcMetiersDuBC(item.data).includes(state.bonCommandeMetierFilter)) return false;
+  if(state.bonCommandeClientFilter && item.data.client !== state.bonCommandeClientFilter) return false;
+  if(state.bonCommandeInterlocuteurFilter && (item.data.interlocuteur||'') !== state.bonCommandeInterlocuteurFilter) return false;
+  if(!bonCommandeItemMatchesSearch(item, q)) return false;
+  if(state.bonCommandeConducteurFilter && item.data.conducteur !== state.bonCommandeConducteurFilter) return false;
+  return true;
+}
+
+function filtrageBonsCommandeActif(){
+  return !!((state.bonCommandeSearch||'').trim() || state.bonCommandeTypeFilter
+    || state.bonCommandeCreationTypeFilter || state.bonCommandeLogementFilter
+    || state.bonCommandeMetierFilter || state.bonCommandeClientFilter
+    || state.bonCommandeInterlocuteurFilter || state.bonCommandeConducteurFilter);
+}
+
+/** « 12 sur 48 » — affiché seulement quand un filtre est actif, comme ailleurs. */
+function syntheseListe(retenus, total, quoi, actif){
+  if(!actif || retenus === total) return '';
+  return `<div class="card-sub" style="margin-bottom:10px;">${retenus} ${esc(quoi)}${retenus>1?'s':''} sur ${total}.</div>`;
 }
 /** Toutes les factures nées de ce bon — un bon peut en porter plusieurs. */
 function facturesDuBonCommande(bcId){
@@ -5953,7 +6537,29 @@ function bonCommandeCardHTML(b, workflowCtx){
        Elle ne vit plus que là où le prix se décide — la liste des bons et les
        deux vues de Facturation — et pour un rôle qui voit les prix. */
     const chiffrageIci = (workflowCtx === false || workflowCtx === 'validation' || workflowCtx === 'afacturer')
-      && (!window.affichePrix || window.affichePrix());
+      && (!window.affichePrix || window.affichePrix())
+      /* Trois affaires n'ont plus de prix à décider, et le bouton y appelait
+         un geste sans objet :
+           — celle qui est FACTURÉE : la facture est le document, la
+             pré-facture n'est plus qu'un brouillon dépassé ;
+           — celle qui est CLOSE SANS FACTURATION ;
+           — un SAV, qui est une reprise sous garantie et ne se facture pas.
+         Le bouton restait pourtant en tête de carte, en premier, avec son
+         total TTC — ce qui donnait à croire qu'il restait quelque chose à
+         chiffrer. */
+      && !factureLiee
+      && b.statutWorkflow !== 'cloture_gratuit'
+      && !isSAV;
+
+    /* Une affaire qui ne se facturera pas doit pouvoir se clore : sans quoi
+       elle reste « à traiter » pour toujours. `bc_cloturer_gratuit` existait
+       en base depuis l'écriture du circuit sans qu'aucun écran l'appelle. */
+    /* `bc_cloturer_gratuit` n'accepte QUE l'administrateur — c'est la base qui
+       décide, et ce test n'est que son miroir d'affichage. Il suit le rôle
+       EFFECTIF : un administrateur qui simule un conducteur doit voir l'écran
+       du conducteur, c'est tout l'objet de la simulation. */
+    const cloturable = isSAV && !circuitTermine(b)
+      && (!window.roleEffectif || window.roleEffectif() === 'admin');
     /* Repliée par défaut. La carte portait vingt-cinq blocs conditionnels et
        faisait trois écrans de haut sur une liste de cent bons : on ne
        parcourait plus rien. Ne restent que les quatre lignes qui identifient
@@ -5965,6 +6571,10 @@ function bonCommandeCardHTML(b, workflowCtx){
       <button class="bc-chevron" onclick="event.stopPropagation(); toggleBonCommandeCard('${jsAttr(b.id)}')" title="${ouverte?'Replier':'Tout afficher'}" aria-expanded="${ouverte}">${ouverte?'▾':'▸'}</button>
       <div class="bc-ident"><div class="card-title">${esc(b.client)}${isSAV? ' <span class="badge warn" style="margin-left:6px;">SAV</span>':''}${verrou? ` <span class="badge success" style="margin-left:6px;" title="${esc(verrou.libelle)}">🔒 Facturé</span>`:''}</div><div class="card-sub"><span class="numref-lg" style="white-space:pre-line;">${esc(b.numeroBC)}</span>${b.conducteur? ' · 🦺 '+esc(b.conducteur):''}</div>
       <div class="card-sub">${esc(withVille(b.adresse, b.codePostal, b.ville))}</div>
+      ${/* Dans la TÊTE, hors du bloc déplié : la carte est repliée par défaut,
+            et « Facture liée » ne s'y voit qu'une fois ouverte. Une mention
+            qu'il faut déplier pour lire n'explique rien. */''}
+      ${origineRechercheHTML(b, requeteCouranteBons(), apportsBonCommande(b))}
       ${ouverte? `
       <div class="card-sub">${b.interlocuteur? '👤 '+esc(b.interlocuteur):''}${b.interlocuteur && ((b.metiers&&b.metiers.length)||b.metier)? ' · ':''}${(b.metiers&&b.metiers.length)||b.metier? '🔧 '+esc(metiersDisplayJoin(b)):''}</div>
       ${planningContactZoneHTML(b, true)}
@@ -6046,6 +6656,7 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${(factureLiee||isSAV)? '' : (b.valideDirecteur
         ? `<button class="btn small primary" onclick="transformerBonCommandeEnFacture('${jsAttr(b.id)}')">🧾 Créer la facture</button>`
         : `<button class="btn small" disabled title="La pré-facture doit être validée avant de facturer">🧾 Créer la facture</button>`)}
+      ${cloturable? `<button class="btn small primary" onclick="event.stopPropagation(); cloturerSansFacturation('${jsAttr(b.id)}')" title="Un SAV est une reprise sous garantie : il se clôt, il ne se facture pas">✓ Clôturer sans facturation</button>`:''}
       ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')">Créer un SAV</button>`}
       ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Lier un rapport</button>`}
       ${verrou
@@ -6056,7 +6667,7 @@ function bonCommandeCardHTML(b, workflowCtx){
     ${(workflowCtx && workflowCtx!=='pieceCommande')? bcWorkflowStepperHTML(b, workflowCtx) : ''}
     ${workflowCtx==='attente'? bcMetiersChecklistHTML(b) : ''}
     ${state.lienOuvert==='bonCommande:'+b.id? `<div style="margin-top:8px;">${lienWidgetHTML('bonCommande', b.id, b.client)}</div>`:''}
-    ${(!factureLiee && !isSAV && !b.valideDirecteur && workflowCtx!=='pieceCommande')? `<div class="bc-attente-message" style="margin-top:8px;">⏳ En attente — ${!b.valideConducteur? "la validation du conducteur puis du directeur est requise" : "la validation du directeur est requise"} avant de pouvoir facturer ce bon de commande.</div>` : ''}
+    ${(!factureLiee && !isSAV && b.statutWorkflow!=='cloture_gratuit' && !b.valideDirecteur && workflowCtx!=='pieceCommande')? `<div class="bc-attente-message" style="margin-top:8px;">⏳ En attente — ${!b.valideConducteur? "la validation du conducteur puis du directeur est requise" : "la validation du directeur est requise"} avant de pouvoir facturer ce bon de commande.</div>` : ''}
     ` : ''}
     </div>`;
 }
@@ -8502,13 +9113,18 @@ function planningScheduledCardHTML(b, dayIso, assigneeField){
       <button class="planning-unschedule" onclick="event.stopPropagation(); removeDateSupplementaire('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" title="Retirer cette date">✕</button>
       <div class="planning-card-title">${esc(b.client)}${kindBadge}<span class="planning-suppl-badge" title="Date supplémentaire ajoutée pour ce même bon de commande">📅 Suppl.</span></div>
       <div class="planning-card-sub">${esc(b.numero)}</div>
-      <div class="planning-card-controls" onclick="event.stopPropagation()">
+      ${/* Une journée déjà pointée par le terrain raconte ce qui s'est passé :
+            son horaire ne se réécrit plus depuis le planning. Offrir les
+            contrôles quand la base va refuser, c'est promettre un geste qui
+            reviendra en arrière au rechargement suivant. */''}
+      ${occSuppl.fait? '' : `<div class="planning-card-controls" onclick="event.stopPropagation()">
         <input type="time" class="planning-time" value="${occSuppl.heure||'08:00'}" onchange="updateDateSupplChamp('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}','heure',this.value)">
         <select class="planning-duree" onchange="updateDateSupplChamp('${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}','duree',this.value)" title="Durée">
           ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${(occSuppl.duree||1)===n?'selected':''}>${n} h</option>`).join('')}
         </select>
-      </div>
+      </div>`}
       ${savTriangle}
+      ${occSuppl.fait? '' : `<div class="planning-resize-corner planning-resize-corner-big" onmousedown="startResizeCornerDateSuppl(event,'${jsAttr(b.kind)}','${jsAttr(b.id)}','${jsAttr(dayIso)}')" draggable="false" title="Glisser vers le bas pour allonger le créneau — une case par heure"></div>`}
     </div>`;
   }
   if(!isOrigin && isDernierJour){
@@ -8661,6 +9277,38 @@ function majContactsFicheTechnicien(){
   const rien = !(resolved.bc.tentativesContact||[]).length && !resolved.bc.rappelDate;
   document.getElementById('techModalContactsVide').style.display = rien? '' : 'none';
 }
+/**
+ * Le récapitulatif des autres journées, et le bouton pour en poser une.
+ *
+ * Extrait de l'ouverture de la fiche pour être rejoué APRÈS un ajout : la
+ * fiche porte un commentaire en cours de frappe, des photos et un croquis non
+ * enregistrés. La rouvrir pour la rafraîchir les perdrait — on ne remet donc à
+ * jour que la ligne qui a changé.
+ */
+function majDatesRestantesFiche(){
+  if(!techModalCtx) return;
+  const b = state.bonsCommande.find(x=>x.id===techModalCtx.bcId);
+  const zone = document.getElementById('techModalDatesRestantes');
+  const bouton = document.getElementById('techModalAjoutDate');
+  if(!b || !zone) return;
+
+  const autresDates = bcToutesDatesDuBC(b).filter(d=> d.dayIso !== (techModalCtx.dayIso||b.datePlanifiee));
+  const nbRestantes = autresDates.filter(d=>!d.fait).length;
+  zone.textContent = autresDates.length
+    ? `Ce bon de commande a ${autresDates.length} autre(s) date(s) planifiée(s) — ${nbRestantes? nbRestantes+' encore à valider' : 'toutes déjà validées'}.`
+    : '';
+
+  /* Un technicien ne planifie pas — le glisser-déposer du calendrier le lui
+     refuse déjà — et un sous-traitant n'ouvre même pas cette fiche. */
+  if(bouton) bouton.hidden = state.currentRole==='technicien' || estSousTraitant();
+}
+
+/** Poser une journée de plus depuis la fiche, sans la refermer. */
+function ajouterDateDepuisFiche(){
+  if(!techModalCtx) return;
+  openAjoutDateSupplModal(techModalCtx.kind, techModalCtx.bcId, true);
+}
+
 function openTechnicienInterventionModal(kind, id, dayIso){
   const resolved = resolvePlanningItem(kind, id);
   if(!resolved) return;
@@ -8676,9 +9324,7 @@ function openTechnicienInterventionModal(kind, id, dayIso){
   document.getElementById('techModalInfo').textContent = `${esc(b.client)} — ${withVille(b.adresse, b.codePostal, b.ville)||''}`;
   const occSuppl = techModalCtx.dayIso ? (b.datesSupplementaires||[]).find(d=>d.date===techModalCtx.dayIso) : null;
   document.getElementById('techModalDateFaite').checked = techModalCtx.dayIso ? !!(occSuppl && occSuppl.fait) : !!b.dateOrigineFait;
-  const autresDates = bcToutesDatesDuBC(b).filter(d=> d.dayIso !== (techModalCtx.dayIso||b.datePlanifiee));
-  const nbRestantes = autresDates.filter(d=>!d.fait).length;
-  document.getElementById('techModalDatesRestantes').textContent = autresDates.length? `Ce bon de commande a ${autresDates.length} autre(s) date(s) planifiée(s) — ${nbRestantes? nbRestantes+' encore à valider' : 'toutes déjà validées'}.` : '';
+  majDatesRestantesFiche();
   document.getElementById('techModalCommentaire').value = b.technicienCommentaire || '';
   document.getElementById('techModalPieceCommander').checked = !!b.pieceACommander;
   document.getElementById('techModalPieceDetail').value = b.pieceACommanderDetail || '';
@@ -9114,8 +9760,13 @@ async function saveTechnicienIntervention(){
   showToast('Intervention enregistrée.', 'success');
 }
 let ajoutDateSupplCtx = null;
-function openAjoutDateSupplModal(kind, id){
-  ajoutDateSupplCtx = { kind, id };
+/**
+ * @param {boolean} [depuisFiche] Ouvert par-dessus la fiche d'intervention.
+ *   La fiche reste derrière : on la rafraîchit à la fermeture au lieu de la
+ *   rouvrir, pour ne pas jeter ce qui y est saisi.
+ */
+function openAjoutDateSupplModal(kind, id, depuisFiche){
+  ajoutDateSupplCtx = { kind, id, depuisFiche: !!depuisFiche };
   document.getElementById('ajoutDateSupplDate').value = '';
   document.getElementById('ajoutDateSupplDate').min = todayISO();
   document.getElementById('ajoutDateSupplHeure').value = '08:00';
@@ -9128,7 +9779,7 @@ function closeAjoutDateSupplModal(){
 }
 async function confirmerAjoutDateSuppl(){
   if(!ajoutDateSupplCtx) return;
-  const { kind, id } = ajoutDateSupplCtx;
+  const { kind, id, depuisFiche } = ajoutDateSupplCtx;
   const dateVal = document.getElementById('ajoutDateSupplDate').value;
   const heureVal = document.getElementById('ajoutDateSupplHeure').value || '08:00';
   const dureeVal = parseInt(document.getElementById('ajoutDateSupplDuree').value,10) || 1;
@@ -9145,12 +9796,35 @@ async function confirmerAjoutDateSuppl(){
   await recharger('bonCommande');
   closeAjoutDateSupplModal();
   renderTab();
+  /* La fiche d'intervention est restée ouverte derrière : sa ligne « autres
+     dates » vient de changer. On la rafraîchit SANS la rouvrir — le
+     commentaire en cours, les photos et le croquis non enregistrés y sont. */
+  if(depuisFiche) majDatesRestantesFiche();
   showToast(`Date ajoutée : ${fmtDate(dateVal)} de ${heureVal} (${dureeVal}h).`, 'success');
 }
+/**
+ * Retirer une journée supplémentaire du planning.
+ *
+ * La date n'a pas de colonne : elle est DÉRIVÉE des tâches. La retirer du
+ * tableau ne suffisait donc pas — la tâche survivait et la date réapparaissait
+ * au rechargement. C'est la suppression de la tâche qui fait foi.
+ */
 async function removeDateSupplementaire(kind, id, dateVal){
   const resolved = resolvePlanningItem(kind, id);
   if(!resolved) return;
   const { bc, bcId } = resolved;
+  let issue;
+  try{
+    issue = await window.retirerDatesSupplementaires(bcId, [dateVal]);
+  }catch(err){
+    console.error('Retrait de la date supplémentaire refusé', err);
+    showToast("Cette journée n'a pas pu être retirée du planning.");
+    return;
+  }
+  if(issue.refusees.length){
+    showToast("Journée conservée : le terrain y a déjà pointé son travail. Passez par le circuit de validation pour la défaire.");
+    return;
+  }
   bc.datesSupplementaires = (bc.datesSupplementaires||[]).filter(d=>d.date!==dateVal);
   await window.stSet(planningKeyPrefix(kind)+bcId, bc);
   await recharger('bonCommande');
@@ -9280,11 +9954,31 @@ async function unscheduleBC(kind, id){
   if(!resolved) return;
   if(bcInterventionFaite(resolved.bc)){ showToast('Cette intervention a été validée par le technicien, elle ne peut plus être modifiée depuis le planning.'); return; }
   const { bc, metierKey, bcId } = resolved;
-  const nbDatesSuppl = !metierKey ? (bc.datesSupplementaires||[]).length : 0;
-  if(nbDatesSuppl>0 && !confirm(`Ce bon de commande a aussi ${nbDatesSuppl} autre(s) date(s) planifiée(s) (via "+ Autre date"). Les retirer du planning va aussi supprimer ces dates-là. Continuer ?`)) return;
+  const datesSuppl = !metierKey ? (bc.datesSupplementaires||[]).map(d=>d.date) : [];
+  if(datesSuppl.length && !confirm(`Ce bon de commande a aussi ${datesSuppl.length} autre(s) date(s) planifiée(s) (via "+ Autre date"). Les retirer du planning va aussi supprimer ces dates-là. Continuer ?`)) return;
+  if(datesSuppl.length){
+    /* Vider le tableau ne suffisait pas : les dates sont dérivées des tâches,
+       qui survivaient à la déplanification et remettaient des vignettes
+       « Suppl. » sur le calendrier d'un bon censé n'être plus planifié. */
+    let issue;
+    try{
+      issue = await window.retirerDatesSupplementaires(bcId, datesSuppl);
+    }catch(err){
+      console.error('Retrait des dates supplémentaires refusé', err);
+      showToast("Les autres dates de ce bon n'ont pas pu être retirées : il reste planifié.");
+      return;
+    }
+    if(issue.refusees.length){
+      showToast(`${issue.refusees.length} journée(s) ont déjà été pointées par le terrain : le bon reste planifié.`);
+      return;
+    }
+  }
   setSchedField(bc, metierKey, 'datePlanifiee', '');
   if(!metierKey) bc.datesSupplementaires = [];
   await window.stSet(planningKeyPrefix(kind)+bcId, bc);
+  /* Sans ce rechargement, l'écran garde la vue d'avant : les dates étant
+     dérivées des tâches, seule une relecture dit ce qu'il en reste. */
+  await recharger('bonCommande');
   renderTab();
 }
 async function shiftBCUnJourPlusTot(kind, id){
@@ -9388,6 +10082,37 @@ function startResizeCorner(ev, kind, id, isLastDay){
   document.addEventListener('mouseup', onResizeEnd);
   document.addEventListener('keydown', onResizeKeydown);
 }
+/**
+ * La même poignée, sur une date supplémentaire.
+ *
+ * `computeNewDuree` sert telle quelle : une case vaut une heure, la pause de
+ * midi comprise. Ce qui change est ce qu'on écrit à la fin — la durée de CETTE
+ * journée-là, pas celle du bon.
+ *
+ * Pas d'extension horizontale ici, contrairement au jour d'origine : une date
+ * supplémentaire est une journée. S'étendre sur la suivante, ce serait une
+ * autre date, à ajouter comme telle.
+ */
+function startResizeCornerDateSuppl(ev, kind, id, dayIso){
+  ev.preventDefault();
+  ev.stopPropagation();
+  const resolved = resolvePlanningItem(kind, id);
+  if(!resolved) return;
+  const { bc } = resolved;
+  const occ = (bc.datesSupplementaires||[]).find(d=>d.date===dayIso);
+  if(!occ) return;
+  const cardEl = ev.target.closest('.planning-card-scheduled');
+  const startDuree = occ.duree || 1;
+  resizeState = {
+    kind, id, mode: 'cornerDateSuppl', dayIso, cardEl,
+    startY: ev.clientY, startDuree, startHeure: occ.heure || '08:00', previewDuree: startDuree,
+  };
+  document.body.classList.add('is-resizing-corner');
+  if(cardEl) cardEl.classList.add('is-resize-active');
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', onResizeEnd);
+  document.addEventListener('keydown', onResizeKeydown);
+}
 function computeNewDuree(startY, startDuree, startHeure, currentY){
   const sampleRow = document.querySelector('.planning-hour-row');
   const rowH = sampleRow ? sampleRow.getBoundingClientRect().height : 50;
@@ -9415,13 +10140,16 @@ function findDayColAtX(x){
 }
 function onResizeMove(ev){
   if(!resizeState) return;
-  if(resizeState.mode === 'corner' || resizeState.mode === 'cornerDernierJour'){
+  if(resizeState.mode === 'corner' || resizeState.mode === 'cornerDernierJour' || resizeState.mode === 'cornerDateSuppl'){
     const newDuree = computeNewDuree(resizeState.startY, resizeState.startDuree, resizeState.startHeure, ev.clientY);
     if(newDuree !== resizeState.previewDuree && resizeState.cardEl){
       const rowExprStr = planningRowExpr();
       resizeState.cardEl.style.height = `calc(${newDuree} * ${rowExprStr} - 4px)`;
     }
     resizeState.previewDuree = newDuree;
+    // Une date supplémentaire ne s'étire pas sur le jour suivant : pas de
+    // colonne cible à mettre en évidence, et rien à retenir.
+    if(resizeState.mode === 'cornerDateSuppl') return;
     document.querySelectorAll('.planning-daycol.is-resize-target').forEach(el=>el.classList.remove('is-resize-target'));
     const col = findDayColAtX(ev.clientX);
     if(col){
@@ -9453,13 +10181,26 @@ async function onResizeEnd(){
   document.removeEventListener('keydown', onResizeKeydown);
   document.body.classList.remove('is-resizing-v', 'is-resizing-h', 'is-resizing-corner');
   document.querySelectorAll('.planning-daycol.is-resize-target').forEach(el=>el.classList.remove('is-resize-target'));
-  const { kind, id, mode, preview, previewDuree, previewEndDate } = resizeState;
+  const { kind, id, mode, dayIso, preview, previewDuree, previewEndDate } = resizeState;
   resizeState = null;
   const resolved = resolvePlanningItem(kind, id);
   if(resolved){
     const { bc, metierKey, bcId } = resolved;
     const debut = schedField(bc, metierKey, 'datePlanifiee');
-    if(mode==='corner'){
+    if(mode==='cornerDateSuppl'){
+      /* La durée se pose sur la journée elle-même, pas sur le bon : c'est le
+         pont qui la traduira en `heure_fin` sur les tâches de ce jour-là. */
+      const occ = (bc.datesSupplementaires||[]).find(d=>d.date===dayIso);
+      if(occ){
+        occ.duree = previewDuree;
+        await window.stSet(planningKeyPrefix(kind)+bcId, bc);
+        /* Relire : la durée n'est pas enregistrée telle quelle mais reconstruite
+           depuis les tâches. Sans ce rechargement, l'écran garderait une valeur
+           que la base n'a peut-être pas acceptée — une journée déjà pointée, par
+           exemple, refuse de voir son horaire réécrit. */
+        await recharger('bonCommande');
+      }
+    } else if(mode==='corner'){
       setSchedField(bc, metierKey, 'dureeHeures', previewDuree);
       if(previewEndDate && previewEndDate >= debut){
         setSchedField(bc, metierKey, 'datePlanifieeFin', previewEndDate);
@@ -11133,6 +11874,7 @@ const REGLAGES_GROUPES = [
     {id:'intervenants', label:'Intervenants', icone:'🦺', desc:'Conducteurs, techniciens, sous-traitants'},
     {id:'rh', label:'RH', icone:'🧑‍🔧', desc:'Seuils d\'alerte'},
     {id:'vehicules', label:'Véhicules', icone:'🚚', desc:'Seuils d\'alerte'},
+    {id:'conduite', label:'Conduite de travaux', icone:'🦺', desc:'Seuil du tableau de bord conducteur'},
     {id:'notifications', label:'Notifications', icone:'🔔', desc:'Alertes et destinataires'},
   ]},
   { titre:'Mon compte', items:[
@@ -11185,6 +11927,7 @@ function renderReglagesOnglet(){
        mémorisé ne tombe pas sur un écran vide. */
     case 'travaux':
     case 'listes':        return renderReferentielsSection();
+    case 'conduite':      return renderSeuilsSection('conduite');
     case 'intervenants':  return renderConducteursSection() + renderSousTraitantsSection() + renderFournisseursSection();
     case 'rh':            return renderSeuilsSection('rh');
     case 'vehicules':     return renderSeuilsSection('vehicules');
@@ -11538,17 +12281,30 @@ function renderReglagesDocumentsSection(){
 const SEUILS_PAR_DOMAINE = {
   rh: ['carteBtp','visiteMedicale','habilitation','documentLegal'],
   vehicules: ['vehiculeCarte','vehiculeControle'],
+  conduite: ['conducteurSansRdv'],
+};
+
+/* Le titre ET la phrase d'explication : celle des deux autres domaines parle
+   d'« alerte dans la cloche », ce qui serait faux ici — ce seuil ne sonne
+   rien, il décide de ce qui remonte sur un tableau de bord. */
+const SEUILS_DOMAINE_TEXTES = {
+  rh:        { titre:"🧑‍🔧 Seuils d'alerte RH",
+               phrase:"Nombre de jours avant échéance à partir duquel l'alerte apparaît dans la cloche." },
+  vehicules: { titre:"🚚 Seuils d'alerte véhicules",
+               phrase:"Nombre de jours avant échéance à partir duquel l'alerte apparaît dans la cloche." },
+  conduite:  { titre:"🦺 Conduite de travaux",
+               phrase:"Au-delà de ce délai, un bon reçu et jamais planifié remonte dans « Sans rendez-vous » sur le tableau de bord du conducteur." },
 };
 
 function renderSeuilsSection(domaine){
   const seuils = reglagesCourants().seuils;
   const libelles = window.LIBELLES_SEUILS;
   const cles = SEUILS_PAR_DOMAINE[domaine] || Object.keys(seuils);
-  const titre = domaine === 'rh' ? "🧑‍🔧 Seuils d'alerte RH" : "🚚 Seuils d'alerte véhicules";
+  const textes = SEUILS_DOMAINE_TEXTES[domaine] || SEUILS_DOMAINE_TEXTES.vehicules;
 
   return `<div class="card">
-    <div class="card-title" style="margin-bottom:10px;">${titre}</div>
-    <div class="card-sub" style="margin-bottom:14px;">Nombre de jours avant échéance à partir duquel l'alerte apparaît dans la cloche.</div>
+    <div class="card-title" style="margin-bottom:10px;">${textes.titre}</div>
+    <div class="card-sub" style="margin-bottom:14px;">${textes.phrase}</div>
     <div class="field-grid">
       ${cles.map(k=>`<div class="field"><label>${esc(libelles[k]||k)}</label><input type="number" min="0" id="rg_seuil_${esc(k)}" value="${seuils[k]}"></div>`).join('')}
     </div>
@@ -14957,14 +15713,47 @@ async function synchroniserFicheConducteur(salarie, veutEtreConducteur){
     return false;
   }
   const fiche = existante || { id: uid(), societeId: state.societeId, salarieId: salarie.id };
-  return !!(await window.stSet('conducteur:'+fiche.id, {
+  const profileId = salarie.profileId || fiche.profileId || null;
+  const enregistree = !!(await window.stSet('conducteur:'+fiche.id, {
     ...fiche, nom, actif:true,
     email: salarie.email || fiche.email || '',
     telephone: salarie.telephone || fiche.telephone || '',
     /* Le compte de la personne, s'il existe : sans lui, le tableau de bord du
        conducteur ne sait pas distinguer ses affaires de celles des autres. */
-    profileId: salarie.profileId || fiche.profileId || null,
+    profileId,
   }));
+  if(enregistree) await qualifierRoleConducteur(profileId, nom);
+  return enregistree;
+}
+
+/**
+ * Le dernier maillon : le rôle du compte.
+ *
+ * La fiche conducteur ne suffit pas. C'est `membres_societe.role` qui décide
+ * du tableau de bord reçu, et il ne se posait qu'à l'invitation — une seule
+ * fois. Un salarié invité comme administrateur le restait, et continuait de
+ * voir le chiffre d'affaires et les impayés quoi qu'on coche sur sa fiche.
+ *
+ * DEMANDÉ, JAMAIS IMPOSÉ. Changer le rôle d'un compte, c'est lui retirer des
+ * droits : une case cochée au passage ne peut pas le faire en silence. Et un
+ * administrateur qu'on rétrograde perdrait la main sur sa propre société.
+ */
+async function qualifierRoleConducteur(profileId, nom){
+  if(!profileId) return;                       // pas encore de compte : rien à changer
+  if(!window.definirRoleDuCompte) return;
+  const actuel = (window.listeIntervenants ? window.listeIntervenants() : [])
+    .find(i => i.id === profileId);
+  if(actuel && actuel.role === 'conducteur') return;
+
+  const etiquette = actuel && actuel.role ? libelleRole(actuel.role) : 'sans rôle';
+  if(!confirm(`Donner à ${nom} le rôle « Conducteur de travaux » ?\n\n`
+    + `Son compte est aujourd'hui ${etiquette}. Sans ce changement, son tableau de bord `
+    + `restera celui du pilotage — chiffre d'affaires, impayés — au lieu de ses chantiers.`)) return;
+
+  const issue = await window.definirRoleDuCompte(profileId, 'conducteur');
+  if(issue === 'change'){ showToast(nom + ' est désormais conducteur de travaux.', 'success'); return; }
+  if(issue === 'absent'){ showToast("Ce compte n'est pas membre de cette société : son rôle n'a pas changé."); return; }
+  if(issue === 'refuse'){ showToast("Seul un administrateur peut changer un rôle. La fiche est enregistrée, le rôle non."); }
 }
 
 function salarieForm(){
@@ -15100,6 +15889,18 @@ function comptesLinkOptions(current){
 
 /* `sous_traitant` est absent : ce rôle vise la fiche sous-traitant, pas le
    salarié. Le proposer ici rattacherait la personne à la mauvaise table. */
+/**
+ * Le rôle que la fiche RH laisse attendre.
+ *
+ * On invitait toujours avec « Technicien », le premier de la liste, y compris
+ * une personne dont la fiche portait déjà la case « conducteur de travaux ».
+ * Il fallait s'en souvenir, et personne ne s'en souvenait — d'où des comptes
+ * dont le rôle ne disait pas le métier.
+ */
+function roleProposePourSalarie(salarie){
+  return salarie && salarie.id && ficheConducteurDuSalarie(salarie.id) ? 'conducteur' : 'technicien';
+}
+
 const ROLES_INVITATION = [
   { code:'technicien', libelle:'Technicien — déclare ses travaux' },
   { code:'conducteur', libelle:'Conducteur de travaux' },
@@ -15170,7 +15971,7 @@ function zoneInvitationHTML(e){
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <input type="email" id="inv_email_${e.id}" value="${esc(email)}" placeholder="adresse e-mail" style="flex:1; min-width:180px;">
       <select id="inv_role_${e.id}" style="width:auto;">
-        ${ROLES_INVITATION.map(r=>`<option value="${r.code}">${esc(r.libelle)}</option>`).join('')}
+        ${ROLES_INVITATION.map(r=>`<option value="${r.code}" ${r.code===roleProposePourSalarie(e)?'selected':''}>${esc(r.libelle)}</option>`).join('')}
       </select>
       <button class="btn small primary" onclick="inviterSalarieEcran('${jsAttr(e.id)}')">✉ Inviter</button>
     </div>
@@ -15576,7 +16377,7 @@ function clientForm(){
     <div class="field-grid">
       <div class="field full">
         <label>Type de client</label>
-        <select id="c_cadreFacturation" onchange="majSectionsEfacture()">
+        <select id="c_cadreFacturation" onchange="majSectionsEfacture(true)">
           ${(window.CADRES_FACTURATION||[]).map(c=>`<option value="${esc(c.code)}" ${cadre===c.code?'selected':''}>${esc(c.libelle)}</option>`).join('')}
         </select>
         <small id="c_cadreAide" style="color:var(--text-dim); font-size:11px;"></small>
@@ -15642,7 +16443,7 @@ function clientForm(){
     <div class="field-grid">
       <div class="field full section-title" style="margin:12px 0 0;">💶 Règlement</div>
       <div class="field"><label>Délai de paiement</label>
-        <select id="c_delaiPreset" onchange="choisirDelaiPreregle()">${optionsDelaiHTML(e)}</select></div>
+        <select id="c_delaiPreset" onchange="choisirDelaiPreregle(true)">${optionsDelaiHTML(e)}</select></div>
       <div class="field"><label>Mode de règlement</label>
         <select id="c_modePaiement">${optionsModeReglementHTML(e.modePaiement)}</select></div>
       ${/* Les deux champs bruts ne servent plus qu'au délai hors liste — 21 jours,
@@ -15688,7 +16489,7 @@ function clientForm(){
       <div class="field full"><label>Notes</label><input type="text" id="c_notes" value="${esc(e.notes)}"></div>
     </div>
 
-    <div class="field full" style="margin-top:-6px;"><small style="color:var(--text-dim); font-size:11px;">Tapez un nom (3 lettres min.), un SIREN (9 chiffres) ou un SIRET (14) : nom officiel, adresse, SIREN et n° de TVA sont renseignés automatiquement. Les établissements fermés sont signalés.</small></div>
+    <div class="field full" id="c_aideAnnuaire" style="margin-top:-6px;"><small style="color:var(--text-dim); font-size:11px;">Tapez un nom (3 lettres min.), un SIREN (9 chiffres) ou un SIRET (14) : nom officiel, adresse, SIREN et n° de TVA sont renseignés automatiquement. Les établissements fermés sont signalés.</small></div>
     <div id="c_completude" style="margin-top:8px;"></div>
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="btn primary" onclick="saveClient()">Enregistrer</button>
@@ -15699,7 +16500,13 @@ function clientForm(){
 
 /* Le cadre décide de ce qui est visible. On ne touche qu'au display : le
    formulaire n'est jamais re-rendu, sinon la saisie en cours serait perdue. */
-function majSectionsEfacture(){
+/**
+ * @param {boolean} [changementDeType] Vrai quand l'utilisateur vient de
+ *   changer le type de client. Le délai de paiement ne se repose qu'alors :
+ *   cette fonction tourne aussi à l'OUVERTURE du formulaire, et y reposer le
+ *   délai modifierait une fiche existante du seul fait de l'avoir ouverte.
+ */
+function majSectionsEfacture(changementDeType){
   const select = document.getElementById('c_cadreFacturation');
   if(!select) return;
   const cadre = select.value;
@@ -15713,6 +16520,23 @@ function majSectionsEfacture(){
   bascule('sec_efacture','efacture');
   bascule('sec_marche','marche');
   bascule('sec_pays','pays');
+
+  /* L'exemple du champ nom dit à qui l'on s'adresse — et pourquoi aucune
+     suggestion n'apparaît plus. Une liste ouverte au moment du basculement se
+     referme : elle proposerait des entreprises pour un particulier. */
+  const champNom = document.getElementById('c_nom');
+  if(champNom) champNom.placeholder = visibles.includes('immatriculation')
+    ? 'Ex : syndic, bailleur social, société…'
+    : 'Ex : M. et Mme Dupont';
+  const boite = document.getElementById('clientSuggestions');
+  if(boite && !visibles.includes('immatriculation')){ boite.innerHTML = ''; boite.style.display = 'none'; }
+  /* L'aide de l'annuaire promettait « SIREN et n° de TVA renseignés
+     automatiquement » sur une fiche où la recherche ne répond plus et où les
+     deux champs n'existent pas. */
+  const aideAnnuaire = document.getElementById('c_aideAnnuaire');
+  if(aideAnnuaire) aideAnnuaire.style.display = visibles.includes('immatriculation') ? '' : 'none';
+
+  if(changementDeType) appliquerDelaiDuCadre(cadre);
 
   const aide = (window.CADRES_FACTURATION||[]).find(c=>c.code===cadre);
   const zoneAide = document.getElementById('c_cadreAide');
@@ -15788,10 +16612,32 @@ function majApresAnnuaire(etab){
 }
 let entrepriseSearchTimer = null;
 let entrepriseResults = [];
+
+/**
+ * Ce client porte-t-il une immatriculation ?
+ *
+ * La MÊME règle que celle qui montre ou masque le bloc SIRET : un particulier
+ * n'en a pas. La reposer ici en testant « B2C » ferait deux définitions de la
+ * même chose, et un cadre ajouté demain n'en corrigerait qu'une.
+ */
+function clientAUneImmatriculation(){
+  const select = document.getElementById('c_cadreFacturation');
+  const visibles = window.sectionsEfactureVisibles
+    ? window.sectionsEfactureVisibles(select ? select.value : null)
+    : ['immatriculation'];
+  return visibles.includes('immatriculation');
+}
+
 function searchEntreprise(query){
   clearTimeout(entrepriseSearchTimer);
   const box = document.getElementById('clientSuggestions');
   if(!box) return;
+  /* L'annuaire des entreprises n'a rien à répondre sur un particulier — et il
+     répondait quand même : « laurent johan » sortait cinq établissements avec
+     leur SIRET, prêts à être choisis pour quelqu'un qui n'en a aucun. Le
+     choix aurait rempli une raison sociale et une adresse d'entreprise sur
+     une fiche de particulier. */
+  if(!clientAUneImmatriculation()){ box.innerHTML = ''; box.style.display = 'none'; return; }
   const q = (query||'').trim();
   const chiffres = q.replace(/[^0-9]/g,'');
   const estNumero = chiffres.length===9 || chiffres.length===14;
@@ -17653,6 +18499,7 @@ async function saveDocument(){
   renderShell();
   // La préférence d'affichage du menu, relue à l'ouverture de la session.
   appliquerEpinglageMenu();
+  installerBulleNavigation();
   renderTab();
   /* Le bandeau « Supabase inaccessible » vivait ici, sous `if(!hasRealStorage)`.
      Il ne pouvait pas s'afficher : ce drapeau n'est écrit que par les fonctions
@@ -17740,6 +18587,7 @@ Object.assign(window, {
   adresseSearchTimer,
   ajoutDateSupplCtx,
   ajouterALEquipe,
+  ajouterDateDepuisFiche,
   ajouterLigneDirecteur,
   alerteEcheance,
   allowDropHour,
@@ -17756,6 +18604,7 @@ Object.assign(window, {
   annulerRappel,
   apercuCouleur,
   paletteDeLaSociete,
+  viderFiltragesDifferes,
   valeurChamp,
   appartenanceTache,
   appliquerClientOCR,
@@ -17903,6 +18752,7 @@ Object.assign(window, {
   closeVendreVehiculeModal,
   closeViewIntervention,
   closeViewOnBackdrop,
+  cloturerSansFacturation,
   commentaireRow,
   compteRecherche,
   comptesLinkOptions,
@@ -18652,6 +19502,7 @@ Object.assign(window, {
   startEditEntretien,
   startResizeAttachmentFloat,
   startResizeCorner,
+  startResizeCornerDateSuppl,
   state,
   statutClientBC,
   stepControlesHTML,
