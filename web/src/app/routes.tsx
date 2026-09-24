@@ -27,6 +27,7 @@ import { ReferenceArticleLigne } from "@/modules/articles/components/ReferenceAr
 import { LayoutEspaceClient } from "@/modules/espace-client/components/LayoutEspaceClient";
 import { PageDocumentClient } from "@/modules/espace-client/components/PageDocumentClient";
 import { PageEspaceClient } from "@/modules/espace-client/components/PageEspaceClient";
+import { PageLectureBon } from "@/modules/ocr/components/PageLectureBon";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -86,6 +87,7 @@ export const routes: RouteObject[] = [
       { path: "articles/nouveau", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
       { path: "articles/:id/modifier", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
       { path: "articles/import", element: <RouteModule module="articles" action="modifier"><PageImportArticles /></RouteModule> },
+      { path: "commandes/lecture", element: <RouteModule module="bons_commande" action="creer"><PageLectureBon /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
