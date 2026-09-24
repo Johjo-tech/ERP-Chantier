@@ -9,6 +9,9 @@ import { PageFicheChantier } from "@/modules/chantiers/components/PageFicheChant
 import { PageFormulaireChantier } from "@/modules/chantiers/components/PageFormulaireChantier";
 import { PageDevis } from "@/modules/devis/components/PageDevis";
 import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
+import { PageApercuDevis } from "@/modules/devis/components/PageApercuDevis";
+import { ActionsDevis } from "@/modules/devis/components/ActionsDevis";
+import { DevisLies } from "@/modules/devis/components/DevisLies";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -26,15 +29,16 @@ export const routes: RouteObject[] = [
       { index: true, element: <Accueil /> },
       { path: "clients", element: <RouteModule module="clients"><PageClients /></RouteModule> },
       { path: "clients/nouveau", element: <RouteModule module="clients" action="creer"><PageFormulaireClient /></RouteModule> },
-      { path: "clients/:id", element: <RouteModule module="clients"><PageFicheClient /></RouteModule> },
+      { path: "clients/:id", element: <RouteModule module="clients"><PageFicheClient complements={(c) => <DevisLies clientId={c.id} />} /></RouteModule> },
       { path: "clients/:id/modifier", element: <RouteModule module="clients" action="modifier"><PageFormulaireClient /></RouteModule> },
       { path: "chantiers", element: <RouteModule module="chantiers"><PageChantiers /></RouteModule> },
       { path: "chantiers/nouveau", element: <RouteModule module="chantiers" action="creer"><PageFormulaireChantier /></RouteModule> },
-      { path: "chantiers/:id", element: <RouteModule module="chantiers"><PageFicheChantier /></RouteModule> },
+      { path: "chantiers/:id", element: <RouteModule module="chantiers"><PageFicheChantier complements={(c) => <DevisLies chantierId={c.id} />} /></RouteModule> },
       { path: "chantiers/:id/modifier", element: <RouteModule module="chantiers" action="modifier"><PageFormulaireChantier /></RouteModule> },
       { path: "devis", element: <RouteModule module="devis"><PageDevis /></RouteModule> },
       { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis /></RouteModule> },
-      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis /></RouteModule> },
+      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis actions={(d) => <ActionsDevis devis={d} />} /></RouteModule> },
+      { path: "devis/:id/apercu", element: <RouteModule module="devis"><PageApercuDevis /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

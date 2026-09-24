@@ -29,7 +29,7 @@ export function Layout() {
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-20 flex w-60 flex-col gap-4 border-r border-border bg-card p-3 transition-transform md:static md:translate-x-0",
+            "fixed inset-y-0 left-0 z-20 flex w-60 flex-col gap-4 border-r border-border bg-card p-3 transition-transform md:static md:translate-x-0 print:hidden",
             // Fermé sur mobile, le menu sort AUSSI de l'ordre de tabulation (invisible), pas seulement de l'écran.
             menuOuvert ? "translate-x-0" : "-translate-x-full max-md:invisible"
           )}
@@ -59,13 +59,13 @@ export function Layout() {
           <MenuUtilisateur />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center gap-2 border-b border-border p-2 md:hidden">
+          <header className="flex items-center gap-2 border-b border-border p-2 md:hidden print:hidden">
             <Button variant="ghost" size="sm" aria-expanded={menuOuvert} onClick={() => setMenuOuvert((o) => !o)}>
               Menu
             </Button>
             <span className="truncate font-semibold">{societeActive.nom}</span>
           </header>
-          <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+          <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 print:overflow-visible print:p-0">
             {/* Changer de société remonte l'écran : aucun état local ne survit d'une société à l'autre. */}
             <Outlet key={societeActive.id} />
           </main>

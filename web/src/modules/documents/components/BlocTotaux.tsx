@@ -55,7 +55,7 @@ export function BlocTotaux({ lignes, remise, onRemise, deductions, signe = 1 }: 
         </div>
       )}
       {onRemise && mode !== "pct" && <p id="remise-aide" className="text-xs text-muted-foreground">Remise appliquée : {formatTaux(t.remisePct)}</p>}
-      <dl className="flex flex-col gap-1">
+      <dl aria-label="Totaux du document" className="flex flex-col gap-1">
         {t.remisePct.gt(0) && (
           <>
             <Ligne libelle="Total HT avant remise" valeur={s(t.htAvant)} />

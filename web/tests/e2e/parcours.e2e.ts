@@ -44,13 +44,17 @@ test("la secrétaire crée un devis multi-TVA ; totaux et numéro viennent de la
   await page.getByLabel("Prix unitaire HT, ligne 2").fill("45");
   await page.getByLabel("TVA, ligne 2").selectOption("20");
   // 2 × 85,50 à 10 % + 45 à 20 % : HT 216, TVA 17,10 + 9, TTC 242,10 — deux taux, donc le détail.
-  const totaux = page.locator("dl");
+  const totaux = page.getByLabel("Totaux du document");
   await expect(totaux).toContainText("TVA 10 % sur 171,00 €");
   await expect(totaux).toContainText("TVA 20 % sur 45,00 €");
   await expect(totaux).toContainText("242,10 €");
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await expect(page.getByText("Devis enregistré.")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Devis DEV-\d{4}-\d{6}/);
+  await page.getByRole("link", { name: "Aperçu / imprimer" }).click();
+  await expect(page.getByRole("heading", { name: "DEVIS" })).toBeVisible();
+  await expect(page.getByText("Valable jusqu’au").or(page.getByText("Valable jusqu'au"))).toBeVisible();
+  await page.getByRole("link", { name: "Retour au devis" }).click();
   await page.getByRole("link", { name: "Retour à la liste" }).click();
   await expect(page.getByRole("row", { name: /SCI Les Tilleuls/ }).first()).toContainText("216,00 €");
 });

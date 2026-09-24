@@ -10,7 +10,7 @@ export function BandeauSimulation() {
   const { roleSimule, simulerRole } = useSession();
   if (!roleSimule) return null;
   return (
-    <div role="status" className="flex items-center justify-between gap-4 bg-warning/30 px-4 py-2 text-sm">
+    <div role="status" className="flex items-center justify-between gap-4 bg-warning/30 px-4 py-2 text-sm print:hidden">
       <span>
         Aperçu en tant que <strong>{ROLES_LIBELLES[roleSimule]}</strong> — affichage seulement, la base applique
         toujours vos droits d'administrateur.
