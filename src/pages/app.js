@@ -189,6 +189,10 @@ let state = {
      tableau posé sur la fiche est écarté à l'écriture. Il se charge et
      s'enregistre par `src/integrations/documents-rh.ts`. */
   documentsRh: [], documentsRhCharges: false, documentsRhSociete: null, rhDocFiltre: '', rhDocSalarieId: null, rhDocForm: null,
+  /* Vrai pendant `loadAll()`. Les collections en mémoire portent alors encore
+     celles de la société qu'on quitte : tout ce qui se déduit d'elles à cet
+     instant est faux, et surtout ne doit pas être retenu comme un résultat. */
+  chargementGlobal: false,
   /* Le registre des visites médicales, et les invitations en attente : même
      raison d'être à part du pont, même indexation par société. */
   visitesRh: [], visitesRhCharges: false, visitesRhSociete: null, rhVisiteFiltre: '', rhVisiteSalarieId: null, rhVisiteForm: null,
@@ -588,6 +592,11 @@ async function rechargerToutesLesDonnees(){
 }
 
 async function loadAll(){
+  /* Levé pendant toute la durée du rechargement : les écrans qui se dessinent
+     entre-temps lisent des collections périmées, et ne doivent pas en tirer de
+     conclusion. Voir `chargerDossiersRh`. */
+  state.chargementGlobal = true;
+  try {
   /* Avant toute requête : le pont ne ramènera que cette société. Sans cela il
      téléchargeait aussi les documents des sociétés qu'on n'affiche pas. */
   if(window.definirSocieteActive) window.definirSocieteActive(state.societeId);
@@ -607,6 +616,9 @@ async function loadAll(){
   appliquerCouleurSociete();
   refreshNotifBadge();
   signalerEchecsDeChargement();
+  } finally {
+    state.chargementGlobal = false;
+  }
 }
 
 /* ---------- Helpers ---------- */
@@ -15518,6 +15530,14 @@ function dossiersRhPrets(){
 function chargerDossiersRh(force){
   if(chargementDossiersRh) return chargementDossiersRh;
   if(!force && dossiersRhPrets()) return Promise.resolve();
+  /* Changer de société dessinait l'onglet AVANT de recharger les données :
+     `state.salaries` portait encore les fiches de la société qu'on quittait,
+     la liste d'identifiants partait donc vide, et le `finally` retenait ce
+     néant comme un résultat valable POUR LA NOUVELLE société. Les dossiers
+     restaient alors vides tout le reste de la session — pastilles ✕ partout,
+     aucune alerte d'expiration. On ne lit pas pendant un rechargement
+     général : celui-ci se termine par un rendu qui relancera la lecture. */
+  if(state.chargementGlobal) return Promise.resolve();
   const societe = state.societeId;
   const ids = state.salaries.filter(s=>s.societeId===societe).map(s=>s.id);
   chargementDossiersRh = (async ()=>{
@@ -15528,11 +15548,16 @@ function chargerDossiersRh(force){
       state.documentsRh = [];
       showToast("Les dossiers documentaires n'ont pas pu être chargés.");
     }finally{
-      /* Marqué lu même en cas d'échec : sinon chaque rendu relance la requête
-         qui vient d'échouer, et l'écran se met à clignoter. */
-      state.documentsRhCharges = true;
-      state.documentsRhSociete = societe;
       chargementDossiersRh = null;
+      /* Un rechargement général a commencé pendant la requête : ce qu'on vient
+         de lire porte sur l'état d'avant. Le retenir rejouerait le défaut
+         ci-dessus — on laisse le drapeau baissé, le rendu final relira. */
+      if(!state.chargementGlobal){
+        /* Marqué lu même en cas d'échec : sinon chaque rendu relance la requête
+           qui vient d'échouer, et l'écran se met à clignoter. */
+        state.documentsRhCharges = true;
+        state.documentsRhSociete = societe;
+      }
     }
     renderTab();
   })();

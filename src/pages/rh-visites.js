@@ -115,6 +115,11 @@ export function visitesRhPretes(){
 export function chargerVisitesRh(force){
   if(chargementVisitesRh) return chargementVisitesRh;
   if(!force && visitesRhPretes()) return Promise.resolve();
+  /* Même défaut que le dossier documentaire, et il se réparait au même
+     endroit : pendant un changement de société, `state.salaries` porte encore
+     les fiches de celle qu'on quitte, la liste d'identifiants part vide, et
+     retenir ce néant condamne le registre à rester vide toute la session. */
+  if(state.chargementGlobal) return Promise.resolve();
   const societe = state.societeId;
   const ids = state.salaries.filter(s=>s.societeId===societe).map(s=>s.id);
   chargementVisitesRh = (async ()=>{
@@ -125,9 +130,11 @@ export function chargerVisitesRh(force){
       state.visitesRh = [];
       showToast("Les visites médicales n'ont pas pu être chargées.");
     }finally{
-      state.visitesRhCharges = true;
-      state.visitesRhSociete = societe;
       chargementVisitesRh = null;
+      if(!state.chargementGlobal){
+        state.visitesRhCharges = true;
+        state.visitesRhSociete = societe;
+      }
     }
     renderTab();
   })();
