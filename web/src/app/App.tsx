@@ -1,3 +1,11 @@
+import { RouterProvider } from "react-router";
+import { Providers } from "./providers";
+import { routeur } from "./routes";
+
 export function App() {
-  return <main className="p-6">ERP Chantier</main>;
+  return (
+    <Providers>
+      <RouterProvider router={routeur} />
+    </Providers>
+  );
 }
