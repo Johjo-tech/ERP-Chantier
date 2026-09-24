@@ -8200,6 +8200,15 @@ async function toggleBCMetierFait(bcId, metier){
    fait qu'une tâche validée est close — `tache_marquer_realisee` refuse
    explicitement de la rouvrir, pour qu'un arbitrage ne s'efface pas sans trace.
    Rouvrir une affaire validée est une décision de gestion, pas un correctif. */
+/* Les deux valeurs que `numero_bc` porte quand aucun numéro n'est encore connu.
+   Ce ne sont pas des numéros : elles disent leur absence, et `ref_bc_client()`
+   en base comme `refBonCommandeClient` les convertissent toutes deux en NULL.
+   Nommées ici pour que le formulaire ne les propose pas à la modification et
+   que l'enregistrement les distingue d'une vraie saisie. */
+const BC_SENTINELLES = ['En attente de BC', 'Sans BC'];
+function numeroBCSaisissable(b){
+  return BC_SENTINELLES.includes((b.numeroBC || '').trim()) ? '' : (b.numeroBC || '');
+}
 function bonCommandeForm(){
   /* Pendant une lecture automatique, l'écran se consacre à la lecture. Le
      formulaire reviendra prérempli. Rendre le suivi depuis `state.ocr` plutôt
@@ -8260,8 +8269,17 @@ function bonCommandeForm(){
     <div class="form-section">
       <div class="form-section-head">${isSAV? 'SAV' : 'Bon de commande'}</div>
       <div class="field-grid">
-        ${(sansBC||enAttenteBC||isSAV)? '' : `<div class="bc-numref-duo">
-          <div class="field"><label>N° du bon de commande</label><textarea id="bc_numeroBC" placeholder="Numéro indiqué sur le BC du client — passez à la ligne pour en ajouter un autre" style="min-height:38px;">${esc(e.numeroBC)}</textarea></div>
+        ${/* Le champ reste saisissable même en attente ou sans BC — seul le SAV
+              le masque, qui porte sa propre numérotation. Il était retiré dans
+              les trois cas, et le sélecteur de mode qui aurait permis d'en
+              sortir n'existe qu'à la création : un bon en attente n'avait
+              AUCUNE issue, alors que c'est ce numéro que le client exige sur sa
+              facture. La « Référence chantier » se perdait par la même
+              condition. */''}
+        ${isSAV? '' : `<div class="bc-numref-duo">
+          <div class="field"><label>N° du bon de commande${enAttenteBC? ' — en attente' : (sansBC? ' — sans BC' : '')}</label><textarea id="bc_numeroBC" placeholder="Numéro indiqué sur le BC du client — passez à la ligne pour en ajouter un autre" style="min-height:38px;">${esc(numeroBCSaisissable(e))}</textarea>
+            ${enAttenteBC? '<div class="card-sub" style="margin-top:4px;">Dès qu\'il arrive, saisissez-le ici : le bon devient un bon de commande standard, et le numéro part sur la facture.</div>'
+              : (sansBC? '<div class="card-sub" style="margin-top:4px;">Ce client travaille sans bon de commande. Si l\'un arrive malgré tout, saisissez-le ici.</div>' : '')}</div>
           <div class="field"><label>Référence chantier (optionnel)</label><input type="text" id="bc_referenceChantier" value="${esc(e.referenceChantier||'')}" placeholder="N° ou nom du chantier"></div>
         </div>`}
         ${isSAV? '' : `<div class="field"><label>Date de réception du BC</label><input type="date" id="bc_dateReception" value="${e.dateReception||todayISO()}"></div>`}
@@ -8369,10 +8387,17 @@ async function saveBonCommande(brouillon){
   });
   if(manques.length){ alert(manques.map(m=>'• '+m.libelle).join('\n\n')); bcSaveInProgress = false; return; }
   const id = e.id || uid();
-  const sansBC = !!e.sansBC;
-  const enAttenteBC = !!e.enAttenteBC;
   const isSAV = !!e.bonCommandeId;
   const numeroBCInput = document.getElementById('bc_numeroBC');
+  /* LA SAISIE D'UN NUMÉRO EST LA BASCULE. Un bon « en attente » qui reçoit
+     enfin son numéro devient un bon de commande standard — pas besoin d'un
+     bouton d'état séparé : pour `ref_bc_client()`, la différence n'est pas
+     entre deux états, c'est la présence ou l'absence d'une référence.
+     Tant que le champ reste vide, la sentinelle et le drapeau d'origine sont
+     conservés — c'est ce qui distingue « pas encore arrivé » de « arrivé ». */
+  const numeroSaisi = isSAV ? '' : ((numeroBCInput? numeroBCInput.value : (numeroBCSaisissable(e) || '')).trim());
+  const sansBC = !!e.sansBC && !numeroSaisi;
+  const enAttenteBC = !!e.enAttenteBC && !numeroSaisi;
   const devisIdInput = document.getElementById('bc_devisId');
   const dateReceptionInput = document.getElementById('bc_dateReception');
   const problemeInput = document.getElementById('bc_problemeDescription');
@@ -8413,7 +8438,8 @@ async function saveBonCommande(brouillon){
     photos: e.photos || [],
     interlocuteur: document.getElementById('bc_interlocuteur').value,
     devisId: devisIdInput? (devisIdInput.value || null) : (e.devisId||null),
-    numeroBC: isSAV ? savNumero : (enAttenteBC ? 'En attente de BC' : (sansBC ? 'Sans BC' : (numeroBCInput? numeroBCInput.value : e.numeroBC||''))),
+    numeroBC: isSAV ? savNumero
+      : (numeroSaisi || (enAttenteBC ? BC_SENTINELLES[0] : (sansBC ? BC_SENTINELLES[1] : ''))),
     adresse: document.getElementById('bc_adresse').value,
     codePostal: document.getElementById('bc_codePostal').value,
     ville: document.getElementById('bc_ville').value,
