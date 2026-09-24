@@ -15,6 +15,7 @@ import "./integrations/librairies-documents";
 import { injectGlobalFunctions, viderCache } from "./integrations/html-adapter";
 import { injecterCatalogue } from "./integrations/catalogue";
 import { injecterImportClients } from "./integrations/clients-import";
+import { injecterImportFactures } from "./integrations/factures-import";
 import { protectRoute, watchAuthState } from "./integrations/auth-guard";
 import {
   chargerIntervenants,
@@ -41,7 +42,8 @@ async function init() {
     injectGlobalFunctions();
     injecterSession();
     injecterCatalogue();
-  injecterImportClients();
+    injecterImportClients();
+    injecterImportFactures();
 
     const session = await getCurrentSession();
     setIdentite(session?.user.email ?? "", session?.user.id ?? null);

@@ -35,8 +35,67 @@
 
 import { lireCsv, type LigneCsv, type RejetImport, type SignalementImport } from "./regles-csv";
 import { decoderTexte, libelleEncodage, type Encodage } from "./regles-encodage";
+import { cleNom } from "./regles-import-clients";
 
 export type { RejetImport, SignalementImport };
+
+// ============ RETROUVER LE CLIENT D'UNE PIÈCE ============
+
+/** Le minimum qu'un client existant doit porter pour être reconnu. */
+export interface ClientConnu {
+  id: string;
+  nom: string;
+  cadre: string | null;
+}
+
+export type RapprochementClient =
+  | { type: "exact" | "prefixe"; client: ClientConnu }
+  | { type: "ambigu"; candidats: ClientConnu[] }
+  | { type: "aucun" };
+
+/**
+ * À quel client cette pièce se rattache-t-elle ?
+ *
+ * Le nom seul en décide : `clients` ne porte aucune colonne de code externe, et
+ * son `legacy_id` est réservé à la reprise kv_store.
+ *
+ * ── POURQUOI L'ÉGALITÉ EXACTE NE SUFFIT PAS ────────────────────────────────
+ * L'import de clients laisse l'annuaire nommer les fiches qu'il crée. « ALPES
+ * ISERE HABITAT » y devient « ALPES ISERE HABITAT OFFICE PUBLIC DE L'HABITAT
+ * (ALPES ISERE HABITAT) », et le logiciel comptable, lui, garde le nom court.
+ * Sur les douze clients de l'export 2025, l'égalité exacte en reconnaît deux ;
+ * le préfixe en reconnaît deux de plus, dont le deuxième client de la société.
+ *
+ * ── POURQUOI LE PRÉFIXE ET PAS « CONTIENT » ────────────────────────────────
+ * Le préfixe est ancré : un nom commercial complet COMMENCE par la raison
+ * sociale. « contient » rapprocherait « HABITAT » de tout, et l'ancrage est ce
+ * qui rend la règle explicable à quelqu'un qui relit le rapport.
+ *
+ * L'exact passe AVANT le préfixe, et cet ordre n'est pas cosmétique : « CDC
+ * HABITAT » est le préfixe de « CDC HABITAT SOCIAL… » autant que de lui-même.
+ * Sans la priorité à l'exact, deux clients que le dépôt sait distincts se
+ * confondraient. Et deux candidats au même préfixe ne se départagent pas : on
+ * ne tranche pas une ambiguïté qu'on ne saurait pas justifier.
+ */
+export function rapprocherClient(nom: string, existants: ClientConnu[]): RapprochementClient {
+  const cle = cleNom(nom);
+  if (!cle) return { type: "aucun" };
+
+  const exacts = existants.filter((c) => cleNom(c.nom) === cle);
+  if (exacts.length === 1) return { type: "exact", client: exacts[0] };
+  if (exacts.length > 1) return { type: "ambigu", candidats: exacts };
+
+  /* La frontière de mot évite que « SCI MILLY » n'attrape « SCI MILLYON » :
+     ce qui suit le préfixe doit ouvrir un mot, pas le prolonger. */
+  const prefixes = existants.filter((c) => {
+    const k = cleNom(c.nom);
+    return k.startsWith(cle) && /[\s(,-]/.test(k.charAt(cle.length));
+  });
+  if (prefixes.length === 1) return { type: "prefixe", client: prefixes[0] };
+  if (prefixes.length > 1) return { type: "ambigu", candidats: prefixes };
+
+  return { type: "aucun" };
+}
 
 /** Les catégories de TVA que la base accepte (énumération `tva_categorie`). */
 export type CategorieTva = "S" | "Z" | "E" | "AE" | "K" | "G" | "O";
