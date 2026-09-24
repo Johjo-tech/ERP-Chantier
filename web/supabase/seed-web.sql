@@ -122,3 +122,33 @@ begin
   values ('b4000000-0000-0000-0000-000000000001', v_beta, 'DEV-2026-B00001', 'b2000000-0000-0000-0000-000000000001', 'Client secret de BETA', '2026-09-10', 'brouillon')
   on conflict (id) do nothing;
 end $$;
+
+-- Espace client (migration PROPOSÉE 20260925030000) : un compte client pour
+-- « OPAC du Rhône » d'ALPHA. Seulement si la table d'accès existe.
+do $$
+begin
+  if to_regclass('public.acces_clients') is null then
+    raise notice 'acces_clients absente : compte client non créé.';
+    return;
+  end if;
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new,
+    email_change_token_current, email_change, phone_change, phone_change_token, reauthentication_token
+  ) values (
+    'c1000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+    'client.opac@erp.local', extensions.crypt('motdepasse-local', extensions.gen_salt('bf')), now(), now(), now(),
+    '{"provider":"email","providers":["email"]}'::jsonb, '{"nom":"Olivier OPAC"}'::jsonb, '', '', '', '', '', '', '', ''
+  ) on conflict (id) do nothing;
+  insert into auth.identities (id, provider_id, user_id, provider, identity_data, created_at, updated_at)
+  values (gen_random_uuid(), 'c1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001', 'email',
+          jsonb_build_object('sub', 'c1000000-0000-0000-0000-000000000001', 'email', 'client.opac@erp.local', 'email_verified', true), now(), now())
+  on conflict do nothing;
+  insert into public.profiles (id, nom, email) values ('c1000000-0000-0000-0000-000000000001', 'Olivier OPAC', 'client.opac@erp.local')
+  on conflict (id) do nothing;
+  execute $i$
+    insert into public.acces_clients (profile_id, client_id, societe_id)
+    values ('c1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-00000000000a')
+    on conflict (profile_id, client_id) do nothing
+  $i$;
+end $$;

@@ -15,8 +15,9 @@ as $function$
 declare
   v_annee integer := coalesce(p_annee, extract(year from current_date)::integer);
 begin
-  if not (peut_ecrire(p_societe)
-          or (p_type = 'devis' and a_permission(p_societe, 'devis', 'creer'))) then
+  -- coalesce : une garde qui rendrait NULL laisserait passer (voir 20260925015000).
+  if not coalesce(peut_ecrire(p_societe)
+                  or (p_type = 'devis' and a_permission(p_societe, 'devis', 'creer')), false) then
     raise exception 'Droits insuffisants sur cette societe' using errcode = '42501';
   end if;
 

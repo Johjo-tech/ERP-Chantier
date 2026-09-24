@@ -1,0 +1,92 @@
+-- PROPOSITION — non appliquée en production (DECISIONS D-008, D-018).
+--
+-- L'espace client : un CLIENT de la société consulte, en lecture seule, ses
+-- chantiers, ses devis envoyés et ses factures émises.
+--
+-- Pourquoi pas un rôle `client` dans `membres_societe` : tout membre passe
+-- `est_membre()`, qui ouvre la lecture de presque toutes les tables — le client
+-- verrait les autres clients, les salariés, les bons. On lui donne donc une
+-- table d'accès à part et des politiques de LECTURE dédiées, qui ne
+-- s'ajoutent (OR) qu'aux lignes de SES clients. Aucune politique d'écriture :
+-- les politiques existantes exigent `a_permission`, qu'un non-membre n'a pas.
+-- Idempotent. Validé par tests/rls/espace-client.essai.ts.
+
+create table if not exists public.acces_clients (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  client_id uuid not null references public.clients(id) on delete cascade,
+  societe_id uuid not null references public.societes(id) on delete cascade,
+  actif boolean not null default true,
+  cree_le timestamptz not null default now(),
+  maj_le timestamptz not null default now(),
+  unique (profile_id, client_id)
+);
+
+comment on table public.acces_clients is
+  'Accès en lecture seule d''un compte à un client (espace client). Jamais un membre de la société.';
+
+alter table public.acces_clients enable row level security;
+
+drop policy if exists acces_clients_select on public.acces_clients;
+drop policy if exists acces_clients_ecriture on public.acces_clients;
+create policy acces_clients_select on public.acces_clients for select to authenticated
+  using (profile_id = auth.uid() or public.est_admin(societe_id));
+-- Seul un admin de la société ouvre ou ferme un accès client.
+create policy acces_clients_ecriture on public.acces_clients for all to authenticated
+  using (public.est_admin(societe_id)) with check (public.est_admin(societe_id));
+
+drop trigger if exists trg_acces_clients_maj on public.acces_clients;
+create trigger trg_acces_clients_maj before update on public.acces_clients
+  for each row execute function public.set_maj_le();
+
+-- Les clients accessibles au compte connecté. La société de l'accès doit être
+-- celle du client : une ligne incohérente n'ouvre rien.
+create or replace function public.mes_clients()
+returns setof uuid
+language sql stable security definer
+set search_path to 'public', 'pg_temp'
+as $$
+  select a.client_id
+  from acces_clients a
+  join profiles p on p.id = a.profile_id and p.actif
+  join clients c on c.id = a.client_id and c.societe_id = a.societe_id
+  where a.profile_id = auth.uid() and a.actif;
+$$;
+revoke all on function public.mes_clients() from public;
+grant execute on function public.mes_clients() to authenticated;
+
+-- Lecture seule, limitée aux lignes de SES clients.
+drop policy if exists espace_client_societes on public.societes;
+create policy espace_client_societes on public.societes for select to authenticated
+  using (id in (select c.societe_id from clients c where c.id in (select public.mes_clients())));
+
+drop policy if exists espace_client_clients on public.clients;
+create policy espace_client_clients on public.clients for select to authenticated
+  using (id in (select public.mes_clients()));
+
+drop policy if exists espace_client_chantiers on public.chantiers;
+create policy espace_client_chantiers on public.chantiers for select to authenticated
+  using (client_id in (select public.mes_clients()));
+
+-- Un brouillon de devis n'est pas encore une offre : le client ne le voit pas.
+drop policy if exists espace_client_devis on public.devis;
+create policy espace_client_devis on public.devis for select to authenticated
+  using (client_id in (select public.mes_clients()) and statut <> 'brouillon');
+
+drop policy if exists espace_client_devis_lignes on public.devis_lignes;
+create policy espace_client_devis_lignes on public.devis_lignes for select to authenticated
+  using (exists (select 1 from devis d where d.id = devis_lignes.devis_id
+                 and d.client_id in (select public.mes_clients()) and d.statut <> 'brouillon'));
+
+-- Une facture non émise n'existe pas pour le client.
+drop policy if exists espace_client_factures on public.factures;
+create policy espace_client_factures on public.factures for select to authenticated
+  using (client_id in (select public.mes_clients()) and numero is not null);
+
+drop policy if exists espace_client_facture_lignes on public.facture_lignes;
+create policy espace_client_facture_lignes on public.facture_lignes for select to authenticated
+  using (exists (select 1 from factures f where f.id = facture_lignes.facture_id
+                 and f.client_id in (select public.mes_clients()) and f.numero is not null));
+
+grant select on public.acces_clients to authenticated;
+grant insert, update, delete on public.acces_clients to authenticated;

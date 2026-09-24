@@ -29,6 +29,7 @@ export function sessionFactice({ role, simule = null, niveau = null, societes }:
         utilisateur: { id: "u1", email: "test@erp.local", nom: "Compte de test" },
         societes: societes ?? [active],
         matrice: MATRICE_REELLE,
+        accesClients: [],
       },
     },
     societeActive: active,

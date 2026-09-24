@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseAvecPropositions } from "../../src/lib/database.propositions";
 import type { Database } from "../../src/lib/database.types";
 
 /**
@@ -49,4 +50,9 @@ export async function connecte(email: string): Promise<Client> {
   const { error } = await c.auth.signInWithPassword({ email, password: MOT_DE_PASSE });
   if (error) throw new Error(`Connexion de ${email} impossible : ${error.message}. Le jeu d'essai est-il chargé ?`);
   return c;
+}
+
+/** Le même client, typé avec les tables des migrations proposées (acces_clients…). */
+export function avecPropositions(c: Client): SupabaseClient<DatabaseAvecPropositions> {
+  return c as unknown as SupabaseClient<DatabaseAvecPropositions>;
 }

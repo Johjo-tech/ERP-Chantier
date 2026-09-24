@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabasePropositions } from "@/lib/supabase";
 import { construireMatrice, estRole, type RoleMembre } from "../domain/permissions";
-import type { Session } from "../domain/types";
+import type { AccesClient, Session } from "../domain/types";
 
-export type { Session, SocieteAccessible, Utilisateur } from "../domain/types";
+export type { AccesClient, Session, SocieteAccessible, Utilisateur } from "../domain/types";
 
 const ligneMembre = z.object({
   role: z.string().refine(estRole, "Rôle inconnu"),
@@ -87,9 +87,37 @@ export async function chargerSession(userId: string): Promise<Session> {
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
   const droits = z.array(ligneDroit).parse(droitsR.data);
+  const accesClients = await chargerAccesClients(userId);
   return {
     utilisateur: { id: p.id, email: p.email ?? "", nom: p.nom || p.email || "" },
     societes,
     matrice: construireMatrice(droits.map((d) => ({ ...d, role: d.role as RoleMembre }))),
+    accesClients,
   };
+}
+
+const ligneAcces = z.object({
+  client_id: z.string(),
+  societe_id: z.string(),
+  client: z.object({ nom: z.string() }).nullable(),
+  societe: z.object({ nom: z.string() }).nullable(),
+});
+
+/** Table absente (migration proposée non appliquée) : pas d'espace client, sans erreur. */
+const TABLE_ABSENTE = new Set(["42P01", "PGRST205", "PGRST200"]);
+
+async function chargerAccesClients(userId: string): Promise<AccesClient[]> {
+  const { data, error } = await supabasePropositions()
+    .from("acces_clients")
+    .select("client_id, societe_id, client:clients(nom), societe:societes(nom)")
+    .eq("profile_id", userId)
+    .eq("actif", true);
+  if (error) {
+    if (TABLE_ABSENTE.has(error.code)) return [];
+    throw error;
+  }
+  return z
+    .array(ligneAcces)
+    .parse(data)
+    .map((a) => ({ clientId: a.client_id, clientNom: a.client?.nom ?? "", societeId: a.societe_id, societeNom: a.societe?.nom ?? "" }));
 }

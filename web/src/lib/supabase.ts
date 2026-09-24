@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseAvecPropositions } from "./database.propositions";
 import type { Database } from "./database.types";
 import { lireConfiguration } from "./env";
 
@@ -20,4 +21,13 @@ export function supabase(): Client {
     });
   }
   return instance;
+}
+
+/**
+ * Le même client, typé avec les tables des migrations PROPOSÉES. Seul point de
+ * conversion : ces tables existent en base locale, pas encore dans les types
+ * générés depuis la production.
+ */
+export function supabasePropositions(): SupabaseClient<DatabaseAvecPropositions> {
+  return supabase() as unknown as SupabaseClient<DatabaseAvecPropositions>;
 }

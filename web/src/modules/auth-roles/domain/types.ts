@@ -16,9 +16,18 @@ export interface Utilisateur {
   nom: string;
 }
 
+/** Un accès « espace client » : lecture seule des documents d'un client (DECISIONS D-008). */
+export interface AccesClient {
+  clientId: string;
+  clientNom: string;
+  societeId: string;
+  societeNom: string;
+}
+
 export interface Session {
   utilisateur: Utilisateur;
   societes: SocieteAccessible[];
   matrice: Matrice;
+  accesClients: AccesClient[];
 }
 
