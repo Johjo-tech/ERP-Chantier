@@ -169,4 +169,5 @@ export const LIBELLES_SEUILS: Record<keyof Seuils, string> = {
   carteBtp: "Cartes BTP",
   visiteMedicale: "Visites médicales",
   habilitation: "Habilitations",
+  conducteurSansRdv: "Bon reçu et non planifié (jours)",
 };

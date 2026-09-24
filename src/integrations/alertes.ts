@@ -30,6 +30,11 @@ export const SEUILS = {
   carteBtp: 60,
   visiteMedicale: 45,
   habilitation: 60,
+  /* Le seul seuil qui ne nourrit pas la cloche : il dit à partir de quand un
+     bon reçu et jamais planifié remonte sur le tableau de bord du conducteur.
+     Il vit ici pour hériter de la lecture et de la fusion des autres — un
+     réglage rangé ailleurs serait un réglage qu'on oublie de relire. */
+  conducteurSansRdv: 7,
 };
 
 export type Seuils = typeof SEUILS;
