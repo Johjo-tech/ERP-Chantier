@@ -6914,6 +6914,17 @@ function bonCommandeCardHTML(b, workflowCtx){
         </div>
       </div>
     </div>
+    ${/* Le geste qu'on vient chercher sur un bon en attente : le numéro est
+          arrivé par courriel ou par courrier, et l'ouvrir en modification pour
+          taper cinq caractères est un détour. Même forme que la zone « pièce
+          arrivée » juste au-dessus, qui résout déjà ce problème.
+          Masquée sous verrou : une facture émise en découle, le bon ne bouge
+          plus — et le numéro ne pourrait de toute façon plus l'atteindre. */''}
+    ${(b.enAttenteBC && !verrou)? `<div class="piece-replanifier-zone">
+      <span class="card-sub" style="margin:0;">📄 Le bon de commande est arrivé ?</span>
+      <input type="text" id="numeroBCRecu_${jsAttr(b.id)}" placeholder="N° indiqué sur le bon du client" style="min-width:200px;" onclick="event.stopPropagation();">
+      <button class="btn small primary" onclick="event.stopPropagation(); enregistrerBCRecu('${jsAttr(b.id)}')">✓ BC reçu</button>
+    </div>`:''}
     <div class="bc-actions-bas">
       ${/* En PREMIER, et visible carte repliée : c'est le geste qu'on vient
             chercher sur cet écran. Enfoui dans le détail, il obligeait à
@@ -6964,6 +6975,29 @@ async function marquerPieceCommandee(bcId){
   await recharger('bonCommande');
   renderTab();
   showToast('📦 Pièce commandée — classée dans le dossier '+(b.pieceACommanderFournisseur||'fournisseur'), 'success', 2500);
+}
+/**
+ * Le bon de commande du client est arrivé : on pose son numéro.
+ *
+ * Le même geste que dans le formulaire — la saisie d'un numéro éteint l'attente
+ * — mais sans ouvrir le bon : il arrive par courriel ou par courrier, et faire
+ * un détour par la modification pour taper cinq caractères décourage de le
+ * faire tout de suite. Or plus il tarde, plus le risque est grand de facturer
+ * sans lui, et `ref_bon_commande_client` est gelé dès la facture émise.
+ */
+async function enregistrerBCRecu(bcId){
+  const champ = document.getElementById('numeroBCRecu_'+bcId);
+  const numero = champ ? champ.value.trim() : '';
+  if(!numero){ showToast('Indiquez le numéro figurant sur le bon du client.'); return; }
+  const b = state.bonsCommande.find(x=>x.id===bcId);
+  if(!b) return;
+  b.numeroBC = numero;
+  b.enAttenteBC = false;
+  const r = await window.stSet('bonCommande:'+bcId, b);
+  if(!r){ showToast(saveFailedMessage()); return; }
+  await recharger('bonCommande');
+  renderTab();
+  showToast('Bon de commande n° '+numero+' enregistré — ce bon n\'est plus en attente, et le numéro partira sur sa facture.', 'success', 5000);
 }
 /**
  * La pièce est arrivée : le bon retourne dans « Non planifiés ».
@@ -19455,6 +19489,7 @@ Object.assign(window, {
   endResizeAttachmentFloat,
   enregistrerAnnotationPhoto,
   enregistrerArticleCatalogue,
+  enregistrerBCRecu,
   enregistrerChiffrageDirecteur,
   enregistrerDocumentRh,
   enteteDashboard,
