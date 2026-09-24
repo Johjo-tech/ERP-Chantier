@@ -32,6 +32,7 @@ import {
   estSociete,
   dateEcheance,
   delaiHorsPlafond,
+  CLE_DELAI_PAR_CADRE,
   DELAIS_PREREGLES,
   delaiPreregle,
   delaiDeLaCle,
@@ -792,6 +793,8 @@ export function injecterSession() {
   /* Les conditions de paiement se choisissent dans une liste nommée ;
      le couple (jours, mode) reste ce qui s'enregistre. */
   w.DELAIS_PREREGLES = DELAIS_PREREGLES;
+  /* Le délai qu'un cadre appelle — l'écran ET l'import de clients le lisent ici. */
+  w.CLE_DELAI_PAR_CADRE = CLE_DELAI_PAR_CADRE;
   w.delaiPreregle = delaiPreregle;
   w.delaiDeLaCle = delaiDeLaCle;
   w.MODES_REGLEMENT = MODES_REGLEMENT;

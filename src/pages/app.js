@@ -3023,15 +3023,9 @@ function cleDelaiDuClient(client){
   return p ? p.cle : 'autre';
 }
 
-/**
- * Le délai que le type de client appelle.
- *
- * Un particulier paie À RÉCEPTION : le crédit de 30 ou 60 jours est un usage
- * entre professionnels, et le proposer par défaut à un particulier revient à
- * lui accorder un délai que personne n'a voulu. Les autres cadres retombent
- * sur le réglage de la société.
- */
-const DELAI_PAR_CADRE = { B2C: 'reception' };
+/* La table vit dans `regles-efacture`, partagée avec l'import de clients qui
+   pose lui aussi un cadre. Lue ici, jamais redéfinie. */
+const DELAI_PAR_CADRE = window.CLE_DELAI_PAR_CADRE || {};
 
 /**
  * Reposer le délai quand le type de client change.

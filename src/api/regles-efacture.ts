@@ -643,6 +643,21 @@ export function delaiDeLaCle(cle?: string | null): DelaiPaiement | null {
 }
 
 /**
+ * Le délai qu'un type de client appelle. Absent : le réglage de la société.
+ *
+ * Un particulier paie À RÉCEPTION : le crédit de 30 ou 60 jours est un usage
+ * entre professionnels, et le proposer par défaut à un particulier revient à
+ * lui accorder un délai que personne n'a voulu.
+ *
+ * Cette table vivait dans l'écran, et elle n'y pouvait pas rester : l'import
+ * de clients pose lui aussi un cadre, et aurait dû la recopier. Deux copies de
+ * la même règle divergent — c'est la raison d'être des modules feuille.
+ */
+export const CLE_DELAI_PAR_CADRE: Partial<Record<CadreFacturation, string>> = {
+  B2C: "reception",
+};
+
+/**
  * Les moyens de paiement proposés.
  *
  * Les codes sont ceux de l'énumération `mode_paiement` déjà en base — la
