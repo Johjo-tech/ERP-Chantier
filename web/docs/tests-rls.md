@@ -40,6 +40,10 @@ Mot de passe de tous : `motdepasse-local`.
 | `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
 | `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
 | | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
+| `facturation.essai.ts` | `v_facture_solde` : avoir jamais dû, facture à 0 € réglée, acomptes et retenue (la retenue non levée n'est pas un retard), reprise historique, accord avec `etatPiece` | oui (20260926040000) |
+| | Statut stocké recalé par le déclencheur ; règlement groupé : imputation = `imputer` de l'ancien, trop-perçu refusé avec son message, un avoir dans la sélection fait tout refuser, le rôle lecture n'écrit rien | oui (20260926041000) |
+| | `imputer_avoir` : deux règlements liés, refus dans l'ordre et avec les mots de `refusImputationAvoir` ; note de frais « NDF- » | oui (20260926041000, 20260926043000) |
+| `espace-client-bons.essai.ts` | Le client suit ses bons (jamais ceux d'un autre client ni de BETA), aucune colonne interne dans la vue ; lit les règlements et le solde de SES factures, n'écrit aucun règlement ; accès nominatif restreint à l'interlocuteur, qu'il ne peut pas élargir lui-même | oui (20260926042000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

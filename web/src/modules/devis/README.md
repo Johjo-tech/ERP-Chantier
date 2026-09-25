@@ -1,19 +1,23 @@
 # devis
 
-**Rôle** : devis — liste, édition (en-tête, lieu d'intervention, lignes multi-TVA,
-remise), duplication, aperçu imprimable.
+**Rôle** : devis — liste filtrée, édition (en-tête, lieu d'intervention, lignes
+multi-TVA, remise), duplication, aperçu, PDF, e-mail, bon de commande et
+facture depuis le devis, devis depuis un rapport d'intervention.
 
 - **Tables / vues / RPC** : `devis`, `devis_lignes`, vue `v_devis_totaux`
-  (totaux de la liste, calculés par la base), RPC `prochain_numero(societe, 'devis')`.
-- **Droits** : module `devis` ; technicien et sous-traitant n'y ont aucun accès
-  (ni en base, ni à l'écran).
-- **Règles** : numéro `DEV-AAAA-NNNNNN` attribué par la base à la PREMIÈRE écriture,
-  brouillon compris ; statut brouillon / envoyé / accepté / refusé ; adresse du
-  devis = siège du client, lieu d'intervention à part, nettoyé selon le logement ;
-  conducteur écrit par son id seul (le libellé est tenu par un déclencheur) ;
-  validité = date + N jours nets (réglage, 30 par défaut). Calculs : module
-  `documents` (parité testée).
-- **Enregistrement** : en-tête puis lignes ; si les lignes échouent après la
-  création, l'écran rouvre le devis créé (jamais de doublon au nouvel essai).
-- **Non repris cette nuit** : recherche d'article dans la ligne, e-mail,
-  devis depuis un rapport d'intervention, filtres conducteur / logement.
+  (totaux de la liste et montant du bon créé), RPC `prochain_numero(societe, 'devis')` ;
+  écrit dans `bons_commande` (bon depuis le devis) et lit `interventions`.
+- **Droits** : module `devis` ; « Créer un bon de commande » sous
+  `bons_commande/creer` ; technicien et sous-traitant n'ont aucun accès aux
+  devis (ni en base, ni à l'écran — DEV-18, D-FAC-14).
+- **Règles** : numéro `DEV-AAAA-NNNNNN` à la PREMIÈRE écriture ; statut
+  brouillon / envoyé / accepté / refusé ; adresse = siège du client, lieu à
+  part, nettoyé selon le logement ; conducteur par son id, un ancien devis le
+  retrouve par son nom (DEV-26) ; validité = date + N jours nets, imprimée avec
+  sa durée ; taux de conversion du mois (DEV-28) ; filtres conducteur,
+  logement, client, interlocuteur (`domain/liste.ts`) ; préconisations d'un
+  rapport en lignes (`domain/preconisations.ts`, parité `tests/parite/devis.essai.ts`).
+- **Pièces nées du devis** : bon « en attente de BC » au HT de la base, refusé
+  si un bon porte déjà le devis ; devis brouillon depuis un rapport, refusé si
+  déjà transformé (D-FAC-08).
+- **À monter ailleurs** : `BoutonDevisDepuisRapport` (fiche d'un rapport).

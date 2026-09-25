@@ -287,7 +287,8 @@ Le TTC vient de `v_facture_totaux` ; le reste dû est calculé à l'écran avec 
 règles portées (arrondi au centime, avoirs, reprise historique), parce que la
 vue `v_facture_solde` ignore le signe des avoirs, les acomptes et la retenue
 (FAC-93). À basculer sur une vue corrigée (migration à écrire) — écart assumé
-avec la règle « pas de solde recalculé côté client » du dépôt.
+avec la règle « pas de solde recalculé côté client » du dépôt. **Remplacée par
+D-FAC-01** : la vue est corrigée (proposition 20260926040000) et les écrans la lisent.
 
 ## D-051 — Un bon inséré hors du début du circuit y est ramené, pas refusé
 Proposition `20260925060000` (relecture 3, I4). Refuser un INSERT portant
@@ -302,3 +303,135 @@ remonter le formulaire (et perdre ce qui est en cours de saisie), le numéro
 reçu et le mode « normal » y sont reportés : le prochain « Enregistrer »
 n'écrase plus le numéro par la sentinelle d'attente (relecture 3, B1). Les
 actions de l'en-tête vivent hors du `<form>` du bon (I1).
+
+## D-FAC-01 — Le solde se lit dans `v_facture_solde`, corrigée (remplace D-050)
+La vue ignorait le signe des avoirs (un crédit y était « Impayée » et
+s'additionnait aux dettes), testait « Impayée » avant le reste (une facture à
+0 € restait due à vie), ignorait acomptes et retenue, faisait redevenir dues
+les pièces historiques « payées » et comptait le retard en UTC sur la seule
+échéance. **Décision** : proposition `20260926040000` qui la refait depuis sa
+définition vivante (colonnes existantes inchangées de nom, de type et d'ordre,
+nouvelles en fin) ; `reste` = TTC − acomptes − payé (la retenue de garantie
+reste due, mais n'est pas un retard : `reste_exigible`) ; `du` et `credit`
+séparent ce qui s'additionne aux créances de ce qui s'additionne aux crédits.
+Liste, fiche, dossiers et espace client lisent la vue ; l'écran ne recalcule
+plus de solde. Tests : `tests/rls/facturation.essai.ts`, `domain/solde.essai.ts`.
+
+## D-FAC-02 — Les gestes de règlement s'écrivent en base, tout ou rien
+Le statut stocké (payée / impayée) était recalé par l'écran après chaque
+règlement ; le règlement groupé était découpé à l'écran puis inséré facture
+par facture ; le lettrage n'était contrôlé qu'à l'écran. **Décision** :
+proposition `20260926041000` — déclencheur `reglements_recalent_statut`, RPC
+`enregistrer_reglement_groupe` (de la plus ancienne à la plus récente, jamais
+au-delà du dû, trop-perçu refusé, verrou par facture) et `imputer_avoir` (les
+contrôles et messages de `refusImputationAvoir`, dans le même ordre). L'écran
+montre la répartition AVANT de valider avec la règle portée (`imputer`, parité)
+mais c'est la base qui impute. L'écran n'écrit plus le statut.
+
+## D-FAC-03 — PDF en vrai texte, un seul modèle pour l'aperçu et le fichier
+L'ancien photographiait l'écran (html2pdf / html2canvas) et ne gardait en texte
+que le pied. **Décision** : `documents/domain/modele.ts` (port pur de
+`renderPrintDoc`) décide du contenu ; jsPDF + jspdf-autotable (bibliothèques
+libres, sans clé, chargées au premier PDF) le posent en texte sélectionnable ;
+l'aperçu à l'écran (`ApercuModele`) rend le même modèle. Pied légal et « n / N »
+sur chaque page, police 7 → 4,5 pt, recomposition serrée si la dernière page
+est sous 12 % et que cela fait gagner une page, caractères ramenés au jeu
+WinAnsi (« → » des situations). Écart assumé : un avoir s'imprime en NÉGATIF,
+comme à l'écran (l'ancien PDF l'imprimait positif sous le titre AVOIR). La pièce
+Factur-X (PDP) reste à la facturation électronique (section 16).
+
+## D-FAC-04 — L'e-mail passe par la messagerie de l'utilisateur
+L'ancienne app n'envoyait aucun courriel elle-même (aucune Edge Function) :
+elle préparait le texte, ouvrait `mailto:` et faisait télécharger le PDF à
+joindre, avec une copie pour webmail. Repris tel quel (`PanneauEmail`), texte
+en parité (`envoyerDocumentEmail`). Rien n'est déployé.
+
+## D-FAC-05 — Le cadenas se pose quand le brouillon part
+Télécharger le PDF, préparer l'e-mail ou imprimer une facture NON numérotée
+pose `verrouillee` et fige l'identité de l'émetteur et du client (FAC-12) ; le
+document partirait sinon sans cadenas. Une facture émise est déjà figée par la
+base : rien à poser (c'était le 23001 de l'ancien). « Déverrouiller » demande
+confirmation (FAC-09). Émettre une facture sous cadenas émet ce qui a été
+envoyé, sans réenregistrer la saisie.
+
+## D-FAC-06 — Une seule définition de l'avoir
+`estAvoir` (`includes`) et `estAvoirDocument` (égalité stricte) coexistaient
+(FAC-94). Sur l'énumération de la base (`facture | avoir | acompte |
+note_frais`), elles disent la même chose : `web/` n'en garde qu'une
+(`documents/domain/totaux#estAvoir`), le verrou compris.
+
+## D-FAC-07 — Préfixes de numérotation : NDF et BC
+Une note de frais sortait « NOT-… » (FAC-98). Proposition `20260926043000` :
+`note_frais` → NDF, `bon_commande` → BC. Elle refait la même fonction que
+`20260926030000` (commandes, BC seul) et en garde l'union : à la fusion, garder
+la plus complète.
+
+## D-FAC-08 — Devis → bon, rapport → devis ou facture : la pièce est créée puis ouverte
+L'ancien ouvrait un formulaire prérempli, non enregistré. Le préremplissage du
+module commandes ne porte ni le devis d'origine ni le logement : le bon
+naîtrait sans son lien, et le refus « déjà lié » ne tiendrait plus.
+**Décision** : la pièce est créée (bon « en attente de BC » au montant HT de
+`v_devis_totaux` ; devis ou facture brouillon aux lignes de préconisation) puis
+ouverte pour relecture. Un devis abandonné laisse un trou dans sa série
+(toléré, RM-40) ; une facture brouillon ne consomme aucun numéro.
+
+## D-FAC-09 — Factures de sous-traitant (FST) : non reprises
+`factures` n'a ni émetteur sous-traitant ni lien aux bons couverts (les champs
+`sousTraitantEmetteur`, `bonCommandeKTAId(s)` de l'ancien étaient filtrés à
+l'écriture) ; les numéros `FST-…` étaient calculés à l'écran, hors série
+légale, et « Marquer payée » écrivait `payée` sans règlement (FAC-90, FAC-91).
+Surtout, la facture d'un sous-traitant à la société est une facture d'ACHAT :
+elle relève de la réception (PDP, section 16), pas de la série de vente.
+**Décision** : ni vues « Mes factures / Factures <société> » ni FST dans
+`web/` (FAC-01 pour sa part sous-traitant, FAC-16, FAC-55, FAC-90, FAC-91).
+
+## D-FAC-10 — Espace client : bons, interlocuteur, solde, en-tête
+Proposition `20260926042000` : vue `v_espace_client_bons` (ni montant, ni
+note, ni conducteur ; avancement dérivé des tâches), accès nominatif
+(`acces_clients.interlocuteur` : NULL = tout le client) appliqué aux devis,
+factures, bons ; lecture des règlements de SES factures émises (et donc du
+solde) ; identité légale et mentions de l'émetteur ajoutées EN FIN de
+`v_mes_acces_clients`. Le client ne lit ni l'IBAN du jour (celui de la facture
+est figé), ni les réglages de la société : la date de validité d'un devis ne
+lui est pas imprimée plutôt que d'en afficher une fausse.
+
+## D-FAC-11 — Vente de véhicule (FAC-96) : dans le module véhicules
+La vente émettait une facture d'emblée, client en texte libre, TVA 20 ou 0.
+Le module véhicules (section 13) n'existe pas encore dans `web/`. Règle
+retenue pour lui : `creerFacture` (brouillon) puis `emettreFacture` (numéro par
+la base), fiche client obligatoire, taux de la liste des réglages.
+
+## D-FAC-12 — Historique comptable : hors code
+FAC-99 (7 factures d'ALPES ISERE HABITAT restées dans `kv_store`) se répare
+par une reprise en production, par un humain, avec le préfixe `compta:` de
+`legacy_id` que la base accepte (proposition `20260925040000`). `web/`
+n'écrit jamais `legacy_id` (FAC-89) : son unicité est l'affaire de l'import
+(section 17).
+
+## D-FAC-13 — Situation de travaux : échéance calculée, pas de note
+L'ancien posait une échéance vide et une note « Situation de travaux — <nom> »
+(FAC-62). L'échéance est une mention obligatoire (L441-9) : `web/` la calcule
+depuis le délai du client. `factures` n'a pas de colonne de notes : le chantier
+est désigné par `chantier_id` et la désignation des lignes.
+
+## D-FAC-14 — Pas de devis de sous-traitant
+`devis` n'a pas de colonne d'émetteur sous-traitant, et la RLS refuse tout
+devis au sous-traitant (matrice : aucun droit `devis`). DEV-18 est sans objet.
+
+## D-FAC-15 — Unités des lignes : le référentiel, sinon la liste de l'ancien
+`uniteOptions` lisait le référentiel `unite` de la société, sinon
+`u, pièce, h, forfait, m, m², m³, ml, mm, jour` ; la liste des réglages était
+« une liste qui mentait ». `web/` fait de même pour devis, factures et bons
+(`useUnitesLignes`), parité `entreesDuDomaine`.
+
+## D-FAC-16 — Créer l'article depuis la ligne : on prévient avant de partir
+La fiche article s'ouvre préremplie et revient au document ; la saisie non
+enregistrée du document ne survit pas au changement d'écran — une
+confirmation le dit. Réservé au droit `articles/modifier` (ART-06).
+
+## D-FAC-17 — Listes de règlement : ni brouillons, ni actions en double
+« Par facture » et les dossiers ne listent pas les brouillons (ils ne doivent
+rien ; l'ancien les montrait à 0). Les gestes du devis (PDF, e-mail, dupliquer,
+facturer, bon de commande, supprimer) vivent sur sa fiche, à un clic de la
+liste (DEV-01). Un règlement « avoir » / « imputation » se retire mais ne se
+corrige pas : ses deux moitiés doivent rester égales.
