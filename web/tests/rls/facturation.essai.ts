@@ -91,12 +91,17 @@ describe("[proposition] v_facture_solde dit vrai", () => {
   });
 
   it("une pièce historique « payée » ne redevient pas due (reprise)", async () => {
+    // Le chemin de la reprise : brouillon « compta: » par l'admin, lignes, puis numéro et statut (relecture 4, I1).
     const { data, error } = await admin
       .from("factures")
-      .insert({ societe_id: ALPHA, client_nom: `Reprise ${suffixe}`, numero: `HIST-SOLDE-${suffixe}`, statut: "payée", legacy_id: `compta:solde-${suffixe}` })
+      .insert({ societe_id: ALPHA, client_nom: `Reprise ${suffixe}`, statut: "brouillon", legacy_id: `compta:solde-${suffixe}` })
       .select("id")
       .single();
     expect(error).toBeNull();
+    const lignes = await admin.from("facture_lignes").insert({ facture_id: data?.id ?? "", position: 0, type: "ligne", designation: "Historique", quantite: 1, prix_unitaire: 100, tva: 20 });
+    expect(lignes.error).toBeNull();
+    const numero = await admin.from("factures").update({ numero: `HIST-SOLDE-${suffixe}`, statut: "payée" }).eq("id", data?.id ?? "");
+    expect(numero.error).toBeNull();
     const s = await solde(admin, data?.id ?? "");
     expect(s).toMatchObject({ cle: "reprise", etat: "Payée", reste: 0, du: 0, reprise: true });
   });

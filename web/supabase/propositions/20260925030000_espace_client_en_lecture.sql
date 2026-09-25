@@ -82,20 +82,39 @@ drop policy if exists espace_client_clients on public.clients;
 drop policy if exists espace_client_chantiers on public.chantiers;
 drop policy if exists espace_client_societes on public.societes;
 
-create or replace view public.v_mes_acces_clients with (security_barrier = true) as
-  select a.client_id, c.nom as client_nom, a.societe_id, s.nom as societe_nom
-  from acces_clients a
-  join profiles p on p.id = a.profile_id and p.actif
-  join clients c on c.id = a.client_id and c.societe_id = a.societe_id
-  join societes s on s.id = a.societe_id
-  where a.profile_id = auth.uid() and a.actif;
+-- Rejouable : 20260926042000 prolonge cette vue EN FIN ; la refaire ici, plus
+-- courte, échouerait (« cannot drop columns from view ») sur une base où la
+-- suite est déjà passée. On ne la pose donc que si elle n'a pas encore été
+-- prolongée.
+do $bloc$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'v_mes_acces_clients'
+                    and column_name = 'interlocuteur') then
+    create or replace view public.v_mes_acces_clients with (security_barrier = true) as
+      select a.client_id, c.nom as client_nom, a.societe_id, s.nom as societe_nom
+      from acces_clients a
+      join profiles p on p.id = a.profile_id and p.actif
+      join clients c on c.id = a.client_id and c.societe_id = a.societe_id
+      join societes s on s.id = a.societe_id
+      where a.profile_id = auth.uid() and a.actif;
+  end if;
+end
+$bloc$;
 
 create or replace view public.v_espace_client_chantiers with (security_barrier = true) as
   select ch.id, ch.societe_id, ch.client_id, ch.nom, ch.adresse, ch.code_postal, ch.ville, ch.date_debut, ch.date_fin
   from chantiers ch
   where public.est_mon_client(ch.client_id, ch.societe_id);
 
-revoke all on public.v_mes_acces_clients, public.v_espace_client_chantiers from anon;
+-- Une vue qui ne lit qu'une table est MODIFIABLE, et celle-ci écrit avec les
+-- droits de son propriétaire : la RLS de `chantiers` n'y intervient pas. Sans
+-- ce retrait, tout compte connecté créait un chantier chez n'importe quelle
+-- société, et le client supprimait les siens en cascade (relecture 4, B1 —
+-- même incident que 20260921144700_les_vues_ne_s_ecrivent_pas). Supabase
+-- accorde par défaut tous les droits à `anon` ET `authenticated` : on retire
+-- tout, puis on rend la seule lecture.
+revoke all on public.v_mes_acces_clients, public.v_espace_client_chantiers from public, anon, authenticated;
 grant select on public.v_mes_acces_clients, public.v_espace_client_chantiers to authenticated;
 
 -- Un brouillon de devis n'est pas encore une offre : le client ne le voit pas.

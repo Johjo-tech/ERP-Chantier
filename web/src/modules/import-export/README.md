@@ -15,7 +15,9 @@ DPGF dans `chantiers` (IMP-30) : ce module les signale depuis `/import-export`.
   « compta: » peut fournir son numéro).
 - **Droits** : un import CRÉE et MET À JOUR — bouton visible seulement avec
   `creer` ET `modifier` sur `clients` (CLI-08) ou `factures` (IMP-23) ; la RLS
-  refuse le reste (`tests/rls/import-export.essai.ts`).
+  refuse le reste (`tests/rls/import-export.essai.ts`). La reprise d'un
+  historique (marqueur « compta: ») est en plus réservée à l'**administrateur** :
+  la base le refuse à tout autre rôle (proposition 20260925040000, D-SQL-02).
 - **Règles** (`domain/`, parités `tests/parite/import-clients.essai.ts`,
   `import-factures.essai.ts`) :
   - `csv.ts` — CSV conforme RFC 4180 (le `;` et le retour à la ligne vivent

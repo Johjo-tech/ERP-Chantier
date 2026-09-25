@@ -19,7 +19,8 @@
 -- Les deux fonctions sont SECURITY INVOKER : la RLS de `reglements`
 -- (a_permission 'reglements' 'creer') reste la barrière. Un verrou consultatif
 -- par facture sérialise deux imputations simultanées sur la même pièce.
--- Idempotent. Validé par tests/rls/facturation.essai.ts (« [proposition] »).
+-- Idempotent. Validé par tests/rls/facturation.essai.ts (« [proposition] ») et
+-- tests/rls/politiques.essai.ts (« [proposition] relecture 4 » : B3, M6).
 
 -- Montant « 1 234,56 € », comme `formatEuros` de l'écran : le message de refus
 -- de la base est celui que l'utilisateur lit.
@@ -45,11 +46,19 @@ begin
     from public.v_facture_solde s
     join public.factures f on f.id = s.facture_id
    where s.facture_id = p_facture;
-  -- Brouillon, avoir, pièce historique : leur statut ne se déduit pas d'un encaissement.
+  -- Brouillon, avoir, reprise « compta: » sans règlement : leur statut ne se
+  -- déduit pas d'un encaissement. Une pièce qui porte un `legacy_id` base 36
+  -- de l'écran historique n'est PAS une reprise : elle est recalée comme les
+  -- autres (relecture 4, B3 — un règlement supprimé la laissait « payée »).
   if not found or v.cle not in ('non_reglee', 'partiellement_reglee', 'reglee') then
     return;
   end if;
   v_statut := case when v.cle = 'reglee' then 'payée' else 'impayée' end;
+  -- « envoyée » est une pièce due qu'on a remise au client : la réécrire en
+  -- « impayée » à chaque règlement effaçait l'information (relecture 4, M6).
+  if v_statut = 'impayée' and v.statut = 'envoyée' then
+    return;
+  end if;
   if v.statut is distinct from v_statut then
     -- `statut` est sur la liste blanche de factures_entete_figee : permis sur une émise.
     update public.factures set statut = v_statut where id = p_facture;

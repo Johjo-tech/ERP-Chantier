@@ -27,8 +27,8 @@ beforeEach(() => {
 });
 
 describe("bouton d'import (CLI-08, IMP-23)", () => {
-  it.each<[RoleMembre, boolean]>([["admin", true], ["secretaire", true], ["conducteur", false], ["lecture", false]])("factures, rôle %s : visible = %s", (role, visible) => {
-    rendreAvecSession(<BoutonImport module="factures" vers="/factures/import" libelle="Reprendre un historique" />, { role });
+  it.each<[RoleMembre, boolean]>([["admin", true], ["secretaire", false], ["conducteur", false], ["lecture", false]])("factures, rôle %s : visible = %s (reprise réservée à l'admin, D-SQL-02)", (role, visible) => {
+    rendreAvecSession(<BoutonImport adminSeul module="factures" vers="/factures/import" libelle="Reprendre un historique" />, { role });
     expect(!!screen.queryByRole("link", { name: "Reprendre un historique" })).toBe(visible);
   });
 });
@@ -81,12 +81,20 @@ describe("reprise d'historique", () => {
 
   it("un fichier qui se contredit bloque TOUTE écriture ; un 0 % demande sa catégorie", async () => {
     const faux = "numero_facture;date_facture;client;montant_ht;taux_tva;montant_tva\nF1;2025-01-10;X;100,00;20;25,00\nF2;2025-01-10;X;100,00;0;0\n";
-    rendreAvecSession(<PageImportFactures />, { role: "secretaire" });
+    rendreAvecSession(<PageImportFactures />, { role: "admin" });
     await userEvent.upload(screen.getByLabelText("Fichier(s) à reprendre"), fichier("faux.csv", faux));
     await screen.findByText(/Le fichier se contredit lui-même/);
     expect(screen.getByRole("button", { name: /définitif/ })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Exonérée de TVA" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Exonérée de TVA" })).toHaveAttribute("aria-pressed", "true"));
+  });
+});
+
+describe("reprise d'historique réservée à l'administrateur (D-SQL-02)", () => {
+  it("la secrétaire, qui crée et modifie les factures, voit le refus au lieu du formulaire", () => {
+    rendreAvecSession(<PageImportFactures />, { role: "secretaire" });
+    expect(screen.getByRole("alert")).toHaveTextContent("réservée à l'administrateur");
+    expect(screen.queryByLabelText("Fichier(s) à reprendre")).toBeNull();
   });
 });
 

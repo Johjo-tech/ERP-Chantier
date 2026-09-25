@@ -195,6 +195,8 @@ describe("[proposition] sous-traitant, photos et téléphone du terrain (2026092
     if (!photo) return;
     const lecture = await connecte(COMPTES.lectureAlpha);
     await expect(supprimerPhoto(photo, lecture)).rejects.toMatchObject({ code: "42501" });
+    // Le sous-traitant ne dépose que sur un bon où il a une tâche (relecture 4, I3).
+    await tacheDe(bcId, { sous_traitant_id: ids.st });
     await ajouterPhoto(ALPHA, bcId, jpeg, 1, sousTraitant);
     await supprimerPhoto(photo, technicien);
     expect(await photosDuBon(bcId, conducteur)).toHaveLength(1);

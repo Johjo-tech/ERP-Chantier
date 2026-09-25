@@ -27,7 +27,7 @@ export function PageImportExport() {
         <p className="text-sm text-muted-foreground">Chaque import montre ce qu'il va écrire avant d'écrire, et rend un rapport de ce qu'il a écarté.</p>
         <div className="flex flex-wrap gap-2">
           <BoutonImport module="clients" vers="/clients/import" libelle="Importer des clients" />
-          <BoutonImport module="factures" vers="/factures/import" libelle="Reprendre un historique de factures" />
+          <BoutonImport adminSeul module="factures" vers="/factures/import" libelle="Reprendre un historique de factures" />
           {articles && <Button variant="outline" asChild><Link to="/articles/import">Importer un catalogue d'articles</Link></Button>}
         </div>
         <p className="text-xs text-muted-foreground">Le DPGF d'un chantier s'importe depuis sa fiche, onglet DPGF.</p>

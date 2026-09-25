@@ -81,7 +81,7 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
         titre={vue === "avoirs" ? "Avoirs" : "Factures"}
         actions={
           <>
-            {vue !== "avoirs" && <BoutonImport module="factures" vers="/factures/import" libelle="Reprendre un historique" />}
+            {vue !== "avoirs" && <BoutonImport adminSeul module="factures" vers="/factures/import" libelle="Reprendre un historique" />}
             <Can module="factures" action="creer">
               <Button asChild>
                 <Link to="/factures/nouvelle">Nouvelle facture</Link>

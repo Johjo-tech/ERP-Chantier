@@ -14,7 +14,7 @@ set -euo pipefail
 CONTENEUR="supabase_db_erp-chantier-web"
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGRATIONS="${ICI}/../supabase/migrations"
-JOURNAL="${ICI}/supabase/.temp/rejeu"
+JOURNAL="${ICI}/supabase/.temp/rejeu${BASE_LOCALE:+-$BASE_LOCALE}"
 mkdir -p "$JOURNAL"
 
 docker ps --format '{{.Names}}' | grep -qx "$CONTENEUR" || {
@@ -22,7 +22,10 @@ docker ps --format '{{.Names}}' | grep -qx "$CONTENEUR" || {
   exit 1
 }
 
-psql_() { docker exec -i "$CONTENEUR" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q "$@"; }
+# BASE_LOCALE : une base temporaire du même conteneur, pour l'essai « base neuve »
+# des propositions (docs/migrations-proposees.md) — jamais une autre cible.
+BASE="${BASE_LOCALE:-postgres}"
+psql_() { docker exec -i "$CONTENEUR" psql -U postgres -d "$BASE" -v ON_ERROR_STOP=1 -q "$@"; }
 
 appliquer() {
   local fichier="$1" nom

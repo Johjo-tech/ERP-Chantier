@@ -20,7 +20,7 @@
 --  2. AUTH-71 — la SUPPRESSION par `peut_ecrire()` laisse un technicien effacer
 --     une fiche conducteur, un fournisseur, un métier, un document légal. Plus
 --     aucune politique DELETE n'est ouverte à « tout membre » (vérifié par
---     tests/rls/politiques.essai.ts) ; il restait celles-ci, trop larges.
+--     tests/rls/auth-roles.essai.ts) ; il restait celles-ci, trop larges.
 --     → La suppression suit « module / supprimer » (véhicules : « modifier »,
 --       comme les sœurs). C'est exactement ce que les deux écrans proposent
 --       déjà : ils masquent le bouton selon la même matrice.
@@ -48,7 +48,7 @@
 -- du terrain (D-BC-06, 20260926021000). Les chemins du seau propres à un
 -- module (salariés, véhicules) ont déjà leurs politiques.
 --
--- Validé par : tests/rls/politiques.essai.ts (« [proposition] »).
+-- Validé par : tests/rls/auth-roles.essai.ts et tests/rls/rh.essai.ts (« [proposition] »).
 -- Idempotent : chaque politique est supprimée puis recréée sous le même nom.
 
 -- ─── 1 et 2 · Tables portant leur société ────────────────────────────────

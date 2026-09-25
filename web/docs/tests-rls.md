@@ -70,6 +70,7 @@ Mot de passe de tous : `motdepasse-local`.
 | `transformations.essai.ts` | Rapport → devis / facture par la voie unique : lien posé dès l'INSERT, lignes « x3,5 m² », logement nettoyé, « déjà transformé », rapport lié à un bon (D-CLI-09) | non |
 | | Seau `terrain` : chantier affecté ou non, dossier RH d'un collègue, photos du bon d'un confrère sous-traitant, logo, domaine inconnu ; suppression des filles restantes refusée à la lecture ; tâches d'un confrère invisibles au sous-traitant ; journal du circuit non inscriptible ; Alsace-Moselle ; accès clients (admin seul, issues, fermer / rouvrir / retirer) | **oui** (2026092610*) |
 | `auth-roles.essai.ts` | Fonctions de droits appelées par chacun des six rôles (`mon_role`, `mes_societes`, `peut_ecrire`, `voit_les_prix`, `a_permission`…) = ce que croit l'écran ; relevé `pg_policy` (lecture seule, conteneur local) : aucune suppression sous `est_membre()` ; secrétaire : équipes, sous-traitants, fiche conducteur, contrôle fournisseurs, cycle de vie, consommations véhicule ; technicien et conducteur n'effacent plus fiche conducteur ni métier ; filles du chantier lues par affectation ; l'admin relit le chantier qu'il crée (`insert … select`) | en partie (20260926110000) — **le dernier échoue contre la base actuelle (vérifié)** |
+| `politiques.essai.ts` | Relecture 4 des propositions, un cas par constat : vues de l'espace client non inscriptibles (B1) ; le terrain ne pose ni prix, ni statut, ni auteur à un travail supplémentaire, et n'accroche pas la tâche d'un autre bon (B2) ; un `legacy_id` base 36 n'est pas une reprise (B3) ; « compta: » réservé à l'admin, reprise sans ligne refusée (I1) ; avoir à lignes négatives « Disponible » (I2) ; dépôt au seau et photos par domaine et par bon (I3) ; téléphones, bons, lignes, photos et fiches du sous-traitant limités aux siens (I4, I5) ; aucune vue de production refaite sans garde (I6, lecture des fichiers) ; bon facturé : en-tête et lignes à l'identique passent (I8) ; `societe_du_bon` fermée à `anon` (M1) ; rapport sur le bon d'une autre société (M3) ; « envoyée » gardée (M6). D-SQL-01 à 08 | **oui** — 14 des 17 échouent contre les propositions d'avant la relecture 4 (vérifié) |
 | `inviter-salarie.essai.ts` | La fonction de bord `inviter-salarie` (code historique tel quel) sert le `functions.invoke` de l'écran : invitée, renvoi < 10 min (429), secrétaire (403), déjà relié (409), rôle hors liste (400) — clé de service LOCALE lue par `scripts/test-rls.sh` (D-AUTH-09) | non |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
@@ -81,9 +82,8 @@ Mot de passe de tous : `motdepasse-local`.
   supprime pas.
 - Règlements : le conducteur (`reglements` absent de sa matrice) ne lit ni
   n'écrit aucun règlement.
-- Tables filles restantes : pour chacune des 20 tables dont la suppression
-  est `est_membre()` (véhicules, matériel, documents de chantier, photos…),
-  vérifier que `lecture` ne supprime rien — échoue aujourd'hui (les filles du chantier : `chantiers.essai.ts`).
+- *(Tables filles : plus aucune suppression sous `est_membre()` une fois les
+  propositions appliquées — relevé automatisé par `auth-roles.essai.ts`.)*
 - Storage (bucket `terrain`) : un compte d'ALPHA ne lit pas `beta/…` (l'inverse est couvert par `circuit.essai.ts`).
 - Edge Functions PDP : elles vérifient l'appartenance mais pas le rôle — un
   compte `lecture` pourrait déclencher une émission.

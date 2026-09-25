@@ -142,7 +142,8 @@ describe("[proposition] le dossier RH du seau `terrain` suit `rh / modifier` (20
 
   it("le reste du seau garde ses règles : le technicien dépose toujours sous un autre dossier", async () => {
     const t = await connecte(COMPTES.technicienAlpha);
-    const c = `${ALPHA}/chantiers/essai-rls-rh/${Date.now()}.txt`;
+    // Un bon de sa société : le dépôt du terrain se juge par domaine et par entité (relecture 4, I3).
+    const c = `${ALPHA}/bons/a5000000-0000-0000-0000-000000000001/${Date.now()}.txt`;
     const depot = await t.storage.from("terrain").upload(c, new Blob(["photo"], { type: "text/plain" }));
     expect(depot.error).toBeNull();
     fichiers.push(c);

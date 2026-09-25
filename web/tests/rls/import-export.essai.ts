@@ -76,7 +76,8 @@ describe("reprise d'historique (IMP-20 à IMP-22)", () => {
   let factureId = "";
 
   it("brouillon → lignes → numéro : la pièce porte SON numéro, « payée », legacy « compta: »", async () => {
-    courant.client = secretaire;
+    // Réservée à l'administrateur (proposition 20260925040000, relecture 4 I1, D-SQL-02).
+    courant.client = admin;
     const rapport = analyserExportFactures(new TextEncoder().encode(csv), new TextEncoder().encode(lignes));
     const pris = await facturesApi.numerosDejaPris(ALPHA, [numero]);
     const apercu = construireApercuFactures(rapport, await facturesApi.clientsConnus(ALPHA), pris);
@@ -96,6 +97,16 @@ describe("reprise d'historique (IMP-20 à IMP-22)", () => {
     courant.client = secretaire;
     expect(await facturesApi.supprimerBrouillonsImport([factureId])).toBe(0);
     expect(await facturesApi.numerosDejaPris(ALPHA, [numero, "INEXISTANT"])).toEqual(new Set([numero]));
+  });
+
+  it("[proposition] la secrétaire, qui crée les factures, ne pose pas le marqueur « compta: » (relecture 4, I1)", async () => {
+    courant.client = secretaire;
+    const autre = `${numero}-S`;
+    const rapport = analyserExportFactures(new TextEncoder().encode(csv.replaceAll(numero, autre)), new TextEncoder().encode(lignes.replaceAll(numero, autre)));
+    const apercu = construireApercuFactures(rapport, await facturesApi.clientsConnus(ALPHA), new Set());
+    const r = await facturesApi.importerFactures(ALPHA, apercu.pieces);
+    expect(r.ecrites).toBe(0);
+    expect(r.echecs[0]).toMatchObject({ etape: "entete", motif: "vos droits ne permettent pas d'écrire les factures" });
   });
 
   it("le rôle lecture ne passe pas l'étape de l'en-tête", async () => {
