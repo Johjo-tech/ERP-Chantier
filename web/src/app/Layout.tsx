@@ -6,6 +6,7 @@ import { MenuUtilisateur } from "@/modules/auth-roles/components/MenuUtilisateur
 import { peut } from "@/modules/auth-roles/domain/permissions";
 import { useSession } from "@/modules/auth-roles/hooks/useSession";
 import { SelecteurSociete } from "@/modules/societes/components/SelecteurSociete";
+import { ThemeSociete } from "@/modules/societes/components/ThemeSociete";
 import { fonctionnaliteOuverte } from "@/modules/societes/domain/abonnement";
 import { cn } from "@/lib/utils";
 import { NAVIGATION } from "./navigation";
@@ -27,6 +28,7 @@ export function Layout() {
   return (
     <div className="flex h-full flex-col">
       <BandeauSimulation />
+      <ThemeSociete key={societeActive.id} />
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
