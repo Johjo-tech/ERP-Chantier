@@ -20,6 +20,9 @@ const BAS = 30;
 const COTE = 12;
 const LARGEUR_BARRE_MAX = 22;
 const ECART = 4;
+/** La part d'un groupe qu'occupe chaque barre, et l'effacement de l'année précédente derrière l'année courante. */
+const PART_BARRE = 0.32;
+const OPACITE_PRECEDENTE = 0.35;
 /** Une barre non nulle reste visible, même minuscule face au plus grand mois. */
 const HAUTEUR_MIN = 2;
 
@@ -37,7 +40,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
   const { points, anneeCourante, anneePrecedente } = serie;
   const max = points.reduce((m, p) => (p.courant.gt(m) ? p.courant : p.precedent.gt(m) ? p.precedent : m), ZERO);
   const largeurGroupe = (L - 2 * COTE) / Math.max(1, points.length);
-  const barre = Math.min(LARGEUR_BARRE_MAX, largeurGroupe * 0.32);
+  const barre = Math.min(LARGEUR_BARRE_MAX, largeurGroupe * PART_BARRE);
   const utile = H - HAUT - BAS;
   const hauteur = (m: Montant) => (m.gt(ZERO) ? Math.max(HAUTEUR_MIN, (utile * partDuMax(m, max)) / 100) : 0);
 
@@ -53,7 +56,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
           {points.map((p, i) => {
             const centre = COTE + i * largeurGroupe + largeurGroupe / 2;
             const barres = [
-              { cle: "precedent", x: centre - barre - ECART / 2, m: p.precedent, libelle: `${p.libelleLong} ${p.annee - 1}`, couleur: COULEUR_PRECEDENTE, opacite: 0.35 },
+              { cle: "precedent", x: centre - barre - ECART / 2, m: p.precedent, libelle: `${p.libelleLong} ${p.annee - 1}`, couleur: COULEUR_PRECEDENTE, opacite: OPACITE_PRECEDENTE },
               { cle: "courant", x: centre + ECART / 2, m: p.courant, libelle: `${p.libelleLong} ${p.annee}`, couleur: COULEUR_COURANTE, opacite: 1 },
             ];
             return (

@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { videEnNull } from "@/lib/validation";
+import { JOUR_MS } from "@/lib/durees";
+
+/** Numéros de `getUTCDay()` : le week-end ne compte pas dans un congé. */
+const DIMANCHE = 0;
+const SAMEDI = 6;
 
 /**
  * Congés et absences (RH-08, RH-20). L'ancien écran posait un tableau
@@ -42,9 +47,9 @@ export function nbJoursOuvres(dateDebut: string, dateFin: string): number {
   const fin = Date.parse(`${dateFin}T00:00:00Z`);
   if (Number.isNaN(debut) || Number.isNaN(fin)) return 0;
   let n = 0;
-  for (let t = debut; t <= fin; t += 86_400_000) {
+  for (let t = debut; t <= fin; t += JOUR_MS) {
     const jour = new Date(t).getUTCDay();
-    if (jour !== 0 && jour !== 6) n++;
+    if (jour !== DIMANCHE && jour !== SAMEDI) n++;
   }
   return n;
 }

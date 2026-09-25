@@ -10,6 +10,14 @@ import { arrondiCentimes, formatEuros, montant, somme, ZERO, type Montant } from
  */
 export const DEMI_CENTIME = new Big("0.005");
 
+/**
+ * Les mêmes seuils pour les montants que la vue `v_facture_solde` rend en
+ * nombres (affichage seulement) : un dû d'au moins un centime se réclame, un
+ * reste sous le demi-centime est soldé.
+ */
+export const DU_A_RECLAMER_EUR = 0.01;
+export const RESTE_SOLDE_EUR = 0.004;
+
 export interface ReglementMontant {
   id?: string | null;
   montant?: number | string | null;

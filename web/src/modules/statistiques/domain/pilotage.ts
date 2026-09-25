@@ -1,3 +1,4 @@
+import { jourIso } from "@/lib/dates";
 import { z } from "zod";
 import { montant, somme, type Montant } from "@/lib/money";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
@@ -108,7 +109,7 @@ export function tempsRelatif(quand: string, maintenant: number, dateFr: (iso: st
   if (heures < HEURES_PAR_JOUR) return `il y a ${heures} h`;
   const jours = Math.floor(heures / HEURES_PAR_JOUR);
   if (jours < JOURS_RELATIFS) return `il y a ${jours} j`;
-  return dateFr(quand.slice(0, 10));
+  return dateFr(jourIso(quand));
 }
 
 // ---------- Clients ----------

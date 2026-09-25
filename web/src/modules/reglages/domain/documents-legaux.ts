@@ -1,3 +1,4 @@
+import { jourIso } from "@/lib/dates";
 import { z } from "zod";
 import { videEnNull } from "@/lib/validation";
 
@@ -21,7 +22,7 @@ const JOUR_MS = 86_400_000;
  */
 export function joursAvant(dateISO: string | null | undefined, aujourdhuiISO: string): number | null {
   if (!dateISO || !/^\d{4}-\d{2}-\d{2}/.test(dateISO)) return null;
-  const midi = (iso: string) => Date.parse(`${iso.slice(0, 10)}T12:00:00Z`);
+  const midi = (iso: string) => Date.parse(`${jourIso(iso)}T12:00:00Z`);
   const ecart = midi(dateISO) - midi(aujourdhuiISO);
   return Number.isNaN(ecart) ? null : Math.trunc(ecart / JOUR_MS);
 }

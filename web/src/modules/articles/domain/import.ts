@@ -45,6 +45,11 @@ export function libelleEncodage(e: Encodage): string {
   }
 }
 
+/** Marques d'ordre des octets (BOM) en tête de fichier, telles que les écrivent Excel et le Bloc-notes. */
+const BOM_UTF8 = [0xef, 0xbb, 0xbf];
+const BOM_UTF16LE = [0xff, 0xfe];
+const BOM_UTF16BE = [0xfe, 0xff];
+
 const commencePar = (o: Uint8Array, ...signature: number[]) =>
   o.length >= signature.length && signature.every((octet, i) => o[i] === octet);
 
@@ -58,9 +63,9 @@ const commencePar = (o: Uint8Array, ...signature: number[]) =>
  */
 export function decoderTexte(donnees: ArrayBuffer | Uint8Array): TexteDecode {
   const o = donnees instanceof Uint8Array ? donnees : new Uint8Array(donnees);
-  if (commencePar(o, 0xef, 0xbb, 0xbf)) return { texte: new TextDecoder("utf-8").decode(o), encodage: "utf-8-bom" };
-  if (commencePar(o, 0xff, 0xfe)) return { texte: new TextDecoder("utf-16le").decode(o), encodage: "utf-16le" };
-  if (commencePar(o, 0xfe, 0xff)) return { texte: new TextDecoder("utf-16be").decode(o), encodage: "utf-16be" };
+  if (commencePar(o, ...BOM_UTF8)) return { texte: new TextDecoder("utf-8").decode(o), encodage: "utf-8-bom" };
+  if (commencePar(o, ...BOM_UTF16LE)) return { texte: new TextDecoder("utf-16le").decode(o), encodage: "utf-16le" };
+  if (commencePar(o, ...BOM_UTF16BE)) return { texte: new TextDecoder("utf-16be").decode(o), encodage: "utf-16be" };
   try {
     return { texte: new TextDecoder("utf-8", { fatal: true }).decode(o), encodage: "utf-8" };
   } catch {

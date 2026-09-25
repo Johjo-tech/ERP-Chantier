@@ -10,6 +10,9 @@ interface Props {
   onChange?: (marques: Marque[]) => void;
 }
 
+/** Coin haut-gauche des quatre roues, dans le repère 220 × 420 de la silhouette. */
+const ROUES = [[14, 70], [192, 70], [14, 300], [192, 300]] as const;
+
 /** La silhouette de l'ancien écran (app.js l. 15283), vue de dessus, avant en haut. */
 function Silhouette() {
   return (
@@ -20,7 +23,7 @@ function Silhouette() {
       <line x1="30" y1="145" x2="190" y2="145" className="stroke-muted-foreground" strokeWidth="1.5" />
       <line x1="30" y1="280" x2="190" y2="280" className="stroke-muted-foreground" strokeWidth="1.5" />
       <line x1="110" y1="145" x2="110" y2="280" className="stroke-border" strokeWidth="1" />
-      {[[14, 70], [192, 70], [14, 300], [192, 300]].map(([x, y]) => (
+      {ROUES.map(([x, y]) => (
         <rect key={`${x}-${y}`} x={x} y={y} width="14" height="45" rx="4" className="fill-foreground/70" />
       ))}
       <text x="110" y="15" textAnchor="middle" fontSize="12" className="fill-muted-foreground">AVANT</text>

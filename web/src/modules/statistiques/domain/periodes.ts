@@ -5,6 +5,8 @@
  * écran construisait ses mois par `new Date()` LOCAL au navigateur (STA-22) —
  * un poste réglé sur un autre fuseau changeait de mois avant ou après Paris.
  */
+import { partiesIso } from "@/lib/dates";
+import { MOIS_PAR_AN } from "@/lib/durees";
 
 export interface MoisCalendaire {
   annee: number;
@@ -29,11 +31,14 @@ export function moisCalendaire(annee: number, mois: number): MoisCalendaire {
 }
 
 function decaler(annee: number, mois: number, delta: number): { annee: number; mois: number } {
-  const index = annee * 12 + (mois - 1) + delta;
-  return { annee: Math.floor(index / 12), mois: (index % 12) + 1 };
+  const index = annee * MOIS_PAR_AN + (mois - 1) + delta;
+  return { annee: Math.floor(index / MOIS_PAR_AN), mois: (index % MOIS_PAR_AN) + 1 };
 }
 
-const partiesDe = (jour: string) => ({ annee: Number(jour.slice(0, 4)), mois: Number(jour.slice(5, 7)) });
+const partiesDe = (jour: string) => {
+  const { annee, mois } = partiesIso(jour);
+  return { annee, mois };
+};
 
 /** Les `n` derniers mois, celui du jour compris, du plus ancien au plus récent (`buildMonthsBack`). */
 export function moisGlissants(n: number, jour: string): MoisCalendaire[] {
@@ -118,6 +123,7 @@ export function refusPlage(du: string, au: string): string | null {
 
 /** « 2026-09 » → « sept. 2026 » (`moisLabelCourt`). */
 export function libelleMois(cle: string): string {
-  const m = moisCalendaire(Number(cle.slice(0, 4)), Number(cle.slice(5, 7)));
+  const p = partiesDe(cle);
+  const m = moisCalendaire(p.annee, p.mois);
   return `${m.libelle} ${m.annee}`;
 }

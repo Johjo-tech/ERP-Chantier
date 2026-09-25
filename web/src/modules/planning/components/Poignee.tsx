@@ -3,6 +3,8 @@ import { HEURES_PLANNING } from "../domain/calendrier";
 
 /** La hauteur d'une case d'une heure, en pixels : fixe, pour que la poignée convertisse sans mesurer. */
 export const HAUTEUR_CASE = 48;
+/** Une case se prend dès qu'on en a franchi la moitié, dans un sens comme dans l'autre. */
+const DEMI_CASE = 0.5;
 
 interface Props {
   casesDepart: number;
@@ -30,7 +32,7 @@ export function Poignee({ casesDepart, indiceDebut, horizontal, onApercu, onFin 
   useEffect(() => {
     if (!actif) return;
     const maxCases = HEURES_PLANNING.length - indiceDebut;
-    const casesPour = (y: number) => Math.min(maxCases, Math.max(1, depart.current.cases + Math.trunc((y - depart.current.y) / HAUTEUR_CASE + Math.sign(y - depart.current.y) * 0.5)));
+    const casesPour = (y: number) => Math.min(maxCases, Math.max(1, depart.current.cases + Math.trunc((y - depart.current.y) / HAUTEUR_CASE + Math.sign(y - depart.current.y) * DEMI_CASE)));
     const jourSous = (x: number, y: number) => (horizontal ? (document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-jour]")?.dataset.jour ?? null) : null);
     const bouger = (e: PointerEvent) => {
       depart.current.jour = jourSous(e.clientX, e.clientY) ?? depart.current.jour;

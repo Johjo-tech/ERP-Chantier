@@ -1,3 +1,4 @@
+import { FRAICHEUR_REFERENCE_MS } from "@/lib/durees";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/modules/auth-roles/hooks/useSession";
 import { chantiersDuClient, devisDuClient, facturesDuClient } from "../api/espace";
@@ -28,5 +29,5 @@ export function useBonsClient() {
 }
 
 export function useEmetteurClient(societeId: string | undefined) {
-  return useQuery({ queryKey: ["espace-client", "emetteur", societeId], queryFn: () => emetteurPourClient(societeId as string), enabled: !!societeId, staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["espace-client", "emetteur", societeId], queryFn: () => emetteurPourClient(societeId as string), enabled: !!societeId, staleTime: FRAICHEUR_REFERENCE_MS });
 }

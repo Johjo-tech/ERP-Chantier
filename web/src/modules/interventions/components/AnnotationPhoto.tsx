@@ -8,6 +8,11 @@ import type { CategoriePhoto } from "../domain/rapport";
 const EPAISSEUR_RELATIVE = 0.006;
 const TAILLE_TEXTE_RELATIVE = 0.04;
 const PAS_HACHURE_RELATIF = 0.02;
+/** Planchers en pixels : sur une petite photo, la proportion seule rendrait texte et hachures illisibles. */
+const TAILLE_TEXTE_MIN_PX = 14;
+const PAS_HACHURE_MIN_PX = 8;
+/** La pointe d'une flèche mesure cinq épaisseurs de trait. */
+const POINTE_EN_TRAITS = 5;
 
 function dessiner(ctx: CanvasRenderingContext2D, image: HTMLImageElement, formes: readonly Forme[], enCours: readonly Point[], couleur: string) {
   const { width: l, height: h } = ctx.canvas;
@@ -24,7 +29,7 @@ function dessiner(ctx: CanvasRenderingContext2D, image: HTMLImageElement, formes
   };
   for (const f of formes) {
     if (f.type === "fleche") {
-      const [g, d] = pointeDeFleche(f.de, f.a, trait * 5);
+      const [g, d] = pointeDeFleche(f.de, f.a, trait * POINTE_EN_TRAITS);
       chemin([f.de, f.a]);
       ctx.stroke();
       chemin([g, f.a, d]);
@@ -35,7 +40,7 @@ function dessiner(ctx: CanvasRenderingContext2D, image: HTMLImageElement, formes
       ctx.ellipse((f.de.x + f.a.x) / 2, (f.de.y + f.a.y) / 2, Math.abs(f.a.x - f.de.x) / 2, Math.abs(f.a.y - f.de.y) / 2, 0, 0, 2 * Math.PI);
       ctx.stroke();
     } else if (f.type === "texte") {
-      ctx.font = `bold ${Math.max(14, l * TAILLE_TEXTE_RELATIVE)}px sans-serif`;
+      ctx.font = `bold ${Math.max(TAILLE_TEXTE_MIN_PX, l * TAILLE_TEXTE_RELATIVE)}px sans-serif`;
       ctx.fillText(f.texte, f.en.x, f.en.y);
     } else if (f.type === "zone") {
       chemin(f.points);
@@ -43,7 +48,7 @@ function dessiner(ctx: CanvasRenderingContext2D, image: HTMLImageElement, formes
       ctx.stroke();
       ctx.save();
       ctx.clip();
-      const pas = Math.max(8, l * PAS_HACHURE_RELATIF);
+      const pas = Math.max(PAS_HACHURE_MIN_PX, l * PAS_HACHURE_RELATIF);
       ctx.lineWidth = trait / 2;
       for (let x = -h; x < l; x += pas) {
         chemin([{ x, y: h }, { x: x + h, y: 0 }]);

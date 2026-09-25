@@ -7,6 +7,8 @@
  * sert à ne pas proposer un geste qui serait refusé, et à dire pourquoi avant
  * l'aller-retour.
  */
+import { MINUTES_PAR_HEURE } from "@/lib/durees";
+import { entierLePlusProche } from "@/lib/nombres";
 import { statutDe, TRANSITIONS, type AppartenanceTache, type GesteTache, type StatutTache } from "@/modules/auth-roles/domain/actions";
 
 // États, transitions et gestes par rôle vivent dans auth-roles, partagés avec
@@ -73,21 +75,25 @@ export interface PlageTache {
   heure_fin?: string | null;
 }
 
-/** Arrondi à l'entier le plus proche, demi vers le haut — celui de `Math.round` (l'argent n'est pas en jeu : des heures). */
-const entierProche = (x: number) => Math.floor(x + 0.5);
+/** Arrondi à l'entier le plus proche, demi vers le haut (l'argent n'est pas en jeu : des heures). */
+const entierProche = entierLePlusProche;
+
+/** Bornes d'une heure « HH:MM » dans la journée : un créneau ne déborde jamais sur le lendemain. */
+const DERNIERE_HEURE = 23;
+const DERNIERE_MINUTE = MINUTES_PAR_HEURE - 1;
 
 function normaliserHeure(brut: string | null | undefined): string {
   const [h, m] = String(brut ?? "").split(":");
   const heures = Number(h);
   const minutes = Number(m ?? 0);
-  if (!Number.isFinite(heures) || heures < 0 || heures > 23) return "";
-  if (!Number.isFinite(minutes) || minutes < 0 || minutes > 59) return "";
+  if (!Number.isFinite(heures) || heures < 0 || heures > DERNIERE_HEURE) return "";
+  if (!Number.isFinite(minutes) || minutes < 0 || minutes > DERNIERE_MINUTE) return "";
   return `${String(heures).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 function minutesDe(heure: string): number {
   const [h, m] = heure.split(":");
-  return Number(h) * 60 + Number(m);
+  return Number(h) * MINUTES_PAR_HEURE + Number(m);
 }
 
 /**
@@ -112,9 +118,9 @@ export function creneauDeclare(heure: string | null | undefined, duree: number |
  */
 export function finDuCreneau(heure: string, duree: number): string {
   const debut = normaliserHeure(heure) || HEURE_DEFAUT;
-  const fin = minutesDe(debut) + Math.max(DUREE_MIN_H, duree) * 60;
-  const borne = Math.min(fin, 23 * 60 + 59);
-  return `${String(Math.floor(borne / 60)).padStart(2, "0")}:${String(borne % 60).padStart(2, "0")}`;
+  const fin = minutesDe(debut) + Math.max(DUREE_MIN_H, duree) * MINUTES_PAR_HEURE;
+  const borne = Math.min(fin, DERNIERE_HEURE * MINUTES_PAR_HEURE + DERNIERE_MINUTE);
+  return `${String(Math.floor(borne / MINUTES_PAR_HEURE)).padStart(2, "0")}:${String(borne % MINUTES_PAR_HEURE).padStart(2, "0")}`;
 }
 
 export function colonnesDuCreneau(creneau: Creneau): { heure_debut: string; heure_fin: string } {
@@ -126,7 +132,7 @@ export function creneauDeLaTache(tache: PlageTache): Creneau | null {
   const fin = normaliserHeure(tache?.heure_fin);
   if (!debut) return null;
   if (!fin) return { heure: debut, duree: DUREE_DEFAUT_H };
-  const heures = entierProche((minutesDe(fin) - minutesDe(debut)) / 60);
+  const heures = entierProche((minutesDe(fin) - minutesDe(debut)) / MINUTES_PAR_HEURE);
   if (heures <= 0) return null;
   return { heure: debut, duree: Math.min(DUREE_MAX_H, heures) };
 }

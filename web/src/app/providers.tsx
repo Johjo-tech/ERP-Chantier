@@ -1,3 +1,4 @@
+import { FRAICHEUR_ORDINAIRE_MS } from "@/lib/durees";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { SessionProvider } from "@/modules/auth-roles/hooks/SessionProvider";
@@ -6,7 +7,7 @@ function creerQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 30_000,
+        staleTime: FRAICHEUR_ORDINAIRE_MS,
         // Un refus RLS ou une ligne absente ne se corrige pas en réessayant.
         retry: (echecs, erreur) => {
           const code = (erreur as { code?: string } | null)?.code;

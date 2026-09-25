@@ -1,3 +1,4 @@
+import { FRAICHEUR_REFERENCE_MS } from "@/lib/durees";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { usePermission, useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { affecter, listerAffectations, listerMembres, retirerAffectation } from "../api/affectations";
@@ -112,13 +113,13 @@ export function useAchats(chantierId: string) {
 
 export function useCategoriesAchat() {
   const societe = useSocieteActive();
-  return useQuery({ queryKey: ["referentiels", societe.id, "categorie_achat"], queryFn: () => listerCategoriesAchat(societe.id), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["referentiels", societe.id, "categorie_achat"], queryFn: () => listerCategoriesAchat(societe.id), staleTime: FRAICHEUR_REFERENCE_MS });
 }
 
 export function useSalaries() {
   const societe = useSocieteActive();
   const autorise = usePermission("rh", "voir");
-  return useQuery({ queryKey: ["salaries-annuaire", societe.id], queryFn: () => listerSalaries(societe.id), enabled: autorise, staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["salaries-annuaire", societe.id], queryFn: () => listerSalaries(societe.id), enabled: autorise, staleTime: FRAICHEUR_REFERENCE_MS });
 }
 
 export const useAjouterAchat = (chantierId: string) => useEcriture(clesFiche.achats(chantierId), (a: SaisieAchat) => ajouterAchat(chantierId, a));
@@ -141,7 +142,7 @@ export const useAffectations = (chantierId: string) => useQuery({ queryKey: cles
 
 export function useMembres() {
   const societe = useSocieteActive();
-  return useQuery({ queryKey: ["membres", societe.id], queryFn: () => listerMembres(societe.id), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["membres", societe.id], queryFn: () => listerMembres(societe.id), staleTime: FRAICHEUR_REFERENCE_MS });
 }
 
 export function useAffecter(chantierId: string) {
@@ -167,7 +168,7 @@ export function useDevisAvecLignes(chantierId: string) {
 
 export function useMetiers() {
   const societe = useSocieteActive();
-  return useQuery({ queryKey: ["metiers", societe.id], queryFn: () => listerMetiers(societe.id), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["metiers", societe.id], queryFn: () => listerMetiers(societe.id), staleTime: FRAICHEUR_REFERENCE_MS });
 }
 
 /** Une URL signée demandée au moment d'ouvrir : elle expire, on ne la garde pas en cache. */

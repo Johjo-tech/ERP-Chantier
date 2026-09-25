@@ -51,9 +51,12 @@ export function nomPourStockage(nom: string): string {
       .replace(/[^A-Za-z0-9._-]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 120) || "document"
+      .slice(0, LONGUEUR_MAX_NOM_STOCKAGE) || "document"
   );
 }
+
+/** Un nom de rangement assez long pour rester lisible, assez court pour la clé d'objet du seau. */
+const LONGUEUR_MAX_NOM_STOCKAGE = 120;
 
 /** `horodatage` rend deux dépôts du même nom distincts, comme `uploadFile` de l'ancienne couche. */
 export function cheminStockage(societeId: string, chantierId: string, nom: string, horodatage: number): string {

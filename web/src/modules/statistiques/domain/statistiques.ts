@@ -1,3 +1,4 @@
+import { moisIso } from "@/lib/dates";
 import { z } from "zod";
 import { ZERO, somme, type Montant } from "@/lib/money";
 import { pourcentage, schemaMontantBase } from "./indicateurs";
@@ -78,11 +79,11 @@ export interface TableauEquipes {
  * triés, équipes par ordre alphabétique, « Non attribué » en dernier.
  */
 export function tableauEquipes(lignes: readonly CaEquipe[]): TableauEquipes {
-  const mois = [...new Set(lignes.map((l) => l.mois.slice(0, 7)))].sort();
+  const mois = [...new Set(lignes.map((l) => moisIso(l.mois)))].sort();
   const parEquipe = new Map<string, Map<string, Montant>>();
   for (const l of lignes) {
     const m = parEquipe.get(l.equipe) ?? new Map<string, Montant>();
-    const cle = l.mois.slice(0, 7);
+    const cle = moisIso(l.mois);
     m.set(cle, (m.get(cle) ?? ZERO).plus(l.ht));
     parEquipe.set(l.equipe, m);
   }

@@ -1,3 +1,4 @@
+import { jourIso } from "@/lib/dates";
 /**
  * La facture en CII (Cross Industry Invoice, la syntaxe XML de Factur-X) —
  * port de src/api/regles-cii.ts, sortie identique octet pour octet
@@ -38,7 +39,7 @@ function echapper(valeur: unknown): string {
 
 /** `2026-09-09` → `20260909`, le format 102 d'UN/CEFACT. */
 export function dateCII(iso: string | null | undefined): string | null {
-  const brut = String(iso ?? "").slice(0, 10);
+  const brut = jourIso(String(iso ?? ""));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(brut)) return null;
   return brut.replace(/-/g, "");
 }

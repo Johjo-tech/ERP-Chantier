@@ -8,6 +8,7 @@ import { formatDateFr } from "@/lib/dates";
 import { formatEuros, montant } from "@/lib/money";
 import { etatDepuisSolde, ETATS_REGLEMENT, facturesParEtat, totalDu, TRIS_REGLEMENT, type CriteresParFacture, type EtatFiltre, type Solde, type TriFactures } from "../domain/solde";
 import { BadgeEtat } from "./BadgeEtat";
+import { DU_A_RECLAMER_EUR } from "../domain/reglements";
 
 /**
  * « Par facture » (FAC-31, app.js l. 10838) : état, client, échéance du… au
@@ -76,7 +77,7 @@ export function VueParFacture({ soldes }: { soldes: readonly Solde[] }) {
                   {s.numero} · {formatDateFr(s.date)}{s.echeance ? ` · échéance ${formatDateFr(s.echeance)}` : ""}
                 </span>
                 <span className="block text-sm text-muted-foreground">
-                  {formatEuros(montant(s.ttc))} TTC · {formatEuros(montant(s.paye))} encaissé{s.du > 0.01 ? ` · ${formatEuros(montant(s.du))} dû` : ""}
+                  {formatEuros(montant(s.ttc))} TTC · {formatEuros(montant(s.paye))} encaissé{s.du > DU_A_RECLAMER_EUR ? ` · ${formatEuros(montant(s.du))} dû` : ""}
                 </span>
               </span>
               <span className="flex flex-col items-end gap-1">

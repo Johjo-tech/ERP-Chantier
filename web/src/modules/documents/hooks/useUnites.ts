@@ -1,3 +1,4 @@
+import { FRAICHEUR_REFERENCE_MS } from "@/lib/durees";
 import { useQuery } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { unitesDuReferentiel } from "../api/unites";
@@ -10,6 +11,6 @@ import { UNITES_REPLI } from "../domain/unites";
  */
 export function useUnitesLignes(): readonly string[] {
   const societe = useSocieteActive();
-  const q = useQuery({ queryKey: ["referentiel-unites", societe.id], queryFn: () => unitesDuReferentiel(societe.id), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ["referentiel-unites", societe.id], queryFn: () => unitesDuReferentiel(societe.id), staleTime: FRAICHEUR_REFERENCE_MS });
   return q.data ?? UNITES_REPLI;
 }

@@ -344,9 +344,12 @@ export async function supprimerRapport(id: string, client: Client = supabase()):
 const schemaBonLiable = z.object({ id: z.string(), numero_bc: z.string().nullable(), numero_interne: z.string().nullable(), client_id: z.string().nullable(), client_nom: z.string(), adresse: z.string().nullable(), code_postal: z.string().nullable(), ville: z.string().nullable(), numero_logement: z.string().nullable(), logement_statut: z.enum(["occupé", "vacant", "commune"]).nullable(), occupant: z.string().nullable(), etage: z.string().nullable(), interlocuteur: z.string().nullable(), conducteur_id: z.string().nullable() });
 export type BonLiable = z.infer<typeof schemaBonLiable>;
 
+/** Le plafond de lignes de PostgREST : au-delà, les plus anciens bons ne se proposent plus (tri du plus récent). */
+const BONS_LIABLES_MAX = 1000;
+
 /** Les bons que l'on peut lier, lus par la vue terrain (le technicien ne lit pas la table). */
 export async function bonsLiables(societeId: string, client: Client = supabase()): Promise<BonLiable[]> {
-  const { data, error } = await client.from("v_bons_commande_terrain").select(Object.keys(schemaBonLiable.shape).join(", ")).eq("societe_id", societeId).order("cree_le", { ascending: false }).limit(1000);
+  const { data, error } = await client.from("v_bons_commande_terrain").select(Object.keys(schemaBonLiable.shape).join(", ")).eq("societe_id", societeId).order("cree_le", { ascending: false }).limit(BONS_LIABLES_MAX);
   if (error) throw error;
   return analyser(z.array(schemaBonLiable), data, "bons de commande liables");
 }

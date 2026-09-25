@@ -1,3 +1,4 @@
+import { FRAICHEUR_REFERENCE_MS } from "@/lib/durees";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { lireIdentiteDocument } from "../api/identite";
@@ -7,7 +8,7 @@ import { telechargerBlob } from "../pdf/telecharger";
 
 export function useIdentiteDocument() {
   const societe = useSocieteActive();
-  return useQuery({ queryKey: ["identite-document", societe.id], queryFn: () => lireIdentiteDocument(societe.id), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["identite-document", societe.id], queryFn: () => lireIdentiteDocument(societe.id), staleTime: FRAICHEUR_REFERENCE_MS });
 }
 
 /**

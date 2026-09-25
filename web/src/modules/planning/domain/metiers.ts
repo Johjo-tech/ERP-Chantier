@@ -48,7 +48,9 @@ export function memeMetier(a: string | null | undefined, b: string | null | unde
   return normaliserLibelle(a) === normaliserLibelle(b);
 }
 
-const singulier = (mot: string) => (mot.length >= 4 && mot.endsWith("S") ? mot.slice(0, -1) : mot);
+/** Règle de l'ancien écran : un mot de moins de quatre lettres garde son « S » final (trop court pour être un pluriel sûr). */
+const LONGUEUR_MIN_PLURIEL = 4;
+const singulier = (mot: string) => (mot.length >= LONGUEUR_MIN_PLURIEL && mot.endsWith("S") ? mot.slice(0, -1) : mot);
 
 /** Les métiers déclarés d'abord, puis les employés : l'orthographe du référentiel gagne. */
 export function referentielMetiers(declares: readonly (string | null | undefined)[], employes: readonly (string | null | undefined)[] = []): string[] {

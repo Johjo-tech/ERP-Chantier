@@ -21,6 +21,10 @@ interface Props {
 
 const arreter = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
+/** Le jour entre deux cartes posées l'une sous l'autre, et le liseré qui porte la couleur du métier. */
+const MARGE_CARTE_PX = 2;
+const LISERE_METIER_PX = 5;
+
 /** Une carte posée sur la colonne d'un jour, à sa hauteur : origine, suite d'une plage, dernier jour ou journée supplémentaire. */
 export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
   const { peutPlanifier, ouvrirFiche, appliquer, couleurMetier, donnees } = usePlanningContexte();
@@ -29,7 +33,7 @@ export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
   const redimensionnee = useRef(false);
   const cases = apercu ?? placement.cases;
   const couleur = couleurMetier(carte.metier);
-  const style: CSSProperties = { top: placement.indiceDebut * HAUTEUR_CASE + 2, height: cases * HAUTEUR_CASE - 4, ...(couleur ? { borderRightColor: couleur, borderRightWidth: 5 } : {}) };
+  const style: CSSProperties = { top: placement.indiceDebut * HAUTEUR_CASE + MARGE_CARTE_PX, height: cases * HAUTEUR_CASE - 2 * MARGE_CARTE_PX, ...(couleur ? { borderRightColor: couleur, borderRightWidth: LISERE_METIER_PX } : {}) };
   const deplacable = peutPlanifier && placement.variante === "origine" && !carte.faite;
   const avecTravaux = new Set(donnees.tachesAvecTravaux);
   const journee = placement.journee;
