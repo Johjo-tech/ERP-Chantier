@@ -215,3 +215,56 @@ export type DatabasePlanning = Omit<DatabaseAvecPropositions, "public"> & {
     };
   };
 };
+
+/* ---------- Propositions des statistiques et du pilotage (2026092608xxxx) ----------
+ * Fonctions d'agrégat de 20260926080000, absentes des types de production.
+ * Type à part, comme celui du planning : la fusion reste une juxtaposition. */
+type PeriodeStats = { p_societe: string; p_du: string | null; p_au: string | null };
+export type DatabaseStatistiques = Omit<DatabaseAvecPropositions, "public"> & {
+  public: Omit<PubP, "Functions"> & {
+    Functions: PubP["Functions"] & {
+      stats_indicateurs: {
+        Args: { p_societe: string; p_jour: string };
+        Returns: {
+          encaisse_mois: number;
+          nb_impayees: number;
+          impayes: number;
+          ttc_emis: number;
+          nb_echues: number;
+          nb_devis_en_attente: number;
+          devis_en_attente_ht: number;
+          devis_du_mois: number;
+          devis_acceptes_du_mois: number;
+        }[];
+      };
+      stats_ca_par_mois: { Args: PeriodeStats; Returns: { mois: string; ht: number; nb: number }[] };
+      stats_activite_recente: {
+        Args: { p_societe: string; p_limite: number };
+        Returns: { nature: string; id: string; quand: string; client: string | null; numero: string | null; montant: number | null; facture_id: string | null }[];
+      };
+      stats_par_client: {
+        Args: PeriodeStats & { p_limite: number | null };
+        Returns: { client_id: string | null; client_nom: string | null; ht: number; nb_factures: number; du: number; nb_devis: number; devis_acceptes: number }[];
+      };
+      stats_par_conducteur: {
+        Args: PeriodeStats & { p_jour: string };
+        Returns: {
+          conducteur_id: string | null;
+          nom: string;
+          ht: number;
+          bons: number;
+          sav: number;
+          en_retard: number;
+          devis: number;
+          devis_acceptes: number;
+          devis_transformes: number;
+          bons_avec_travaux: number;
+          travaux: number;
+          travaux_ht: number;
+        }[];
+      };
+      stats_par_metier: { Args: PeriodeStats & { p_jour: string }; Returns: { metier: string; bons: number; sav: number; en_retard: number; ht: number }[] };
+      stats_ca_par_equipe: { Args: PeriodeStats; Returns: { equipe_id: string | null; equipe: string; mois: string; ht: number }[] };
+    };
+  };
+};
