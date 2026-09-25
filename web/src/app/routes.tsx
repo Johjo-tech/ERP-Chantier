@@ -47,6 +47,9 @@ import { PagePlanning } from "@/modules/planning/components/PagePlanning";
 import { PageApercuRapport } from "@/modules/interventions/components/PageApercuRapport";
 import { PageRapport } from "@/modules/interventions/components/PageRapport";
 import { PageRapports } from "@/modules/interventions/components/PageRapports";
+import { PageFicheSalarie } from "@/modules/rh/components/PageFicheSalarie";
+import { PageRegistre } from "@/modules/rh/components/PageRegistre";
+import { PageRh } from "@/modules/rh/components/PageRh";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -144,6 +147,10 @@ export const routes: RouteObject[] = [
       { path: "rapports/nouveau", element: <RouteModule module="rapports" action="creer"><PageRapport /></RouteModule> },
       { path: "rapports/:id", element: <RouteModule module="rapports" action="modifier"><PageRapport /></RouteModule> },
       { path: "rapports/:id/apercu", element: <RouteModule module="rapports"><PageApercuRapport /></RouteModule> },
+      { path: "rh", element: <RouteModule module="rh"><PageRh /></RouteModule> },
+      { path: "rh/registre", element: <RouteModule module="rh" action="modifier"><PageRegistre /></RouteModule> },
+      { path: "rh/salaries/nouveau", element: <RouteModule module="rh" action="creer"><PageFicheSalarie /></RouteModule> },
+      { path: "rh/salaries/:id", element: <RouteModule module="rh" action="modifier"><PageFicheSalarie /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

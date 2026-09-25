@@ -16,18 +16,18 @@ function menu(role: RoleMembre, options: { simule?: RoleMembre; niveau?: number 
 describe("menu principal par rôle", () => {
   it("admin voit tout", () => {
     expect(menu("admin")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "Réglages",
+      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "RH", "Réglages",
     ]);
   });
 
   it("secrétaire voit toute la gestion", () => {
     expect(menu("secretaire")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "Réglages",
+      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "RH", "Réglages",
     ]);
   });
 
   it("technicien ne voit ni devis, ni factures, ni clients, ni articles", () => {
-    expect(menu("technicien")).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports"]);
+    expect(menu("technicien")).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports", "RH"]);
   });
 
   it("sous-traitant ne voit aucun écran d'argent", () => {
@@ -36,16 +36,16 @@ describe("menu principal par rôle", () => {
 
   it("conducteur voit ses chantiers, devis et commandes", () => {
     expect(menu("conducteur")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "Réglages",
+      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "RH", "Réglages",
     ]);
   });
 
   it("« voir en tant que » : l'admin qui simule un technicien voit le menu du technicien", () => {
-    expect(menu("admin", { simule: "technicien" })).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports"]);
+    expect(menu("admin", { simule: "technicien" })).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports", "RH"]);
     expect(screen.getByRole("status")).toHaveTextContent(/Aperçu en tant que/);
   });
 
   it("l'abonnement ferme ce qui dépasse le niveau souscrit", () => {
-    expect(menu("admin", { niveau: 1 })).toEqual(["Tableau de bord", "Clients", "Chantiers", "Devis", "Planning", "Rapports", "Réglages"]);
+    expect(menu("admin", { niveau: 1 })).toEqual(["Tableau de bord", "Clients", "Chantiers", "Devis", "Planning", "Rapports", "RH", "Réglages"]);
   });
 });

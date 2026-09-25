@@ -25,5 +25,7 @@ export const NAVIGATION: readonly EntreeNavigation[] = [
   // Planning et rapports : aucun niveau d'abonnement ne les porte encore (D-PLN-12), ouverts à tous.
   { chemin: "/planning", libelle: "Planning", module: "planning" },
   { chemin: "/rapports", libelle: "Rapports", module: "rapports" },
+  // RH : aucun niveau d'abonnement ne le porte encore (comme le planning) ; ouvert selon la matrice.
+  { chemin: "/rh", libelle: "RH", module: "rh" },
   { chemin: "/reglages", libelle: "Réglages", module: "reglages" },
 ];
