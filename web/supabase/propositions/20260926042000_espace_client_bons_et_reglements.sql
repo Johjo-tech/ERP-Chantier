@@ -143,7 +143,15 @@ create or replace view public.v_mes_acces_clients with (security_barrier = true)
     s.capital_social as societe_capital_social,
     s.rcs_numero as societe_rcs_numero,
     s.rcs_ville as societe_rcs_ville,
-    s.code_naf as societe_code_naf
+    s.code_naf as societe_code_naf,
+    -- Les mentions que chaque facture imprime de toute façon (pénalités, indemnité, assurance).
+    s.mention_penalites_retard as societe_mention_penalites_retard,
+    s.indemnite_recouvrement as societe_indemnite_recouvrement,
+    s.autoliquidation_batiment as societe_autoliquidation_batiment,
+    s.tva_sur_encaissements as societe_tva_sur_encaissements,
+    s.assurance_decennale_nom as societe_assurance_decennale_nom,
+    s.assurance_decennale_police as societe_assurance_decennale_police,
+    s.regime_tva as societe_regime_tva
   from acces_clients a
   join profiles p on p.id = a.profile_id and p.actif
   join clients c on c.id = a.client_id and c.societe_id = a.societe_id

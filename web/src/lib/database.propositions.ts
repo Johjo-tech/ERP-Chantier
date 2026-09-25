@@ -40,6 +40,13 @@ type VueMesAcces = {
   societe_rcs_numero: string | null;
   societe_rcs_ville: string | null;
   societe_code_naf: string | null;
+  societe_mention_penalites_retard: string | null;
+  societe_indemnite_recouvrement: number | null;
+  societe_autoliquidation_batiment: boolean | null;
+  societe_tva_sur_encaissements: boolean | null;
+  societe_assurance_decennale_nom: string | null;
+  societe_assurance_decennale_police: string | null;
+  societe_regime_tva: string | null;
 };
 
 type VueChantierClient = {

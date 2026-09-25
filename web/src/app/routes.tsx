@@ -33,6 +33,7 @@ import { ReferenceArticleLigne } from "@/modules/articles/components/ReferenceAr
 import { LayoutEspaceClient } from "@/modules/espace-client/components/LayoutEspaceClient";
 import { PageDocumentClient } from "@/modules/espace-client/components/PageDocumentClient";
 import { PageEspaceClient } from "@/modules/espace-client/components/PageEspaceClient";
+import { PageBonsClient } from "@/modules/espace-client/components/PageBonsClient";
 import { PageLectureBon } from "@/modules/ocr/components/PageLectureBon";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
@@ -49,6 +50,7 @@ export const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <PageEspaceClient /> },
+      { path: "bons", element: <PageBonsClient /> },
       { path: "devis/:id", element: <PageDocumentClient nature="devis" /> },
       { path: "factures/:id", element: <PageDocumentClient nature="facture" /> },
     ],

@@ -21,12 +21,16 @@ function Section<T>({ titre, requete, vide, rendu }: { titre: string; requete: {
   );
 }
 
-/** Ce qu'un client consulte : ses chantiers, ses devis envoyés, ses factures émises. */
+/** Ce qu'un client consulte : ses chantiers, ses devis envoyés, ses factures émises et ce qu'il en doit. */
 export function PageEspaceClient() {
-  const { chantiers, devis, factures } = useDocumentsClient();
+  const { chantiers, devis, factures, soldes } = useDocumentsClient();
+  const soldeDe = new Map((soldes.data ?? []).map((s) => [s.facture_id, s]));
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Vos documents</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Vos documents</h1>
+        <Link className="text-sm font-medium text-primary hover:underline" to="/espace-client/bons">Suivi de vos bons de commande</Link>
+      </div>
       <Section titre="Vos chantiers" requete={chantiers} vide="Aucun chantier." rendu={(liste) => (
         <ul className="divide-y divide-border text-sm">
           {liste.map((c) => (
@@ -53,7 +57,7 @@ export function PageEspaceClient() {
       )} />
       <Section titre="Vos factures" requete={factures} vide="Aucune facture." rendu={(liste) => (
         <Table>
-          <THead><Tr><Th>N°</Th><Th>Date</Th><Th>Échéance</Th><Th className="text-right">TTC</Th></Tr></THead>
+          <THead><Tr><Th>N°</Th><Th>Date</Th><Th>Échéance</Th><Th className="text-right">TTC</Th><Th className="text-right">Reste dû</Th></Tr></THead>
           <TBody>
             {liste.map((f) => (
               <Tr key={f.id}>
@@ -61,6 +65,11 @@ export function PageEspaceClient() {
                 <Td>{formatDateFr(f.date)}</Td>
                 <Td>{formatDateFr(f.echeance)}</Td>
                 <Td className="text-right tabular-nums">{formatEuros(estAvoir(f.type_document) ? montant(f.ttc).neg() : montant(f.ttc))}</Td>
+                <Td className="text-right tabular-nums">
+                  {/* Un avoir n'est pas une dette : son reste est un crédit, on ne le présente pas comme dû. */}
+                  {estAvoir(f.type_document) ? "—" : soldeDe.has(f.id) ? formatEuros(montant(soldeDe.get(f.id)?.reste ?? 0)) : "…"}
+                  {soldeDe.get(f.id)?.en_retard && <span className="block text-xs font-semibold text-destructive">En retard</span>}
+                </Td>
               </Tr>
             ))}
           </TBody>
