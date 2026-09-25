@@ -3578,7 +3578,21 @@ async function rechargerType(type){
   if(COLLECTIONS_ETAT[type]) await recharger(type);
   else await loadAll();
 }
+/* Ce qui interdit de supprimer, selon le type — AVANT la confirmation, et avec
+   la phrase que la base opposerait. `deleteItem` sert quinze collections : la
+   règle propre à l'une d'elles se lit dans cette table, elle ne s'écrit pas
+   dans le geste générique. Les types absents ne refusent rien, comme avant. */
+const REFUS_SUPPRESSION = {
+  facture: id => {
+    const f = state.factures.find(x => x.id === id);
+    return f && window.refusGesteFacture ? window.refusGesteFacture('supprimer', f) : null;
+  },
+};
 async function deleteItem(type, id){
+  /* Avant la confirmation : demander « supprimer définitivement ? » pour
+     refuser ensuite est exactement le défaut qu'on ferme. */
+  const refusSuppression = REFUS_SUPPRESSION[type] && REFUS_SUPPRESSION[type](id);
+  if(refusSuppression){ showToast(refusSuppression, 'danger', 8000); return; }
   if(!confirm('Supprimer définitivement cet élément ?')) return;
   /* Les tables filles partent en cascade avec le salarié, mais pas les
      fichiers du bucket : sans ce passage, le stockage garderait les contrats
@@ -4328,6 +4342,15 @@ function printDocument(type, id, action){
   const doc = resolu && resolu.doc;
   const area = document.getElementById('printArea');
   if(!area || !doc) return;
+  /* Le garde vit ICI et pas seulement sur les boutons de la carte : la fenêtre
+     d'aperçu (`printCurrentView`, ses deux boutons sont dans index.html) et le
+     modal d'envoi passent par le même chemin. Masquer trois boutons en
+     laisserait deux autres grands ouverts, et un brouillon sortirait en deux
+     clics. */
+  if(type==='facture'){
+    const refus = window.refusGesteFacture && window.refusGesteFacture('imprimer', doc);
+    if(refus){ showToast(refus, 'danger', 7000); return; }
+  }
   if(type==='facture') marquerFactureVerrouillee(id);
   if(typeof html2pdf === 'undefined'){
     showToast("Le générateur de PDF n'a pas pu se charger (connexion internet bloquée ?). Utilisez Ctrl+P / Cmd+P pour imprimer ou enregistrer en PDF depuis le navigateur.");
@@ -4743,6 +4766,8 @@ async function transmettreALaPlateforme(factureId){
     showToast("La transmission n'est pas disponible.");
     return;
   }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('transmettre', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
   if(!confirm(`Déposer la facture ${f.numero} sur la plateforme ?\n\nUne facture transmise ne peut plus être modifiée : il faudrait émettre un avoir.`)) return;
 
   showToast('Transmission en cours…');
@@ -6102,8 +6127,10 @@ function factureForm(){
  * qu'on affiche ailleurs.
  */
 function refusEnregistrementFacture(e){
-  const verrou = e && e.id ? window.verrouFacture(e) : null;
-  return verrou && !verrou.reversible ? verrou.libelle : null;
+  /* Une pièce qui n'existe pas encore n'a pas d'état : sa création relève de
+     `factures/creer`, que le formulaire lit de son côté. */
+  if(!e || !e.id) return null;
+  return window.refusGesteFacture ? window.refusGesteFacture('modifier', e) : null;
 }
 
 async function saveFacture(brouillon){
@@ -6212,10 +6239,8 @@ async function saveFacture(brouillon){
 async function dupliquerFacture(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
-  if(window.estAvoir(f.typeDocument)){
-    showToast("Un avoir rectifie une facture précise : il ne se duplique pas.", 'danger', 6000);
-    return;
-  }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('dupliquer', f);
+  if(refus){ showToast(refus, 'danger', 6000); return; }
 
   const id = uid();
   const copie = {
@@ -6285,7 +6310,8 @@ async function emettreLaFacture(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.emettreFacture){ showToast("L'émission n'est pas disponible."); return; }
-  if(f.numero){ showToast(`Déjà émise sous le n° ${f.numero}.`); return; }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('emettre', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
 
   const t = computeDocTotals(f);
   if(!confirm(`Émettre la facture de ${esc(f.client)} pour ${moneyDisplay(t.ttc)} TTC ?\n\nElle recevra son numéro définitif. Son contenu ne pourra plus être modifié, et une correction devra passer par un avoir.`)) return;
@@ -6340,6 +6366,8 @@ function etablirAvoirPour(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.etablirAvoir){ showToast("L'établissement d'un avoir n'est pas disponible."); return; }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('avoir', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
 
   state.avoirCible = factureId;
   const ttc = Math.abs(computeDocTotals(f).ttc);
@@ -6454,6 +6482,8 @@ function reglerParAvoir(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.imputerAvoir){ showToast("L'imputation n'est pas disponible."); return; }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('imputerAvoir', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
 
   const dispos = avoirsDisponiblesPour(f);
   if(!dispos.length){ showToast("Aucun avoir disponible pour ce client."); return; }
@@ -11974,6 +12004,12 @@ function lignesLogementPourEmail(doc){
 function envoyerDocumentEmail(type, id){
   const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
   if(!doc) return;
+  /* Enfermée dans le type : un devis n'a pas de numéro à l'envoi, et la même
+     garde posée sans discernement les empêcherait tous de partir. */
+  if(type==='facture'){
+    const refus = window.refusGesteFacture && window.refusGesteFacture('envoyer', doc);
+    if(refus){ showToast(refus, 'danger', 7000); return; }
+  }
   const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===doc.client);
   const dest = client && client.email ? client.email : '';
   /* « Notre facture » sur un avoir, avec un montant négatif dans la phrase :
