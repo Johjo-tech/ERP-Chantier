@@ -1,4 +1,5 @@
 import type { ModeleDocument } from "../domain/modele";
+import { stylesCouleurs } from "./couleurs";
 
 const Lignes = ({ lignes }: { lignes: readonly string[] }) => <>{lignes.map((l) => <span key={l} className="block">{l}</span>)}</>;
 
@@ -7,10 +8,11 @@ const Lignes = ({ lignes }: { lignes: readonly string[] }) => <>{lignes.map((l) 
  * voit est ce qui part, mentions et pied compris. Ctrl+P reste possible.
  */
 export function ApercuModele({ m }: { m: ModeleDocument }) {
+  const couleurs = stylesCouleurs(m);
   return (
     <article aria-label={`${m.titre} ${m.nomFichier}`} className="mx-auto flex max-w-3xl flex-col gap-5 bg-white p-8 text-sm text-black print:p-0">
       {m.brouillon && <p className="text-sm font-semibold text-red-700">BROUILLON — sans valeur de facture tant qu'elle n'est pas émise.</p>}
-      <header className="flex justify-between gap-6">
+      <header className="flex justify-between gap-6 border-b-2 pb-3" style={couleurs.filet}>
         <div className="flex gap-3">
           {m.emetteur.logo && <img src={m.emetteur.logo} alt="" className="h-16 w-auto object-contain" />}
           <div>
@@ -20,7 +22,7 @@ export function ApercuModele({ m }: { m: ModeleDocument }) {
           </div>
         </div>
         <div className="text-right">
-          <h1 className="text-2xl font-bold tracking-wide">{m.titre}</h1>
+          <h1 className="text-2xl font-bold tracking-wide" style={couleurs.titre}>{m.titre}</h1>
           <dl className="mt-1 grid grid-cols-[auto_auto] justify-end gap-x-3 text-xs">
             {m.meta.map(([k, v]) => (
               <div key={k} className="contents">
@@ -48,7 +50,7 @@ export function ApercuModele({ m }: { m: ModeleDocument }) {
       </section>
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="bg-slate-800 text-left text-white">
+          <tr className="text-left" style={couleurs.bandeau}>
             <th className="p-1">Désignation</th>
             <th className="p-1 text-right">Qté</th>
             <th className="p-1 text-center">Unité</th>
@@ -95,7 +97,7 @@ export function ApercuModele({ m }: { m: ModeleDocument }) {
         </div>
         <dl aria-label="Totaux du document" className="flex w-72 flex-col gap-1">
           {m.totaux.map((t) => (
-            <div key={t.libelle} className={`flex justify-between gap-4 ${t.fort ? "text-base font-semibold" : ""}`}>
+            <div key={t.libelle} className={`flex justify-between gap-4 ${t.fort ? "text-base font-semibold" : ""}`} style={t.fort ? couleurs.titre : undefined}>
               <dt>{t.libelle}</dt>
               <dd className="tabular-nums">{t.valeur}</dd>
             </div>

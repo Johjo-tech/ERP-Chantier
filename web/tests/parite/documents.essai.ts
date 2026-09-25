@@ -76,6 +76,8 @@ describe("parité des réglages d'impression", () => {
         conditionsDevis: g.parmi(valeurs),
         mentionAcceptation: g.parmi(valeurs),
         siteWeb: g.parmi(valeurs),
+        couleurAccent: g.parmi([...valeurs, "#1E8FD5"]),
+        couleurSecondaire: g.parmi([...valeurs, "#0B3D2E"]),
       };
       const brut = g.parmi([{ documents }, {}, null, { documents: null }]);
       const a = fusionnerReglages(brut).documents;
@@ -87,6 +89,8 @@ describe("parité des réglages d'impression", () => {
         conditionsDevis: a.conditionsDevis,
         mentionAcceptation: a.mentionAcceptation,
         siteWeb: a.siteWeb,
+        couleurAccent: a.couleurAccent,
+        couleurSecondaire: a.couleurSecondaire,
       });
     }
   });

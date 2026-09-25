@@ -1,6 +1,6 @@
 import { formatDateFr } from "@/lib/dates";
 import { formatEuros, formatTaux, montant, type Montant } from "@/lib/money";
-import { piedDePage, type IdentiteEmettrice, type ReglagesImpression } from "./identite";
+import { piedDePage, type CouleursDocument, type IdentiteEmettrice, type ReglagesImpression } from "./identite";
 import type { LigneBase } from "./lignes";
 import { STATUTS_LOGEMENT, type StatutLogement } from "./logement";
 import { montantLigneHt, soldeAPayer, sousTotauxChapitres, totauxDocument } from "./totaux";
@@ -63,6 +63,8 @@ export interface ModeleDocument {
   signature: string | null;
   mentions: string | null;
   pied: string;
+  /** Couleurs de la société (SOC-04) ; absentes, le document reste en encre sombre. */
+  couleurs?: CouleursDocument | undefined;
 }
 
 const LIBELLES_MODE: Record<string, string> = {
@@ -199,5 +201,6 @@ export function construireModele(p: PieceImprimable, identite: IdentiteEmettrice
     // Les mentions du code de commerce : sur la facture seulement.
     mentions: p.type === "facture" && mentions ? mentions : null,
     pied: piedDePage({ nom: em.nom, siret: em.siret, tvaIntracom: em.tvaIntracom, adresse: em.adresse }, identite, reglages),
+    couleurs: identite.couleurs,
   };
 }

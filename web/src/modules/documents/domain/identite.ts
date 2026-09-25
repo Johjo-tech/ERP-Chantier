@@ -27,6 +27,21 @@ export interface IdentiteEmettrice {
   bic: string | null;
   /** Logo en data-URL seulement : le PDF se fabrique sans requête réseau. */
   logo: string | null;
+  /** Les couleurs de la société (SOC-04), déjà déclinées ; absentes = sobre, comme avant. */
+  couleurs?: CouleursDocument | undefined;
+}
+
+/**
+ * Les couleurs d'une pièce imprimée, tirées de la MÊME palette que l'écran
+ * (`paletteSociete`, variables `--color-accent-societe*`) : le ton foncé de
+ * l'accent (lisible sur le blanc) pour le titre et le total, la seconde
+ * couleur pour l'en-tête du tableau, avec l'encre qui s'y lit.
+ */
+export interface CouleursDocument {
+  accent: string;
+  accentFonce: string;
+  secondaire: string;
+  surSecondaire: string;
 }
 
 export interface ReglagesImpression {
@@ -36,6 +51,9 @@ export interface ReglagesImpression {
   conditionsDevis: string;
   mentionAcceptation: string;
   siteWeb: string;
+  /** Couleurs choisies en Réglages › Identité visuelle (défauts de l'ancien écran). */
+  couleurAccent: string;
+  couleurSecondaire: string;
 }
 
 /** Les défauts de `REGLAGES_DEFAUT.documents` de l'ancienne app. */
@@ -46,6 +64,8 @@ export const REGLAGES_IMPRESSION_DEFAUT: ReglagesImpression = {
   conditionsDevis: "",
   mentionAcceptation: "Bon pour accord — date et signature",
   siteWeb: "",
+  couleurAccent: "#FF6A1A",
+  couleurSecondaire: "#182233",
 };
 
 const texte = (v: unknown, defaut: string) => (v == null ? defaut : String(v));
@@ -63,7 +83,20 @@ export function lireReglagesImpression(infosEntreprise: unknown): ReglagesImpres
     conditionsDevis: texte(d.conditionsDevis, D.conditionsDevis),
     mentionAcceptation: texte(d.mentionAcceptation, D.mentionAcceptation),
     siteWeb: texte(d.siteWeb, D.siteWeb),
+    couleurAccent: texte(d.couleurAccent, D.couleurAccent),
+    couleurSecondaire: texte(d.couleurSecondaire, D.couleurSecondaire),
   };
+}
+
+/**
+ * Le chemin du logo dans le seau (SOC-08 : `<société>/societe/logo-….png`),
+ * quand il n'y a pas d'ancienne data-URL. Seuls PNG et JPEG s'impriment
+ * (jsPDF) ; un chemin d'une autre société n'est jamais suivi.
+ */
+export function cheminLogoDuSeau(infosEntreprise: unknown, logoUrl: string | null, societeId: string): string | null {
+  if (logoDesReglages(infosEntreprise, logoUrl)) return null;
+  if (!logoUrl || !logoUrl.startsWith(`${societeId}/`)) return null;
+  return /\.(png|jpe?g)$/i.test(logoUrl) ? logoUrl : null;
 }
 
 /** Le logo vit dans le JSON des réglages (data-URL) ; une URL distante n'est pas suivie. */

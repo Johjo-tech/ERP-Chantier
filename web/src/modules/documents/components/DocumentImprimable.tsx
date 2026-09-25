@@ -36,7 +36,7 @@ export function DocumentImprimable({ titre, numero, date, emetteur, destinataire
           <p className="text-xs">{texte(emetteur.lignes)}</p>
         </div>
         <div className="text-right">
-          <h1 className="text-2xl font-bold tracking-wide">{titre}</h1>
+          <h1 className="text-2xl font-bold tracking-wide" style={{ color: "var(--color-primary, #182233)" }}>{titre}</h1>
           <p>N° {numero}</p>
           <p>Du {formatDateFr(date)}</p>
           {meta.map((m) => (
@@ -52,7 +52,7 @@ export function DocumentImprimable({ titre, numero, date, emetteur, destinataire
       </section>
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b-2 border-black text-left">
+          <tr className="border-b-2 border-black text-left" style={{ borderColor: "var(--color-accent-societe, #000000)" }}>
             <th className="py-1">Désignation</th>
             <th className="py-1 text-right">Qté</th>
             <th className="py-1 text-right">PU HT</th>
