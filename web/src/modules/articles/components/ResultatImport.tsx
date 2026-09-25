@@ -1,27 +1,39 @@
-import { Alert } from "@/components/ui/alert";
+import type { ReactNode } from "react";
 import { messageErreur } from "@/lib/erreurs";
 import type { ResultatImport as Resultat } from "../api/articles";
 
-export function ResultatImport({ resultat }: { resultat: Resultat }) {
+const pluriel = (n: number) => (n > 1 ? "s" : "");
+
+/** La fin de l'import, au HTML de l'ancien (`importCatalogueHTML`, étape « termine »). */
+export function ResultatImport({ resultat, rapport, retour }: { resultat: Resultat; rapport: (() => void) | null; retour: ReactNode }) {
   const { crees, misAJour, echecs } = resultat;
-  const refuses = echecs.reduce((n, e) => n + e.codes.length, 0);
   return (
-    <div className="flex flex-col gap-3">
-      <Alert variant={echecs.length ? "info" : "succes"}>
-        <span className="font-semibold">Import terminé</span> — {crees} créé(s), {misAJour} mis à jour, {refuses} en échec.
-      </Alert>
+    <div className="form-panel">
+      <div role="status" className="wf-banner ok">
+        <b>Import terminé</b> — {crees} créé{pluriel(crees)}, {misAJour} mis à jour.
+      </div>
       {echecs.length > 0 && (
-        <Alert variant="erreur">
-          <p className="font-semibold">{echecs.length} lot(s) refusé(s) — les autres ont bien été écrits.</p>
-          <ul className="list-disc pl-5">
+        <div role="alert" className="wf-banner alerte" style={{ marginTop: "10px" }}>
+          <div style={{ fontWeight: 700 }}>
+            {echecs.length} lot{pluriel(echecs.length)} refusé{pluriel(echecs.length)}
+          </div>
+          <ul style={{ margin: 0, paddingLeft: "18px" }}>
             {echecs.map((e) => (
               <li key={e.codes[0] ?? ""}>
-                {messageErreur(e.erreur)} <span className="text-xs">({e.codes.length} article(s), de {e.codes[0]} à {e.codes.at(-1)})</span>
+                {messageErreur(e.erreur)} <span className="card-sub">({e.codes.length} article(s))</span>
               </li>
             ))}
           </ul>
-        </Alert>
+        </div>
       )}
+      <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+        {rapport && (
+          <button type="button" className="btn" onClick={rapport}>
+            📄 Rapport
+          </button>
+        )}
+        {retour}
+      </div>
     </div>
   );
 }

@@ -52,8 +52,8 @@ describe("catalogue — droits (ART-06, ART-40)", () => {
   ] as const)("%s : écriture visible = %s", async (role, ecrit) => {
     liste(role);
     expect(await screen.findByText("Article PLB-001")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Nouvel article" }) !== null).toBe(ecrit);
-    expect(screen.queryByRole("link", { name: "Importer un fichier" }) !== null).toBe(ecrit);
+    expect(screen.queryByRole("link", { name: "+ Nouvel article" }) !== null).toBe(ecrit);
+    expect(screen.queryByRole("link", { name: "📥 Importer un fichier" }) !== null).toBe(ecrit);
     expect(screen.queryByRole("button", { name: "Retirer" }) !== null).toBe(ecrit);
     expect(screen.queryByRole("link", { name: "Modifier PLB-001" }) !== null).toBe(ecrit);
   });
@@ -73,8 +73,8 @@ describe("catalogue — droits (ART-06, ART-40)", () => {
   it("l'import se cache sous le niveau d'abonnement qui ne l'ouvre pas", async () => {
     liste("secretaire", 2);
     await screen.findByText("Article PLB-001");
-    expect(screen.getByRole("link", { name: "Nouvel article" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Importer un fichier" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "+ Nouvel article" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "📥 Importer un fichier" })).not.toBeInTheDocument();
   });
 });
 
@@ -83,14 +83,16 @@ describe("catalogue — liste paginée côté serveur (ART-01)", () => {
     liste("secretaire");
     await screen.findByText("Article PLB-001");
     expect(api.chercherArticles).toHaveBeenCalledWith("alpha", { recherche: "", actif: "actifs", type: "", famille: "", page: 1 });
-    expect(screen.getByText("Retiré")).toBeInTheDocument();
+    // Comme l'ancien : un retiré se voit estompé, et propose « Remettre ».
+    expect(screen.getByText("Article ELE-001").closest("tr")).toHaveStyle({ opacity: "0.55" });
+    expect(screen.getByText("2 articles")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remettre" })).toBeInTheDocument();
   });
 
   it("la recherche attend que la frappe s'arrête, puis revient page 1", async () => {
     api.chercherArticles.mockResolvedValue(page([article("PLB-001")], 60));
     liste("secretaire");
-    await userEvent.click(await screen.findByRole("button", { name: "Suivante →" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Suivant →" }));
     await waitFor(() => expect(api.chercherArticles).toHaveBeenLastCalledWith("alpha", expect.objectContaining({ page: 2 })));
     const avant = api.chercherArticles.mock.calls.length;
     await userEvent.type(screen.getByLabelText("Rechercher un article"), "robinet");
@@ -115,7 +117,7 @@ describe("catalogue — liste paginée côté serveur (ART-01)", () => {
     liste("lecture");
     const nav = await screen.findByRole("navigation", { name: "Pages du catalogue" });
     expect(within(nav).getByText("Page 1 sur 3")).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: "← Précédente" })).toBeDisabled();
+    expect(within(nav).getByRole("button", { name: "← Précédent" })).toBeDisabled();
   });
 
   it("vide : distingue un catalogue vide d'une recherche sans résultat", async () => {
@@ -126,19 +128,20 @@ describe("catalogue — liste paginée côté serveur (ART-01)", () => {
     expect(await screen.findByText("Aucun article ne correspond.")).toBeInTheDocument();
   });
 
-  it("erreur en français, avec « Réessayer »", async () => {
+  it("erreur en français, à la place de la liste comme l'ancien", async () => {
     api.chercherArticles.mockRejectedValue({ code: "42501", message: "permission denied" });
     liste("secretaire");
-    expect(await screen.findByText("Vous n'avez pas le droit de faire cette opération.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Réessayer" })).toBeInTheDocument();
+    expect(await screen.findByText("Catalogue indisponible : Vous n'avez pas le droit de faire cette opération.")).toBeInTheDocument();
   });
 
   it("retirer demande confirmation, puis écrit actif = false", async () => {
     api.changerActif.mockResolvedValue(undefined);
     liste("secretaire");
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     await userEvent.click(await screen.findByRole("button", { name: "Retirer" }));
+    expect(confirmer).toHaveBeenCalledWith(expect.stringContaining("Retirer cet article du catalogue ?"));
     expect(api.changerActif).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Confirmer" }));
+    await userEvent.click(screen.getByRole("button", { name: "Retirer" }));
     await waitFor(() => expect(api.changerActif).toHaveBeenCalledWith("PLB-001", false));
     await userEvent.click(screen.getByRole("button", { name: "Remettre" }));
     await waitFor(() => expect(api.changerActif).toHaveBeenCalledWith("ELE-001", true));
@@ -192,7 +195,7 @@ describe("fiche article (ART-02, ART-04)", () => {
     await userEvent.type(await screen.findByLabelText(/Code article/), "PLB-001");
     await userEvent.type(screen.getByLabelText(/Désignation/), "X");
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
-    expect(await screen.findAllByText("Le code « PLB-001 » existe déjà dans le catalogue.")).toHaveLength(2);
+    expect(await screen.findAllByText("Le code « PLB-001 » existe déjà dans le catalogue.")).toHaveLength(1);
     expect(screen.getByLabelText(/Code article/)).toHaveAttribute("aria-invalid", "true");
   });
 

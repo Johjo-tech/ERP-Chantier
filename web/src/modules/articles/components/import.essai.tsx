@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,22 +41,15 @@ beforeEach(() => {
 });
 
 describe("import du catalogue (ART-05)", () => {
-  it("aperçu avant toute écriture : encodage, compteurs, rejets, signalements, TVA des premiers articles", async () => {
+  it("aperçu avant toute écriture : compteurs, rejets, signalements (au HTML de l'ancien)", async () => {
     ouvrir();
     await deposer();
-    expect(await screen.findByText("Windows-1252 (Europe occidentale)")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "catalogue.csv" })).toBeInTheDocument();
     expect(screen.getByText("Ligne 5 — Code « A1 » déjà présent plus haut dans le fichier.")).toBeInTheDocument();
     expect(screen.getByText(/Ligne 6 — 9 champs au lieu de 7/)).toBeInTheDocument();
     // Six signalements montrés (cinq sur le fichier, l'unité ML), le septième — la TVA de A3 — est au rapport.
     expect(screen.getByText("Ligne 2 (A1) — Unité « ML » inconnue : laissée vide.")).toBeInTheDocument();
-    expect(screen.getByText("…et 1 autre(s), dans le rapport.")).toBeInTheDocument();
-    const table = screen.getByRole("table", { name: "Les 3 premiers articles lus" });
-    const lignes = within(table).getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell").map((c) => c.textContent));
-    expect(lignes).toEqual([
-      ["A1", 'Tube 1/2"', "Bien", "—", "12,50\u00a0€", "10 %"],
-      ["A2", "Réfection", "Prestation", "m²", "30,00\u00a0€", "20 %"],
-      ["A3", "Évier(retiré)", "Prestation", "pièce", "5,00\u00a0€", "20 %"],
-    ]);
+    expect(screen.getByText("…et 1 autres.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("à mettre à jour").previousSibling).toHaveTextContent("1"));
     expect(screen.getByText("à créer").previousSibling).toHaveTextContent("2");
     expect(api.importerArticles).not.toHaveBeenCalled();
@@ -71,7 +64,7 @@ describe("import du catalogue (ART-05)", () => {
     const [societe, articles] = api.importerArticles.mock.calls[0] as [string, { code: string; tva: number; actif: boolean }[]];
     expect(societe).toBe("alpha");
     expect(articles.map((a) => [a.code, a.tva, a.actif])).toEqual([["A1", 10, true], ["A2", 20, true], ["A3", 20, false]]);
-    expect(await screen.findByText(/1 créé\(s\), 1 mis à jour, 1 en échec/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 créé, 1 mis à jour\./)).toBeInTheDocument();
     expect(screen.getByText(/Une valeur saisie n'est pas acceptée\./)).toBeInTheDocument();
   });
 
@@ -85,7 +78,7 @@ describe("import du catalogue (ART-05)", () => {
     const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     ouvrir();
     await deposer();
-    await userEvent.click(await screen.findByRole("button", { name: "Télécharger le rapport" }));
+    await userEvent.click(await screen.findByRole("button", { name: "📄 Rapport" }));
     expect(clic).toHaveBeenCalled();
     const csv = await blobs[0]?.text();
     expect(csv).toContain("Ligne;Motif;Contenu");

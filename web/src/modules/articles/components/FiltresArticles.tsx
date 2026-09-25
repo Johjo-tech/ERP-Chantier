@@ -1,5 +1,4 @@
-import { Input, Select } from "@/components/ui/input";
-import { TYPES_ARTICLE, type FiltreActif, type TypeArticle } from "../domain/article";
+import { type FiltreActif, type TypeArticle } from "../domain/article";
 
 export interface ValeursFiltres {
   saisie: string;
@@ -20,34 +19,40 @@ const ETATS: readonly { valeur: FiltreActif; libelle: string }[] = [
   { valeur: "tous", libelle: "Tous" },
 ];
 
+/** Les filtres de l'ancien catalogue : même ligne, mêmes libellés (« Prestations », « Biens »). */
 export function FiltresArticles({ valeurs, familles, onChange }: Props) {
   // Une famille choisie puis disparue du catalogue reste proposée : sinon la liste afficherait un filtre invisible.
   const options = valeurs.famille && !familles.includes(valeurs.famille) ? [...familles, valeurs.famille] : familles;
   return (
-    <div className="mb-3 flex flex-wrap gap-2">
-      <label htmlFor="recherche-articles" className="sr-only">Rechercher un article</label>
-      <Input
-        id="recherche-articles"
-        type="search"
-        className="max-w-sm"
-        placeholder="Code ou désignation…"
+    <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+      <input
+        type="text"
+        aria-label="Rechercher un article"
+        style={{ flex: 1, minWidth: "220px" }}
+        placeholder="Rechercher : code ou désignation…"
         value={valeurs.saisie}
         onChange={(e) => onChange("saisie", e.target.value)}
       />
-      <label htmlFor="filtre-etat-articles" className="sr-only">État</label>
-      <Select id="filtre-etat-articles" className="max-w-36" value={valeurs.actif} onChange={(e) => onChange("actif", e.target.value as FiltreActif)}>
-        {ETATS.map((e) => <option key={e.valeur} value={e.valeur}>{e.libelle}</option>)}
-      </Select>
-      <label htmlFor="filtre-type-articles" className="sr-only">Type</label>
-      <Select id="filtre-type-articles" className="max-w-40" value={valeurs.type} onChange={(e) => onChange("type", e.target.value as TypeArticle | "")}>
+      <select aria-label="État" style={{ width: "auto" }} value={valeurs.actif} onChange={(e) => onChange("actif", e.target.value as FiltreActif)}>
+        {ETATS.map((e) => (
+          <option key={e.valeur} value={e.valeur}>
+            {e.libelle}
+          </option>
+        ))}
+      </select>
+      <select aria-label="Type" style={{ width: "auto" }} value={valeurs.type} onChange={(e) => onChange("type", e.target.value as TypeArticle | "")}>
         <option value="">Tous types</option>
-        {TYPES_ARTICLE.map((t) => <option key={t.code} value={t.code}>{t.libelle}</option>)}
-      </Select>
-      <label htmlFor="filtre-famille-articles" className="sr-only">Famille</label>
-      <Select id="filtre-famille-articles" className="max-w-48" value={valeurs.famille} onChange={(e) => onChange("famille", e.target.value)}>
+        <option value="service">Prestations</option>
+        <option value="bien">Biens</option>
+      </select>
+      <select aria-label="Famille" style={{ width: "auto" }} value={valeurs.famille} onChange={(e) => onChange("famille", e.target.value)}>
         <option value="">Toutes familles</option>
-        {options.map((f) => <option key={f} value={f}>{f}</option>)}
-      </Select>
+        {options.map((f) => (
+          <option key={f} value={f}>
+            {f}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

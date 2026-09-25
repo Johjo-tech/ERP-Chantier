@@ -1,21 +1,20 @@
-import { type FormEvent } from "react";
+import { useId, type FormEvent } from "react";
 import { z } from "zod";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
-import { ChampChoix, ChampTexte, ChampZone } from "@/components/formulaire/Champ";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
-import { formatTaux, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { afficherToast as toast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
+import { useUnitesLignes } from "@/modules/documents/hooks/useUnites";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
 import type { ReglagesDocuments } from "@/modules/societes/domain/reglages";
 import { CodeEnDouble } from "../api/articles";
-import { schemaSaisieArticle, TYPES_ARTICLE, valeurCase, valeursDepuis, type Article, type ValeursArticle } from "../domain/article";
-import { useArticle, useEnregistrerArticle } from "../hooks/useArticles";
+import { schemaSaisieArticle, valeurCase, valeursDepuis, type Article, type ValeursArticle } from "../domain/article";
+import { useArticle, useEnregistrerArticle, useFamillesArticles } from "../hooks/useArticles";
+import { CadreCatalogue } from "./CadreCatalogue";
+import { libelleTaux } from "./taux";
 
 /**
  * Ce qu'un autre écran peut passer en ouvrant la création (ART-10) : une fiche
@@ -34,11 +33,19 @@ export function PageFormulaireArticle() {
   const etat = schemaEtat.safeParse(useLocation().state ?? {});
   const { brouillon, retour } = etat.success ? etat.data : {};
 
-  if ((id && article.isPending) || reglages.isPending) return <Chargement />;
-  if (id && article.isError) return <Erreur erreur={article.error} reessayer={() => void article.refetch()} />;
-  if (reglages.isError) return <Erreur erreur={reglages.error} reessayer={() => void reglages.refetch()} />;
-  const f = <FormulaireArticle key={id ?? "nouveau"} article={article.data ?? null} reglages={reglages.data} brouillon={brouillon} retour={retour} />;
-  return article.data ? <GardeSociete societeId={article.data.societe_id} retour="/articles">{f}</GardeSociete> : f;
+  let contenu;
+  if ((id && article.isPending) || reglages.isPending) contenu = <Chargement />;
+  else if (id && article.isError) contenu = <Erreur erreur={article.error} reessayer={() => void article.refetch()} />;
+  else if (reglages.isError) contenu = <Erreur erreur={reglages.error} reessayer={() => void reglages.refetch()} />;
+  else contenu = <FormulaireArticle key={id ?? "nouveau"} article={article.data ?? null} reglages={reglages.data} brouillon={brouillon} retour={retour} />;
+  const page = <CadreCatalogue>{contenu}</CadreCatalogue>;
+  return article.data ? (
+    <GardeSociete societeId={article.data.societe_id} retour="/articles">
+      {page}
+    </GardeSociete>
+  ) : (
+    page
+  );
 }
 
 interface Props {
@@ -48,76 +55,139 @@ interface Props {
   retour?: string | undefined;
 }
 
+/** Un champ de l'ancien formulaire : le libellé PUIS la saisie (libellé flottant de `.field`). */
+function Champ({ libelle, full, erreur, children }: { libelle: string; full?: boolean; erreur?: string | undefined; children: (id: string) => React.ReactNode }) {
+  const id = useId();
+  return (
+    <div className={full ? "field full" : "field"}>
+      <label htmlFor={id}>{libelle}</label>
+      {children(id)}
+      {erreur && (
+        <small role="alert" className="champ-erreur">
+          {erreur}
+        </small>
+      )}
+    </div>
+  );
+}
+
+/** La fiche article de l'ancien (`articleCatalogueFormHTML`), dans `.form-panel`. */
 function FormulaireArticle({ article, reglages, brouillon, retour }: Props) {
   const navigate = useNavigate();
   const enregistrer = useEnregistrerArticle(article?.id);
+  const familles = useFamillesArticles();
   const { valeurs, erreurs, changer, valider } = useFormulaire(valeursDepuis(article, reglages.tvaDefaut, brouillon));
-  const doublon = enregistrer.error instanceof CodeEnDouble ? enregistrer.error.message : undefined;
+  const doublon = enregistrer.error instanceof CodeEnDouble ? `Le code « ${valeurs.code} » existe déjà dans le catalogue.` : undefined;
+  const idListe = useId();
 
   function soumettre(e: FormEvent) {
     e.preventDefault();
     const saisie = valider(schemaSaisieArticle);
-    if (!saisie) return;
-    enregistrer.mutate(saisie, { onSuccess: (a) => void navigate(retour ?? "/articles", { state: { articleEnregistre: a } }) });
+    if (!saisie) {
+      // Le message de l'ancien quand code ou désignation manquent ; les autres erreurs se lisent sous leur champ.
+      if (!valeurs.code.trim() || !valeurs.designation.trim()) toast("Le code et la désignation sont requis.");
+      return;
+    }
+    enregistrer.mutate(saisie, {
+      onSuccess: (a) => {
+        toast("Article enregistré.", "success");
+        void navigate(retour ?? "/articles", { state: { articleEnregistre: a } });
+      },
+      // Comme l'ancien : le refus se dit en bulle ; le doublon se lit en plus sous le code.
+      onError: (err) => toast(err instanceof CodeEnDouble ? `Le code « ${saisie.code} » existe déjà dans le catalogue.` : messageErreur(err)),
+    });
   }
 
-  // Une valeur enregistrée qui n'est plus dans les réglages reste proposée : l'ouvrir ne doit pas la changer.
-  const unites = [...new Set([...reglages.unites, ...(valeurs.unite ? [valeurs.unite] : [])])];
-  const taux = [...new Set([...reglages.tauxTva, Number(montant(valeurs.tva))])].sort((a, b) => a - b);
-  const champ = (nom: keyof ValeursArticle, libelle: string, extra: Partial<Parameters<typeof ChampTexte>[0]> = {}) => (
-    <ChampTexte libelle={libelle} valeur={valeurs[nom]} onChange={(v) => changer(nom, v)} erreur={erreurs[nom]} {...extra} />
-  );
+  // Une valeur enregistrée qui n'est plus dans les réglages reste proposée — en tête, comme l'ancien `uniteOptions`.
+  // Les unités d'une ligne (référentiel, sinon la liste de repli) : la fiche propose ce que la ligne proposera.
+  const referentiel = useUnitesLignes();
+  const unites = valeurs.unite && !referentiel.includes(valeurs.unite) ? [valeurs.unite, ...referentiel] : referentiel;
+  const tauxCourant = Number(montant(valeurs.tva));
+  const taux = reglages.tauxTva.includes(tauxCourant) ? reglages.tauxTva : [...reglages.tauxTva, tauxCourant].sort((a, b) => a - b);
 
   return (
-    <form onSubmit={soumettre} noValidate className="flex max-w-3xl flex-col gap-4">
-      <EnTetePage titre={article ? `Modifier ${article.code}` : "Nouvel article"} />
-      {enregistrer.isError && <Alert variant="erreur">{doublon ?? messageErreur(enregistrer.error)}</Alert>}
-      {Object.keys(erreurs).length > 0 && <Alert variant="erreur">Le formulaire contient des erreurs : corrigez les champs signalés.</Alert>}
-      <Card>
-        <CardContent className="grid gap-3 pt-6 sm:grid-cols-2">
-          {champ("code", "Code article", { requis: true, placeholder: "PLB-001", erreur: erreurs.code ?? doublon })}
-          {champ("famille", "Famille")}
-          <div className="sm:col-span-2">{champ("designation", "Désignation", { requis: true })}</div>
-          <div className="sm:col-span-2">
-            <ChampZone
-              libelle="Description"
-              valeur={valeurs.description}
-              onChange={(v) => changer("description", v)}
-              aide="Reprise en commentaire de la ligne quand on choisit cet article."
-            />
-          </div>
-          <ChampChoix
-            libelle="Type"
-            valeur={valeurs.type_article}
-            onChange={(v) => changer("type_article", v)}
-            options={TYPES_ARTICLE.map((t) => ({ valeur: t.code, libelle: t.libelle }))}
-          />
-          <ChampChoix
-            libelle="Unité"
-            valeur={valeurs.unite}
-            onChange={(v) => changer("unite", v)}
-            options={[{ valeur: "", libelle: "—" }, ...unites.map((u) => ({ valeur: u, libelle: u }))]}
-          />
-          {champ("prix_unitaire", "Prix de vente HT", { inputMode: "decimal" })}
-          {champ("prix_achat", "Prix d'achat HT", { inputMode: "decimal" })}
-          <ChampChoix
-            libelle="TVA"
-            valeur={String(Number(montant(valeurs.tva)))}
-            onChange={(v) => changer("tva", v.replace(".", ","))}
-            erreur={erreurs.tva}
-            options={taux.map((t) => ({ valeur: String(t), libelle: formatTaux(montant(t)) }))}
-          />
-          <label className="flex items-center gap-2 self-end text-sm">
+    <form onSubmit={soumettre} noValidate className="form-panel" aria-label={article ? "Modifier l'article" : "Nouvel article"}>
+      <h3>{article ? "Modifier l'article" : "Nouvel article"}</h3>
+      <div className="field-grid">
+        <Champ libelle="Code article" erreur={erreurs.code ?? doublon}>
+          {(id) => (
+            <input id={id} type="text" value={valeurs.code} placeholder="PLB-001" aria-invalid={!!(erreurs.code ?? doublon)} onChange={(e) => changer("code", e.target.value)} />
+          )}
+        </Champ>
+        <Champ libelle="Famille">
+          {(id) => (
+            <>
+              <input id={id} type="text" value={valeurs.famille} list={idListe} onChange={(e) => changer("famille", e.target.value)} />
+              <datalist id={idListe}>
+                {(familles.data ?? []).map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </Champ>
+        <Champ libelle="Désignation" full erreur={erreurs.designation}>
+          {(id) => <input id={id} type="text" value={valeurs.designation} onChange={(e) => changer("designation", e.target.value)} />}
+        </Champ>
+        <Champ libelle="Description" full>
+          {(id) => (
+            <>
+              <textarea id={id} style={{ minHeight: "70px" }} value={valeurs.description} onChange={(e) => changer("description", e.target.value)} />
+              <div className="card-sub">Reprise en commentaire de la ligne quand on choisit cet article.</div>
+            </>
+          )}
+        </Champ>
+        <Champ libelle="Type">
+          {(id) => (
+            <select id={id} value={valeurs.type_article} onChange={(e) => changer("type_article", e.target.value)}>
+              <option value="service">Prestation</option>
+              <option value="bien">Bien</option>
+            </select>
+          )}
+        </Champ>
+        <Champ libelle="Unité">
+          {(id) => (
+            <select id={id} value={valeurs.unite} onChange={(e) => changer("unite", e.target.value)}>
+              {unites.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          )}
+        </Champ>
+        <Champ libelle="Prix de vente HT" erreur={erreurs.prix_unitaire}>
+          {(id) => <input id={id} type="text" inputMode="decimal" value={valeurs.prix_unitaire} onChange={(e) => changer("prix_unitaire", e.target.value)} />}
+        </Champ>
+        <Champ libelle="Prix d'achat" erreur={erreurs.prix_achat}>
+          {(id) => <input id={id} type="text" inputMode="decimal" value={valeurs.prix_achat} onChange={(e) => changer("prix_achat", e.target.value)} />}
+        </Champ>
+        <Champ libelle="TVA" erreur={erreurs.tva}>
+          {(id) => (
+            <select id={id} value={String(tauxCourant)} onChange={(e) => changer("tva", e.target.value.replace(".", ","))}>
+              {taux.map((t) => (
+                <option key={t} value={String(t)}>
+                  {libelleTaux(t)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Champ>
+        <div className="field">
+          <label aria-hidden="true">&nbsp;</label>
+          <label className="bc-tache-row" style={{ margin: 0 }}>
             <input type="checkbox" checked={valeurs.gere_en_stock !== ""} onChange={(e) => changer("gere_en_stock", valeurCase(e.target.checked))} />
-            Géré en stock
+            <span>Géré en stock</span>
           </label>
-        </CardContent>
-      </Card>
-      <div className="flex gap-2">
-        <Button type="submit" disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}</Button>
-        <Button variant="ghost" asChild>
-          <Link to={retour ?? "/articles"}>Annuler</Link>
-        </Button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button type="submit" className="btn primary" disabled={enregistrer.isPending}>
+          Enregistrer
+        </button>
+        <Link className="btn ghost" to={retour ?? "/articles"}>
+          Annuler
+        </Link>
       </div>
     </form>
   );
