@@ -13,13 +13,15 @@ export function useIdentiteDocument() {
 /**
  * Fabrique et remet le PDF. `avant` passe d'abord — c'est là qu'une facture
  * brouillon reçoit son cadenas (FAC-12) : le document ne part pas si le
- * cadenas n'a pas pu être posé.
+ * cadenas n'a pas pu être posé. `apres` transforme le fichier rendu avant sa
+ * remise — une facture numérotée y reçoit son XML Factur-X (EFA-04).
  */
 export function useTelechargerPdf() {
   return useMutation({
-    mutationFn: async ({ modele, avant }: { modele: ModeleDocument; avant?: (() => Promise<void>) | undefined }) => {
+    mutationFn: async ({ modele, avant, apres }: { modele: ModeleDocument; avant?: (() => Promise<void>) | undefined; apres?: ((pdf: Blob) => Promise<Blob>) | undefined }) => {
       if (avant) await avant();
-      telechargerBlob(await genererPdf(modele), modele.nomFichier);
+      const pdf = await genererPdf(modele);
+      telechargerBlob(apres ? await apres(pdf) : pdf, modele.nomFichier);
     },
   });
 }

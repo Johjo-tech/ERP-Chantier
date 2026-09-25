@@ -4,12 +4,20 @@ import { messageErreur } from "@/lib/erreurs";
 import type { ModeleDocument } from "../domain/modele";
 import { useTelechargerPdf } from "../hooks/useIdentiteDocument";
 
+interface Props {
+  modele: ModeleDocument | null;
+  avant?: () => Promise<void>;
+  /** Transforme le PDF rendu avant sa remise (Factur-X d'une facture émise). */
+  apres?: (pdf: Blob) => Promise<Blob>;
+  libelle?: string;
+}
+
 /** « Télécharger le PDF » ; en cas d'échec, l'impression du navigateur reste le recours. */
-export function BoutonPdf({ modele, avant, libelle = "Télécharger le PDF" }: { modele: ModeleDocument | null; avant?: () => Promise<void>; libelle?: string }) {
+export function BoutonPdf({ modele, avant, apres, libelle = "Télécharger le PDF" }: Props) {
   const pdf = useTelechargerPdf();
   return (
     <>
-      <Button variant="outline" disabled={!modele || pdf.isPending} onClick={() => modele && pdf.mutate({ modele, avant })}>
+      <Button variant="outline" disabled={!modele || pdf.isPending} onClick={() => modele && pdf.mutate({ modele, avant, apres })}>
         {pdf.isPending ? "Préparation du PDF…" : libelle}
       </Button>
       {pdf.isError && (
