@@ -18,15 +18,17 @@ function FormulaireCommande({ piece, onResultat }: Props) {
   const [fournisseur, setFournisseur] = useState(piece.fournisseur);
   const commander = useMarquerCommandee();
   const id = piece.bon.id;
+  // Autant de champs que de cartes : leur nom accessible cite le bon, sinon ils se confondent (relecture 3, M8).
+  const ref = `${piece.bon.numero_interne ?? "bon sans numéro"} (${piece.bon.client_nom})`;
   return (
     <div className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col text-xs">
         Commandée le
-        <Input type="date" className="h-8 w-40" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Input type="date" className="h-8 w-40" aria-label={`Commandée le — ${ref}`} value={date} onChange={(e) => setDate(e.target.value)} />
       </label>
       <label className="flex flex-col text-xs">
         Fournisseur
-        <Input className="h-8 w-48" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} />
+        <Input className="h-8 w-48" aria-label={`Fournisseur — ${ref}`} value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} />
       </label>
       <Button
         size="sm"
@@ -68,6 +70,7 @@ export function CartePiece({ piece, onResultat }: Props) {
             <Button
               size="sm"
               variant="secondary"
+              aria-label={`Pièce reçue — ${b.numero_interne ?? b.client_nom}`}
               disabled={recue.isPending}
               onClick={() =>
                 recue.mutate(b.id, {

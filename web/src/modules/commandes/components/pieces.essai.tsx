@@ -42,14 +42,31 @@ describe("pièces en commande", () => {
     await userEvent.type(await screen.findByLabelText("Fournisseur"), "Point P");
     await userEvent.click(screen.getByRole("button", { name: "Marquer commandée" }));
     await waitFor(() => expect(api.marquerCommandee).toHaveBeenCalledWith("1", { date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), fournisseur: "Point P" }));
-    await userEvent.click(screen.getByRole("button", { name: "Pièce reçue" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pièce reçue — BC-2026-900001" }));
     await waitFor(() => expect(api.pieceRecue).toHaveBeenCalledWith("1"));
+  });
+
+  it("onglets accessibles : panneau relié, flèches et Fin ; chaque champ nomme son bon (relecture 3, M8)", async () => {
+    rendreAvecSession(<PagePieces />, { role: "conducteur" });
+    await screen.findByText("Pièce 1");
+    const premier = screen.getByRole("tab", { name: /À commander/ });
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", premier.id);
+    expect(premier).toHaveAttribute("aria-controls", "panneau-pieces");
+    premier.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: /Commandées/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Commandées/ })).toHaveFocus();
+    await userEvent.keyboard("{End}");
+    expect(screen.getByRole("tab", { name: /Reçues/ })).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowRight}");
+    expect(premier).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("textbox", { name: "Fournisseur — BC-2026-900001 (Mme Durand)" })).toBeInTheDocument();
   });
 
   it("la secrétaire voit les pièces sans pouvoir agir (planning/modifier réservé)", async () => {
     rendreAvecSession(<PagePieces />, { role: "secretaire" });
     expect(await screen.findByText("Pièce 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Marquer commandée" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Pièce reçue" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Pièce reçue/ })).not.toBeInTheDocument();
   });
 });

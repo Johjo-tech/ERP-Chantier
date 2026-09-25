@@ -16,13 +16,13 @@ function menu(role: RoleMembre, options: { simule?: RoleMembre; niveau?: number 
 describe("menu principal par rôle", () => {
   it("admin voit tout", () => {
     expect(menu("admin")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures",
+      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer",
     ]);
   });
 
   it("secrétaire voit toute la gestion", () => {
     expect(menu("secretaire")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures",
+      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer",
     ]);
   });
 
@@ -36,7 +36,7 @@ describe("menu principal par rôle", () => {
 
   it("conducteur voit ses chantiers, devis et commandes", () => {
     expect(menu("conducteur")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures",
+      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer",
     ]);
   });
 

@@ -3,7 +3,8 @@ import { ongletDe, parFournisseur, pieceDuBon, SANS_FOURNISSEUR } from "./pieces
 import { circuitDuBon, etapeWorkflow, etatPieceDuBon, type TacheBon } from "./workflow";
 
 const tache = (t: Partial<TacheBon>): TacheBon => ({
-  id: "t", bon_commande_id: "b", metier: null, statut: "planifiee", date_tache: null,
+  id: "t", bon_commande_id: "b", libelle: null, metier: null, statut: "planifiee", date_tache: null,
+  commentaire: null, refus_motif: null, realisee_le: null, validee_le: null,
   piece_a_commander: false, piece_description: null, piece_fournisseur: null, piece_date_commande: null, piece_recue_le: null, ...t,
 });
 

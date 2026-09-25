@@ -13,9 +13,14 @@ import { z } from "zod";
 export const schemaTacheBon = z.object({
   id: z.string(),
   bon_commande_id: z.string().nullable(),
+  libelle: z.string().nullable(),
   metier: z.string().nullable(),
   statut: z.string().nullable(),
   date_tache: z.string().nullable(),
+  commentaire: z.string().nullable(),
+  refus_motif: z.string().nullable(),
+  realisee_le: z.string().nullable(),
+  validee_le: z.string().nullable(),
   piece_a_commander: z.boolean().nullable(),
   piece_description: z.string().nullable(),
   piece_fournisseur: z.string().nullable(),
@@ -121,4 +126,18 @@ export function etapeWorkflow(b: EnFile, factureLiee: boolean): Etape {
   if (b.valideConducteur) return { cle: "directeur", libelle: "À valider — directeur", court: "Directeur", variante: "alerte" };
   if (tachesTerminees(b)) return { cle: "conducteur", libelle: "À valider — conducteur", court: "Conducteur", variante: "default" };
   return { cle: "terrain", libelle: "Travaux à pointer", court: "À pointer", variante: "danger" };
+}
+
+/**
+ * Les quatre étapes du stepper (bcWorkflowStepperHTML, app.js l. 7100, BC-03) :
+ * terrain, conducteur, directeur, facturé. L'étape courante est la première
+ * non franchie.
+ */
+export function etapesDuCircuit(b: EnFile, factureLiee: boolean): { libelle: string; faite: boolean }[] {
+  return [
+    { libelle: "Métiers (technicien)", faite: tachesTerminees(b) },
+    { libelle: "Conducteur", faite: b.valideConducteur },
+    { libelle: "Directeur", faite: b.valideDirecteur },
+    { libelle: "Facturé (secrétariat)", faite: factureLiee },
+  ];
 }

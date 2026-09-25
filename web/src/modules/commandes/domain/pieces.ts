@@ -33,6 +33,14 @@ export function ongletDe(p: EtatPiece): OngletPieces | null {
   return p.recueLe ? "recues" : null;
 }
 
+/** L'onglet atteint au clavier : flèches circulaires, Début et Fin (motif ARIA des onglets, relecture 3 M8). */
+export function ongletVoisin<T>(ordre: readonly T[], courant: T, touche: string): T | null {
+  const i = ordre.indexOf(courant);
+  const n = ordre.length;
+  const cible = touche === "ArrowRight" ? (i + 1) % n : touche === "ArrowLeft" ? (i - 1 + n) % n : touche === "Home" ? 0 : touche === "End" ? n - 1 : null;
+  return cible === null ? null : (ordre[cible] ?? null);
+}
+
 /** Des dossiers par fournisseur, triés par nom ; le fournisseur absent a le sien. */
 export function parFournisseur(pieces: readonly PieceDuBon[]): { fournisseur: string; pieces: PieceDuBon[] }[] {
   const dossiers = new Map<string, PieceDuBon[]>();

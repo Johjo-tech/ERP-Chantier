@@ -4,21 +4,29 @@ import { Navigate, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
 import { rendreAvecSession } from "@/test/session-factice";
-import type { Bon } from "../api/bons";
+import { bonEssai } from "../essai-fixtures";
 import { circuitDuBon } from "../domain/workflow";
 import { PageBonCommande } from "./PageBonCommande";
 import { PageBonsCommande } from "./PageBonsCommande";
 
 const api = vi.hoisted(() => ({
-  listerBons: vi.fn(),
+  listerBons: vi.fn(async (): Promise<unknown[]> => []),
   lireBon: vi.fn(),
   enregistrerBon: vi.fn(),
   enregistrerBcRecu: vi.fn(),
   genererFacture: vi.fn(),
+  ecrireContacts: vi.fn(),
   COLONNES_TACHE: "",
   EnregistrementPartiel: class extends Error {},
 }));
 vi.mock("../api/bons", () => api);
+const circuit = vi.hoisted(() => ({ listerTaches: vi.fn(async (): Promise<unknown[]> => []), listerTravaux: vi.fn(async (): Promise<unknown[]> => []) }));
+vi.mock("../api/circuit", () => circuit);
+const documents = vi.hoisted(() => ({ remplacerPieceJointe: vi.fn(async (..._args: unknown[]) => undefined), urlPieceJointe: vi.fn(async () => "https://local/signe"), listerPhotos: vi.fn(async () => []), DUREE_URL_SIGNEE_S: 3600 }));
+vi.mock("../api/documents", () => documents);
+vi.mock("../api/metiers", () => ({ listerMetiersDeclares: vi.fn(async () => ["Peinture", "Plomberie", "Sol"]) }));
+const devis = vi.hoisted(() => ({ listerDevis: vi.fn(async (): Promise<unknown[]> => []), lireDevis: vi.fn() }));
+vi.mock("@/modules/devis/api/devis", () => devis);
 vi.mock("@/modules/clients/api/clients", () => ({
   listerClients: vi.fn(async () => [{ id: "c1", societe_id: "alpha", nom: "OPAC du Rhône", adresse: "12 rue R", interlocuteurs: [], cadre_facturation: "B2B_national" }]),
 }));
@@ -29,18 +37,7 @@ vi.mock("@/modules/societes/api/reglages", () => ({
   chargerReglages: vi.fn(async () => ({ validiteDevisJours: 30, tvaDefaut: 10, delaiPaiementJours: 30, modeDelaiPaiement: "net", unites: ["u", "m²"], tauxTva: [5.5, 10, 20] })),
 }));
 
-function bon(surcharges: Partial<Bon> = {}): Bon {
-  return {
-    id: "b1", societe_id: "alpha", numero_interne: "BC-2026-900001", numero_bc: "CMD-OPAC-7781", sans_bc: false, en_attente_bc: false,
-    bon_commande_parent_id: null, client_id: "c1", client_nom: "OPAC du Rhône", interlocuteur: null, adresse: "14 rue Garibaldi", code_postal: "69003",
-    ville: "Lyon", logement_statut: null, occupant: null, etage: null, numero_logement: null, precision_commune: null, ancien_locataire: null,
-    date: "2026-09-05", date_reception: "2026-09-05", date_fin_travaux: null, nature_travaux: "Salle d'eau", reference_chantier: null, notes: null,
-    montant: 471, statut: "en attente", statut_workflow: "en_cours", conducteur_id: "k1", conducteur: "Christophe Conducteur",
-    circuit: circuitDuBon([], "en_cours"), factures: [],
-    lignes: [{ id: "l1", position: 0, type: "ligne", designation: "Pose faïence", quantite: 6, prix_unitaire: 78.5, unite: "m²", tva: 10, article_reference: null, commentaire: null, metier: null }],
-    ...surcharges,
-  };
-}
+const bon = bonEssai;
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -224,5 +221,127 @@ describe("création", () => {
     expect(screen.getByDisplayValue("3 place Bellecour")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Recherche de fuite")).toBeInTheDocument();
     expect(screen.getByText("88,00 €")).toBeInTheDocument();
+  });
+
+  it("le préremplissage de la lecture : « Sans BC », TVA lue, interlocuteur, notes ; le document lu devient la pièce jointe (OCR-04, OCR-12)", async () => {
+    api.enregistrerBon.mockResolvedValue("nouveau");
+    api.lireBon.mockReturnValue(new Promise(() => undefined));
+    const fichier = new File(["%PDF"], "bon-client.pdf", { type: "application/pdf" });
+    ouvrir("conducteur", "/aller", {
+      prefill: { client_id: "c1", mode: "sans_bc", notes: "Clés en loge", adresse_locataire: "3 place Bellecour", lignes: [{ designation: "Recherche de fuite", quantite: 1, prix_unitaire: 80, tva: 5.5 }] },
+      fichier,
+    });
+    expect(await screen.findByDisplayValue("Clés en loge")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sans BC" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("TVA, ligne 1")).toHaveValue("5.5");
+    expect(screen.getByText(/bon-client.pdf — sera rangé à l'enregistrement/)).toBeInTheDocument();
+    await screen.findByRole("option", { name: "OPAC du Rhône" });
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(documents.remplacerPieceJointe).toHaveBeenCalled());
+    expect(api.enregistrerBon.mock.calls[0]?.[2]).toMatchObject({ numero_bc: "Sans BC", sans_bc: true, notes: "Clés en loge" });
+    expect(documents.remplacerPieceJointe.mock.calls[0]?.[1]).toBe(fichier);
+  });
+});
+
+describe("métiers, montant par métier, devis et facturation (BC-05, BC-11, BC-12, BC-53)", () => {
+  it("deux métiers : le bon se planifiera en deux interventions, le montant se ventile, `metier` = le premier", async () => {
+    api.enregistrerBon.mockResolvedValue("b1");
+    api.lireBon.mockResolvedValue(bon({ lignes: [] }));
+    ouvrir("conducteur", "/commandes/b1");
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Peinture" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Sol" }));
+    expect(screen.getByText(/Ce bon se planifiera en 2 interventions/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Montant HT — Peinture"), "300,5");
+    await userEvent.type(screen.getByLabelText("Montant HT — Sol"), "200");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer le brouillon" }));
+    await waitFor(() => expect(api.enregistrerBon).toHaveBeenCalled());
+    expect(api.enregistrerBon.mock.calls[0]?.[2]).toMatchObject({ metiers: ["Peinture", "Sol"], metier: "Peinture", montant_par_metier: { Peinture: 300.5, Sol: 200 }, montant: 500.5 });
+  });
+
+  it("le métier d'un chapitre : lu sur le titre (et coché), ou refusé par la sentinelle — jamais \"\"", async () => {
+    api.enregistrerBon.mockResolvedValue("b1");
+    api.lireBon.mockResolvedValue(bon({ lignes: [{ id: "c1", position: 0, type: "chapitre", designation: "PEINTURE CHAMBRE 1", quantite: 0, prix_unitaire: 0, unite: null, tva: 0, article_reference: null, commentaire: null, metier: null }, ...bon().lignes] }));
+    ouvrir("conducteur", "/commandes/b1");
+    const choix = await screen.findByLabelText("Métier du chapitre");
+    await waitFor(() => expect(within(choix).getByRole("option", { name: /Déduit du titre — \(lu : Peinture\)/ })).toBeInTheDocument());
+    expect(screen.getByRole("checkbox", { name: /Peinture/ })).toBeChecked();
+    await userEvent.selectOptions(choix, "(aucun)");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.enregistrerBon).toHaveBeenCalled());
+    const lignes = api.enregistrerBon.mock.calls[0]?.[3] as { type: string; metier: string | null }[];
+    expect(lignes.find((l) => l.type === "chapitre")?.metier).toBe("(aucun)");
+    expect(lignes.every((l) => l.metier !== "")).toBe(true);
+  });
+
+  it("le devis lié préremplit les montants par métier ; sans chapitre, il le dit", async () => {
+    devis.listerDevis.mockResolvedValue([{ id: "d1", numero: "DEV-2026-000003", client_id: "c1", client_nom: "OPAC du Rhône", chantier_id: null, date: "2026-09-01", statut: "accepté", conducteur: null, interlocuteur: null, ville: null, adresse_locataire: null }]);
+    devis.lireDevis.mockResolvedValue({
+      id: "d1", lignes: [
+        { id: "x1", position: 0, type: "chapitre", designation: "Peinture séjour", quantite: 0, prix_unitaire: 0, unite: null, tva: 0, article_reference: null, commentaire: null, metier: null },
+        { id: "x2", position: 1, type: "ligne", designation: "Murs", quantite: 2, prix_unitaire: 100.25, unite: "u", tva: 10, article_reference: null, commentaire: null, metier: null },
+      ],
+    });
+    api.lireBon.mockResolvedValue(bon({ lignes: [], metiers: ["Peinture", "Sol"] }));
+    ouvrir("conducteur", "/commandes/b1");
+    await screen.findByRole("option", { name: /DEV-2026-000003/ });
+    await userEvent.selectOptions(screen.getByLabelText("Devis lié"), "d1");
+    await waitFor(() => expect(screen.getByLabelText("Montant HT — Peinture")).toHaveValue("200,5"));
+    expect(screen.getByText(/Aucun chapitre « Sol » trouvé dans le devis lié/)).toBeInTheDocument();
+  });
+
+  it("l'adresse de facturation se déplie quand elle est remplie, et part avec le bon", async () => {
+    api.enregistrerBon.mockResolvedValue("b1");
+    api.lireBon.mockResolvedValue(bon({ facturation_adresse: "1 av. du Siège", facturation_ville: "Lyon" }));
+    ouvrir("secretaire", "/commandes/b1");
+    const adresse = await screen.findByLabelText("Adresse de facturation");
+    expect(adresse.closest("details")).toHaveAttribute("open");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.enregistrerBon).toHaveBeenCalled());
+    expect(api.enregistrerBon.mock.calls[0]?.[2]).toMatchObject({ facturation_adresse: "1 av. du Siège", facturation_ville: "Lyon", facturation_code_postal: null });
+  });
+
+  it("après un enregistrement, la fiche relue remonte le formulaire : la ligne ajoutée n'est pas réinsérée (relecture 3, M12)", async () => {
+    api.enregistrerBon.mockResolvedValue("b1");
+    api.lireBon.mockResolvedValueOnce(bon());
+    ouvrir("secretaire", "/commandes/b1");
+    await userEvent.click(await screen.findByRole("button", { name: "+ Ligne" }));
+    await userEvent.type(screen.getByLabelText("Désignation, ligne 2"), "Joint");
+    const relu = bon({ lignes: [...bon().lignes, { id: "l2", position: 1, type: "ligne", designation: "Joint", quantite: 1, prix_unitaire: 0, unite: "u", tva: 10, article_reference: null, commentaire: null, metier: null }] });
+    api.lireBon.mockResolvedValue(relu);
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(await screen.findByText("Bon de commande enregistré.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.enregistrerBon).toHaveBeenCalledTimes(2));
+    const secondes = api.enregistrerBon.mock.calls[1]?.[3] as { id: string | null }[];
+    expect(secondes.map((l) => l.id)).toEqual(["l1", "l2"]);
+  });
+
+  it("un SAV garde son numéro et reste « sans BC » ; « Ce qui ne va pas » se relit", async () => {
+    api.enregistrerBon.mockResolvedValue("s1");
+    api.lireBon.mockResolvedValue(bon({ id: "s1", bon_commande_parent_id: "b1", numero_bc: "SAV-2026-000004", sans_bc: true, probleme_description: "Fuite revenue" }));
+    ouvrir("conducteur", "/commandes/s1");
+    expect(await screen.findByDisplayValue("Fuite revenue")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.enregistrerBon).toHaveBeenCalled());
+    expect(api.enregistrerBon.mock.calls[0]?.[2]).toMatchObject({ numero_bc: "SAV-2026-000004", sans_bc: true, probleme_description: "Fuite revenue" });
+  });
+});
+
+describe("liste : filtres et contacts (BC-01, BC-02)", () => {
+  it("filtre par logement et par métier ; 📞 note une tentative", async () => {
+    api.listerBons.mockResolvedValue([bon({ logement_statut: "vacant", metiers: ["Peinture"] }), bon({ id: "b2", numero_interne: "BC-2026-900002", logement_statut: "occupé", metiers: ["Sol"] })]);
+    api.ecrireContacts.mockResolvedValue(undefined);
+    ouvrir("secretaire", "/commandes");
+    await screen.findByRole("link", { name: "BC-2026-900002" });
+    await userEvent.selectOptions(screen.getByLabelText("Logement"), "vacant");
+    expect(screen.queryByRole("link", { name: "BC-2026-900002" })).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Logement"), "");
+    await userEvent.selectOptions(screen.getByLabelText("Métier"), "Sol");
+    expect(screen.queryByRole("link", { name: "BC-2026-900001" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Noter une tentative d'appel — BC-2026-900002" }));
+    await waitFor(() => expect(api.ecrireContacts).toHaveBeenCalled());
+    const [id, contacts] = api.ecrireContacts.mock.calls[0] as [string, { tentatives_contact: { type: string }[] }];
+    expect(id).toBe("b2");
+    expect(contacts.tentatives_contact).toEqual([expect.objectContaining({ type: "appel" })]);
   });
 });
