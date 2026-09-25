@@ -215,3 +215,22 @@ export type DatabasePlanning = Omit<DatabaseAvecPropositions, "public"> & {
     };
   };
 };
+
+/* ---------- Proposition du parc (20260926070000) ----------
+ * `duree_jours` sur les deux tables de prêts : le retour prévu d'un prêt.
+ * Type à part, juxtaposé aux précédents pour que la fusion reste simple. */
+type ColonnesPret = { duree_jours: number | null };
+type AvecPret<T extends "vehicule_prets" | "materiel_prets"> = Omit<Public["Tables"][T], "Row" | "Insert" | "Update"> & {
+  Row: Public["Tables"][T]["Row"] & ColonnesPret;
+  Insert: Public["Tables"][T]["Insert"] & Partial<ColonnesPret>;
+  Update: Public["Tables"][T]["Update"] & Partial<ColonnesPret>;
+};
+
+export type DatabaseParc = Omit<DatabaseAvecPropositions, "public"> & {
+  public: Omit<PubP, "Tables"> & {
+    Tables: Omit<PubP["Tables"], "vehicule_prets" | "materiel_prets"> & {
+      vehicule_prets: AvecPret<"vehicule_prets">;
+      materiel_prets: AvecPret<"materiel_prets">;
+    };
+  };
+};
