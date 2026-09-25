@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -9,12 +10,15 @@ import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { formatEuros, montant } from "@/lib/money";
 import { correspond } from "@/lib/recherche";
-import { cn, grouperPar } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Can } from "@/modules/auth-roles/components/Can";
+import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { estAvoir } from "@/modules/documents/domain/totaux";
-import { etatPiece, libelleDelai } from "../domain/etat";
-import { useFactures, useReglements, useTotauxFactures } from "../hooks/useFactures";
+import { libelleDelai } from "../domain/etat";
+import { etatDepuisSolde, totalDu } from "../domain/solde";
+import { useFactures, useSoldes } from "../hooks/useFactures";
 import { BadgeEtat } from "./BadgeEtat";
+import { OngletsFacturation } from "./OngletsFacturation";
 
 type Vue = "factures" | "avoirs";
 const FILTRES = [
@@ -26,24 +30,26 @@ const FILTRES = [
   { valeur: "brouillon", libelle: "Brouillons" },
 ];
 
-export function PageFactures() {
+/**
+ * Factures et avoirs. Reste, état et retard sont LUS dans `v_facture_solde`
+ * (FAC-92, D-FAC-01) : la base calcule, l'écran montre.
+ */
+export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
   const factures = useFactures();
-  const totaux = useTotauxFactures();
-  const reglements = useReglements();
-  const [vue, setVue] = useState<Vue>("factures");
+  const soldes = useSoldes();
+  const voitReglements = usePermission("reglements", "voir");
   const [recherche, setRecherche] = useState("");
   const [filtre, setFiltre] = useState("");
   const aujourdhui = todayISO();
 
   const lignes = useMemo(() => {
-    const ttcParId = new Map((totaux.data ?? []).map((t) => [t.facture_id, t.ttc ?? 0]));
-    const reglementsParId = grouperPar(reglements.data ?? [], (r) => r.facture_id);
+    const parId = new Map((soldes.data ?? []).map((s) => [s.facture_id, s]));
     return (factures.data ?? []).map((f) => {
-      const ttc = ttcParId.get(f.id) ?? 0;
-      const etat = etatPiece(f, ttc, reglementsParId.get(f.id) ?? [], aujourdhui);
-      return { f, ttc, etat, delai: libelleDelai(etat, f.echeance || f.date, aujourdhui) };
+      const s = parId.get(f.id);
+      const etat = s ? etatDepuisSolde(s) : ({ nature: "brouillon" } as const);
+      return { f, s, ttc: s?.ttc ?? 0, etat, delai: libelleDelai(etat, f.echeance || f.date, aujourdhui) };
     });
-  }, [factures.data, totaux.data, reglements.data, aujourdhui]);
+  }, [factures.data, soldes.data, aujourdhui]);
 
   const visibles = lignes.filter(({ f, etat }) => {
     if (estAvoir(f.type_document) !== (vue === "avoirs")) return false;
@@ -54,14 +60,15 @@ export function PageFactures() {
     if (filtre === "retard") return etat.enRetard;
     return { impayee: "non_reglee", partiel: "partiellement_reglee", payee: "reglee" }[filtre] === etat.cle;
   });
+  const enRetard = (soldes.data ?? []).filter((s) => s.en_retard);
 
-  const chargement = factures.isPending || totaux.isPending || reglements.isPending;
-  const erreur = factures.error ?? totaux.error ?? reglements.error;
+  const chargement = factures.isPending || soldes.isPending;
+  const erreur = factures.error ?? soldes.error;
 
   return (
     <>
       <EnTetePage
-        titre="Factures"
+        titre={vue === "avoirs" ? "Avoirs" : "Factures"}
         actions={
           <Can module="factures" action="creer">
             <Button asChild>
@@ -70,13 +77,15 @@ export function PageFactures() {
           </Can>
         }
       />
-      <div role="tablist" aria-label="Vue" className="mb-3 flex gap-1">
-        {(["factures", "avoirs"] as const).map((v) => (
-          <Button key={v} role="tab" aria-selected={vue === v} variant={vue === v ? "default" : "ghost"} size="sm" onClick={() => setVue(v)}>
-            {v === "factures" ? "Factures" : "Avoirs"}
-          </Button>
-        ))}
-      </div>
+      <OngletsFacturation />
+      {vue === "factures" && enRetard.length > 0 && (
+        // « Factures échues à relancer » (app.js l. 2097) : le compte, le montant, et le chemin vers la liste.
+        <Alert>
+          {enRetard.length} facture{enRetard.length > 1 ? "s" : ""} échue{enRetard.length > 1 ? "s" : ""} à relancer — {formatEuros(totalDu(enRetard))} en retard.{" "}
+          {voitReglements && <Link className="font-medium text-primary hover:underline" to="/factures/reglements/par-facture?etat=en_retard">Voir les retards</Link>}
+        </Alert>
+      )}
+      {vue === "avoirs" && <p className="mb-3 text-sm text-muted-foreground">Les avoirs rectifient une facture émise. Ils portent leur propre série « AV » et comptent en négatif ; ils s'imputent, ils ne s'encaissent pas.</p>}
       <div className="mb-3 flex flex-wrap gap-2">
         <label htmlFor="recherche-factures" className="sr-only">Rechercher une facture</label>
         <Input id="recherche-factures" type="search" className="max-w-sm" placeholder="N°, client…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
@@ -90,7 +99,7 @@ export function PageFactures() {
         )}
       </div>
       {chargement && <Chargement />}
-      {erreur && <Erreur erreur={erreur} reessayer={() => { void factures.refetch(); void totaux.refetch(); void reglements.refetch(); }} />}
+      {erreur && <Erreur erreur={erreur} reessayer={() => { void factures.refetch(); void soldes.refetch(); }} />}
       {!chargement && !erreur && visibles.length === 0 && <Vide message={vue === "avoirs" ? "Aucun avoir." : "Aucune facture ne correspond."} />}
       {!chargement && visibles.length > 0 && (
         <Table>

@@ -152,11 +152,60 @@ export async function synchroniserStatut(id: string, statut: "payée" | "impayé
   if (error) throw error;
 }
 
-export async function imputerAvoirSurFacture(societeId: string, r: { avoirId: string; avoirNumero: string; factureId: string; factureNumero: string; montant: number; date: string }) {
-  // Deux règlements liés, en UNE insertion : la facture est soldée par l'avoir, l'avoir est consommé par la facture.
-  const { error } = await supabase().from("reglements").insert([
-    { societe_id: societeId, facture_id: r.factureId, montant: r.montant, date: r.date, mode: "avoir", reference: r.avoirNumero },
-    { societe_id: societeId, facture_id: r.avoirId, montant: r.montant, date: r.date, mode: "imputation", reference: r.factureNumero },
+/**
+ * Le cadenas « téléchargée / envoyée » (FAC-12, `marquerFactureVerrouillee`,
+ * app.js l. 11890) : imprimer ou envoyer une facture NON numérotée la fige
+ * contre la modification par mégarde, et fige avec elle l'identité des deux
+ * parties — le client a reçu CE document. Sans objet sur une facture émise,
+ * déjà figée par la base (l'écriture y serait refusée : 23001).
+ */
+export async function verrouillerBrouillon(societeId: string, f: { id: string; client_id: string | null }): Promise<void> {
+  const db = supabase();
+  const [societe, client] = await Promise.all([
+    db.from("societes").select("nom, raison_sociale_legale, adresse, code_postal, ville, siret, siren, tva_intracom, pays_code, iban").eq("id", societeId).single(),
+    f.client_id
+      ? db.from("clients").select("siret, siren, tva_intracom, pays_code, code_routage, code_service, cadre_facturation").eq("id", f.client_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
+  if (societe.error) throw societe.error;
+  if (client.error) throw client.error;
+  const c = client.data;
+  const identiteClient = c
+    ? {
+        client_siret: c.siret,
+        client_siren: c.siren ?? (c.siret ? c.siret.slice(0, 9) : null),
+        client_tva_intracom: c.tva_intracom,
+        client_pays_code: c.pays_code ?? "FR",
+        client_code_routage: c.code_routage,
+        client_code_service: c.code_service,
+        // NOT NULL en base : un client sans cadre ne l'efface pas.
+        ...(c.cadre_facturation ? { cadre_facturation: c.cadre_facturation } : {}),
+      }
+    : {};
+  const { error } = await db
+    .from("factures")
+    .update({ verrouillee: true, ...identiteEmetteur(societe.data), ...identiteClient })
+    .eq("id", f.id)
+    .is("numero", null)
+    .eq("verrouillee", false);
   if (error) throw error;
+}
+
+/** Lever le cadenas (FAC-09) : seulement sur une facture non émise. */
+export async function deverrouillerBrouillon(id: string): Promise<void> {
+  const { data, error } = await supabase().from("factures").update({ verrouillee: false }).eq("id", id).is("numero", null).select("id");
+  if (error) throw error;
+  if (!data?.length) throw { code: "42501", message: "Déverrouillage refusé : la facture est émise, ou vous n'avez pas le droit de la modifier." };
+}
+
+/** Ce que la pièce imprimée cite : le numéro de son devis, la facture qu'un avoir rectifie. */
+export async function contexteImpression(f: { devis_id: string | null; facture_rectifiee_id: string | null }) {
+  const db = supabase();
+  const [devis, rectifiee] = await Promise.all([
+    f.devis_id ? db.from("devis").select("numero").eq("id", f.devis_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    f.facture_rectifiee_id ? db.from("factures").select("numero, date").eq("id", f.facture_rectifiee_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (devis.error) throw devis.error;
+  if (rectifiee.error) throw rectifiee.error;
+  return { devisNumero: devis.data?.numero ?? null, rectifiee: rectifiee.data ?? null };
 }

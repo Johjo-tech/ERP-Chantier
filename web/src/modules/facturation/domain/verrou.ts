@@ -5,6 +5,8 @@
  * (déclencheurs factures_entete_figee et lignes figées). Téléchargée ou
  * envoyée (`verrouillee`) : cadenas réversible contre la modification par mégarde.
  */
+import { estAvoir } from "@/modules/documents/domain/totaux";
+
 export type CodeVerrou = "emise" | "telechargee";
 
 export interface Verrou {
@@ -15,8 +17,9 @@ export interface Verrou {
 
 export function verrouFacture(f: { numero: string | null; type_document: string; verrouillee: boolean }): Verrou | null {
   const numero = (f.numero ?? "").trim();
-  // Égalité stricte, comme estAvoirDocument : le texte du verrou suit le type exact.
-  const avoir = f.type_document.trim() === "avoir";
+  // UNE définition de l'avoir (FAC-94, D-FAC-06) : l'ancien en avait deux
+  // (`includes` et égalité stricte), équivalentes sur l'énumération de la base.
+  const avoir = estAvoir(f.type_document);
   if (numero) {
     return {
       code: "emise",

@@ -7,6 +7,7 @@ import { lireDevis } from "@/modules/devis/api/devis";
 import { depuisBase, lignesPourEnregistrement, type LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import { chargerReglages } from "@/modules/societes/api/reglages";
 import { refusAvoir } from "../domain/avoir";
+import { copieDeFacture, refusDuplication } from "../domain/duplication";
 import { designationSituation, refusSituation, type LigneSituation } from "../domain/situation";
 import { creerFacture, emettreFacture, lireFacture, listerFactures } from "./factures";
 
@@ -37,6 +38,14 @@ export async function factureDepuisDevis(societeId: string, devisId: string): Pr
   return creerFacture(societeId, { ...entete, date, devis_id: devisId, ...(await conditions(societeId, d.client_id, date)) }, copieDesLignes(lignes));
 }
 
+/** Dupliquer (FAC-07) : un nouveau brouillon daté du jour, liens d'origine coupés, échéance recalculée. */
+export async function dupliquerFacture(societeId: string, factureId: string): Promise<string> {
+  const f = await lireFacture(factureId);
+  const refus = refusDuplication(f);
+  if (refus) throw { code: "P0001", message: refus };
+  return creerFacture(societeId, copieDeFacture(f, todayISO()), copieDesLignes(f.lignes));
+}
+
 /**
  * Avoir sur une facture émise : mêmes lignes (positives, le type donne le
  * sens), l'émetteur DE LA FACTURE D'ORIGINE, puis émission immédiate —
@@ -46,8 +55,12 @@ export async function etablirAvoir(societeId: string, factureId: string, motif: 
   const f = await lireFacture(factureId);
   const refus = refusAvoir(f, motif);
   if (refus) throw { code: "P0001", message: refus };
-  const { id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, intervention_id: _it, ...entete } = f;
+  const {
+    id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, intervention_id: _it,
+    statut_cycle: _sc, pdp_identifiant: _pi, pdp_transmission_id: _pt, ...entete
+  } = f;
   // Ni devis, ni bon, ni intervention : ces liens disent « ce travail a été facturé » ; l'avoir ne facture rien.
+  // Ni cycle ni identifiant de plateforme : l'avoir aura les siens.
   const avoirId = await creerFacture(
     societeId,
     { ...entete, type_document: "avoir", date: todayISO(), facture_rectifiee_id: factureId, motif_rectification: motif.trim(), acomptes_deduits: 0, retenue_garantie_pourcentage: null },
