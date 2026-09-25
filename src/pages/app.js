@@ -14464,11 +14464,16 @@ function chantierFacturesHTML(c){
     </div>
     ${facturesLiees.length? facturesLiees.map(f=>{
       const t = computeDocTotals(f);
+      /* La même pièce, la même règle : ces deux boutons vivaient ici sans aucune
+         condition, et sortaient un brouillon que la liste principale refuse. */
+      const actions = window.actionsFacture(f);
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
-        <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${jsAttr(f.id)}')">🧾 ${esc(f.numero)} — ${moneyDisplay(t.ttc)} TTC</a>
+        ${/* `esc(f.numero)` sur un brouillon donnait un lien sans libellé :
+              « 🧾  — 1 234,00 € TTC ». La liste sait déjà le dire. */''}
+        <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${jsAttr(f.id)}')">🧾 ${f.numero? esc(f.numero) : 'Brouillon — non émise'} — ${moneyDisplay(t.ttc)} TTC</a>
         <span class="badge ${f.statut==='payée'?'success':f.statut==='impayée'?'danger':'info'}">${esc(f.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
-        <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
+        ${actions.peutImprimer? `<button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>`:''}
+        ${actions.peutEnvoyer? `<button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>`:''}
       </div>`;
     }).join('') : '<div class="empty">Aucune facture pour l\'instant.</div>'}
   </div>`;
