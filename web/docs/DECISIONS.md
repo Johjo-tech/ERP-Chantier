@@ -1235,3 +1235,140 @@ dans `node_modules` partagé (un `npm install` complet aurait élagué les
 paquets d'autres agents). Première prise : `CartePosee` était un
 `role="button"` contenant des contrôles → groupe libellé et bouton
 « Ouvrir la fiche ».
+
+## D-AUTH-01 — Démarrage ordonné ; l'annuaire des comptes n'est plus un préalable (AUTH-07, AUTH-33)
+`chargerSession` lit, dans l'ordre de l'ancien démarrage et SÉQUENTIELLEMENT :
+la matrice (`count: "exact"` ; vide ou tronquée → `DemarrageImpossible`, rien
+d'autre n'est lu), le profil, les sociétés où le compte est membre actif avec
+son rôle dans chacune, puis les accès « espace client ». L'annuaire des
+intervenants que l'ancien écran chargeait avant le rendu (`chargerIntervenants`)
+n'est pas repris comme étape : chaque écran qui nomme un compte le lit par sa
+propre requête indexée par société (chantiers, comptes, planning), ce qui
+évite l'annuaire vide « toute la session » quand il échouait en silence.
+`peut()` ne lève pas faute de matrice : la matrice fait partie du type
+`Session`, une session sans matrice ne peut pas exister (le cas « matrice non
+installée » de l'ancien code est impossible par construction).
+
+## D-AUTH-02 — Délai de 15 s et session expirée (AUTH-09, AUTH-10)
+La lecture du jeton et celle de la session sont bornées à 15 s
+(`avecDelai`) ; au-delà, le message de l'ancien écran (« La couche de données
+n'a pas répondu… VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY… ») s'affiche
+avec « Réessayer ». Un délai dépassé ou une matrice illisible ne sont PAS
+réessayés automatiquement (trois fois 15 s pour le même message).
+Une erreur d'expiration (`PGRST301/302/303`, statut 401, mention « JWT ») reçue
+par N'IMPORTE QUELLE lecture ou écriture ferme la session **localement**
+(`signOut({ scope: "local" })` : le serveur refuserait le jeton pour la fermer),
+vide le cache métier et renvoie à la connexion, qui dit « Votre session a
+expiré ». Une déconnexion voulue n'affiche aucun motif.
+
+## D-AUTH-03 — Onglet devenu interdit : bascule après un changement, refus sur un lien (AUTH-16)
+Après un changement de rôle simulé ou de société, une page que le nouveau
+contexte interdit bascule sur le premier onglet autorisé (comme `app.js`).
+Un accès DIRECT par l'URL à une page interdite garde « Accès refusé » : un
+lien partagé qui ne s'ouvre pas doit dire pourquoi. Le `Layout` retient sous
+quel contexte (société|rôle effectif) la page a été atteinte
+(`useRepliOnglet`) ; `RouteModule` ne redirige que si ce contexte a changé
+depuis.
+
+## D-AUTH-04 — Le motif d'un refus de la base s'affiche s'il est rédigé (AUTH-39)
+Ordre de l'ancien `dernierRefus` : `details`, puis `hint`, puis `message`. N'est
+retenu qu'un texte rédigé en FRANÇAIS par nos fonctions et déclencheurs, dans
+une réponse PostgREST (qui porte toujours `details` et `hint`) : les messages
+natifs de Postgres (« new row violates row-level security policy… »,
+« duplicate key… »), en anglais et techniques, gardent leur traduction
+générique ; les refus fabriqués par nos modules `api/` (« Suppression
+refusée ») aussi ; une erreur Zod n'est jamais montrée brute.
+
+## D-AUTH-05 — La secrétaire tient ce que la matrice lui donne (AUTH-70, tranche D-RH-05)
+Proposition 20260926110000 : l'écriture des tables jugées par
+`peut_ecrire()` devient « `peut_ecrire()` OU la matrice du module » — `rh`
+(équipes, sous-traitants et leurs documents, fiche conducteur), `reglages`
+(référentiels, métiers, documents légaux, fournisseurs, fiche conducteur),
+`controle_fournisseurs` (contrôles, factures reçues et leurs lignes),
+`factures` (cycle de vie). On AJOUTE ceux que la matrice désigne, on ne retire
+l'écriture à personne : l'écran historique, en production sur la même base,
+continue de fonctionner. L'écran RH suit désormais `rh / modifier` seul
+(`droitsRh`), comme la matrice. Les trois filles de véhicule sans écran
+(cartes, consommations, contrôles périodiques) suivent « véhicules / modifier »
+comme leurs sœurs (D-VEH-01) : aucun écran ne les écrit au terrain.
+Restent à `peut_ecrire()`, à dessein, les gestes du terrain : tâches, travaux
+supplémentaires, photos de bon, to-do / documents / inspections de chantier,
+seau `terrain` générique (D-BC-06) ; les chemins du seau propres à un module
+(salariés, véhicules) ont leurs politiques.
+
+## D-AUTH-06 — Suppression = « module / supprimer » (AUTH-71)
+Relevé automatisé (`tests/rls/auth-roles.essai.ts`, lecture de `pg_policy`) :
+plus AUCUNE politique DELETE sous `est_membre()`. Celles qui restaient trop
+larges sous `peut_ecrire()` (un technicien effaçait une fiche conducteur, un
+fournisseur, un métier, une ligne de contrôle fournisseur) suivent le droit
+« supprimer » du module — exactement ce que les deux écrans proposent, qui
+masquent le bouton selon la même matrice. Remplace, pour trois tables, la
+suppression posée par 20260926101000. Non tranché : l'INSERTION reste ouverte
+à `peut_ecrire()` (un technicien peut créer une fiche conducteur par l'API) —
+la retirer demande de vérifier qu'aucun geste de l'écran historique n'en
+dépend ; noté dans « Migrations à écrire ensuite ».
+
+## D-AUTH-07 — Filles du chantier et chantier créé (AUTH-72)
+La lecture de `chantier_documents|inspections|todos|comptes_rendus` ne suivait
+l'affectation que par ricochet (la sous-requête sur `chantiers` subit la RLS
+de `chantiers`) : `est_affecte_au_chantier()` y est écrit en toutes lettres.
+En l'éprouvant, défaut trouvé : `chantiers_select` appelait
+`est_affecte_au_chantier(id)`, qui RELIT la ligne pour connaître sa société ;
+pendant un `insert … returning`, la ligne neuve est invisible à cette
+relecture, et l'administrateur se voyait refuser (42501) le chantier qu'il
+venait de créer — or `web/` enregistre un chantier par `insert(...).select()`.
+La politique lit désormais le rôle sur `societe_id` de la ligne et ne consulte
+l'affectation que pour le terrain (même verdict pour toute ligne existante).
+Test qui reproduit le défaut : « l'administrateur relit le chantier qu'il crée ».
+
+## D-AUTH-08 — La matrice de production n'est pas lue d'ici (AUTH-90)
+Règle absolue du chantier : aucune connexion à la production. La fixture
+`src/test/fixtures/role_permissions.json` est relevée sur la base LOCALE, bâtie
+depuis les migrations du dépôt (celles qui ont écrit la matrice en production)
+et comparée à elle par `tests/rls/isolement.essai.ts`. `tests/matrice-miroir.essai.ts`
+échoue si la fixture, le tableau §1.6 de l'inventaire, la liste `MODULES` ou
+celle de l'ancien écran divergent. Relecture de la production par un humain :
+exporter `select role, module, action from role_permissions` puis
+`node scripts/comparer-matrice.mjs export.csv` (sortie en erreur à la moindre
+différence).
+
+## D-AUTH-09 — `inviter-salarie` éprouvée dans le processus de test (AUTH-52)
+`npx supabase functions serve` exige l'image `edge-runtime` : le registre ECR
+est refusé par le réseau de l'agent et Docker Hub répond 429 ; la fonction
+importe en outre depuis deno.land et esm.sh, eux aussi fermés. Retenu : le test
+charge la fonction de l'application historique TELLE QUELLE, en ne réécrivant
+que ses spécificateurs d'import (doublure de `serve`, supabase-js du dépôt) et
+en posant `Deno.env` ; `functions.invoke` de l'écran est servi par elle, contre
+la base locale (GoTrue local fabrique l'identité). Couvre : invitée (200,
+`invitee`, invitation datée), renvoi < 10 min (429, délai relayé), secrétaire
+(403), salarié déjà relié (409), rôle hors liste (400). Ne couvre pas : la
+passerelle (`verify_jwt`) et le runtime Deno eux-mêmes. La clé de service LOCALE
+est lue par `scripts/test-rls.sh` depuis `supabase status`.
+
+## D-AUTH-10 — Garde-fous par l'arbre syntaxique (TRV-14)
+`tests/garde-fous-syntaxe.essai.ts` (compilateur TypeScript, pas d'expression
+régulière) : (1) aucun `catch` vide — un commentaire n'est pas une instruction —
+ni `.catch(cb)` dont le rappel ignore l'erreur sans la tracer ni la relever, dans
+`src/` et `tests/` ; (2) aucun littéral numérique sans nom dans `src/`. Admis :
+initialisation d'une constante en CAPITALES, neutres 0/1/2/100, base de
+numération, indice de tableau, type, attribut JSX (géométrie SVG = mise en
+page), et six familles de fichiers de FORMAT où les nombres sont la norme
+(géométrie PDF, PDF/A-3, ZIP/DOCX/XLSX, gabarit PPSPS, colorimétrie sRGB/WCAG,
+calcul de Pâques). Les 130 littéraux trouvés sont nommés : `lib/durees`
+(fraîcheurs de requête, jour, mois), `lib/dates` (`jourIso`, `moisIso`,
+`partiesIso`, `anneeIso`), seuils d'affichage des soldes, BOM, clé de Luhn,
+bornes d'un créneau, limites d'affichage des imports. `entierLePlusProche`
+(`lib/nombres`) remplace `Math.floor(x + 0.5)` dans le domaine, pour des comptes
+seulement.
+
+## D-AUTH-11 — Une seule règle pour `actionsTache` et `actionsFacturation` (AUTH-36, AUTH-37)
+Portées dans `auth-roles/domain/actions.ts`, réexportées par
+`planning/domain/taches.ts` et `commandes/domain/circuit.ts`, qui en avaient
+chacun leur copie. Parité : `tests/parite/actions.essai.ts` (ancien
+`regles-taches.ts` importé tel quel, `actionsFacturation` extraite de
+`integrations/session.ts`) et identité des réexports.
+
+## D-AUTH-12 — Version construite (AUTH-12)
+`vite.config.ts` pose `<meta name="version-construite">` (commit Vercel ou git,
+7 caractères, et l'heure de construction À PARIS) ; le menu utilisateur
+l'affiche avec « Copier ». Sans marqueur (serveur de développement) : « inconnue ».
