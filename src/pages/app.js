@@ -1329,6 +1329,14 @@ async function changerSociete(code){
      les garder afficherait une liste filtrée sans que la barre, hors écran,
      explique pourquoi. */
   state.recherches = {};
+  /* Le catalogue ne vit pas en mémoire comme les autres collections : `loadAll`
+     ne le rafraîchit donc pas, et son état survivait à la bascule. L'écran
+     gardait les articles, la page ET le nombre de pages de la société qu'on
+     venait de quitter — `chargement` étant à false, il n'interrogeait même pas
+     la base. Cliquer « Suivant » envoyait alors chercher une page qui
+     n'existait que dans l'autre catalogue, et la réponse vide s'annonçait
+     « Le catalogue est vide ». */
+  state.catalogue = null;
   state.currentRole = window.roleEffectif();
   appliquerCouleurSociete();
   document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
@@ -18841,6 +18849,19 @@ async function rafraichirCatalogue(){
     c.pages = page.pages;
     c.familles = familles;
     c.chargement = false;
+    /* L'échec précédent s'efface avec la réussite. Il ne s'effaçait nulle part :
+       une seule panne marquait l'écran à vie, « Catalogue indisponible » restant
+       affiché par-dessus des données parfaitement chargées. */
+    c.erreur = null;
+
+    /* Une page au-delà de la dernière ne laisse rien à afficher, et la liste
+       vide emportait la pagination avec elle : plus de « Précédent », donc plus
+       de retour possible. On revient de nous-mêmes — une seule fois, puisque
+       la page vaut 1 ensuite. */
+    if(!c.articles.length && c.page > 1){
+      c.page = 1;
+      c.chargement = true;
+    }
   }catch(err){
     console.error('Catalogue indisponible', err);
     c.chargement = false;
@@ -18891,7 +18912,20 @@ function catalogueListeHTML(c){
     </div>`;
 
   if(c.chargement) return filtres + '<div class="empty">Chargement du catalogue…</div>';
-  if(!c.articles.length) return filtres + `<div class="empty">${c.recherche||c.type||c.famille? 'Aucun article ne correspond.' : 'Le catalogue est vide. Importez un fichier ou créez un premier article.'}</div>`;
+  if(!c.articles.length){
+    /* « Le catalogue est vide » sur une page au-delà de la dernière faisait
+       douter de ce qu'il y avait en base. Trois situations, trois phrases — et
+       un bouton quand il y a quelque part où revenir. */
+    const message = c.page > 1
+      ? `Cette page n'existe plus : le catalogue en compte ${c.pages}.`
+      : (c.recherche||c.type||c.famille
+          ? 'Aucun article ne correspond.'
+          : 'Le catalogue est vide. Importez un fichier ou créez un premier article.');
+    const retour = c.page > 1
+      ? `<div style="margin-top:10px;"><button class="btn small" onclick="relancerCatalogue('page', 1)">← Revenir à la première page</button></div>`
+      : '';
+    return filtres + `<div class="empty">${esc(message)}${retour}</div>`;
+  }
 
   const lignes = c.articles.map(a=>`
     <tr${a.actif? '' : ' style="opacity:.55;"'}>
