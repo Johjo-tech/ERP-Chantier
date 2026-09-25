@@ -26,9 +26,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (!admin) return;
-  const { error } = await nt(admin).delete().like("cle", `${MARQUE}%`);
-  if (error) console.warn("Nettoyage des alertes d'essai incomplet :", error);
+  // Chaque société ne voit que ses lignes : chacune retire les siennes.
+  for (const c of [admin, adminBeta]) {
+    if (!c) continue;
+    const { error } = await nt(c).delete().like("cle", `${MARQUE}%`);
+    if (error) console.warn("Nettoyage des alertes d'essai incomplet :", error);
+  }
 });
 
 describe("[proposition] notifications traitées par société", () => {
