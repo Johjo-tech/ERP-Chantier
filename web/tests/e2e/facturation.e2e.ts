@@ -40,11 +40,15 @@ test("situation de travaux : la facture porte l'avancement, le DPGF le cumule", 
   await connexion(page, "admin.alpha@erp.local");
   await page.goto("/chantiers");
   await page.getByRole("link", { name: "Salle de bains Durand" }).click();
-  await page.getByLabel("Désignation").fill("E2E Carrelage mural");
-  await page.getByLabel("Quantité").fill("20");
-  await page.getByLabel("PU HT").fill("45");
-  await page.getByRole("button", { name: "Ajouter" }).last().click();
-  await expect(page.getByRole("cell", { name: "E2E Carrelage mural" })).toBeVisible();
+  await page.getByRole("tab", { name: "DPGF" }).click();
+  const ajout = page.getByRole("form", { name: "Ajouter au DPGF" });
+  await ajout.getByLabel("Désignation").fill("E2E Carrelage mural");
+  await ajout.getByLabel("Quantité").fill("20");
+  await ajout.getByLabel("PU HT").fill("45");
+  await ajout.getByRole("button", { name: "+ Ligne" }).click();
+  // Le DPGF s'édite sur place : la ligne ajoutée se lit dans son champ.
+  const ligne = page.locator("tr", { has: page.locator('input[value="E2E Carrelage mural"]') });
+  await expect(ligne).toBeVisible();
   await page.getByRole("link", { name: "Facturer l'avancement" }).click();
   await page.getByLabel("Avancement cumulé, E2E Carrelage mural").fill("50");
   await expect(page.getByText("Total HT à facturer : 450,00 €")).toBeVisible();
@@ -53,5 +57,6 @@ test("situation de travaux : la facture porte l'avancement, le DPGF le cumule", 
   await expect(page.locator('input[value="E2E Carrelage mural (avancement 0% → 50%)"]')).toBeVisible();
   await page.goBack();
   await page.goBack();
-  await expect(page.getByRole("row", { name: /E2E Carrelage mural/ })).toContainText("50 %");
+  await page.getByRole("tab", { name: "DPGF" }).click();
+  await expect(ligne).toContainText("50 %");
 });

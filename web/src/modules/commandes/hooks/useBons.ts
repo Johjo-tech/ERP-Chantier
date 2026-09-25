@@ -99,7 +99,13 @@ export function useMetiersDisponibles(): string[] {
 function useRecharger() {
   const s = useSocieteActive();
   const qc = useQueryClient();
-  return () => Promise.all([qc.invalidateQueries({ queryKey: clesBons.racine(s.id) }), qc.invalidateQueries({ queryKey: ["factures", s.id] })]);
+  // Rechargement NON attendu par la mutation : un geste qui fait disparaître son propre
+  // bouton (« BC reçu », « Créer la facture ») serait démonté avant son onSuccess, et
+  // TanStack ne le rappellerait plus — la navigation ou le report du numéro se perdaient.
+  return () => {
+    void qc.invalidateQueries({ queryKey: clesBons.racine(s.id) });
+    void qc.invalidateQueries({ queryKey: ["factures", s.id] });
+  };
 }
 
 export interface EnregistrementBon {

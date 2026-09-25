@@ -839,29 +839,28 @@ partagent avec les modules ci-dessus (tâches, prix masqués, numérotation) son
 
 ## Décompte
 
-Relevé le 25/09/2026 d'après le code de `web/src` et les tests. Parité =
-([x] + 0,5 × [~]) / (total − [-]). Les sections 6, 7 et 11 à 17 n'ont pas été revues
-dans ce passage (6 et 7 portent l'état laissé par leur module, 11 à 17 sont hors périmètre).
+Relevé le 25/09/2026, après la vague 1 (sociétés et réglages, chantiers,
+commandes et OCR, facturation et devis, planning), d'après le code de
+`web/src` et les tests. Parité = ([x] + 0,5 × [~]) / (total − [-]).
 
 | Section | Préfixe | [x] | [~] | [-] | [ ] | Total | Parité |
 |---|---|---|---|---|---|---|---|
-| 1. auth-roles | AUTH | 19 | 14 | 0 | 21 | 54 | 48 % |
-| 2. societes | SOC | 9 | 2 | 0 | 12 | 23 | 43 % |
+| 1. auth-roles | AUTH | 31 | 14 | 3 | 6 | 54 | 75 % |
+| 2. societes | SOC | 19 | 1 | 2 | 1 | 23 | 93 % |
 | 3. clients | CLI | 12 | 6 | 0 | 5 | 23 | 65 % |
-| 4. chantiers | CHA | 5 | 8 | 0 | 20 | 33 | 27 % |
-| 5. devis | DEV | 26 | 7 | 0 | 5 | 38 | 78 % |
-| 6. articles | ART | 11 | 1 | 1 | 0 | 13 | 96 % |
-| 7. commandes | BC | 26 | 10 | 1 | 36 | 73 | 43 % |
-| 8. facturation | FAC | 34 | 15 | 0 | 23 | 72 | 58 % |
-| 9. ocr | OCR | 7 | 8 | 0 | 1 | 16 | 69 % |
-| 10. espace-client | ESP | 3 | 1 | 1 | 3 | 8 | 50 % |
-| 11. planning, interventions, rapports | PLN | 0 | 0 | 0 | 24 | 24 | 0 % |
+| 4. chantiers | CHA | 33 | 0 | 0 | 0 | 33 | 100 % |
+| 5. devis | DEV | 37 | 0 | 1 | 0 | 38 | 100 % |
+| 6. articles | ART | 12 | 0 | 1 | 0 | 13 | 100 % |
+| 7. commandes | BC | 68 | 0 | 5 | 0 | 73 | 100 % |
+| 8. facturation | FAC | 65 | 0 | 7 | 0 | 72 | 100 % |
+| 9. ocr | OCR | 15 | 0 | 1 | 0 | 16 | 100 % |
+| 10. espace-client | ESP | 7 | 0 | 1 | 0 | 8 | 100 % |
+| 11. planning, interventions, rapports | PLN | 22 | 1 | 1 | 0 | 24 | 98 % |
 | 12. rh | RH | 0 | 0 | 0 | 13 | 13 | 0 % |
 | 13. vehicules et materiel | VEH | 0 | 0 | 0 | 7 | 7 | 0 % |
 | 14. statistiques et tableaux de bord | STA | 0 | 0 | 0 | 8 | 8 | 0 % |
-| 15. reglages | PAR | 0 | 0 | 0 | 9 | 9 | 0 % |
+| 15. reglages | PAR | 7 | 1 | 1 | 0 | 9 | 94 % |
 | 16. facturation électronique | EFA | 0 | 0 | 0 | 10 | 10 | 0 % |
 | 17. import / export | IMP | 6 | 0 | 0 | 12 | 18 | 33 % |
 | 18. Transversal | TRV | 7 | 4 | 0 | 4 | 15 | 60 % |
-| **Sections revues (1-5, 8-10, 18)** | | **122** | **65** | **1** | **94** | **282** | **55 %** |
-| **Total** | | **165** | **76** | **3** | **213** | **457** | **45 %** |
+| **Total** | | **341** | **27** | **23** | **66** | **457** | **82 %** |
