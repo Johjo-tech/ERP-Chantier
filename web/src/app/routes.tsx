@@ -8,6 +8,7 @@ import { PageFormulaireClient } from "@/modules/clients/components/PageFormulair
 import { PageChantiers } from "@/modules/chantiers/components/PageChantiers";
 import { PageFicheChantier } from "@/modules/chantiers/components/PageFicheChantier";
 import { PageFormulaireChantier } from "@/modules/chantiers/components/PageFormulaireChantier";
+import { lienDevisComplementaire } from "@/modules/chantiers/domain/liens";
 import { PageDevis } from "@/modules/devis/components/PageDevis";
 import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
 import { PageApercuDevis } from "@/modules/devis/components/PageApercuDevis";
@@ -67,10 +68,19 @@ export const routes: RouteObject[] = [
       { path: "chantiers/nouveau", element: <RouteModule module="chantiers" action="creer"><PageFormulaireChantier /></RouteModule> },
       { path: "chantiers/:id", element: <RouteModule module="chantiers">
             <PageFicheChantier
-              complements={(c) => <DevisLies chantierId={c.id} />}
+              complements={(c) => <DevisLies chantierId={c.id} lienNouveau={lienDevisComplementaire(c)} />}
               actionsDpgf={(c) => (
                 <Can module="factures" action="creer">
                   <Button asChild size="sm" variant="secondary"><Link to={`/chantiers/${c.id}/situation`}>Facturer l'avancement</Link></Button>
+                </Can>
+              )}
+              actionsSelection={(c, lignes) => (
+                <Can module="factures" action="creer">
+                  {lignes.length ? (
+                    <Button asChild size="sm"><Link to={`/chantiers/${c.id}/situation?lignes=${lignes.join(",")}`}>Facturer la sélection ({lignes.length})</Link></Button>
+                  ) : (
+                    <Button size="sm" disabled title="Cochez d'abord au moins une ligne à facturer">Facturer la sélection</Button>
+                  )}
                 </Can>
               )}
             />

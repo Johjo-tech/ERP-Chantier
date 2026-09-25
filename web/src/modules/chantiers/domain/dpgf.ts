@@ -35,3 +35,21 @@ export function avancementChantier(lignes: readonly LigneDpgf[]): AvancementChan
   const pourcentage = total.gt(0) ? Number(facture.div(total).times(CENT).round(0, Big.roundHalfUp)) : 0;
   return { total, facture, reste: total.minus(facture), pourcentage };
 }
+
+/**
+ * Les lignes qui portent de l'histoire : déjà facturées en situation, ou dont
+ * une part est planifiée (une tâche pointe vers elles). Elles ne se suppriment
+ * pas, ne se remplacent pas à l'import, et gardent quantité et prix (D-CHA-05).
+ */
+export function lignesFigees(
+  lignes: readonly { id: string; avancement_cumule: number | string }[],
+  taches: readonly { dpgf_ligne_id: string | null }[]
+): Set<string> {
+  const planifiees = new Set(taches.map((t) => t.dpgf_ligne_id).filter((id): id is string => !!id));
+  return new Set(lignes.filter((l) => montant(l.avancement_cumule).gt(0) || planifiees.has(l.id)).map((l) => l.id));
+}
+
+/** Une ligne facturée à 100 % ne se sélectionne plus pour une situation (app.js l. 14020). */
+export function estFactureeEntierement(l: { avancement_cumule: number | string }): boolean {
+  return montant(l.avancement_cumule).gte(CENT);
+}

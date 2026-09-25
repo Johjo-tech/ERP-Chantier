@@ -49,9 +49,13 @@ function FormulaireDevis({ devis, reglages, actions, ChampReference }: PropsForm
   const enregistrer = useEnregistrerDevis(devis?.id);
   const peutEcrire = usePermission("devis", devis ? "modifier" : "creer");
   const lectureSeule = !peutEcrire;
-  const { valeurs, erreurs, changer, valider } = useFormulaire(
-    valeursDepuis(devis, todayISO(), params.get("chantier") ?? "", params.get("client") ?? "")
-  );
+  const { valeurs, erreurs, changer, valider } = useFormulaire({
+    ...valeursDepuis(devis, todayISO(), params.get("chantier") ?? "", params.get("client") ?? ""),
+    // Un devis complémentaire créé depuis la fiche chantier reprend son lieu (CHA-13).
+    ...(!devis && params.get("chantier")
+      ? { adresse_locataire: params.get("adresse") ?? "", code_postal: params.get("cp") ?? "", ville: params.get("ville") ?? "" }
+      : {}),
+  });
   const [lignes, setLignes] = useState<LigneEdition[]>(() =>
     devis?.lignes.length ? devis.lignes.map(depuisBase) : [ligneVide(reglages.tvaDefaut)]
   );

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
 import { Alert } from "@/components/ui/alert";
@@ -26,17 +26,19 @@ export function PageSituation() {
   const facturer = useFacturerSituation();
   const navigate = useNavigate();
   const [saisies, setSaisies] = useState<Record<string, string>>({});
+  // « Facturer la sélection » du DPGF (CHA-06) : seules les lignes cochées, si la fiche en transmet.
+  const [params] = useSearchParams();
+  const selectionBrute = params.get("lignes");
 
-  const lignes: LigneSituation[] = useMemo(
-    () =>
-      (dpgf.data ?? [])
-        .filter((l) => l.type === "ligne" && l.avancement_cumule < 100)
-        .map((l) => {
-          const apres = nouvelAvancement(l.avancement_cumule, saisies[l.id] ?? "");
-          return { dpgfId: l.id, designation: l.designation, avant: montant(l.avancement_cumule), apres, aFacturer: montantAFacturer(l, apres) };
-        }),
-    [dpgf.data, saisies]
-  );
+  const lignes: LigneSituation[] = useMemo(() => {
+    const selection = selectionBrute?.split(",").filter(Boolean) ?? null;
+    return (dpgf.data ?? [])
+      .filter((l) => l.type === "ligne" && l.avancement_cumule < 100 && (!selection || selection.includes(l.id)))
+      .map((l) => {
+        const apres = nouvelAvancement(l.avancement_cumule, saisies[l.id] ?? "");
+        return { dpgfId: l.id, designation: l.designation, avant: montant(l.avancement_cumule), apres, aFacturer: montantAFacturer(l, apres) };
+      });
+  }, [dpgf.data, saisies, selectionBrute]);
 
   if (chantier.isPending || dpgf.isPending) return <Chargement />;
   if (chantier.isError) return <Erreur erreur={chantier.error} reessayer={() => void chantier.refetch()} />;

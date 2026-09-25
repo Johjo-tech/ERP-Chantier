@@ -9,16 +9,17 @@ import { useListeDevis } from "../hooks/useDevis";
 import { BadgeStatutDevis } from "./BadgeStatutDevis";
 
 /** Les devis d'un chantier ou d'un client, sur leur fiche. Rien pour qui ne voit pas les devis. */
-export function DevisLies({ chantierId, clientId }: { chantierId?: string; clientId?: string }) {
+/** `lienNouveau` : la fiche chantier y met client et lieu, pour un devis complémentaire prérempli (CHA-13). */
+export function DevisLies({ chantierId, clientId, lienNouveau }: { chantierId?: string; clientId?: string; lienNouveau?: string }) {
   const autorise = usePermission("devis", "voir");
   if (!autorise) return null;
-  return <Liste chantierId={chantierId} clientId={clientId} />;
+  return <Liste chantierId={chantierId} clientId={clientId} lienNouveau={lienNouveau} />;
 }
 
-function Liste({ chantierId, clientId }: { chantierId?: string | undefined; clientId?: string | undefined }) {
+function Liste({ chantierId, clientId, lienNouveau }: { chantierId?: string | undefined; clientId?: string | undefined; lienNouveau?: string | undefined }) {
   const filtre = chantierId ? { chantierId } : clientId ? { clientId } : {};
   const devis = useListeDevis(filtre);
-  const nouveau = chantierId ? `/devis/nouveau?chantier=${chantierId}` : `/devis/nouveau?client=${clientId ?? ""}`;
+  const nouveau = lienNouveau ?? (chantierId ? `/devis/nouveau?chantier=${chantierId}` : `/devis/nouveau?client=${clientId ?? ""}`);
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
