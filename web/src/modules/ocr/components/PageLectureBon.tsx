@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { messageErreur } from "@/lib/erreurs";
-import { useClients } from "@/modules/clients/hooks/useClients";
+import { useClientsRapprochables } from "@/modules/clients/hooks/useClients";
 import { useFonctionnalite } from "@/modules/societes/hooks/useFonctionnalite";
 import { LectureImpossible } from "../api/extraire";
 import { attenteAnnoncee, ETAPES_AFFICHEES, etatAnnule, etatDelaiDepasse, etatEchec, etatLecture, formaterDuree, LIBELLES_ETAPE, type EtapeLecture, type EtatLecture } from "../domain/lecture";
@@ -40,7 +40,7 @@ function etatDeLEchec(erreur: unknown, ecoule: number): EtatLecture {
  */
 export function PageLectureBon() {
   const ouverte = useFonctionnalite("ocr");
-  const clients = useClients();
+  const clients = useClientsRapprochables();
   const { lecture, ecoule, etape, annuler, reessayer } = useLectureBon();
   if (!ouverte) return <Alert>La lecture automatique des bons n'est pas incluse dans l'abonnement de cette société.</Alert>;
   const enCours = etatLecture(etape, ecoule);

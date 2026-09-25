@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { serieComparee, totalDesMois } from "../domain/indicateurs";
 import { bornesComparaison, bornesDuMois, moisDeLaPeriode, PERIODES_GRAPHIQUE, refusPlage, type Bornes, type PeriodeGraphique } from "../domain/periodes";
 import { useCaParMois } from "../hooks/useStatistiques";
@@ -42,7 +42,7 @@ function Comparaison({ periode, jour }: { periode: PeriodeGraphique; jour: strin
   const serie = serieComparee(ca.data, mois);
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm">Total de la période : <b className="tabular-nums">{formatEuros(serie.total)}</b></p>
+      <p className="text-sm">Total de la période : <b className="tabular-nums">{formatEurosEcran(serie.total)}</b></p>
       <GraphiqueCA serie={serie} />
       <p className="text-xs text-muted-foreground">Factures émises à leur date, avoirs en déduction ; ni brouillons ni factures d'acompte (déjà comprises dans la facture de solde).</p>
     </div>
@@ -73,7 +73,7 @@ function PlageLibre({ jour }: { jour: string }) {
       {retenue && ca.isSuccess && (
         <div aria-live="polite">
           <p className="text-sm text-muted-foreground">Du {formatDateFr(retenue.du)} au {formatDateFr(retenue.au)}</p>
-          <p className="text-3xl font-semibold tabular-nums">{formatEuros(totalDesMois(ca.data).ht)}</p>
+          <p className="text-3xl font-semibold tabular-nums">{formatEurosEcran(totalDesMois(ca.data).ht)}</p>
           <p className="text-sm text-muted-foreground">{pluriel(totalDesMois(ca.data).nb, "facture")}</p>
         </div>
       )}

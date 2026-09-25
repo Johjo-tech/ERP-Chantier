@@ -15,6 +15,10 @@ const api = vi.hoisted(() => ({
   supprimerClient: vi.fn(),
 }));
 vi.mock("../api/clients", () => api);
+vi.mock("../api/communes", () => ({ communesDuCodePostal: vi.fn(async () => []) }));
+// Hors ligne : ni l'annuaire des entreprises ni la Base Adresse Nationale ne sont appelés par les tests.
+vi.mock("../api/annuaire", () => ({ rechercherEntreprise: vi.fn(async () => ({ type: "erreur", code: "NON_TROUVE", message: "Aucun résultat" })) }));
+vi.mock("../api/adresses", () => ({ rechercherAdresse: vi.fn(async () => []), CARACTERES_MINIMUM_ADRESSE: 3 }));
 
 function client(nom: string, extra: Partial<ClientListe> = {}): ClientListe {
   return {

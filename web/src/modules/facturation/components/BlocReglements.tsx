@@ -3,7 +3,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Solde } from "../domain/solde";
 import { useReglementsFacture } from "../hooks/useFactures";
@@ -30,7 +31,7 @@ export function BlocReglements({ solde, soldes, modeParDefaut }: { solde: Solde;
       <CardHeader>
         <CardTitle>Règlements</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Réglé {formatEuros(montant(solde.paye))} sur {formatEuros(montant(totalDu))} — reste dû {formatEuros(montant(solde.reste))}
+          Réglé {formatEurosEcran(montant(solde.paye))} sur {formatEurosEcran(montant(totalDu))} — reste dû {formatEurosEcran(montant(solde.reste))}
         </p>
         {retenueNonEchue && <p className="text-sm text-muted-foreground">Le reste est la retenue de garantie : due à sa levée, elle ne met pas la facture en retard.</p>}
       </CardHeader>

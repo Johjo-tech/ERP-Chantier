@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { couleurAnnotation, fermerZone, pointeDeFleche, COULEUR_CONSTATATION, COULEUR_PRECONISATION } from "./annotation";
 import { avecLeBon, basculerCategorie, dupliquer, placesPhotos, saisieInitiale, type BonSource, type PhotoEdition } from "./assistant";
-import { courrielDuRapport, filtrerRapports, lignesAReprendre, schemaSaisieRapport, signatureClientDemandee, STATUT_DEFAUT, type RapportListe } from "./rapport";
+import { courrielDuRapport, filtrerRapports, schemaSaisieRapport, signatureClientDemandee, STATUT_DEFAUT, type RapportListe } from "./rapport";
 
 const photo = (cle: string, s: Partial<PhotoEdition> = {}): PhotoEdition => ({ cle, id: cle, apercu: `https://x/${cle}.jpg`, dataUrl: null, categorie: null, ...s });
 
@@ -36,15 +36,6 @@ describe("rapport (PLN-20, PLN-21)", () => {
     expect(d.map((p) => p.cle)).toEqual(["a", "a2", "b"]);
     expect(d[1]).toMatchObject({ id: null, dataUrl: "https://x/a.jpg" });
     expect(basculerCategorie(basculerCategorie(photo("a"), "preconisation"), "preconisation").categorie).toBeNull();
-  });
-
-  it("lignes reprises : préconisations, sinon constatations, sinon le métier", () => {
-    expect(lignesAReprendre({ preconisations: "Joint x2\nEnduit x3,5 m²", constatations: "x", metier: null })).toEqual([
-      { designation: "Joint", quantite: 2, unite: "u" },
-      { designation: "Enduit", quantite: 3.5, unite: "m²" },
-    ]);
-    expect(lignesAReprendre({ preconisations: " ", constatations: "Fuite visible", metier: null })).toEqual([{ designation: "Fuite visible", quantite: 1, unite: "u" }]);
-    expect(lignesAReprendre({ preconisations: null, constatations: null, metier: "plomberie" })).toEqual([{ designation: "Plomberie", quantite: 1, unite: "u" }]);
   });
 
   it("liste : émetteur, conducteur, logement, recherche multi-mots (PLN-52)", () => {

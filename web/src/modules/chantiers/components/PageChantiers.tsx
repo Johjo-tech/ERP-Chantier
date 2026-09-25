@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
@@ -106,7 +107,7 @@ export function PageChantiers() {
                   <Td>{c.client_nom || "—"}</Td>
                   <Td>{formatDateFr(c.date_debut)} → {formatDateFr(c.date_fin)}</Td>
                   <Td>{c.conducteur || "—"}</Td>
-                  {voitDpgf && <Td className="text-right tabular-nums">{a ? formatEuros(total) : "—"}</Td>}
+                  {voitDpgf && <Td className="text-right tabular-nums">{a ? formatEurosEcran(total) : "—"}</Td>}
                   {voitDpgf && <Td className="text-right tabular-nums">{a && total.gt(0) ? `${pct} %` : "—"}</Td>}
                   <Td className="text-right tabular-nums">{n?.comptesRendus ?? 0}</Td>
                   {voitDevis && <Td className="text-right tabular-nums">{n?.devis ?? 0}</Td>}

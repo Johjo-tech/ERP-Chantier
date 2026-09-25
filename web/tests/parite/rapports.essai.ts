@@ -10,7 +10,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CONTROLES_PAR_METIER, lignesDesPreconisations, METIERS_RAPPORT, nettoyerLogement, type LogementStatut } from "../../src/modules/interventions/domain/rapport";
+import { CONTROLES_PAR_METIER, METIERS_RAPPORT, nettoyerLogement, type LogementStatut } from "../../src/modules/interventions/domain/rapport";
+// La seule lecture des préconisations, celle du module devis, que la transformation du rapport emprunte (D-CLI-09).
+import { lignesDesPreconisations } from "../../src/modules/devis/domain/preconisations";
 import { generateur } from "./aleatoire";
 
 const g = generateur(11951);

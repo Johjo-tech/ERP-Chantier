@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { BoutonConfirme } from "@/components/ui/confirmation";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { TachePlanifiee } from "../api/planification";
 import { estFactureeEntierement } from "../domain/dpgf";
@@ -90,7 +91,7 @@ function Ligne({ l, brouillon, changer, erreurs, selection, basculer, taches, me
       <Td>
         <Input aria-label="Prix unitaire HT" aria-invalid={!!erreur("prix_unitaire")} inputMode="decimal" className="w-24 text-right" value={b.prix_unitaire} disabled={b.figee} onChange={(e) => changer(l, "prix_unitaire", e.target.value)} />
       </Td>
-      <Td className="text-right tabular-nums">{formatEuros(montant(l.quantite).times(montant(l.prix_unitaire)))}</Td>
+      <Td className="text-right tabular-nums">{formatEurosEcran(montant(l.quantite).times(montant(l.prix_unitaire)))}</Td>
       <Td className="text-right tabular-nums">{nombreFr(l.avancement_cumule)} %</Td>
       <Td>
         <Select aria-label="Métier" className="w-36 text-xs" value={b.metier} onChange={(e) => changer(l, "metier", e.target.value)}>

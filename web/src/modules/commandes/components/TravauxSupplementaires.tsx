@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { peutEcrireTerrain } from "../domain/circuit";
 import { badgeOrigine, lirePrixTravail, QUANTITE_DEFAUT, UNITE_DEFAUT, type Travail } from "../domain/prefacture";
@@ -64,7 +65,7 @@ export function TravauxSupplementaires({ bonId, travaux, circuitOuvert, onResult
             <span>
               {t.libelle} <Badge variant="neutre">{badgeOrigine(t.origine)}</Badge>{" "}
               <span className="text-xs text-muted-foreground">
-                {t.statut === "chiffre" && prix && t.prix_vente_ht !== null ? `${formatEuros(montant(t.prix_vente_ht))} HT` : LIBELLES_STATUT[t.statut]}
+                {t.statut === "chiffre" && prix && t.prix_vente_ht !== null ? `${formatEurosEcran(montant(t.prix_vente_ht))} HT` : LIBELLES_STATUT[t.statut]}
               </span>
             </span>
             <span className="flex items-center gap-2">

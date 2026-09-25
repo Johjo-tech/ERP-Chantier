@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { circuitDuBon, etapeWorkflow, etatPieceDuBon } from "@/modules/commandes/domain/workflow";
 import type { CartePlanning } from "../domain/cartes";
 import { lienTelephone } from "../domain/contacts";
@@ -33,10 +34,10 @@ export function MontantCarte({ carte }: { carte: CartePlanning }) {
   const { voitPrix, role, donnees } = usePlanningContexte();
   if (role === "sous_traitant") {
     const sien = donnees.montantsSousTraitant[carte.bcId];
-    return sien != null ? <p className="font-semibold text-emerald-700">💶 Votre montant : {formatEuros(montant(sien))} HT</p> : <p className="text-muted-foreground">💶 Montant en cours de définition</p>;
+    return sien != null ? <p className="font-semibold text-emerald-700">💶 Votre montant : {formatEurosEcran(montant(sien))} HT</p> : <p className="text-muted-foreground">💶 Montant en cours de définition</p>;
   }
   if (!voitPrix || carte.montant === null) return null;
-  return <p className="text-right font-semibold">{formatEuros(montant(carte.montant))}</p>;
+  return <p className="text-right font-semibold">{formatEurosEcran(montant(carte.montant))}</p>;
 }
 
 export function InfosCarte({ carte, compacte = false }: { carte: CartePlanning; compacte?: boolean }) {

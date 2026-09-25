@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
-import { creerClient, listerClients, lireClient, modifierClient, supprimerClient, usagesDuClient } from "../api/clients";
+import { creerClient, listerClients, listerClientsRapprochables, lireClient, modifierClient, supprimerClient, usagesDuClient } from "../api/clients";
 import { creerInterlocuteur, listerInterlocuteurs, supprimerInterlocuteur } from "../api/interlocuteurs";
 import type { SaisieClient } from "../domain/client";
 import type { SaisieInterlocuteur } from "../domain/interlocuteur";
 
 export const clesClients = {
   liste: (societeId: string) => ["clients", societeId] as const,
+  rapprochables: (societeId: string) => ["clients", societeId, "rapprochables"] as const,
   fiche: (id: string) => ["client", id] as const,
   interlocuteurs: (clientId: string) => ["interlocuteurs", clientId] as const,
 };
@@ -14,6 +15,12 @@ export const clesClients = {
 export function useClients() {
   const societe = useSocieteActive();
   return useQuery({ queryKey: clesClients.liste(societe.id), queryFn: () => listerClients(societe.id) });
+}
+
+/** La lecture légère pour rapprocher un nom lu (OCR) d'une fiche (CLI-32). */
+export function useClientsRapprochables() {
+  const societe = useSocieteActive();
+  return useQuery({ queryKey: clesClients.rapprochables(societe.id), queryFn: () => listerClientsRapprochables(societe.id) });
 }
 
 export function useClient(id: string | undefined) {

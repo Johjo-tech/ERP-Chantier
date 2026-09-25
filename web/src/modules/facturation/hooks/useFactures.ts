@@ -6,13 +6,13 @@ import {
   ajouterReglement, contexteImpression, creerFacture, deverrouillerBrouillon, emettreFacture, listerFactures, lireFacture, modifierBrouillon,
   reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, verrouillerBrouillon,
 } from "../api/factures";
-import { dupliquerFacture, etablirAvoir, factureDepuisDevis, factureDepuisIntervention, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
+import { dupliquerFacture, etablirAvoir, factureDepuisDevis, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
 import { enregistrerReglementGroupe, imputerAvoir, modifierReglement } from "../api/reglements";
 import { soldesDesFactures } from "../api/soldes";
 import type { EnteteAEnregistrer } from "../domain/facture";
 import type { LigneSituation } from "../domain/situation";
 
-const cles = {
+export const clesFactures = {
   racine: (s: string) => ["factures", s] as const,
   liste: (s: string, f: object) => ["factures", s, "liste", f] as const,
   reglements: (s: string) => ["factures", s, "reglements"] as const,
@@ -20,6 +20,7 @@ const cles = {
   fiche: (id: string) => ["facture", id] as const,
 };
 
+const cles = clesFactures;
 export function useFactures(filtre: { chantierId?: string } = {}) {
   const s = useSocieteActive();
   return useQuery({ queryKey: cles.liste(s.id, filtre), queryFn: () => listerFactures(s.id, filtre) });
@@ -141,16 +142,6 @@ export function useModifierReglement() {
 export function useSupprimerReglement() {
   const invalider = useInvalider();
   return useMutation({ mutationFn: supprimerReglement, onSettled: () => invalider() });
-}
-
-/** Un rapport d'intervention devient une facture brouillon (FAC-15). */
-export function useFactureDepuisIntervention() {
-  const s = useSocieteActive();
-  const invalider = useInvalider();
-  return useMutation({
-    mutationFn: ({ interventionId, tvaDefaut }: { interventionId: string; tvaDefaut: number }) => factureDepuisIntervention(s.id, interventionId, tvaDefaut),
-    onSuccess: (id) => invalider(id),
-  });
 }
 
 export function useDupliquerFacture() {

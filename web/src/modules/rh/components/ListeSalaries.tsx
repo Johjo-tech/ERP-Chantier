@@ -8,7 +8,8 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { Input, Select } from "@/components/ui/input";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useMetiers } from "@/modules/reglages/hooks/useReglagesEcran";
 import { absenceEnCours, type Absence } from "../domain/conges";
 import { aVerifier, conformiteRh, motifIncomplet, type SeuilsRh } from "../domain/conformite";
@@ -108,9 +109,9 @@ function CarteSalarie({ s, documents, absences, dossiersLus, seuils, supprimer }
         {droits.sensible && (
           <dl className="text-right text-sm">
             <dt className="text-xs text-muted-foreground">coût chargé</dt>
-            <dd className="font-semibold">{s.coutHoraireCharge != null ? `${formatEuros(montant(s.coutHoraireCharge))}/h` : "—"}</dd>
+            <dd className="font-semibold">{s.coutHoraireCharge != null ? `${formatEurosEcran(montant(s.coutHoraireCharge))}/h` : "—"}</dd>
             <dt className="text-xs text-muted-foreground">salaire net/mois</dt>
-            <dd className="font-semibold">{s.salaireMensuelNet != null ? formatEuros(montant(s.salaireMensuelNet)) : "—"}</dd>
+            <dd className="font-semibold">{s.salaireMensuelNet != null ? formatEurosEcran(montant(s.salaireMensuelNet)) : "—"}</dd>
           </dl>
         )}
       </div>

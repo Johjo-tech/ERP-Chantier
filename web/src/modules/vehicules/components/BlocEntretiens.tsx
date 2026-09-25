@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BoutonConfirme } from "@/components/ui/confirmation";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { trierEntretiens } from "../domain/entretien";
 import { formatKm, type Vehicule } from "../domain/vehicule";
@@ -69,7 +70,7 @@ export function BlocEntretiens({ vehicule }: { vehicule: Vehicule }) {
                       {en.fichier_chemin && <LienFichier chemin={en.fichier_chemin} libelle={`Facture (${en.fichier_nom ?? "fichier"})`} />}
                     </div>
                   </div>
-                  {voitLesPrix && <span className="tabular-nums">{formatEuros(montant(en.montant))}</span>}
+                  {voitLesPrix && <span className="tabular-nums">{formatEurosEcran(montant(en.montant))}</span>}
                   {modifiable && (
                     <>
                       <Button size="sm" variant="ghost" onClick={() => setEnEdition(en.id)} aria-label={`Modifier l'entretien ${en.designation}`}>

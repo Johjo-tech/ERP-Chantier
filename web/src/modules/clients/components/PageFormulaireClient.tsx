@@ -1,4 +1,4 @@
-import { type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { ChampChoix, ChampTexte, ChampZone } from "@/components/formulaire/Champ";
@@ -6,6 +6,7 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
@@ -14,7 +15,10 @@ import { CLE_DELAI_PAR_CADRE, DELAIS_PREREGLES } from "../domain/delais";
 import { adresseElectroniqueParDefaut, completudeClient, phraseManques, sectionsEfactureVisibles } from "../domain/efacture";
 import { chiffres, sirenDuSiret, tvaIntracomFr } from "../domain/identifiants";
 import { SCHEMAS_ADRESSE_ELECTRONIQUE } from "@/modules/societes/domain/societe";
+import { cadreSuggere } from "@/modules/efacture/domain/cadre";
+import { appliquerEtablissement, messageApresRemplissage, type ChampsAnnuaire, type EtablissementTrouve } from "../domain/annuaire";
 import { useClient, useEnregistrerClient } from "../hooks/useClients";
+import { RechercheSiret, SuggestionsAdresse, SuggestionsEntreprise } from "./Annuaire";
 import { ChampsDelai } from "./ChampsDelai";
 import { VillesProposees } from "./VillesProposees";
 
@@ -34,6 +38,11 @@ function FormulaireClient({ client }: { client: Client | null }) {
   const sections = sectionsEfactureVisibles(valeurs.cadre_facturation as Client["cadre_facturation"]);
   const particulier = !sections.includes("immatriculation");
   const adresseProposee = adresseElectroniqueParDefaut(valeurs);
+  // Les services publics ne s'interrogent que sur une saisie de l'utilisateur, jamais à l'ouverture d'une fiche.
+  const [nomTape, setNomTape] = useState(false);
+  const [adresseTapee, setAdresseTapee] = useState(false);
+  const [apresAnnuaire, setApresAnnuaire] = useState<{ texte: string; alerte: boolean } | null>(null);
+  const [cadrePropose, setCadrePropose] = useState<{ cadre: string; motif: string } | null>(null);
   const manques = completudeClient({
     nom: valeurs.nom, adresse: valeurs.adresse, codePostal: valeurs.code_postal, ville: valeurs.ville, siret: valeurs.siret,
     tvaIntracom: valeurs.tva_intracom, adresseElectroniqueValeur: valeurs.adresse_electronique_valeur || adresseProposee?.valeur,
@@ -55,6 +64,21 @@ function FormulaireClient({ client }: { client: Client | null }) {
     const siren = chiffres(valeurs.siren) || sirenDuSiret(valeurs.siret) || "";
     const tva = tvaIntracomFr(siren);
     if (tva) changer("tva_intracom", tva);
+  }
+
+  /** Un établissement choisi dans l'annuaire (CLI-23) : l'identité s'écrase, TVA et adresse électronique ne remplissent que le vide. */
+  function choisirEtablissement(etab: EtablissementTrouve) {
+    const actuels: ChampsAnnuaire = {
+      nom: valeurs.nom, siret: valeurs.siret, siren: valeurs.siren, adresse: valeurs.adresse, code_postal: valeurs.code_postal, ville: valeurs.ville,
+      tva_intracom: valeurs.tva_intracom, adresse_electronique_valeur: valeurs.adresse_electronique_valeur, adresse_electronique_schema: valeurs.adresse_electronique_schema,
+    };
+    for (const [cle, v] of Object.entries(appliquerEtablissement(actuels, etab))) changer(cle as keyof ChampsAnnuaire, v);
+    setNomTape(false);
+    setAdresseTapee(false);
+    setApresAnnuaire(messageApresRemplissage(etab, formatDateFr));
+    // « Acheteur public » : seulement PROPOSÉ — le type de client reste le choix de l'utilisateur.
+    const s = cadreSuggere({ paysCode: valeurs.pays_code, natureJuridique: etab.formeJuridique });
+    setCadrePropose(s && s.cadre !== valeurs.cadre_facturation ? s : null);
   }
 
   function soumettre(e: FormEvent) {
@@ -91,9 +115,33 @@ function FormulaireClient({ client }: { client: Client | null }) {
             onChange={changerCadre}
             options={CADRES_FACTURATION.map((c) => ({ valeur: c.code, libelle: c.libelle }))}
           />
-          {champ("nom", "Nom ou raison sociale", { requis: true })}
+          <ChampTexte
+            libelle="Nom ou raison sociale"
+            valeur={valeurs.nom}
+            onChange={(v) => {
+              changer("nom", v);
+              setNomTape(true);
+              setApresAnnuaire(null);
+            }}
+            erreur={erreurs.nom}
+            requis
+          />
+          {/* Un particulier n'a rien à trouver dans l'annuaire des entreprises (CLI-40). */}
+          <SuggestionsEntreprise saisie={valeurs.nom} actif={nomTape && !particulier} onChoisir={choisirEtablissement} />
           {!particulier && champ("siret", "SIRET", { inputMode: "numeric" })}
           {!particulier && champ("siren", "SIREN", { inputMode: "numeric" })}
+          {!particulier && <RechercheSiret numero={valeurs.siret || valeurs.siren} onChoisir={choisirEtablissement} message={apresAnnuaire} />}
+          {apresAnnuaire && (
+            <p role="status" className={`text-xs sm:col-span-2 ${apresAnnuaire.alerte ? "font-semibold text-destructive" : "text-success"}`}>{apresAnnuaire.texte}</p>
+          )}
+          {cadrePropose && (
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:col-span-2">
+              <span>{cadrePropose.motif} Type suggéré : {CADRES_FACTURATION.find((c) => c.code === cadrePropose.cadre)?.libelle}.</span>
+              <Button type="button" size="sm" variant="outline" onClick={() => { changerCadre(cadrePropose.cadre); setCadrePropose(null); }}>
+                Appliquer ce type
+              </Button>
+            </div>
+          )}
           {!particulier && (
             <div className="flex items-end gap-2 sm:col-span-2">
               <div className="flex-1">{champ("tva_intracom", "N° de TVA intracommunautaire")}</div>
@@ -141,7 +189,27 @@ function FormulaireClient({ client }: { client: Client | null }) {
           <CardTitle>Coordonnées</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">{champ("adresse", "Adresse")}</div>
+          <div className="sm:col-span-2">
+            <ChampTexte
+              libelle="Adresse"
+              valeur={valeurs.adresse}
+              onChange={(v) => {
+                changer("adresse", v);
+                setAdresseTapee(true);
+              }}
+              erreur={erreurs.adresse}
+            />
+          </div>
+          <SuggestionsAdresse
+            saisie={valeurs.adresse}
+            actif={adresseTapee}
+            onChoisir={(a) => {
+              changer("adresse", a.adresse);
+              changer("code_postal", a.codePostal);
+              changer("ville", a.ville);
+              setAdresseTapee(false);
+            }}
+          />
           {champ("code_postal", "Code postal", { inputMode: "numeric" })}
           {champ("ville", "Ville")}
           <VillesProposees codePostal={valeurs.code_postal} ville={valeurs.ville} onChoisir={(v) => changer("ville", v)} />

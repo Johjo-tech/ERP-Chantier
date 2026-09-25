@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
+import { lireTout } from "@/lib/lecture";
 import { analyser } from "@/lib/validation";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
@@ -17,15 +18,20 @@ export type DevisListe = z.infer<typeof schemaListe>[number];
 const schemaTotaux = z.array(z.object({ devis_id: z.string().nullable(), ht: z.number().nullable(), ttc: z.number().nullable() }));
 
 export async function listerDevis(societeId: string, filtre: { chantierId?: string; clientId?: string } = {}) {
-  let requete = supabase()
-    .from("devis")
-    .select("id, numero, client_id, client_nom, chantier_id, date, statut, conducteur, conducteur_id, logement_statut, interlocuteur, ville, adresse_locataire")
-    .eq("societe_id", societeId);
-  if (filtre.chantierId) requete = requete.eq("chantier_id", filtre.chantierId);
-  if (filtre.clientId) requete = requete.eq("client_id", filtre.clientId);
-  const { data, error } = await requete.order("date", { ascending: false }).order("numero", { ascending: false });
-  if (error) throw error;
-  return analyser(schemaListe, data, "liste des devis");
+  // Toute la liste, ou un refus : jamais une liste coupée par le plafond du serveur (TRV-10).
+  return lireTout(
+    (debut, fin) => {
+      let requete = supabase()
+        .from("devis")
+        .select("id, numero, client_id, client_nom, chantier_id, date, statut, conducteur, conducteur_id, logement_statut, interlocuteur, ville, adresse_locataire", { count: "exact" })
+        .eq("societe_id", societeId);
+      if (filtre.chantierId) requete = requete.eq("chantier_id", filtre.chantierId);
+      if (filtre.clientId) requete = requete.eq("client_id", filtre.clientId);
+      return requete.order("date", { ascending: false }).order("numero", { ascending: false }).order("id").range(debut, fin);
+    },
+    schemaListe.element,
+    "liste des devis"
+  );
 }
 
 /** Totaux calculés PAR LA BASE (vue v_devis_totaux) : l'affichage de la liste ne recalcule rien. */

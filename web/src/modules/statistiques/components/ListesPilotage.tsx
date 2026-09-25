@@ -2,7 +2,8 @@ import { Link } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Card } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, ZERO } from "@/lib/money";
+import { ZERO } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { partDuMax } from "../domain/indicateurs";
 import { ACTIVITE_VISIBLE, LIBELLES_ACTIVITE, lienActivite, lienClient, tempsRelatif, TOP_CLIENTS } from "../domain/pilotage";
 import { useActivite, useParClient } from "../hooks/useStatistiques";
@@ -29,7 +30,7 @@ export function ActiviteRecente() {
                     <span className="text-muted-foreground">{[a.client, a.numero].filter(Boolean).join(" · ")}</span>
                   </span>
                   <span className="text-right">
-                    {a.montant && <span className="block font-semibold tabular-nums">{formatEuros(a.montant)}</span>}
+                    {a.montant && <span className="block font-semibold tabular-nums">{formatEurosEcran(a.montant)}</span>}
                     <span className="text-xs text-muted-foreground">{tempsRelatif(a.quand, activite.dataUpdatedAt, formatDateFr)}</span>
                   </span>
                 </Link>
@@ -65,7 +66,7 @@ export function TopClients() {
                       <span className="block h-full rounded-full" style={{ width: `${partDuMax(c.ht, max)}%`, background: COULEUR_COURANTE }} />
                     </span>
                   </span>
-                  <span className="font-semibold tabular-nums">{formatEuros(c.ht)}</span>
+                  <span className="font-semibold tabular-nums">{formatEurosEcran(c.ht)}</span>
                 </Link>
               </li>
             ))}

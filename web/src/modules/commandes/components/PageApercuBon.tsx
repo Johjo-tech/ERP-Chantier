@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { DocumentImprimable } from "@/modules/documents/components/DocumentImprimable";
 import { depuisBase } from "@/modules/documents/domain/lignes";
+import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { useIdentite } from "@/modules/societes/hooks/useIdentite";
 import { versLigneBase } from "../domain/bon";
@@ -16,8 +17,11 @@ export function PageApercuBon() {
   const { id } = useParams();
   const bon = useBon(id);
   const identite = useIdentite();
+  // Le logo vient de l'identité des pièces (seau → data-URL), comme sur le devis et la facture ;
+  // introuvable, le bon s'imprime sans lui plutôt que pas du tout.
+  const documentaire = useIdentiteDocument();
   const prix = useVoitLesPrix();
-  if (bon.isPending || identite.isPending) return <Chargement />;
+  if (bon.isPending || identite.isPending || documentaire.isPending) return <Chargement />;
   if (bon.isError) return <Erreur erreur={bon.error} reessayer={() => void bon.refetch()} />;
   if (identite.isError) return <Erreur erreur={identite.error} reessayer={() => void identite.refetch()} />;
   const b = bon.data;
@@ -34,7 +38,7 @@ export function PageApercuBon() {
           titre={b.bon_commande_parent_id ? "SAV" : "BON DE COMMANDE"}
           numero={b.numero_interne ?? "—"}
           date={b.date_reception ?? b.date}
-          emetteur={{ nom: s.raison_sociale_legale || s.nom, lignes: [s.adresse, [s.code_postal, s.ville].filter(Boolean).join(" "), s.telephone, s.email, s.siret && `SIRET ${s.siret}`] }}
+          emetteur={{ nom: s.raison_sociale_legale || s.nom, logo: documentaire.data?.identite.logo, lignes: [s.adresse, [s.code_postal, s.ville].filter(Boolean).join(" "), s.telephone, s.email, s.siret && `SIRET ${s.siret}`] }}
           destinataire={{ nom: b.client_nom, lignes: [b.interlocuteur && `À l'attention de ${b.interlocuteur}`] }}
           meta={[...metaImpressionBon(b), ...(lieu ? [{ libelle: "Lieu :", valeur: lieu }] : [])]}
           lignes={b.lignes.map(versLigneBase).map(depuisBase)}

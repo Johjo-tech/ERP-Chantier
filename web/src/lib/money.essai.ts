@@ -34,11 +34,11 @@ describe("arrondiCentimes", () => {
 
 describe("formatEuros", () => {
   it("formate à la française avec deux décimales", () => {
-    expect(formatEuros(montant("1234.5"))).toBe("1 234,50 €");
-    expect(formatEuros(montant("-12"))).toBe("-12,00 €");
+    expect(formatEuros(montant("1234.5"))).toBe("1\u202f234,50\u00a0€");
+    expect(formatEuros(montant("-12"))).toBe("-12,00\u00a0€");
   });
 
   it("n'hérite pas du défaut d'arrondi flottant de Intl", () => {
-    expect(formatEuros(montant("1.005"))).toBe("1,01 €");
+    expect(formatEuros(montant("1.005"))).toBe("1,01\u00a0€");
   });
 });

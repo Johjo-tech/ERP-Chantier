@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEuros, ZERO, type Montant } from "@/lib/money";
+import { ZERO, type Montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { partDuMax, type SerieCA } from "../domain/indicateurs";
 
 /**
@@ -65,7 +66,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
                   const h = hauteur(b.m);
                   const montrer = () => setSurvol({ x: ((b.x + barre / 2) / L) * 100, libelle: b.libelle, montant: b.m });
                   return (
-                    <g key={b.cle} tabIndex={0} role="button" aria-label={`${b.libelle} : ${formatEuros(b.m)}`} onMouseEnter={montrer} onFocus={montrer} onMouseLeave={() => setSurvol(null)} onBlur={() => setSurvol(null)} className="cursor-default focus:outline-none">
+                    <g key={b.cle} tabIndex={0} role="button" aria-label={`${b.libelle} : ${formatEurosEcran(b.m)}`} onMouseEnter={montrer} onFocus={montrer} onMouseLeave={() => setSurvol(null)} onBlur={() => setSurvol(null)} className="cursor-default focus:outline-none">
                       {/* Zone de survol plus grande que la barre : on vise la colonne, pas le trait. */}
                       <rect x={b.x} y={HAUT} width={barre} height={utile} fill="transparent" />
                       {h > 0 && <rect x={b.x} y={H - BAS - h} width={barre} height={h} rx={3} fill={b.couleur} opacity={b.opacite} />}
@@ -81,7 +82,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
           <div role="status" className="pointer-events-none absolute top-0 -translate-x-1/2 rounded-md border border-border bg-card px-2 py-1 text-xs shadow" style={{ left: `${survol.x}%` }}>
             <b className="capitalize">{survol.libelle}</b>
             <br />
-            {formatEuros(survol.montant)}
+            {formatEurosEcran(survol.montant)}
           </div>
         )}
       </div>
@@ -93,7 +94,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
           </THead>
           <TBody>
             {points.map((p) => (
-              <Tr key={p.cle}><Td className="capitalize">{p.libelleLong}</Td><Td className="text-right tabular-nums">{formatEuros(p.courant)}</Td><Td className="text-right tabular-nums">{formatEuros(p.precedent)}</Td></Tr>
+              <Tr key={p.cle}><Td className="capitalize">{p.libelleLong}</Td><Td className="text-right tabular-nums">{formatEurosEcran(p.courant)}</Td><Td className="text-right tabular-nums">{formatEurosEcran(p.precedent)}</Td></Tr>
             ))}
           </TBody>
         </Table>

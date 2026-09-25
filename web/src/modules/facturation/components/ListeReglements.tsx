@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { BoutonConfirme } from "@/components/ui/confirmation";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Reglement } from "../api/factures";
 import { libelleModeReglement } from "../domain/reglements";
@@ -35,7 +36,7 @@ export function ListeReglements({ factureId, totalDu, reglements, modeParDefaut 
                 {formatDateFr(r.date)} · {libelleModeReglement(r.mode)} {r.reference && `(${r.reference})`}
               </span>
               <span className="flex items-center gap-2">
-                <span className="tabular-nums">{formatEuros(montant(r.montant))}</span>
+                <span className="tabular-nums">{formatEurosEcran(montant(r.montant))}</span>
                 {peutModifier && r.mode !== "avoir" && r.mode !== "imputation" && (
                   <Button size="sm" variant="ghost" aria-label={`Modifier le règlement du ${formatDateFr(r.date)}`} onClick={() => setEnCours(enCours === r.id ? null : r.id)}>✎</Button>
                 )}

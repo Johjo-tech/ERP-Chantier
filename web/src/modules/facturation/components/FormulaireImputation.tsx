@@ -4,7 +4,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { avoirsImputables, montantImputable } from "../domain/lettrage";
 import type { Solde } from "../domain/solde";
@@ -34,7 +35,7 @@ export function FormulaireImputation({ facture, soldes, fermer }: { facture: Sol
         libelle="Avoir"
         valeur={avoirId}
         onChange={(v) => { setAvoirId(v); setSaisie(""); }}
-        options={avoirs.map((a) => ({ valeur: a.facture_id, libelle: `${a.numero} — disponible ${formatEuros(montant(a.reste))}` }))}
+        options={avoirs.map((a) => ({ valeur: a.facture_id, libelle: `${a.numero} — disponible ${formatEurosEcran(montant(a.reste))}` }))}
       />
       <ChampTexte libelle="Montant imputé" inputMode="decimal" placeholder={propose ? String(propose).replace(".", ",") : ""} valeur={saisie} onChange={setSaisie} erreur={saisie && !lu.success ? "Montant invalide." : undefined} />
       <ChampTexte libelle="Date" type="date" valeur={date} onChange={setDate} />

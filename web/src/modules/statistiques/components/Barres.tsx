@@ -1,4 +1,5 @@
-import { formatEuros, type Montant } from "@/lib/money";
+import { type Montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { COULEUR_COURANTE } from "./GraphiqueCA";
 
 /**
@@ -19,7 +20,7 @@ export function BarresRepartition({ titre, lignes }: { titre: string; lignes: { 
             <span aria-hidden="true" className="h-2.5 overflow-hidden rounded-full bg-muted">
               <span className="block h-full rounded-full" style={{ width: `${l.part}%`, background: COULEUR_COURANTE }} />
             </span>
-            <span className="tabular-nums">{formatEuros(l.ht)} <span className="text-muted-foreground">({l.part} %)</span></span>
+            <span className="tabular-nums">{formatEurosEcran(l.ht)} <span className="text-muted-foreground">({l.part} %)</span></span>
           </li>
         ))}
       </ul>

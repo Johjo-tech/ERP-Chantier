@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant, somme } from "@/lib/money";
+import { montant, somme } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useChantier, useDpgf } from "@/modules/chantiers/hooks/useChantiers";
 import { montantLigneDpgf } from "@/modules/chantiers/domain/dpgf";
 import { REGLAGES_DEFAUT } from "@/modules/societes/domain/reglages";
@@ -69,7 +70,7 @@ export function PageSituation() {
               return (
                 <Tr key={l.dpgfId}>
                   <Td>{l.designation}</Td>
-                  <Td className="text-right tabular-nums">{dpgfLigne ? formatEuros(montantLigneDpgf(dpgfLigne)) : "—"}</Td>
+                  <Td className="text-right tabular-nums">{dpgfLigne ? formatEurosEcran(montantLigneDpgf(dpgfLigne)) : "—"}</Td>
                   <Td className="text-right tabular-nums">{l.avant.toString().replace(".", ",")} %</Td>
                   <Td>
                     <div className="flex items-center gap-1">
@@ -80,14 +81,14 @@ export function PageSituation() {
                       ))}
                     </div>
                   </Td>
-                  <Td className="text-right tabular-nums">{formatEuros(l.aFacturer)}</Td>
+                  <Td className="text-right tabular-nums">{formatEurosEcran(l.aFacturer)}</Td>
                 </Tr>
               );
             })}
           </TBody>
         </Table>
       )}
-      <p className="text-right font-semibold">Total HT à facturer : {formatEuros(total)}</p>
+      <p className="text-right font-semibold">Total HT à facturer : {formatEurosEcran(total)}</p>
       {facturer.isError && <Alert variant="erreur">{messageErreur(facturer.error)}</Alert>}
       <div className="flex gap-2">
         <Button

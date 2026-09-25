@@ -6,7 +6,7 @@ import { depuisBase, lignesPourEnregistrement } from "@/modules/documents/domain
 import { construireModele, type ModeleDocument } from "@/modules/documents/domain/modele";
 import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { enregistrerDevis, listerDevis, lireDevis, supprimerDevis, totauxDesDevis } from "../api/devis";
-import { bonDepuisDevis, devisDepuisIntervention } from "../api/operations";
+import { bonDepuisDevis } from "../api/operations";
 import type { Devis } from "../domain/devis";
 import { pieceDeDevis } from "../domain/impression";
 import type { EnteteAEnregistrer } from "../domain/devis";
@@ -81,16 +81,6 @@ export function useBonDepuisDevis() {
   return useMutation({
     mutationFn: (devisId: string) => bonDepuisDevis(societe.id, devisId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: clesBons.racine(societe.id) }),
-  });
-}
-
-/** Un rapport d'intervention devient un devis brouillon (DEV-17). */
-export function useDevisDepuisIntervention() {
-  const societe = useSocieteActive();
-  const invalider = useInvaliderDevis();
-  return useMutation({
-    mutationFn: ({ interventionId, tvaDefaut }: { interventionId: string; tvaDefaut: number }) => devisDepuisIntervention(societe.id, interventionId, tvaDefaut),
-    onSuccess: (id) => invalider(id),
   });
 }
 

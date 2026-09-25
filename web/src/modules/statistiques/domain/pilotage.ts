@@ -145,9 +145,8 @@ export function lienClient(c: Pick<StatClient, "client_nom">): string {
  */
 export const DESTINATIONS = {
   caEncaisse: "/factures/reglements/tous",
-  // Ni la liste des devis, ni celle des bons, ni le planning ne lisent de filtre
-  // dans l'adresse : ils s'ouvrent entiers (D-STA-07).
-  devisEnAttente: "/devis",
+  // Les listes lisent leurs filtres dans l'adresse (D-CLI-10) : la tuile ouvre ce qu'elle compte.
+  devisEnAttente: "/devis?statut=envoy%C3%A9",
   impayees: "/factures/reglements/par-facture?tri=reste",
   echues: "/factures/reglements/par-facture?etat=en_retard",
   aFacturer: "/facturation/a-facturer",
@@ -157,9 +156,23 @@ export const DESTINATIONS = {
   planning: "/planning",
   maJournee: "/planning/ma-journee",
   pieces: "/pieces",
-  sav: "/commandes",
+  sav: "/commandes?type=sav",
   nouveauRapport: "/rapports/nouveau",
   nouveauDevis: "/devis/nouveau",
   nouvelleFacture: "/factures/nouvelle",
 } as const;
 export type Destination = keyof typeof DESTINATIONS;
+
+/**
+ * Le tableau de bord d'un conducteur rattaché à sa fiche ouvre SES bons (par son id
+ * sur la liste des bons, par son nom sur le planning, qui filtre ainsi) :
+ * le filtre de conducteur s'ajoute à la destination. Sans fiche, l'écran
+ * entier — le tableau le dit déjà (« toute la société »).
+ */
+export function pourLeConducteur(destination: string, valeur: string | null | undefined, cle: "conducteur" | "conducteurId"): string {
+  if (!valeur) return destination;
+  const [chemin, requete = ""] = destination.split("?");
+  const params = new URLSearchParams(requete);
+  params.set(cle, valeur);
+  return `${chemin}?${params.toString()}`;
+}

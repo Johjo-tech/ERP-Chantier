@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { etatDepuisSolde, ETATS_REGLEMENT, facturesParEtat, totalDu, TRIS_REGLEMENT, type CriteresParFacture, type EtatFiltre, type Solde, type TriFactures } from "../domain/solde";
 import { BadgeEtat } from "./BadgeEtat";
 import { DU_A_RECLAMER_EUR } from "../domain/reglements";
@@ -60,7 +61,7 @@ export function VueParFacture({ soldes }: { soldes: readonly Solde[] }) {
             <p className="text-sm text-muted-foreground">{enRetard ? `dont ${enRetard} en retard` : "aucune en retard"}</p>
           </div>
           <div className="text-right">
-            <p className="text-xl font-semibold tabular-nums">{formatEuros(totalDu(lignes))}</p>
+            <p className="text-xl font-semibold tabular-nums">{formatEurosEcran(totalDu(lignes))}</p>
             <p className="text-sm text-muted-foreground">reste à encaisser</p>
           </div>
         </CardContent>
@@ -77,7 +78,7 @@ export function VueParFacture({ soldes }: { soldes: readonly Solde[] }) {
                   {s.numero} · {formatDateFr(s.date)}{s.echeance ? ` · échéance ${formatDateFr(s.echeance)}` : ""}
                 </span>
                 <span className="block text-sm text-muted-foreground">
-                  {formatEuros(montant(s.ttc))} TTC · {formatEuros(montant(s.paye))} encaissé{s.du > DU_A_RECLAMER_EUR ? ` · ${formatEuros(montant(s.du))} dû` : ""}
+                  {formatEurosEcran(montant(s.ttc))} TTC · {formatEurosEcran(montant(s.paye))} encaissé{s.du > DU_A_RECLAMER_EUR ? ` · ${formatEurosEcran(montant(s.du))} dû` : ""}
                 </span>
               </span>
               <span className="flex flex-col items-end gap-1">

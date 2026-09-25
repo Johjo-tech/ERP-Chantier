@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
+import { montantsCherchables } from "@/lib/recherche";
+import { useFiltresAdresse } from "@/lib/useFiltresAdresse";
+import { CLASSE_EN_EVIDENCE, useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
+import { cn } from "@/lib/utils";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { STATUTS_LOGEMENT } from "@/modules/documents/domain/logement";
 import { useConducteurs } from "@/modules/societes/hooks/useConducteurs";
@@ -32,10 +37,16 @@ export function PageDevis() {
   const devis = useListeDevis();
   const totaux = useTotauxDevis();
   const conducteurs = useConducteurs();
-  const [c, setC] = useState<CriteresDevis>(CRITERES_DEVIS_VIDES);
+  // Les filtres vivent dans l'adresse : une tuile du tableau de bord ouvre `/devis?statut=envoyé` (D-CLI-10).
+  const { filtres: c, changer: setC, changerUn } = useFiltresAdresse(CRITERES_DEVIS_VIDES);
+  const recherche = useRechercheDifferee(c.recherche, (q) => changerUn("recherche", q));
   const parDevis = useMemo(() => new Map((totaux.data ?? []).map((t) => [t.devis_id, t])), [totaux.data]);
   const liste = devis.data ?? [];
-  const filtres = filtrerDevis(liste, c);
+  const filtres = filtrerDevis(liste, c, (d) => {
+    const t = parDevis.get(d.id);
+    return t ? montantsCherchables(montant(t.ht), montant(t.ttc)) : [];
+  });
+  const defile = useEntreeDefile("devis", filtres.map((d) => d.id), c.recherche, recherche);
   const filtre = (cle: keyof CriteresDevis) => (v: string) => setC({ ...c, [cle]: v });
   const clients = new Map(liste.filter((d) => d.client_id).map((d) => [d.client_id as string, d.client_nom]));
 
@@ -54,7 +65,7 @@ export function PageDevis() {
       />
       <div className="mb-3 flex flex-wrap gap-2">
         <label htmlFor="recherche-devis" className="sr-only">Rechercher un devis</label>
-        <Input id="recherche-devis" type="search" className="max-w-sm" placeholder="N°, client, conducteur, lieu…" value={c.recherche} onChange={(e) => filtre("recherche")(e.target.value)} />
+        <Input id="recherche-devis" type="search" className="max-w-sm" placeholder="N°, client, conducteur, lieu…" value={recherche.saisie} onChange={(e) => recherche.setSaisie(e.target.value)} onKeyDown={defile.surTouche} />
         <Filtre id="filtre-statut" libelle="Filtrer par statut" valeur={c.statut} onChange={filtre("statut")} options={[{ valeur: "", libelle: "Tous les statuts" }, ...STATUTS_DEVIS.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))]} />
         <Filtre id="filtre-conducteur" libelle="Filtrer par conducteur" valeur={c.conducteur} onChange={filtre("conducteur")} options={[{ valeur: "", libelle: "Tous les conducteurs" }, ...(conducteurs.data ?? []).map((k) => ({ valeur: k.id, libelle: k.actif ? k.nom : `${k.nom} (retiré)` }))]} />
         <Filtre id="filtre-logement" libelle="Filtrer par logement" valeur={c.logement} onChange={filtre("logement")} options={[{ valeur: "", libelle: "Tous les logements" }, ...STATUTS_LOGEMENT.map((s) => ({ valeur: s.code, libelle: s.libelle }))]} />
@@ -86,7 +97,7 @@ export function PageDevis() {
             {filtres.map((d) => {
               const t = parDevis.get(d.id);
               return (
-                <Tr key={d.id}>
+                <Tr key={d.id} id={defile.idDomDe(d.id)} className={cn(defile.enEvidence === d.id && CLASSE_EN_EVIDENCE)}>
                   <Td>
                     <Link to={`/devis/${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link>
                   </Td>
@@ -96,8 +107,8 @@ export function PageDevis() {
                     {d.interlocuteur && <span className="block text-xs text-muted-foreground">{d.interlocuteur}</span>}
                   </Td>
                   <Td><BadgeStatutDevis statut={d.statut} /></Td>
-                  <Td className="text-right tabular-nums">{t ? formatEuros(montant(t.ht)) : "—"}</Td>
-                  <Td className="text-right tabular-nums">{t ? formatEuros(montant(t.ttc)) : "—"}</Td>
+                  <Td className="text-right tabular-nums">{t ? formatEurosEcran(montant(t.ht)) : "—"}</Td>
+                  <Td className="text-right tabular-nums">{t ? formatEurosEcran(montant(t.ttc)) : "—"}</Td>
                 </Tr>
               );
             })}

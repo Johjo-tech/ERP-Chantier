@@ -53,9 +53,9 @@ describe("import du catalogue (ART-05)", () => {
     const table = screen.getByRole("table", { name: "Les 3 premiers articles lus" });
     const lignes = within(table).getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell").map((c) => c.textContent));
     expect(lignes).toEqual([
-      ["A1", 'Tube 1/2"', "Bien", "—", "12,50 €", "10 %"],
-      ["A2", "Réfection", "Prestation", "m²", "30,00 €", "20 %"],
-      ["A3", "Évier(retiré)", "Prestation", "pièce", "5,00 €", "20 %"],
+      ["A1", 'Tube 1/2"', "Bien", "—", "12,50\u00a0€", "10 %"],
+      ["A2", "Réfection", "Prestation", "m²", "30,00\u00a0€", "20 %"],
+      ["A3", "Évier(retiré)", "Prestation", "pièce", "5,00\u00a0€", "20 %"],
     ]);
     await waitFor(() => expect(screen.getByText("à mettre à jour").previousSibling).toHaveTextContent("1"));
     expect(screen.getByText("à créer").previousSibling).toHaveTextContent("2");

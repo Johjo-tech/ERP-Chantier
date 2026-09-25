@@ -1,5 +1,5 @@
 import { ChampTexte } from "@/components/formulaire/Champ";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { LigneEdition } from "@/modules/documents/domain/lignes";
 import { MIN_METIERS_VENTILES } from "../domain/enregistrement";
 import { lignesOntDuContenu, montantDuBon } from "../domain/regles";
@@ -20,7 +20,7 @@ interface Props {
 function NoteLignes({ lignes, ventile }: { lignes: readonly LigneEdition[]; ventile: boolean }) {
   return (
     <p className="text-sm" aria-live="polite">
-      Montant du bon (HT, d'après les lignes) : <strong className="tabular-nums">{formatEuros(montantDuBon(lignes, 0))}</strong>
+      Montant du bon (HT, d'après les lignes) : <strong className="tabular-nums">{formatEurosEcran(montantDuBon(lignes, 0))}</strong>
       {ventile && <span className="block text-xs text-muted-foreground">Le total enregistré est celui des lignes ; la répartition par métier ne sert qu'à ventiler.</span>}
     </p>
   );

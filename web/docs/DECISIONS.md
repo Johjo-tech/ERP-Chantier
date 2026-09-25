@@ -906,6 +906,7 @@ tableau du conducteur, lui, ne regardait que les bons ouverts. Les deux suivent
 désormais la même règle.
 
 ## D-STA-07 — Tuiles vers les écrans, sans filtre dans l'adresse quand l'écran n'en lit pas
+**Remplacée par D-CLI-10** : devis, bons et planning lisent désormais leurs filtres dans l'adresse.
 Liste des devis, des bons et planning ne lisent aucun filtre dans l'URL :
 « Devis en attente », « SAV », « À valider » y ouvrent l'écran entier (le
 libellé de la tuile dit ce qu'on y cherche). Impayés → règlements par facture
@@ -1204,6 +1205,7 @@ l'accès ensuite. L'ouverture révèle à l'admin si une adresse a un compte :
 accepté, l'admin est un utilisateur de confiance de sa société.
 
 ## D-TRV-09 — Fiche du rapport : les boutons des modules devis et facturation
+**Résorbée par D-CLI-09** : une seule voie, `interventions/api/transformations.ts`.
 Montés sur l'aperçu du rapport (`PageApercuRapport`) ; un rapport lié à un
 bon affiche « Facturer par le bon lié » au lieu de « Créer la facture »
 (`factureDepuisIntervention` du module facturation ne connaît pas encore le
@@ -1372,3 +1374,119 @@ chacun leur copie. Parité : `tests/parite/actions.essai.ts` (ancien
 `vite.config.ts` pose `<meta name="version-construite">` (commit Vercel ou git,
 7 caractères, et l'heure de construction À PARIS) ; le menu utilisateur
 l'affiche avec « Copier ». Sans marqueur (serveur de développement) : « inconnue ».
+
+## D-CLI-01 — Annuaire des entreprises : l'API publique, depuis le navigateur, sous le quota
+Même service que l'ancien écran (recherche-entreprises.api.gouv.fr, sans clé,
+CORS ouvert) : aucune donnée sensible ne part, seule la saisie du nom ou du
+numéro. Une file UNIQUE (6 appels/s, 3 en vol, 3 tentatives, `Retry-After`
+lu, succès gardés 5 min) : le quota est par IP. Réponse validée par Zod ;
+règle pure (`interpreterReponse`) séparée de l'appel. Parité : la SOURCE de
+`src/integrations/entreprise.ts` est évaluée avec un `fetch` factice.
+Les services publics (annuaire, BAN, communes) ne sont interrogés qu'après
+une frappe de l'utilisateur, jamais à l'ouverture d'une fiche existante.
+
+## D-CLI-02 — Remplissage depuis l'annuaire : l'identité s'écrase, le reste complète
+Parité `appliquerEtablissement` : nom, adresse, CP, ville, SIRET, SIREN
+écrasés ; TVA et adresse électronique seulement si vides. La fiche client n'a
+ni NAF, ni forme juridique, ni gérant : ces trois-là ne concernent que la
+fiche société (non touchée ici). Entreprise radiée : avertissement qui
+REMPLACE « Champs remplis », jamais de blocage. Personne publique (catégorie
+juridique 4/7) : le type « administration » est PROPOSÉ par un bouton
+(`cadreSuggere`), jamais appliqué seul.
+
+## D-CLI-03 — Identité de l'acheteur recopiée à l'écriture, pas seulement au cadenas
+`rattacherClient` de l'ancien pont posait SIRET, SIREN, TVA, pays, code
+service, code de routage et cadre à CHAQUE écriture de facture, par le NOM.
+Ici par `client_id`, à la création et à chaque modification d'un brouillon
+(`identiteDuClient`), avec la règle du cadenas (SIREN déduit du SIRET, pays
+FR par défaut, cadre NOT NULL jamais effacé). À la création, ce que
+l'appelant fournit l'emporte (un avoir garde l'identité de sa facture) ; à la
+modification, la fiche l'emporte (changer de client change l'acheteur). Une
+valeur vide de la fiche EFFACE l'ancienne (l'ancien `poser` la gardait :
+le SIRET d'un autre client pouvait survivre à un changement de client).
+Devis, bons et rapports n'ont que `client_id` / `client_nom` : rien de plus
+à recopier.
+
+## D-CLI-04 — Mode discret : préférence de session, l'écran se remonte
+Comme l'ancien `state.ghostMode` : non mémorisé (un rechargement le quitte).
+`formatEurosEcran` lit l'état au rendu ; basculer remonte le contenu de la
+page (clé de l'`Outlet`) pour que chaque montant se reformate — une saisie en
+cours dans un formulaire est perdue, comme au `renderTab()` de l'ancien.
+Les pièces (aperçu imprimable, pré-facture, PDF, courriel, domaines) gardent
+`formatEuros` : le document envoyé au client porte ses montants.
+
+## D-CLI-05 — « Fait » de la cloche : une table par société (proposition 20260926120000)
+L'ancien rangeait `notifsTraitees` dans les réglages de la société : écrit
+seulement avec « réglages / modifier », il échouait pour un conducteur ou un
+technicien, et réécrivait tout le JSON des réglages à chaque coche.
+`notifications_traitees` (société, clé) : lecture et ajout par tout membre,
+auteur posé par la base, suppression par `peut_ecrire`. Les clés sont celles
+de l'ancien écran : une reprise de `notifsTraitees` est un simple INSERT.
+
+## D-CLI-06 — La cloche : familles filtrées par le rôle, trois écarts à l'ancien
+Chaque famille n'est lue que si le rôle ouvre l'écran où elle se traite
+(véhicules, RH, dossier RH sous `rh / modifier`, réglages pour les documents
+légaux, bons) : ni requête vouée au refus, ni lien vers une page fermée.
+Écarts assumés, vérifiés par la parité : (1) une habilitation n'est annoncée
+qu'une fois (l'ancien la comptait aussi comme document RH, deux lignes pour
+la même échéance) ; (2) un bon n'est « en retard » que si ses travaux sont
+encore à faire (`statut_workflow` nul ou `en_cours`) — l'ancien sonnait pour
+tout bon à date de fin passée, facturés compris ; (3) les seuils des
+Réglages s'appliquent partout (l'ancien appelait `alertesSalarie` sans eux).
+Libellé des véhicules par la plaque (D-VEH-04).
+
+## D-CLI-07 — Liste tronquée : lecture par pages jusqu'au compte exact
+`lireTout` demande `count: "exact"` et lit par pages (ordre départagé par
+l'id). Un serveur qui plafonne plus bas que la page ne coupe rien : on repart
+de ce qui a été lu. Une lecture qui n'atteint pas le compte (lignes disparues
+pendant la lecture, plafond inattendu) est une ERREUR (`ListeTronquee`),
+dite en français, jamais une liste partielle. Appliqué aux clients,
+chantiers, devis, factures et à la lecture de rapprochement ; les bons
+(`parPages`) et les soldes paginaient déjà. Une table en échec garde ses
+données précédentes et s'annonce (TanStack + `<Erreur>`) ; la cloche nomme
+la famille illisible.
+
+## D-CLI-08 — Recherche : montants et croisement, sans les lignes
+Montants cherchables sous leurs deux écritures (« 1 234,50 € », « 1234.50 ») :
+HT et TTC des devis (`v_devis_totaux`), TTC des factures (`v_facture_solde` ;
+la liste ne porte pas le HT), montant des bons. Le croisement facture ↔ bon
+suit la clé puis la référence client normalisée (parité
+`regles-liens-facture-bc`) et ne sert qu'à CHERCHER ; « 🔎 d'où vient la
+correspondance » est calculé au rendu. Les désignations des lignes ne sont
+pas cherchées depuis les listes (elles n'y sont pas chargées). Entrée fait
+défiler les résultats ; une frappe en attente est d'abord appliquée.
+
+## D-CLI-09 — Rapport → devis / facture : une seule voie (résorbe D-TRV-09)
+`interventions/api/transformations.ts` est gardé (gardes « client du
+répertoire », « rapport lié à un bon », message « déjà transformé ») et
+repris pour l'aperçu : `ActionsTransformation` sert la carte ET l'aperçu,
+libellés unifiés (« Transformer en devis / en facture », « Facturer le bon
+lié »). Il emprunte au module devis `lignesDevisDuRapport` (parité
+`parsePreconisationsEnLignes` : métier brut en repli, comme l'ancien) et
+`nettoyerLogement` ; le lien `intervention_id` part avec l'INSERT (plus
+d'UPDATE séparé). `devisDepuisIntervention`, `factureDepuisIntervention`,
+leurs hooks et `Bouton*DepuisRapport` sont supprimés.
+
+## D-CLI-10 — Filtres dans l'adresse (remplace D-STA-07)
+Devis, bons de commande et planning lisent et écrivent leurs filtres dans
+l'URL (`useFiltresAdresse`, `replace` : une frappe n'empile pas l'historique).
+Tuiles : « Devis en attente » → `/devis?statut=envoyé` (la définition de
+`stats_indicateurs`), « SAV » → `/commandes?type=sav` ; sur le tableau d'un
+conducteur rattaché à sa fiche, SAV et « à valider » portent son conducteur
+(`conducteurId` sur les bons, le NOM sur le planning, qui filtre ainsi).
+« À valider » du pilotage ouvre le planning entier : aucun filtre de l'écran
+ne dit « réalisée non validée ».
+
+## D-CLI-11 — Menu épinglé : la clé de l'ancien écran, le planning replie
+`erp.menu.epingle` (même clé, même valeur « 1 ») dans le stockage du
+navigateur, par `lib/stockage.ts` (stockage refusé → comportement
+d'origine). Non épinglé, le menu se replie de lui-même sur le planning (qui
+reprend la largeur) ; un geste manuel vaut jusqu'au prochain écran. Sur
+mobile, le menu reste un tiroir.
+
+## D-CLI-12 — Formats monétaires exacts
+`formatEuros` rend l'ancien `money()` à l'octet près (U+202F entre milliers,
+U+00A0 avant « € ») : un montant ne se coupe plus en fin de ligne. Le PDF, dont
+la police ne connaît pas U+202F, les convertit déjà (`texteWinAnsi`). L'arrondi
+reste décimal exact avant formatage (1,005 € → 1,01 € ; l'ancien affichait
+1,00 € : seul écart, au demi-centime, déjà admis par D-006).

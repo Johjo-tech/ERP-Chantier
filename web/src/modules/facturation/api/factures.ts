@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { Database } from "@/lib/database.types";
+import { lireTout } from "@/lib/lecture";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
-import { LONGUEUR_SIREN } from "@/modules/clients/domain/identifiants";
+import { identiteDuClient } from "@/modules/clients/api/clients";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import { identiteEmetteur } from "../domain/emetteur";
@@ -11,21 +12,28 @@ import { schemaEnteteFacture, schemaLigneFacture, type EnteteAEnregistrer, type 
 const ENTETE = Object.keys(schemaEnteteFacture.shape).join(", ");
 const LIGNES = "id, position, type, designation, quantite, prix_unitaire, unite, tva, article_reference, commentaire, metier";
 
-const schemaListe = z.array(
-  schemaEnteteFacture.pick({ id: true, numero: true, type_document: true, statut: true, client_id: true, client_nom: true, date: true, echeance: true, chantier_id: true, legacy_id: true, devis_id: true })
-);
-export type FactureListe = z.infer<typeof schemaListe>[number];
+/** Le bon et la référence de commande du client servent au croisement facture ↔ bon (TRV-07). */
+const schemaFactureListe = schemaEnteteFacture.pick({
+  id: true, numero: true, type_document: true, statut: true, client_id: true, client_nom: true, date: true, echeance: true, chantier_id: true, legacy_id: true, devis_id: true,
+  bon_commande_id: true, ref_bon_commande_client: true, occupant: true, adresse_locataire: true,
+});
+export type FactureListe = z.infer<typeof schemaFactureListe>;
 
+/** Toute la liste, ou un refus : jamais une liste coupée par le plafond du serveur (TRV-10). */
 export async function listerFactures(societeId: string, filtre: { chantierId?: string; devisId?: string } = {}) {
-  let q = supabase()
-    .from("factures")
-    .select("id, numero, type_document, statut, client_id, client_nom, date, echeance, chantier_id, legacy_id, devis_id")
-    .eq("societe_id", societeId);
-  if (filtre.chantierId) q = q.eq("chantier_id", filtre.chantierId);
-  if (filtre.devisId) q = q.eq("devis_id", filtre.devisId);
-  const { data, error } = await q.order("date", { ascending: false });
-  if (error) throw error;
-  return analyser(schemaListe, data, "liste des factures");
+  return lireTout(
+    (debut, fin) => {
+      let q = supabase()
+        .from("factures")
+        .select("id, numero, type_document, statut, client_id, client_nom, date, echeance, chantier_id, legacy_id, devis_id, bon_commande_id, ref_bon_commande_client, occupant, adresse_locataire", { count: "exact" })
+        .eq("societe_id", societeId);
+      if (filtre.chantierId) q = q.eq("chantier_id", filtre.chantierId);
+      if (filtre.devisId) q = q.eq("devis_id", filtre.devisId);
+      return q.order("date", { ascending: false }).order("id").range(debut, fin);
+    },
+    schemaFactureListe,
+    "liste des factures"
+  );
 }
 
 export const schemaReglement = z.object({
@@ -89,9 +97,11 @@ export async function creerFacture(
     .single();
   if (societe.error) throw societe.error;
   const identite = entete.emetteur_nom ? {} : identiteEmetteur(societe.data);
+  // L'identité de l'acheteur est recopiée de sa fiche (CLI-26) ; ce que l'appelant fournit l'emporte (un avoir reprend celle de sa facture).
+  const acheteur = (await identiteDuClient(entete.client_id)) ?? {};
   const { data, error } = await client
     .from("factures")
-    .insert({ ...entete, ...identite, conducteur: null, statut: "brouillon", societe_id: societeId })
+    .insert({ ...acheteur, ...entete, ...identite, conducteur: null, statut: "brouillon", societe_id: societeId })
     .select("id")
     .single();
   if (error) throw error;
@@ -105,7 +115,9 @@ export async function creerFacture(
 
 export async function modifierBrouillon(id: string, entete: EnteteAEnregistrer, lignes: readonly LigneAEnregistrer[]): Promise<void> {
   // Le déclencheur factures_entete_figee refuserait de toute façon une facture numérotée.
-  const { error } = await supabase().from("factures").update({ ...entete, conducteur: null }).eq("id", id).is("numero", null);
+  // Changer de client change l'identité de l'acheteur : relue sur sa fiche (CLI-26).
+  const acheteur = (await identiteDuClient(entete.client_id)) ?? {};
+  const { error } = await supabase().from("factures").update({ ...entete, ...acheteur, conducteur: null }).eq("id", id).is("numero", null);
   if (error) throw error;
   await synchroniserLignes("facture_lignes", "facture_id", id, lignes);
 }
@@ -147,27 +159,12 @@ export async function supprimerReglement(id: string) {
  */
 export async function verrouillerBrouillon(societeId: string, f: { id: string; client_id: string | null }): Promise<void> {
   const db = supabase();
-  const [societe, client] = await Promise.all([
+  const [societe, acheteur] = await Promise.all([
     db.from("societes").select("nom, raison_sociale_legale, adresse, code_postal, ville, siret, siren, tva_intracom, pays_code, iban").eq("id", societeId).single(),
-    f.client_id
-      ? db.from("clients").select("siret, siren, tva_intracom, pays_code, code_routage, code_service, cadre_facturation").eq("id", f.client_id).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
+    identiteDuClient(f.client_id),
   ]);
   if (societe.error) throw societe.error;
-  if (client.error) throw client.error;
-  const c = client.data;
-  const identiteClient = c
-    ? {
-        client_siret: c.siret,
-        client_siren: c.siren ?? (c.siret ? c.siret.slice(0, LONGUEUR_SIREN) : null),
-        client_tva_intracom: c.tva_intracom,
-        client_pays_code: c.pays_code ?? "FR",
-        client_code_routage: c.code_routage,
-        client_code_service: c.code_service,
-        // NOT NULL en base : un client sans cadre ne l'efface pas.
-        ...(c.cadre_facturation ? { cadre_facturation: c.cadre_facturation } : {}),
-      }
-    : {};
+  const identiteClient = acheteur ?? {};
   const { error } = await db
     .from("factures")
     .update({ verrouillee: true, ...identiteEmetteur(societe.data), ...identiteClient })
