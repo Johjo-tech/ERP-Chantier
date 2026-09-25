@@ -1,37 +1,60 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { correspond } from "@/lib/recherche";
 import { useBonsLiables } from "../hooks/useRapports";
 
 const SUGGESTIONS_MAX = 8;
+/** Le temps de laisser partir le clic sur une suggestion avant que la perte du focus ne la cache (`onblur` de l'ancien). */
+const DELAI_FERMETURE_MS = 180;
 
 /**
- * Chercher un bon à lier : n°, adresse, n° de logement (`lienWidgetHTML`).
- * Seuls les bons du client du rapport sont proposés, comme l'ancien écran.
+ * Chercher un bon à lier : n°, adresse, n° de logement (`lienWidgetHTML`,
+ * `searchLienCandidat`). Seuls les bons du client du rapport sont proposés,
+ * comme l'ancien écran ; les suggestions s'ouvrent au focus.
  */
-export function LienBon({ clientId, clientNom, onChoisir, onAnnuler }: { clientId: string | null; clientNom: string; onChoisir: (bcId: string) => void; onAnnuler: () => void }) {
+export function LienBon({ rapportId, clientId, clientNom, onChoisir, onAnnuler }: { rapportId: string; clientId: string | null; clientNom: string; onChoisir: (bcId: string) => void; onAnnuler: () => void }) {
   const bons = useBonsLiables();
   const [recherche, setRecherche] = useState("");
+  const [ouvert, setOuvert] = useState(false);
   const candidats = (bons.data ?? [])
     .filter((b) => (clientId ? b.client_id === clientId : !clientNom || b.client_nom === clientNom))
     .filter((b) => correspond(recherche, b.numero_bc, b.numero_interne, b.client_nom, b.adresse, b.code_postal, b.ville, b.numero_logement))
     .slice(0, SUGGESTIONS_MAX);
   return (
-    <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-      <label className="sr-only" htmlFor={`lien-${clientNom}`}>Rechercher un bon de commande</label>
-      <Input id={`lien-${clientNom}`} autoFocus placeholder="Rechercher un bon de commande : n°, adresse, n° logement…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
-      <ul className="flex flex-col rounded-md border">
-        {candidats.map((b) => (
-          <li key={b.id}>
-            <button type="button" className="w-full px-2 py-1 text-left text-sm hover:bg-muted" onClick={() => onChoisir(b.id)}>
-              <b>{b.numero_bc || b.numero_interne || "—"}</b> <span className="text-muted-foreground">{b.client_nom}{b.adresse ? ` — ${b.adresse}` : ""}{b.numero_logement ? ` · N° ${b.numero_logement}` : ""}</span>
-            </button>
-          </li>
-        ))}
-        {!candidats.length && <li className="px-2 py-1 text-sm text-muted-foreground">Aucun résultat</li>}
-      </ul>
-      <Button variant="ghost" size="sm" className="self-start" onClick={onAnnuler}>Annuler</Button>
+    <div onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
+      <input
+        type="text"
+        id={`lienSearch-${rapportId}`}
+        aria-label="Rechercher un bon de commande"
+        placeholder="Rechercher un bon de commande : n°, adresse, n° logement…"
+        autoComplete="off"
+        style={{ width: "100%" }}
+        value={recherche}
+        onChange={(e) => {
+          setRecherche(e.target.value);
+          setOuvert(true);
+        }}
+        onFocus={() => setOuvert(true)}
+        onBlur={() => window.setTimeout(() => setOuvert(false), DELAI_FERMETURE_MS)}
+      />
+      <div id={`lienSuggest-${rapportId}`} className="suggest-box" style={{ display: ouvert ? "block" : "none" }}>
+        {candidats.length ? (
+          candidats.map((b) => (
+            <div key={b.id} className="suggest-item" role="option" aria-selected={false} onMouseDown={() => onChoisir(b.id)}>
+              <b>{b.numero_bc || b.numero_interne || "—"}</b>
+              <small>
+                {b.client_nom}
+                {b.adresse ? ` — ${b.adresse}` : ""}
+                {b.numero_logement ? ` · N° ${b.numero_logement}` : ""}
+              </small>
+            </div>
+          ))
+        ) : (
+          <div className="suggest-empty">Aucun résultat</div>
+        )}
+      </div>
+      <button type="button" className="btn small ghost" style={{ marginTop: "4px" }} onClick={onAnnuler}>
+        Annuler
+      </button>
     </div>
   );
 }

@@ -1,5 +1,4 @@
-import { useId, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useRef, useState } from "react";
 import { Croquis } from "@/modules/planning/components/Croquis";
 import { compresserPhoto } from "@/modules/planning/components/image";
 import { basculerCategorie, dupliquer, placesPhotos, type PhotoEdition } from "../domain/assistant";
@@ -7,6 +6,9 @@ import { PHOTOS_MAX, signatureClientDemandee, type LogementStatut } from "../dom
 import { AnnotationPhoto } from "./AnnotationPhoto";
 
 const ENCRE_SIGNATURE = "#182233";
+/** Le pavé de signature de l'ancien écran (`sigCanvas`, 500 × 150). */
+const TOILE_SIGNATURE = { largeur: 500, hauteur: 150 };
+const EFFACER = { libelle: "Effacer la signature", classe: "btn small", style: { marginTop: "8px" } };
 
 export interface SignaturesEdition {
   /** `undefined` : inchangée (on garde celle en base). */
@@ -36,12 +38,12 @@ async function lireEnDataUrl(f: File): Promise<string> {
 }
 
 /**
- * Étape 3 — photos (trois au plus, classées constatation ou préconisation,
+ * Étape 3 (`stepPhotosHTML`) — photos (trois au plus, classées constatation ou préconisation,
  * dupliquées, annotées) et signatures. Pas de signature du client dans un
  * logement vacant ni une partie commune : personne n'est là pour signer (PLN-21).
  */
 export function EtapePhotos({ photos, onPhotos, signatures, signaturesExistantes, onSignatures, logement, onMessage }: Props) {
-  const idFichier = useId();
+  const champ = useRef<HTMLInputElement>(null);
   const [annotee, setAnnotee] = useState<PhotoEdition | null>(null);
   const ajouter = async (fichiers: FileList | null) => {
     const liste = Array.from(fichiers ?? []);
@@ -56,41 +58,38 @@ export function EtapePhotos({ photos, onPhotos, signatures, signaturesExistantes
   const remplacer = (p: PhotoEdition) => onPhotos(photos.map((x) => (x.cle === p.cle ? p : x)));
 
   return (
-    <div className="flex flex-col gap-4">
-      <section aria-label="Photos de l'intervention" className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold">Photos de l'intervention ({PHOTOS_MAX} maximum)</h3>
-        <ul className="flex flex-wrap gap-3">
+    <>
+      <div className="field full">
+        <label>Photos de l'intervention ({PHOTOS_MAX} maximum)</label>
+        <input ref={champ} type="file" id="photoFileInput" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => void ajouter(e.target.files).catch((err: unknown) => onMessage(err instanceof Error ? err.message : "Photo illisible.")).finally(() => (e.target.value = ""))} />
+        <div className="photo-grid">
           {photos.map((p, i) => (
-            <li key={p.cle} className="flex w-40 flex-col gap-1">
-              <button type="button" onClick={() => setAnnotee(p)} title="Cliquer pour annoter">
-                <img src={p.apercu} alt={`Photo ${i + 1}${p.categorie ? ` (${p.categorie === "constatation" ? "constatation" : "préconisation"})` : ""}`} className="h-28 w-40 rounded-md border object-cover" />
-              </button>
-              <div className="flex flex-wrap gap-1">
-                <Button size="sm" variant={p.categorie === "constatation" ? "default" : "outline"} aria-pressed={p.categorie === "constatation"} className="h-6 px-1 text-[11px]" onClick={() => remplacer(basculerCategorie(p, "constatation"))}>🔴 Constat.</Button>
-                <Button size="sm" variant={p.categorie === "preconisation" ? "default" : "outline"} aria-pressed={p.categorie === "preconisation"} className="h-6 px-1 text-[11px]" onClick={() => remplacer(basculerCategorie(p, "preconisation"))}>🟢 Préco</Button>
-                <Button size="sm" variant="ghost" className="h-6 px-1 text-[11px]" aria-label={`Dupliquer la photo ${i + 1}`} disabled={photos.length >= PHOTOS_MAX} onClick={() => onPhotos(dupliquer(photos, p.cle, crypto.randomUUID()))}>⧉</Button>
-                <Button size="sm" variant="ghost" className="h-6 px-1 text-[11px]" aria-label={`Retirer la photo ${i + 1}`} onClick={() => onPhotos(photos.filter((x) => x.cle !== p.cle))}>✕</Button>
+            <div key={p.cle} className={`photo-thumb photo-thumb-${p.categorie ?? ""}`}>
+              <img src={p.apercu} alt={`Photo ${i + 1}`} onClick={() => setAnnotee(p)} style={{ cursor: "pointer" }} title="Cliquer pour annoter (flèche, carré)" />
+              <button type="button" className="photo-remove-btn" aria-label={`Retirer la photo ${i + 1}`} onClick={() => onPhotos(photos.filter((x) => x.cle !== p.cle))}>✕</button>
+              <button type="button" className="photo-duplicate-btn" aria-label={`Dupliquer la photo ${i + 1}`} onClick={() => (photos.length >= PHOTOS_MAX ? onMessage("Maximum 3 photos par intervention.") : onPhotos(dupliquer(photos, p.cle, crypto.randomUUID())))} title="Dupliquer cette photo">⧉</button>
+              {p.categorie && <span className={`photo-categorie-badge photo-categorie-${p.categorie}`}>{p.categorie === "constatation" ? "Constatation" : "Préconisation"}</span>}
+              <div className="photo-categorie-choix">
+                <button type="button" className="photo-cat-btn photo-cat-constatation" aria-pressed={p.categorie === "constatation"} onClick={() => remplacer(basculerCategorie(p, "constatation"))} title="Marquer comme photo de constatation">🔴 Constat.</button>
+                <button type="button" className="photo-cat-btn photo-cat-preco" aria-pressed={p.categorie === "preconisation"} onClick={() => remplacer(basculerCategorie(p, "preconisation"))} title="Marquer comme photo de préconisation">🟢 Préco</button>
               </div>
-            </li>
+            </div>
           ))}
-        </ul>
-        {photos.length < PHOTOS_MAX && (
-          <div>
-            <label htmlFor={idFichier} className="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted">📷 Ajouter une photo</label>
-            <input id={idFichier} type="file" accept="image/*" capture="environment" multiple className="sr-only" onChange={(e) => void ajouter(e.target.files).catch((err: unknown) => onMessage(err instanceof Error ? err.message : "Photo illisible."))} />
-          </div>
-        )}
-      </section>
+          {photos.length < PHOTOS_MAX && (
+            <div className="photo-add" role="button" tabIndex={0} aria-label="Ajouter une photo" onClick={() => champ.current?.click()} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && champ.current?.click()} title="Ajouter une photo">+</div>
+          )}
+        </div>
+      </div>
       {signatureClientDemandee(logement) && (
-        <section aria-label="Signature client" className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold">Signature client</h3>
-          <Croquis libelle="Signature du client" couleur={ENCRE_SIGNATURE} valeur={signatures.client === undefined ? signaturesExistantes.client : signatures.client} onChange={(v) => onSignatures({ ...signatures, client: v })} />
-        </section>
+        <div className="field full" style={{ marginTop: "16px" }}>
+          <label>Signature client</label>
+          <Croquis {...TOILE_SIGNATURE} id="sigCanvas" enveloppe="sig-wrap" libelle="Signature du client" couleur={ENCRE_SIGNATURE} valeur={signatures.client === undefined ? signaturesExistantes.client : signatures.client} onChange={(v) => onSignatures({ ...signatures, client: v })} effacer={EFFACER} />
+        </div>
       )}
-      <section aria-label="Signature du technicien" className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold">Signature du technicien</h3>
-        <Croquis libelle="Signature du technicien" couleur={ENCRE_SIGNATURE} valeur={signatures.technicien === undefined ? signaturesExistantes.technicien : signatures.technicien} onChange={(v) => onSignatures({ ...signatures, technicien: v })} />
-      </section>
+      <div className="field full" style={{ marginTop: "16px" }}>
+        <label>Signature du technicien</label>
+        <Croquis {...TOILE_SIGNATURE} id="sigCanvasTech" enveloppe="sig-wrap" libelle="Signature du technicien" couleur={ENCRE_SIGNATURE} valeur={signatures.technicien === undefined ? signaturesExistantes.technicien : signatures.technicien} onChange={(v) => onSignatures({ ...signatures, technicien: v })} effacer={EFFACER} />
+      </div>
       {annotee && (
         <AnnotationPhoto
           image={annotee.dataUrl ?? annotee.apercu}
@@ -102,6 +101,6 @@ export function EtapePhotos({ photos, onPhotos, signatures, signaturesExistantes
           }}
         />
       )}
-    </div>
+    </>
   );
 }

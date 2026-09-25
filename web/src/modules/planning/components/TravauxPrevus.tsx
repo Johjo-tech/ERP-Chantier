@@ -30,21 +30,26 @@ export function TravauxPrevus({ carte }: { carte: CartePlanning }) {
   const total = blocs.reduce((n, b) => n + b.lignes.length, 0);
   if (!total) return null;
   return (
-    <section aria-label="Travaux prévus au bon" className="rounded-md border bg-muted/30 p-2 text-sm">
-      <h3 className="mb-1 font-semibold">📋 Travaux prévus au bon — {total} ligne{total > 1 ? "s" : ""}</h3>
+    <div className="wf-travaux">
+      <div className="wf-travaux-titre">
+        📋 Travaux prévus au bon — {total} ligne{total > 1 ? "s" : ""}
+      </div>
       {blocs.map((bloc, i) => (
         <div key={`${bloc.chapitre ?? ""}-${i}`}>
-          {bloc.chapitre && <p className="mt-1 text-xs font-semibold uppercase text-muted-foreground">{bloc.chapitre}</p>}
-          <ul className="ml-3 list-disc">
-            {bloc.lignes.map((l, j) => (
-              <li key={j} className={l.type === "commentaire" ? "italic text-muted-foreground" : undefined}>
-                {l.designation}
-                {quantiteLisible(l.qte ?? null, l.unite ?? null) && <span className="ml-2 text-xs text-muted-foreground">{quantiteLisible(l.qte ?? null, l.unite ?? null)}</span>}
-              </li>
-            ))}
+          {bloc.chapitre && <div className="wf-travaux-chapitre">{bloc.chapitre}</div>}
+          <ul className="wf-travaux-liste">
+            {bloc.lignes.map((l, j) => {
+              const q = quantiteLisible(l.qte ?? null, l.unite ?? null);
+              return (
+                <li key={j} className={l.type === "commentaire" ? "wf-travaux-note" : undefined}>
+                  <span>{l.designation}</span>
+                  {q && <span className="wf-travaux-qte">{q}</span>}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
-    </section>
+    </div>
   );
 }

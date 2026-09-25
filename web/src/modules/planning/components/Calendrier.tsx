@@ -1,6 +1,4 @@
-import { useState } from "react";
 import { todayISO } from "@/lib/dates";
-import { cn } from "@/lib/utils";
 import { useOptionsFeries } from "@/modules/societes/hooks/useFeries";
 import { estFerie, estNonOuvre, HEURE_PAUSE, HEURES_PLANNING, joursDeLaSemaine, libelleSemaine, lundiDe, semainesAffichees, type JourDeSemaine } from "../domain/calendrier";
 import type { CartePlanning } from "../domain/cartes";
@@ -8,7 +6,7 @@ import { cartesDuJour } from "../domain/filtres";
 import { heureDeLaCase, placementDuJour } from "../domain/grille";
 import { usePlanningContexte } from "./contexte";
 import { CartePosee } from "./CartePosee";
-import { HAUTEUR_CASE } from "./Poignee";
+import { RANGEE } from "./format";
 
 interface Props {
   cartes: CartePlanning[];
@@ -17,46 +15,83 @@ interface Props {
   onGlisser: (c: CartePlanning | null) => void;
 }
 
+const INDICE_PAUSE = (HEURES_PLANNING as readonly number[]).indexOf(HEURE_PAUSE);
+const deuxChiffres = (h: number) => String(h).padStart(2, "0");
+
 function ColonneJour({ jour, cartes, glissee, onGlisser }: { jour: JourDeSemaine; cartes: CartePlanning[]; glissee: CartePlanning | null; onGlisser: (c: CartePlanning | null) => void }) {
   const { peutPlanifier, poser } = usePlanningContexte();
-  const [survol, setSurvol] = useState<number | null>(null);
-  const duJour = cartesDuJour(cartes, jour.iso);
   const feries = useOptionsFeries();
   const ferie = estFerie(jour.iso, feries);
   return (
-    <div data-jour={jour.iso} className={cn("min-w-32 flex-1 border-l", estNonOuvre(jour.iso, feries) && "bg-muted/60")}>
-      <div className={cn("h-12 border-b px-1 text-center text-xs", jour.iso === todayISO() && "bg-primary/10 font-semibold")}>
+    <div className={`planning-daycol ${estNonOuvre(jour.iso, feries) ? "is-non-ouvre" : ""}`} data-iso={jour.iso}>
+      <div className={`planning-day-head ${jour.iso === todayISO() ? "is-today" : ""}`}>
         {jour.libelle}
         <br />
-        <b>{jour.numero} {jour.mois}</b>
-        {ferie && <span className="block text-[10px]">Férié</span>}
+        <b>
+          {jour.numero} {jour.mois}
+        </b>
+        {ferie && (
+          <>
+            <br />
+            <span style={{ fontSize: "9.5px" }}>Férié</span>
+          </>
+        )}
       </div>
-      <div className="relative" style={{ height: HEURES_PLANNING.length * HAUTEUR_CASE }}>
+      <div className="planning-day-grid" style={{ height: `calc(${HEURES_PLANNING.length} * ${RANGEE})` }}>
         {HEURES_PLANNING.map((h, i) => (
           <div
             key={h}
-            aria-hidden="true"
-            className={cn("absolute inset-x-0 border-b border-dashed", h === HEURE_PAUSE && "bg-muted", survol === i && "bg-primary/20")}
-            style={{ top: i * HAUTEUR_CASE, height: HAUTEUR_CASE }}
+            className={`planning-hour-row ${h === HEURE_PAUSE ? "is-pause" : ""}`}
+            style={{ top: `calc(${i} * ${RANGEE})`, height: `calc(${RANGEE})` }}
             onDragOver={(e) => {
               if (!peutPlanifier) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = "move";
-              setSurvol(i);
+              e.currentTarget.classList.add("drag-over");
             }}
-            onDragLeave={() => setSurvol(null)}
+            onDragLeave={(e) => e.currentTarget.classList.remove("drag-over")}
             onDrop={(e) => {
               e.preventDefault();
-              setSurvol(null);
+              e.currentTarget.classList.remove("drag-over");
               const id = e.dataTransfer.getData("text/plain");
-              const carte = glissee?.id === id || !id ? glissee : cartes.find((c) => c.id === id) ?? glissee;
+              const carte = glissee?.id === id || !id ? glissee : (cartes.find((c) => c.id === id) ?? glissee);
               onGlisser(null);
               if (carte) poser(carte, jour.iso, heureDeLaCase(i));
             }}
           />
         ))}
-        {duJour.map((c) => (
+        {cartesDuJour(cartes, jour.iso).map((c) => (
           <CartePosee key={`${c.id}|${jour.iso}`} carte={c} jour={jour.iso} placement={placementDuJour(c, jour.iso)} onGlisser={onGlisser} />
+        ))}
+        {INDICE_PAUSE >= 0 && <div className="planning-pause-overlay" style={{ top: `calc(${INDICE_PAUSE} * ${RANGEE})`, height: `calc(${RANGEE})` }} />}
+      </div>
+    </div>
+  );
+}
+
+/** Une semaine (`renderWeekBlockHTML`) : colonne des heures, puis un jour par colonne. */
+function Semaine({ lundi, cartes, glissee, onGlisser }: { lundi: string } & Omit<Props, "premierLundi">) {
+  const cetteSemaine = lundi === lundiDe(todayISO());
+  return (
+    <div className="planning-week-block" data-week={lundi}>
+      <div className={`planning-week-label ${cetteSemaine ? "is-current-week" : ""}`}>
+        {libelleSemaine(lundi)}
+        {cetteSemaine ? " · cette semaine" : ""}
+      </div>
+      <div className="planning-calendar">
+        <div className="planning-hourcol">
+          <div className="planning-hourcol-spacer" />
+          {HEURES_PLANNING.map((h) => (
+            <div key={h} className={`planning-hour-tick ${h === HEURE_PAUSE ? "is-pause" : ""}`} style={{ height: `calc(${RANGEE})` }}>
+              {deuxChiffres(h)}:00
+            </div>
+          ))}
+          <div className="planning-hour-tick" style={{ height: 0, borderBottom: "none", paddingTop: 0 }}>
+            17:00
+          </div>
+        </div>
+        {joursDeLaSemaine(lundi).map((j) => (
+          <ColonneJour key={j.iso} jour={j} cartes={cartes} glissee={glissee} onGlisser={onGlisser} />
         ))}
       </div>
     </div>
@@ -65,30 +100,13 @@ function ColonneJour({ jour, cartes, glissee, onGlisser }: { jour: JourDeSemaine
 
 /** Six semaines de grille, heures 8-16 avec la pause de midi, week-ends et fériés grisés (PLN-02). */
 export function Calendrier({ cartes, premierLundi, glissee, onGlisser }: Props) {
-  const cetteSemaine = lundiDe(todayISO());
   return (
-    <div className="flex flex-col gap-4 overflow-x-auto">
-      {semainesAffichees(premierLundi).map((lundi) => (
-        <section key={lundi} aria-label={`Semaine du ${libelleSemaine(lundi)}`}>
-          <h2 className={cn("mb-1 text-sm font-semibold", lundi === cetteSemaine && "text-primary")}>
-            {libelleSemaine(lundi)}
-            {lundi === cetteSemaine && " · cette semaine"}
-          </h2>
-          <div className="flex rounded-md border">
-            <div className="w-12 shrink-0 text-[10px] text-muted-foreground">
-              <div className="h-12 border-b" />
-              {HEURES_PLANNING.map((h) => (
-                <div key={h} className={cn("border-b px-1", h === HEURE_PAUSE && "bg-muted")} style={{ height: HAUTEUR_CASE }}>
-                  {String(h).padStart(2, "0")}:00
-                </div>
-              ))}
-            </div>
-            {joursDeLaSemaine(lundi).map((j) => (
-              <ColonneJour key={j.iso} jour={j} cartes={cartes} glissee={glissee} onGlisser={onGlisser} />
-            ))}
-          </div>
-        </section>
-      ))}
+    <div className="planning-week">
+      <div className="planning-scroll">
+        {semainesAffichees(premierLundi).map((lundi) => (
+          <Semaine key={lundi} lundi={lundi} cartes={cartes} glissee={glissee} onGlisser={onGlisser} />
+        ))}
+      </div>
     </div>
   );
 }

@@ -42,6 +42,11 @@ export function bonEssai(s: Partial<BonPlanning> = {}): BonPlanning {
     rappel_date: null,
     piece_jointe_nom: null,
     piece_jointe_chemin: null,
+    statut: "en cours",
+    en_attente_bc: false,
+    date_reception: null,
+    date: "2026-09-01",
+    cree_le: "2026-09-01T08:00:00Z",
     ...s,
   };
 }

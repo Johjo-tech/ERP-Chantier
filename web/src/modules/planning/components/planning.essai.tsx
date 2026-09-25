@@ -27,6 +27,12 @@ const api = vi.hoisted(() => ({
 vi.mock("../api/planning", () => api);
 const feries = vi.hoisted(() => ({ lireFeriesAlsaceMoselle: vi.fn(), definirFeriesAlsaceMoselle: vi.fn() }));
 vi.mock("@/modules/societes/api/feries", () => feries);
+// Les annuaires des filtres (conducteurs, clients) et les rapports liés : hors du sujet de ces essais.
+vi.mock("@/modules/societes/api/conducteurs", () => ({ listerConducteurs: vi.fn(async () => [{ id: "cd1", nom: "Christophe Conducteur", actif: true }]) }));
+vi.mock("@/modules/clients/api/clients", () => ({ listerClients: vi.fn(async () => []) }));
+vi.mock("@/modules/interventions/api/rapports", () => ({ listerRapports: vi.fn(async () => []) }));
+const toast = vi.hoisted(() => ({ afficherToast: vi.fn() }));
+vi.mock("@/lib/toast", async (original) => ({ ...(await original<typeof import("@/lib/toast")>()), ...toast }));
 
 const AUJ = todayISO();
 
@@ -69,25 +75,37 @@ beforeEach(() => {
   api.validerTache.mockResolvedValue(undefined);
 });
 
+const colonne = async () => {
+  await screen.findByText(/Non planifiés \(/);
+  const c = document.querySelector<HTMLElement>(".planning-unscheduled");
+  if (!c) throw new Error("colonne « Non planifiés » absente");
+  return c;
+};
+const carteAPlanifier = (col: HTMLElement, client: string) => {
+  const c = [...col.querySelectorAll<HTMLElement>(".planning-card")].find((x) => x.querySelector(".planning-card-title")?.textContent?.startsWith(client));
+  if (!c) throw new Error(`carte ${client} absente`);
+  return c;
+};
+
 describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
-  it("le conducteur a les quatre vues et la colonne « Non planifiés »", async () => {
+  it("le conducteur a les quatre vues de l'ancien écran et la colonne « Non planifiés »", async () => {
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    const colonne = await screen.findByRole("complementary", { name: "Non planifiés" });
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Planning technicien", "Planning sous-traitant", "En attente technicien", "En attente sous-traitant"]);
-    expect(within(colonne).getByText("Non planifiés (2)")).toBeInTheDocument();
-    expect(within(colonne).getByText("Régie Sud")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: /OPAC du Rhône, CMD-1/ })).toBeInTheDocument();
+    const col = await colonne();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Planning Technicien", "Planning Sous-traitant", "En attente technicien", "En attente sous-traitant"]);
+    expect(within(col).getByText("Non planifiés (2)")).toBeInTheDocument();
+    expect(within(col).getByText("Régie Sud")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /OPAC du Rhône CMD-1/ })).toBeInTheDocument();
   });
 
-  it("poser une carte au clavier demande l'équipe — obligatoire — puis écrit rendez-vous et tâche", async () => {
+  it("poser une carte par sa date demande l'équipe — obligatoire — puis écrit rendez-vous et tâche", async () => {
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    const colonne = await screen.findByRole("complementary", { name: "Non planifiés" });
-    fireEvent.change(within(within(colonne).getByRole("listitem", { name: /Régie Sud/ })).getByLabelText("Planifier le"), { target: { value: ajouterJours(AUJ, 1) } });
+    const col = await colonne();
+    fireEvent.change(within(carteAPlanifier(col, "Régie Sud")).getByLabelText("Planifier le"), { target: { value: ajouterJours(AUJ, 1) } });
     const modale = await screen.findByRole("dialog", { name: "Quelle équipe ?" });
-    await userEvent.click(within(modale).getByRole("button", { name: "Planifier" }));
-    expect(within(modale).getByRole("alert")).toHaveTextContent("Choisissez d'abord dans la liste.");
+    await userEvent.click(within(modale).getByRole("button", { name: "✓ Planifier" }));
+    expect(toast.afficherToast).toHaveBeenCalledWith("Choisissez d'abord dans la liste.");
     await userEvent.selectOptions(within(modale).getByRole("combobox"), "eqB");
-    await userEvent.click(within(modale).getByRole("button", { name: "Planifier" }));
+    await userEvent.click(within(modale).getByRole("button", { name: "✓ Planifier" }));
     await waitFor(() => expect(api.appliquerPlan).toHaveBeenCalled());
     const [, bcId, plan] = api.appliquerPlan.mock.calls[0] as [string, string, { bon: unknown; taches: { type: string; tache: unknown }[] }];
     expect(bcId).toBe("b2");
@@ -97,12 +115,12 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
 
   it("glisser une carte sur une case horaire la pose à cette heure ; le filtre d'équipe évite la question", async () => {
     const { container } = rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    await screen.findByRole("complementary", { name: "Non planifiés" });
+    const col = await colonne();
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Équipe" }), "eqA");
-    const carte = screen.getByRole("listitem", { name: /Régie Sud/ });
+    const carte = carteAPlanifier(col, "Régie Sud");
     const transfert = { data: {} as Record<string, string>, setData(k: string, v: string) { this.data[k] = v; }, getData(k: string) { return this.data[k] ?? ""; }, effectAllowed: "", dropEffect: "" };
     fireEvent.dragStart(carte, { dataTransfer: transfert });
-    const cases = container.querySelectorAll(`[data-jour="${AUJ}"] [aria-hidden="true"]`);
+    const cases = container.querySelectorAll(`[data-iso="${AUJ}"] .planning-hour-row`);
     fireEvent.dragOver(cases[3] as Element, { dataTransfer: transfert });
     fireEvent.drop(cases[3] as Element, { dataTransfer: transfert });
     await waitFor(() => expect(api.appliquerPlan).toHaveBeenCalled());
@@ -114,9 +132,9 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
   it("une carte faite ne se retire pas du planning : le refus est dit, rien n'est écrit (PLN-50)", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ taches: [tacheEssai({ id: "t1", bon_commande_id: "b1", date_tache: AUJ, technicien_id: "eqA", statut: "realisee" })] }));
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    const carte = await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ });
-    await userEvent.click(within(carte).getByRole("button", { name: "Retirer du planning" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("validée par le technicien");
+    const carte = await screen.findByRole("group", { name: /OPAC du Rhône CMD-1/ });
+    await userEvent.click(within(carte).getByTitle("Retirer du planning"));
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith(expect.stringContaining("validée par le technicien")));
     expect(api.appliquerPlan).not.toHaveBeenCalled();
   });
 
@@ -134,74 +152,92 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
     imprimer.mockRestore();
   });
 
-  it("le rôle lecture voit le planning sans aucun réglage", async () => {
+  it("le rôle lecture voit le planning sans aucun réglage (D-ECR-PLN-03)", async () => {
     rendreAvecSession(<PagePlanning />, { role: "lecture" });
-    const carte = await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ });
-    expect(within(carte).queryByRole("button", { name: "Retirer du planning" })).not.toBeInTheDocument();
+    const carte = await screen.findByRole("group", { name: /OPAC du Rhône CMD-1/ });
+    expect(within(carte).queryByTitle("Retirer du planning")).not.toBeInTheDocument();
+    expect(carte.querySelector(".planning-time, .planning-technicien-select, .planning-resize-corner")).toBeNull();
     expect(screen.queryByLabelText("Planifier le")).not.toBeInTheDocument();
+  });
+
+  it("programmer un rappel depuis une carte à planifier : la fenêtre de l'ancien, puis l'écriture", async () => {
+    api.enregistrerRappel.mockResolvedValue(undefined);
+    rendreAvecSession(<PagePlanning />, { role: "conducteur" });
+    const col = await colonne();
+    await userEvent.click(within(carteAPlanifier(col, "Régie Sud")).getByTitle(/Programmer un rappel/));
+    const modale = await screen.findByRole("dialog", { name: "Programmer un rappel" });
+    await userEvent.click(within(modale).getByRole("button", { name: "✓ Programmer" }));
+    expect(toast.afficherToast).toHaveBeenCalledWith("Choisissez une date de rappel.");
+    fireEvent.change(modale.querySelector('input[type="date"]') as Element, { target: { value: ajouterJours(AUJ, 3) } });
+    await userEvent.click(within(modale).getByRole("button", { name: "✓ Programmer" }));
+    await waitFor(() => expect(api.enregistrerRappel).toHaveBeenCalledWith("b2", ajouterJours(AUJ, 3)));
   });
 
   it("le conducteur arbitre une tâche déclarée faite ; un refus exige un motif", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ taches: [tacheEssai({ id: "t1", bon_commande_id: "b1", date_tache: AUJ, technicien_id: "eqA", statut: "realisee", realisee_le: `${AUJ}T15:00:00Z` })] }));
+    const motif = vi.spyOn(window, "prompt").mockReturnValueOnce("  ").mockReturnValueOnce("Joint à reprendre");
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    await userEvent.click(await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ }));
+    await userEvent.click(within(await screen.findByRole("group", { name: /OPAC du Rhône CMD-1/ })).getByText("CMD-1"));
     const fiche = await screen.findByRole("dialog");
     await userEvent.click(within(fiche).getByRole("button", { name: "✕ Refuser" }));
-    const confirmer = within(fiche).getByRole("button", { name: "Confirmer le refus" });
-    expect(confirmer).toBeDisabled();
-    await userEvent.type(within(fiche).getByLabelText(/Motif du refus/), "Joint à reprendre");
-    await userEvent.click(confirmer);
+    expect(api.validerTache).not.toHaveBeenCalled();
+    await userEvent.click(within(fiche).getByRole("button", { name: "✕ Refuser" }));
     await waitFor(() => expect(api.validerTache).toHaveBeenCalledWith("t1", false, "Joint à reprendre"));
+    motif.mockRestore();
   });
 });
 
 describe("planning — terrain (PLN-01, PLN-08, PLN-09)", () => {
-  it("le technicien : « Ma journée » d'abord, ni colonne « Non planifiés » ni prix ; il déclare ses travaux faits", async () => {
+  it("le technicien : « Ma journée », puis sa fiche — sans prix ; il déclare ses travaux faits", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ monEquipeId: "eqA" }));
-    rendreAvecSession(<PagePlanning />, { role: "technicien" });
+    rendreAvecSession(<PagePlanning vue="ma_journee" />, { role: "technicien" });
     expect(await screen.findByRole("region", { name: "Ma journée" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Ma journée", "Planning technicien"]);
     await userEvent.click(screen.getByRole("button", { name: /10:00 · OPAC du Rhône/ }));
     const fiche = await screen.findByRole("dialog");
-    expect(within(fiche).getByText("PLOMBERIE CUISINE")).toBeInTheDocument();
-    expect(within(fiche).getByRole("link", { name: /06 12 34 56 78/ })).toHaveAttribute("href", "tel:0612345678");
+    expect(await within(fiche).findByText("PLOMBERIE CUISINE")).toBeInTheDocument();
     await userEvent.type(within(fiche).getByLabelText("Commentaire"), "Siphon changé");
     await userEvent.click(within(fiche).getByRole("button", { name: "✓ Travaux terminés" }));
     await waitFor(() => expect(api.marquerRealisee).toHaveBeenCalledWith("t1", "Siphon changé"));
     expect(api.sauvegarderTerrain).toHaveBeenCalledWith("t1", { commentaire: "Siphon changé", pieceACommander: false, pieceDescription: "", croquis: null });
     expect(document.body.textContent).not.toMatch(/480|999|777/);
-    await userEvent.click(within(fiche).getByRole("button", { name: "Fermer" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Planning technicien" }));
-    expect(screen.queryByRole("complementary", { name: "Non planifiés" })).not.toBeInTheDocument();
+  });
+
+  it("au planning, le technicien n'a que sa vue : ni autres onglets, ni colonne, ni prix ; l'occupant s'appelle d'un geste", async () => {
+    api.lirePlanning.mockResolvedValue(donnees({ monEquipeId: "eqA" }));
+    rendreAvecSession(<PagePlanning />, { role: "technicien" });
+    const carte = await screen.findByRole("group", { name: /OPAC du Rhône CMD-1/ });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Planning Technicien"]);
+    expect(document.querySelector(".planning-unscheduled")).toBeNull();
+    expect(within(carte).getByRole("link", { name: /06 12 34 56 78/ })).toHaveAttribute("href", "tel:0612345678");
+    expect(document.body.textContent).not.toMatch(/480|999|777/);
   });
 
   it("un technicien d'une autre équipe lit la fiche sans pouvoir agir, et sait pourquoi", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ monEquipeId: "eqB" }));
-    rendreAvecSession(<PagePlanning vue="technicien" />, { role: "technicien" });
-    await userEvent.click(await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ }));
+    rendreAvecSession(<PagePlanning />, { role: "technicien" });
+    await userEvent.click(within(await screen.findByRole("group", { name: /OPAC du Rhône CMD-1/ })).getByText("CMD-1"));
     const fiche = await screen.findByRole("dialog");
     expect(within(fiche).getByText("Cette tâche est confiée à une autre équipe.")).toBeInTheDocument();
     expect(within(fiche).queryByRole("button", { name: "✓ Travaux terminés" })).not.toBeInTheDocument();
   });
 
-  it("le sous-traitant : « Mon planning », ses seules cartes, et SON montant — jamais celui du bon", async () => {
+  it("le sous-traitant : « Mon planning », ses seules cartes, SON montant — jamais celui du bon — et « Valider les travaux »", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ monSousTraitantId: "stA", montantsSousTraitant: { b3: 250 } }));
     rendreAvecSession(<PagePlanning />, { role: "sous_traitant" });
-    await screen.findByRole("region", { name: "Ma journée" });
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Ma journée", "Mon planning ALPHA Rénovation"]);
-    await userEvent.click(screen.getByRole("button", { name: /13:00 · Syndic Bellecour/ }));
-    const fiche = await screen.findByRole("dialog");
-    expect(within(fiche).getByText(/Votre montant : 250,00 € HT/)).toBeInTheDocument();
-    expect(within(fiche).getByRole("button", { name: "✓ Travaux terminés" })).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/777|480/);
-    await userEvent.click(within(fiche).getByRole("button", { name: "Fermer" }));
-    await userEvent.click(screen.getByRole("tab", { name: /Mon planning/ }));
+    const carte = await screen.findByRole("group", { name: /Syndic Bellecour/ });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Mon planning ALPHA Rénovation"]);
     expect(screen.queryByRole("group", { name: /OPAC du Rhône/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: /Syndic Bellecour/ })).toBeInTheDocument();
+    expect(within(carte).getByText(/Votre montant : 250,00 € HT/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/777|480/);
+    await userEvent.click(within(carte).getByText(/CMD-3/));
+    const fiche = await screen.findByRole("dialog", { name: /Valider les travaux — CMD-3/ });
+    await userEvent.click(within(fiche).getByLabelText(/Travaux de cette date réalisés/));
+    await userEvent.click(within(fiche).getByRole("button", { name: "✓ Enregistrer" }));
+    await waitFor(() => expect(api.marquerRealisee).toHaveBeenCalledWith("t3", ""));
   });
 
   it("un compte terrain sans équipe est prévenu au lieu de voir une journée vide", async () => {
-    rendreAvecSession(<PagePlanning />, { role: "technicien" });
+    rendreAvecSession(<PagePlanning vue="ma_journee" />, { role: "technicien" });
     expect(await screen.findByText(/rattaché à aucune équipe/)).toBeInTheDocument();
   });
 });
@@ -210,7 +246,7 @@ describe("fériés d'Alsace-Moselle (PLN-53)", () => {
   const vendrediSaint2027 = async () => {
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
     fireEvent.change(await screen.findByLabelText("Aller à la semaine de cette date"), { target: { value: "2027-03-22" } });
-    return () => document.querySelector('[data-jour="2027-03-26"]');
+    return () => document.querySelector('[data-iso="2027-03-26"]');
   };
 
   it("sans le réglage, le Vendredi saint est ouvré", async () => {
@@ -223,5 +259,6 @@ describe("fériés d'Alsace-Moselle (PLN-53)", () => {
     feries.lireFeriesAlsaceMoselle.mockResolvedValue(true);
     const colonne = await vendrediSaint2027();
     await waitFor(() => expect(colonne()?.textContent).toContain("Férié"));
+    expect(colonne()?.classList.contains("is-non-ouvre")).toBe(true);
   });
 });

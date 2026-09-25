@@ -56,3 +56,13 @@ créent et retirent les leurs). Pour voir « Ma journée » du technicien :
 `insert into techniciens (societe_id, nom, metiers) values ('a0000000-0000-0000-0000-00000000000a', 'Équipe Thomas', '{}');`
 puis un salarié `profile_id = 'a1000000-0000-0000-0000-000000000004'` rattaché à cette équipe,
 et poser une carte au planning avec le compte conducteur.
+
+**Écran identique à l'ancien** (vague « écrans ») : les composants reprennent le HTML et les
+classes de `renderPlanning`, `renderPlanningCalendar`, `renderWeekBlockHTML`, `planningCardHTML`,
+`planningScheduledCardHTML`, `planningContactZoneHTML`, `bonCommandeCardHTML(…, 'attente')` et des
+fenêtres `technicienInterventionModal`, `stValidationModal`, `rappelModal`, `ajoutDateSupplModal`,
+`choixAssigneModal` ; la hauteur de case est l'expression de l'ancien (`RANGEE` dans `format.ts`),
+la poignée la mesure au moment de tirer. Messages dans la bulle de l'ancien (`afficherToast`).
+Écarts restants, décidés : D-PLN-04, D-PLN-10, D-PLN-13, D-ECR-PLN-02 à 07. Comparaison :
+`tests/visuel` écrans `planning*` ; jeu d'essai `tests/visuel/jeux/planning.sql` (une carte posée
+dans la semaine courante, rejouable).

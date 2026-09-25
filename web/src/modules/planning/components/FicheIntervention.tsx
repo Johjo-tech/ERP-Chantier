@@ -1,53 +1,37 @@
 import { useState } from "react";
-import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Modale } from "@/components/ui/modale";
 import { formatDateFr } from "@/lib/dates";
-import { Can } from "@/modules/auth-roles/components/Can";
 import type { Constats } from "../api/planning";
-import { tacheDuJour, tachesHorsMetier, toutesLesJournees, type CartePlanning, type TachePlanning } from "../domain/cartes";
+import { tacheDuJour, tachesHorsMetier, type CartePlanning, type TachePlanning } from "../domain/cartes";
 import { planMaterialiser } from "../domain/planification";
 import { actionsTache, appartenanceDe } from "../domain/taches";
+import { useSauvegarderTerrain } from "../hooks/usePlanning";
 import { BandeauTache } from "./BandeauTache";
 import { usePlanningContexte } from "./contexte";
 import { Croquis } from "./Croquis";
-import { Dialogue } from "./Dialogue";
-import { adresseDuLieu, numeroDeLaCarte } from "./format";
-import { InfosCarte, MontantCarte } from "./InfosCarte";
+import { FicheSousTraitant } from "./FicheSousTraitant";
+import { autresDates, constatsInitiaux, journeeSupplementaire } from "./fiche";
+import { avecVille, libelleDuMetier } from "./format";
 import { PhotosTerrain } from "./PhotosTerrain";
 import { TravauxPrevus } from "./TravauxPrevus";
 import { TravauxSupplementaires } from "./TravauxSupplementaires";
 import { ZoneContacts } from "./ZoneContacts";
 
-/** Ceux qui créent une tâche manquante (`peut_ecrire`) — l'écran historique la créait à l'ouverture. */
+/** Ceux qui créent une tâche manquante (`peut_ecrire`) — l'écran historique la créait à l'ouverture (D-PLN-02). */
 const PREPARENT = ["admin", "conducteur", "technicien"];
+const TOILE = { largeur: 540, hauteur: 280 };
 
-function constatsInitiaux(t: TachePlanning | null): Constats {
-  return { commentaire: t?.commentaire ?? "", pieceACommander: !!t?.piece_a_commander, pieceDescription: t?.piece_description ?? "", croquis: t?.croquis ?? null };
-}
-
-/** Commentaire, pièce à commander, croquis : une seule saisie, que chaque bouton de tâche emporte. */
-function SaisieConstats({ constats, onChange, active }: { constats: Constats; onChange: (c: Constats) => void; active: boolean }) {
+function Titre({ texte, pourToutLeBon = false, style }: { texte: string; pourToutLeBon?: boolean; style?: React.CSSProperties }) {
   return (
-    <fieldset disabled={!active} className="flex flex-col gap-2 text-sm">
-      <legend className="mb-1 font-semibold">Mes constats</legend>
-      <label className="flex flex-col gap-1">
-        Commentaire
-        <Textarea value={constats.commentaire} onChange={(e) => onChange({ ...constats, commentaire: e.target.value })} />
-      </label>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={constats.pieceACommander} onChange={(e) => onChange({ ...constats, pieceACommander: e.target.checked })} />
-        Pièce à commander
-      </label>
-      {constats.pieceACommander && (
-        <label className="flex flex-col gap-1">
-          Pièce à commander (détail)
-          <Input value={constats.pieceDescription} placeholder="Référence, dimension, quantité…" onChange={(e) => onChange({ ...constats, pieceDescription: e.target.value })} />
-        </label>
+    <div className="section-title" style={style ?? { marginTop: "16px" }}>
+      {texte}
+      {pourToutLeBon && (
+        <>
+          {" "}
+          <span className="tout-le-bon">pour tout le bon</span>
+        </>
       )}
-      <span>Croquis</span>
-      <Croquis valeur={constats.croquis} desactive={!active} onChange={(croquis) => onChange({ ...constats, croquis })} />
-    </fieldset>
+    </div>
   );
 }
 
@@ -58,66 +42,141 @@ interface Props {
 }
 
 /**
- * La fiche d'une carte (PLN-08, PLN-09) : ce qu'il y a à faire, où, pour qui,
- * et le circuit de chaque tâche. Technicien, sous-traitant et conducteur
- * ouvrent la MÊME fiche ; les gestes proposés suivent le rôle et l'équipe.
- * Aucun prix, sauf « Votre montant » au sous-traitant.
+ * La fiche d'intervention d'une carte (`technicienInterventionModal`, PLN-08,
+ * PLN-09) : le circuit de la tâche de CE métier, les contacts, la journée, le
+ * commentaire, la pièce, les travaux en plus, les photos et le croquis. Le
+ * sous-traitant ouvre sa propre fenêtre, « Valider les travaux ». Aucun prix.
  */
 export function FicheIntervention({ carte, jour, onFermer }: Props) {
-  const { role, donnees, peutPlanifier, appliquer, demanderDate } = usePlanningContexte();
-  const jourVise = jour ?? carte.rdv.datePlanifiee;
+  const { role } = usePlanningContexte();
+  if (role === "sous_traitant") return <FicheSousTraitant carte={carte} jour={jour} onFermer={onFermer} />;
+  return <FicheTechnicien carte={carte} jour={jour} onFermer={onFermer} />;
+}
+
+function FicheTechnicien({ carte, jour, onFermer }: Props) {
+  const { role, donnees, peutPlanifier, appliquer, demanderDate, signaler } = usePlanningContexte();
+  const sauver = useSauvegarderTerrain();
+  const suppl = journeeSupplementaire(carte, jour);
+  const jourVise = suppl ?? carte.rdv.datePlanifiee;
   const entrees = carte.metiersDeLaCarte.map((m) => ({ metier: m, tache: tacheDuJour(carte, m, jourVise) }));
   const hors = carte.positionLiee <= 1 ? tachesHorsMetier(carte) : [];
   const principale = entrees.find((e) => e.tache)?.tache ?? hors[0] ?? null;
   const [constats, setConstats] = useState<Constats>(() => constatsInitiaux(principale));
-  const saisissable = [...entrees.map((e) => e.tache), ...hors].some((t) => t && actionsTache(t.statut, role, appartenanceDe(t, donnees.monEquipeId, donnees.monSousTraitantId)).peutSaisir);
   const toutes = [...entrees.map((e) => e.tache).filter((t): t is TachePlanning => !!t), ...hors];
   const toutesValidees = toutes.length > 0 && toutes.every((t) => t.statut === "validee");
-  const autres = toutesLesJournees(carte.rdv.datePlanifiee, false, carte.suppl).filter((d) => d.date !== jourVise);
-  const restantes = carte.suppl.filter((d) => d.date !== jourVise && !d.fait).length;
+  const saisissable = !!principale && actionsTache(principale.statut, role, appartenanceDe(principale, donnees.monEquipeId, donnees.monSousTraitantId)).peutSaisir;
+  const journeeFaite = suppl ? !!carte.suppl.find((d) => d.date === suppl)?.fait : toutes.length > 0 && toutes.every((t) => t.statut === "realisee" || t.statut === "validee");
+  const titre = `${carte.bon.numero_bc || carte.bon.client_nom}${carte.metierKey ? ` — ${libelleDuMetier(carte.metierKey)}` : ""}${suppl ? ` — ${formatDateFr(suppl)}` : ""}`;
+  const rien = !carte.tentatives.length && !carte.bon.rappel_date;
+
+  const enregistrer = () => {
+    if (!principale || !saisissable) return onFermer();
+    sauver.mutate(
+      { tacheId: principale.id, constats },
+      {
+        onSuccess: () => {
+          onFermer();
+          signaler("Intervention enregistrée.");
+        },
+        onError: (e) => signaler("", e),
+      }
+    );
+  };
 
   return (
-    <Dialogue titre={`${numeroDeLaCarte(carte)}${jourVise && jour ? ` — ${formatDateFr(jourVise)}` : ""}`} onFermer={onFermer} large>
-      <p className="text-sm text-muted-foreground">{carte.bon.client_nom} — {adresseDuLieu(carte)}</p>
-      <InfosCarte carte={carte} />
-      <MontantCarte carte={carte} />
-      <ZoneContacts carte={carte} />
-      <TravauxPrevus carte={carte} />
-      {entrees.map(({ metier, tache }) =>
-        tache ? (
-          <BandeauTache key={tache.id} tache={tache} metier={metier} constats={constats} />
-        ) : (
-          <div key={metier ?? "sans-metier"} className="rounded-md border border-dashed p-2 text-sm">
-            <p>{metier ? `${metier} : ` : ""}aucune journée enregistrée{jourVise ? ` le ${formatDateFr(jourVise)}` : ""}.</p>
-            {jourVise && role && PREPARENT.includes(role) && (
-              <Button size="sm" variant="outline" className="mt-1" onClick={() => appliquer(carte, () => planMaterialiser(carte, metier, jourVise), "Fiche préparée.")}>
-                Préparer la fiche de ce jour
-              </Button>
-            )}
+    <Modale titre={titre} onFermer={onFermer} largeurMax="600px">
+      <p className="card-sub">
+        {carte.bon.client_nom} — {avecVille(carte.bon.adresse, carte.bon.code_postal, carte.bon.ville)}
+      </p>
+
+      <Titre texte="🔧 Métier de cette carte" style={{ marginTop: "14px" }} />
+      <div style={{ marginTop: "12px" }}>
+        {entrees.map(({ metier, tache }) =>
+          tache ? (
+            <BandeauTache key={tache.id} tache={tache} metier={metier} travaux={<TravauxPrevus carte={carte} />} constats={constats} />
+          ) : (
+            <div key={metier ?? "sans-metier"} className="wf-bandeau">
+              {metier && <div className="wf-metier">{libelleDuMetier(metier)}</div>}
+              <TravauxPrevus carte={carte} />
+              <div className="wf-meta">Aucune journée enregistrée{jourVise ? ` le ${formatDateFr(jourVise)}` : ""}.</div>
+              {jourVise && role && PREPARENT.includes(role) && (
+                <div className="wf-actions">
+                  <button type="button" className="btn" onClick={() => appliquer(carte, () => planMaterialiser(carte, metier, jourVise))}>
+                    Préparer la fiche de ce jour
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        )}
+        {hors.map((t) => (
+          <BandeauTache key={t.id} tache={t} metier={t.metier} horsMetier constats={constats} />
+        ))}
+        {toutesValidees && (
+          <div className="wf-bandeau">
+            <span className="wf-meta">
+              ✓ Tous les métiers sont validés — le bon attend son chiffrage dans <b>Facturation › Validation</b>.
+            </span>
           </div>
-        )
-      )}
-      {hors.map((t) => (
-        <BandeauTache key={t.id} tache={t} metier={t.metier} horsMetier constats={constats} />
-      ))}
-      {toutesValidees && <p className="text-sm">✓ Tous les métiers sont validés — le bon attend son chiffrage dans <b>Facturation › Validation</b>.</p>}
-      {principale && <SaisieConstats constats={constats} onChange={setConstats} active={saisissable} />}
-      <PhotosTerrain bcId={carte.bcId} />
-      <TravauxSupplementaires bcId={carte.bcId} tacheId={principale?.id ?? null} />
-      {autres.length > 0 && (
-        <p className="text-sm">
-          Ce bon de commande a {autres.length} autre(s) date(s) planifiée(s) — {restantes ? `${restantes} encore à valider` : "toutes déjà validées"}.
-        </p>
-      )}
-      <Can module="bons_commande">
-        <Button asChild variant="link" size="sm" className="self-start px-0"><Link to={`/commandes/${carte.bcId}`}>Ouvrir le bon de commande{carte.bon.piece_jointe_nom ? ` (📎 ${carte.bon.piece_jointe_nom})` : ""}</Link></Button>
-      </Can>
-      <Can module="rapports" action="creer">
-        <Button asChild variant="outline" size="sm" className="self-start"><Link to={`/rapports/nouveau?bon=${carte.bcId}`}>📝 Rédiger le rapport d'intervention</Link></Button>
-      </Can>
+        )}
+      </div>
+
+      <Titre texte="📞 Contacts et relances" pourToutLeBon />
+      <ZoneContacts carte={carte} />
+      {rien && <p className="card-sub">Aucun appel ni relance enregistré pour ce bon.</p>}
+
+      <Titre texte="📅 Cette date" pourToutLeBon />
+      {/* Cochée d'après les tâches : la journée se clôt par « ✓ Travaux terminés » (D-ECR-PLN-06). */}
+      <label className="bc-tache-row" style={{ background: "var(--surface-2)", borderRadius: "8px" }}>
+        <input type="checkbox" checked={journeeFaite} readOnly disabled title="Se coche par « ✓ Travaux terminés »" />
+        <span style={{ flex: 1 }}>Cette date est terminée</span>
+      </label>
+      <p className="card-sub">{autresDates(carte, jourVise)}</p>
       {peutPlanifier && carte.rdv.datePlanifiee && (
-        <Button variant="outline" size="sm" className="self-start" onClick={() => demanderDate(carte)}>+ Ajouter une date</Button>
+        <button type="button" className="btn small ghost" onClick={() => demanderDate(carte)} title="Planifier ce même bon de commande sur un jour de plus">
+          + Ajouter une journée
+        </button>
       )}
-    </Dialogue>
+
+      <Titre texte="💬 Commentaire" pourToutLeBon />
+      <textarea rows={3} aria-label="Commentaire" placeholder="Remarque sur l'intervention (optionnel)…" style={{ width: "100%" }} value={constats.commentaire} disabled={!saisissable} onChange={(e) => setConstats({ ...constats, commentaire: e.target.value })} />
+
+      <Titre texte="📦 Pièce" pourToutLeBon />
+      <label className="bc-tache-row" style={{ background: "var(--surface-2)", borderRadius: "8px" }}>
+        <input type="checkbox" checked={constats.pieceACommander} disabled={!saisissable} onChange={(e) => setConstats({ ...constats, pieceACommander: e.target.checked })} />
+        <span style={{ flex: 1 }}>Pièce à commander</span>
+      </label>
+      <input type="text" aria-label="Pièce à commander" placeholder="Laquelle ? (référence, description…)" style={{ width: "100%", marginTop: "6px", display: constats.pieceACommander ? "block" : "none" }} value={constats.pieceDescription} disabled={!saisissable} onChange={(e) => setConstats({ ...constats, pieceDescription: e.target.value })} />
+
+      <Titre texte="➕ Travail effectué en plus (sans prix)" />
+      <p className="card-sub">Pour signaler un travail réalisé en plus de ce qui était prévu, sans montant associé.</p>
+      <TravauxSupplementaires bcId={carte.bcId} tacheId={principale?.id ?? null} />
+
+      <Titre texte="📷 Photos" />
+      <PhotosTerrain bcId={carte.bcId} />
+
+      <Titre texte="✏️ Dessin / croquis" />
+      <p className="card-sub">Utile pour schématiser un problème ou un emplacement.</p>
+      <Croquis
+        {...TOILE}
+        id="techDessinCanvas"
+        libelle="Dessin / croquis"
+        valeur={constats.croquis}
+        desactive={!saisissable}
+        onChange={(croquis) => setConstats({ ...constats, croquis })}
+        style={{ width: "100%", touchAction: "none", border: "1px solid var(--border)", borderRadius: "10px", background: "#fff" }}
+        effacer={{ libelle: "Effacer le dessin", classe: "btn small ghost", style: { marginTop: "6px" } }}
+      />
+
+      <div style={{ display: "flex", gap: "10px", marginTop: "18px" }}>
+        <button type="button" className="btn primary" disabled={sauver.isPending} onClick={enregistrer}>
+          ✓ Enregistrer
+        </button>
+        <button type="button" className="btn ghost" onClick={onFermer}>
+          Annuler
+        </button>
+      </div>
+    </Modale>
   );
 }
+

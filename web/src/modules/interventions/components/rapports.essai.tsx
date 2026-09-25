@@ -28,6 +28,11 @@ vi.mock("@/modules/documents/api/identite", () => ({
 }));
 vi.mock("@/modules/clients/api/interlocuteurs", () => ({ listerInterlocuteurs: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/modules/societes/api/conducteurs", () => ({ listerConducteurs: vi.fn().mockResolvedValue([{ id: "k1", nom: "Christophe Conducteur", actif: true }]) }));
+const toast = vi.hoisted(() => ({ afficherToast: vi.fn() }));
+vi.mock("@/lib/toast", async (original) => ({ ...(await original<typeof import("@/lib/toast")>()), ...toast }));
+
+/** La carte d'un rapport (`#intervention-card-…`), trouvée par son client. */
+const carteDe = async (client: string) => (await screen.findByText(client)).closest(".card") as HTMLElement;
 
 const rapport = (s: Partial<RapportDeLaListe>): RapportDeLaListe => ({
   id: "r1", societe_id: "alpha", numero: "INT-2026-000001", client_id: "c1", client_nom: "OPAC du Rhône", interlocuteur: null, adresse: null, adresse_locataire: "3 place Bellecour",
@@ -47,33 +52,47 @@ beforeEach(() => {
 });
 
 describe("liste des rapports (PLN-20, PLN-52)", () => {
-  it("l'encadrement voit les rapports internes, puis ceux des sous-traitants à la demande", async () => {
+  it("l'encadrement ne voit que les rapports internes, comme dans l'ancien écran (D-ECR-PLN-01)", async () => {
     rendreAvecSession(<PageRapports />, { role: "conducteur" });
     expect(await screen.findByText("OPAC du Rhône")).toBeInTheDocument();
     expect(screen.queryByText("Régie Sud")).not.toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Émetteur" }), "tous");
-    expect(screen.getByText("Régie Sud")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Émetteur" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "+ Nouveau rapport" })).toBeInTheDocument();
+    // Le filtre des conducteurs lit l'annuaire, pas les seuls noms déjà écrits sur les rapports.
+    expect(within(screen.getByRole("combobox", { name: "Conducteur" })).getByRole("option", { name: "Christophe Conducteur" })).toBeInTheDocument();
   });
 
-  it("un rapport lié à un bon se facture par le bon, pas à côté", async () => {
+  it("un rapport lié à un bon se facture par le bon, pas à côté — sous le libellé de l'ancien", async () => {
     rendreAvecSession(<PageRapports />, { role: "admin" });
-    const carte = (await screen.findByText("Syndic")).closest("li") as HTMLElement;
-    expect(within(carte).getByRole("link", { name: "Facturer le bon lié" })).toHaveAttribute("href", "/commandes/b1");
+    const carte = await carteDe("Syndic");
+    expect(within(carte).getByRole("link", { name: "Transformer en facture" })).toHaveAttribute("href", "/commandes/b1");
     expect(within(carte).getByRole("link", { name: "CMD-1" })).toBeInTheDocument();
     expect(within(carte).queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
   });
 
   it("transformer en devis crée le brouillon depuis le rapport", async () => {
     rendreAvecSession(<PageRapports />, { role: "admin" });
-    const carte = (await screen.findByText("OPAC du Rhône")).closest("li") as HTMLElement;
+    const carte = await carteDe("OPAC du Rhône");
     await userEvent.click(within(carte).getByRole("button", { name: "Transformer en devis" }));
     await waitFor(() => expect(transfo.devisDepuisRapport).toHaveBeenCalledWith("alpha", expect.objectContaining({ id: "r1" })));
   });
 
+  it("supprimer demande la confirmation de l'ancien écran", async () => {
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    api.supprimerRapport.mockResolvedValue(undefined);
+    rendreAvecSession(<PageRapports />, { role: "admin" });
+    const carte = await carteDe("OPAC du Rhône");
+    await userEvent.click(within(carte).getByRole("button", { name: "Supprimer" }));
+    expect(api.supprimerRapport).not.toHaveBeenCalled();
+    await userEvent.click(within(carte).getByRole("button", { name: "Supprimer" }));
+    await waitFor(() => expect(api.supprimerRapport).toHaveBeenCalled());
+    expect(confirmer).toHaveBeenCalledWith("Supprimer définitivement cet élément ?");
+    confirmer.mockRestore();
+  });
+
   it("le technicien rédige et modifie, sans transformer ni supprimer", async () => {
     rendreAvecSession(<PageRapports />, { role: "technicien" });
-    const carte = (await screen.findByText("OPAC du Rhône")).closest("li") as HTMLElement;
+    const carte = await carteDe("OPAC du Rhône");
     expect(within(carte).getByRole("link", { name: "Modifier" })).toBeInTheDocument();
     expect(within(carte).queryByRole("button", { name: "Transformer en devis" })).not.toBeInTheDocument();
     expect(within(carte).queryByRole("button", { name: "Supprimer" })).not.toBeInTheDocument();
@@ -87,7 +106,8 @@ describe("liste des rapports (PLN-20, PLN-52)", () => {
 
   it("le rôle lecture consulte l'aperçu, sans rien créer", async () => {
     rendreAvecSession(<PageRapports />, { role: "lecture" });
-    expect(await screen.findByRole("link", { name: "OPAC du Rhône" })).toHaveAttribute("href", "/rapports/r1/apercu");
+    const carte = await carteDe("OPAC du Rhône");
+    expect(within(carte).getByRole("link", { name: "Imprimer / PDF" })).toHaveAttribute("href", "/rapports/r1/apercu");
     expect(screen.queryByRole("link", { name: "+ Nouveau rapport" })).not.toBeInTheDocument();
   });
 });
@@ -101,19 +121,22 @@ describe("assistant en quatre étapes (PLN-20, PLN-21)", () => {
       </Routes>,
       { role: "technicien", chemin }
     );
+  const etape = (libelle: string) => userEvent.click(screen.getByText(libelle, { selector: ".step-label" }));
 
   it("le client est exigé ; les contrôles suivent le métier ; « autre » demande une précision", async () => {
+    const alerte = vi.spyOn(window, "alert").mockImplementation(() => undefined);
     ouvrir("/rapports/nouveau");
-    await userEvent.click(await screen.findByRole("button", { name: "4. Rapport" }));
+    await screen.findByText("Infos", { selector: ".step-label" });
+    await etape("Rapport");
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer le rapport" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Le nom du client est requis");
-    await userEvent.type(screen.getByLabelText("Client *"), "Mme Durand");
+    expect(alerte).toHaveBeenCalledWith("Le nom du client est requis (étape Infos).");
+    await userEvent.type(document.getElementById("f_client") as HTMLElement, "Mme Durand");
     await userEvent.selectOptions(screen.getByLabelText("Type d'intervention"), "plomberie");
     await userEvent.click(screen.getByRole("button", { name: "Suivant →" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Autre contrôle" }));
     await userEvent.type(screen.getByLabelText("Précisez le contrôle"), "Robinet d'arrêt");
     await userEvent.click(screen.getByRole("button", { name: "Suivant →" }));
-    expect(screen.getByRole("region", { name: "Signature client" })).toBeInTheDocument();
+    expect(screen.getByText("Signature client")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Suivant →" }));
     await userEvent.type(screen.getByLabelText("Constatations"), "Fuite au raccord");
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer le rapport" }));
@@ -122,15 +145,16 @@ describe("assistant en quatre étapes (PLN-20, PLN-21)", () => {
     expect([societe, id, photos, signatures]).toEqual(["alpha", null, [], {}]);
     expect(saisie).toMatchObject({ client_nom: "Mme Durand", client_id: null, metier: "plomberie", controles: { autre: true }, precision_autre: "Robinet d'arrêt", constatations: "Fuite au raccord", statut: "en cours" });
     expect(await screen.findByText("Liste des rapports")).toBeInTheDocument();
+    alerte.mockRestore();
   });
 
   it("rédigé pour un bon (depuis le planning) : client et lieu repris ; logement vacant, pas de signature client", async () => {
     ouvrir("/rapports/nouveau?bon=b1");
-    expect(await screen.findByLabelText("Client *")).toHaveValue("OPAC du Rhône");
+    await waitFor(() => expect(document.getElementById("f_client")).toHaveValue("OPAC du Rhône"));
     expect(screen.getByLabelText("Bon de commande lié (si applicable)")).toHaveValue("b1");
-    await userEvent.click(screen.getByRole("button", { name: "3. Photos" }));
-    expect(screen.queryByRole("region", { name: "Signature client" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Signature du technicien" })).toBeInTheDocument();
+    await etape("Photos");
+    expect(screen.queryByText("Signature client")).not.toBeInTheDocument();
+    expect(screen.getByText("Signature du technicien")).toBeInTheDocument();
   });
 });
 
@@ -160,7 +184,7 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
     ouvrir();
     expect(await screen.findByRole("button", { name: "Transformer en devis" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Facturer le bon lié" })).toHaveAttribute("href", "/commandes/b1");
+    expect(screen.getByRole("link", { name: "Transformer en facture" })).toHaveAttribute("href", "/commandes/b1");
   });
 
   it("un refus de la voie unique (déjà transformé) se dit sur l'aperçu", async () => {
@@ -168,7 +192,7 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
     transfo.devisDepuisRapport.mockRejectedValueOnce({ code: "P0001", message: "Ce rapport a déjà été transformé en devis (DEV-2026-000004). Ouvrez-le directement pour le modifier." });
     ouvrir();
     await userEvent.click(await screen.findByRole("button", { name: "Transformer en devis" }));
-    expect(await screen.findByText(/déjà été transformé en devis \(DEV-2026-000004\)/)).toBeInTheDocument();
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith(expect.stringMatching(/déjà été transformé en devis \(DEV-2026-000004\)/)));
   });
 
   it("le rôle lecture ne voit aucun des deux gestes", async () => {

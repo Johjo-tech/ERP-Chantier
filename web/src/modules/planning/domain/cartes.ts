@@ -63,6 +63,13 @@ export const schemaBonPlanning = z.object({
   rappel_date: z.string().nullable(),
   piece_jointe_nom: z.string().nullable(),
   piece_jointe_chemin: z.string().nullable(),
+  // Pour la carte « En attente », qui reprend celle de la liste des bons (statut, attente du BC).
+  statut: z.string().nullable().default(null),
+  en_attente_bc: z.boolean().nullable().default(null),
+  // L'ordre de l'ancien écran (`trierParDate`) : réception, rendez-vous, date, puis création.
+  date_reception: z.string().nullable().default(null),
+  date: z.string().nullable().default(null),
+  cree_le: z.string().nullable().default(null),
 });
 export type BonPlanning = z.infer<typeof schemaBonPlanning>;
 
@@ -371,4 +378,15 @@ export function tacheDuJour(carte: CartePlanning, metier: string | null, jour: s
 /** Les tâches qu'aucun métier de la carte ne réclame (« Hors métier ») — la première carte les porte. */
 export function tachesHorsMetier(carte: CartePlanning): TachePlanning[] {
   return carte.taches.filter((t) => !carte.metiersDeLaCarte.some((m) => memeMetier(m, t.metier)));
+}
+
+/**
+ * L'ordre des bons de l'ancien écran (`COLLECTIONS_ETAT.bonCommande`,
+ * `trierParDate`) : le plus récent d'abord, sur la première date renseignée
+ * parmi réception, rendez-vous et date du bon ; la création départage. Les
+ * cartes d'un même bon gardent l'ordre de ses métiers (tri stable).
+ */
+export function trierCommeLAncien<C extends { bon: Pick<BonPlanning, "date_reception" | "date_planifiee" | "date" | "cree_le"> }>(cartes: readonly C[]): C[] {
+  const cle = (b: C["bon"]) => b.date_reception || b.date_planifiee || b.date || "";
+  return [...cartes].sort((a, b) => cle(b.bon).localeCompare(cle(a.bon)) || (b.bon.cree_le ?? "").localeCompare(a.bon.cree_le ?? ""));
 }
