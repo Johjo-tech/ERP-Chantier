@@ -1737,9 +1737,10 @@ et le PDF n'est pas validement PDF/A-3 (page en image, polices du pied).
 l'espace client montrent la fenêtre `.view-modal` de l'ancien (« Imprimer »,
 « Enregistrer », ✕ ; clic sur le voile = fermer). L'e-mail et la plateforme
 d'une facture restent sur sa fiche (`VueFactureEmise`), comme sur les cartes de
-l'ancien. Le rapport d'intervention garde, devant « Imprimer », l'envoi et la
-transformation en devis/facture, que web/ ne porte qu'à cet endroit (PLN-20,
-D-CLI-09). Le bon n'a pas d'aperçu dans l'ancien (il ne se lit que dans le
+l'ancien. Le rapport d'intervention garde l'envoi et la transformation en
+devis/facture, que web/ ne porte qu'à cet endroit (PLN-20, D-CLI-09) : sur une
+rangée à part, AU-DESSUS de la barre de l'ancien, qui reste intacte (ces
+boutons échappent à l'isolation de la feuille : `.actions-web`). Le bon n'a pas d'aperçu dans l'ancien (il ne se lit que dans le
 panneau de la pré-facture) : on lui donne la même fenêtre et son PDF
 (`printDocument('bonCommande')` existe dans l'ancien), montants « ••• » sans
 le droit de voir les prix (`renderPrintDoc(…, !avecPrix)`).
@@ -1759,3 +1760,11 @@ l'extension à tout), un défaut qu'on ne recopie pas.
 L'ancien fabrique le PPSPS avec la bibliothèque `docx` 8.5.0 ; web/ l'écrit
 sans bibliothèque (D-CHA-08), contenu mot pour mot mais sans le logo. Le
 porter sur `docx` 8.5.0, pour un fichier comparable à l'ancien, reste à faire.
+
+## D-PDF-09 — Le rapport imprimé porte ses contrôles, même rechargé
+Dans l'ancien, les contrôles cochés ne s'impriment que juste après la saisie :
+rechargé depuis la base, un rapport n'a plus ni `controles` (l'adaptateur ne
+relit pas `intervention_controles`) ni `typePanne` (la colonne est `metier`),
+et « Contrôles réalisés » disparaît du PDF. web/ imprime ce qui est enregistré,
+comme l'ancien l'imprimait à la saisie : c'est le seul écart mesuré sur le
+rapport (1 % des pixels, la section en plus) — `tests/visuel/pdf/`.

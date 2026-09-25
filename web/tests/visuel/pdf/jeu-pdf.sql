@@ -4,7 +4,9 @@
 --   « PDF PARITÉ — facture »   : chapitres, commentaire, deux taux, remise,
 --                                acompte, retenue, échéance, référence client ;
 --   « PDF PARITÉ — avoir »     : l'avoir qui la rectifie ;
---   « PDF PARITÉ — longue »    : 45 lignes, pour la découpe en pages.
+--   « PDF PARITÉ — longue »    : 45 lignes, pour la découpe en pages ;
+--   « PDF PARITÉ — rapport »   : un rapport d'intervention (contrôles cochés,
+--                                constatations, préconisations, sans signature).
 -- Émises (numérotées par la base) : les imprimer n'écrit rien, ni dans l'une ni
 -- dans l'autre application (seul un brouillon reçoit un cadenas).
 -- Idempotent : une pièce déjà là n'est pas recréée.
@@ -15,6 +17,7 @@ declare
   v_facture uuid;
   v_avoir uuid;
   v_longue uuid;
+  v_rapport uuid;
   i integer;
 begin
   select id into v_facture from factures where societe_id = v_soc and client_nom = 'PDF PARITÉ — facture';
@@ -66,6 +69,20 @@ begin
     end loop;
     update factures set statut = 'impayée' where id = v_longue;
   end if;
+
+  select id into v_rapport from interventions where societe_id = v_soc and client_nom = 'PDF PARITÉ — rapport';
+  if v_rapport is null then
+    insert into interventions (societe_id, client_id, client_nom, interlocuteur, adresse, adresse_locataire, code_postal, ville,
+                               logement_statut, occupant, etage, numero_logement, date, heure, metier, constatations, preconisations)
+    values (v_soc, v_client, 'PDF PARITÉ — rapport', 'M. Chargé d''affaires', '33 rue Mouton-Duvernet, 69003 Lyon',
+            '14 rue Garibaldi', '69003', 'Lyon', 'occupé', 'Mme Dupont', '2', '12', '2026-09-16', '09:30', 'plomberie',
+            E'Fuite sous l''évier de la cuisine.\nJoint du siphon desséché.', E'Remplacer le siphon x1\nReprendre le joint x2 ml')
+    returning id into v_rapport;
+    insert into intervention_controles (intervention_id, cle, coche, precision_autre) values
+      (v_rapport, 'alim_froide', true, null),
+      (v_rapport, 'evacuations', true, null);
+  end if;
 end $$;
 
 select numero, client_nom, type_document, statut from factures where client_nom like 'PDF PARITÉ%' order by client_nom;
+select numero, client_nom from interventions where client_nom like 'PDF PARITÉ%';

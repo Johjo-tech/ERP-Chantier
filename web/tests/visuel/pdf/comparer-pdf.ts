@@ -36,12 +36,12 @@ const ATTENTE_MS = 60_000;
 const ESSAIS_POLICES = 30;
 const PAUSE_POLICES_MS = 2000;
 
-type Nature = "devis" | "facture" | "bonCommande";
+type Nature = "devis" | "facture" | "bonCommande" | "intervention";
 
 interface Cible {
   nom: string;
   nature: Nature;
-  /** Numéro dans l'ancien `state` (numéro interne pour un bon). */
+  /** Numéro dans l'ancien `state` (numéro interne pour un bon, client pour un rapport sans numéro). */
   numero: string;
   route: (id: string) => string;
 }
@@ -52,6 +52,7 @@ const CIBLES: Cible[] = [
   { nom: "avoir AV-2026-000001", nature: "facture", numero: "AV-2026-000001", route: (id) => `/factures/${id}/apercu` },
   { nom: "facture longue FAC-2026-000002 (découpe en pages)", nature: "facture", numero: "FAC-2026-000002", route: (id) => `/factures/${id}/apercu` },
   { nom: "bon de commande BC-2026-900001", nature: "bonCommande", numero: "BC-2026-900001", route: (id) => `/commandes/${id}/apercu` },
+  { nom: "rapport d'intervention INT-2026-000001", nature: "intervention", numero: "INT-2026-000001", route: (id) => `/rapports/${id}/apercu` },
 ];
 
 /* ── Les deux applications ─────────────────────────────────────────────── */
@@ -128,9 +129,9 @@ async function connexionNouvelle(page: Page): Promise<void> {
 /** L'identifiant de la pièce, lu dans l'état de l'ancien : c'est l'uuid de la base. */
 async function idDansAncienne(page: Page, c: Cible): Promise<string> {
   return page.evaluate(({ nature, numero }) => {
-    const s = (window as unknown as { state: Record<string, { id: string; numero?: string; numeroInterne?: string }[]> }).state;
-    const liste = nature === "devis" ? s.devis : nature === "facture" ? s.factures : s.bonsCommande;
-    const doc = (liste ?? []).find((d) => (nature === "bonCommande" ? d.numeroInterne : d.numero) === numero);
+    const s = (window as unknown as { state: Record<string, { id: string; numero?: string; numeroInterne?: string; client?: string }[]> }).state;
+    const liste = nature === "devis" ? s.devis : nature === "facture" ? s.factures : nature === "intervention" ? s.interventions : s.bonsCommande;
+    const doc = (liste ?? []).find((d) => (nature === "bonCommande" ? d.numeroInterne : nature === "intervention" ? d.numero || d.client : d.numero) === numero);
     if (!doc) throw new Error(`${numero} introuvable dans l'ancienne application`);
     return doc.id;
   }, { nature: c.nature, numero: c.numero });
@@ -140,7 +141,11 @@ async function pdfAncien(page: Page, c: Cible, id: string): Promise<{ nom: strin
   await policesChargees(page);
   const [telechargement] = await Promise.all([
     page.waitForEvent("download", { timeout: ATTENTE_MS }),
-    page.evaluate(({ nature, cle }) => (window as unknown as { printDocument: (t: string, i: string, a: string) => void }).printDocument(nature, cle, "save"), { nature: c.nature, cle: id }),
+    page.evaluate(({ nature, cle }) => {
+      const w = window as unknown as { printDocument: (t: string, i: string, a: string) => void; printInterventionDocument: (i: string, a: string) => void };
+      if (nature === "intervention") w.printInterventionDocument(cle, "save");
+      else w.printDocument(nature, cle, "save");
+    }, { nature: c.nature, cle: id }),
   ]);
   return { nom: telechargement.suggestedFilename(), octets: await lire(await telechargement.path()) };
 }
@@ -251,7 +256,11 @@ async function capturePanneau(page: Page, panneau: ReturnType<Page["locator"]>):
 
 async function apercus(ancienne: Page, nouvelle: Page, c: Cible, id: string): Promise<[Buffer, Buffer] | null> {
   if (c.nature === "bonCommande") return null;
-  await ancienne.evaluate(({ nature, cle }) => (window as unknown as { openViewDoc: (t: string, i: string) => void }).openViewDoc(nature, cle), { nature: c.nature, cle: id });
+  await ancienne.evaluate(({ nature, cle }) => {
+    const w = window as unknown as { openViewDoc: (t: string, i: string) => void; openViewIntervention: (i: string) => void };
+    if (nature === "intervention") w.openViewIntervention(cle);
+    else w.openViewDoc(nature, cle);
+  }, { nature: c.nature, cle: id });
   const panneauAncien = ancienne.locator("#viewInterventionModal.open .view-modal-panel");
   await panneauAncien.waitFor({ timeout: ATTENTE_MS });
   const a = await capturePanneau(ancienne, panneauAncien);

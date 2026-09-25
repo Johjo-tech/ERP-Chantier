@@ -11,7 +11,7 @@ fenêtre (D-PDF-01).
    docker exec -i supabase_db_erp-chantier-web psql -U postgres -v ON_ERROR_STOP=1 < tests/visuel/pdf/jeu-pdf.sql
    ```
    (trois factures émises « PDF PARITÉ … » : facture complète, avoir, facture
-   de 45 lignes ; idempotent).
+   de 45 lignes, et un rapport d'intervention ; idempotent).
 2. Les deux applications lancées : l'ancienne sur 5174 (racine du dépôt),
    web/ sur un port libre, par exemple :
    ```bash
@@ -27,11 +27,14 @@ node --experimental-strip-types tests/visuel/pdf/comparer-pdf.ts
 ```
 
 Pour chaque pièce (devis DEV-2026-900001, factures FAC-2026-000001 et
-FAC-2026-000002, avoir AV-2026-000001, bon BC-2026-900001) :
+FAC-2026-000002, avoir AV-2026-000001, bon BC-2026-900001, rapport
+INT-2026-000001 — numéro attribué par la base à la naissance, à ajuster dans
+`CIBLES` si le jeu d'essai est rejoué sur une autre base) :
 
 - l'ancienne produit le PDF par `printDocument(type, id, 'save')` (le bouton
-  « Imprimer / PDF » des listes), la nouvelle par « Enregistrer » dans son
-  aperçu ; les deux fichiers sont téléchargés ;
+  « Imprimer / PDF » des listes ; `printInterventionDocument` pour un rapport),
+  la nouvelle par « Enregistrer » dans son aperçu ; les deux fichiers sont
+  téléchargés ;
 - chaque page est rastérisée (pdfjs-dist, ×2) et comparée pixel à pixel
   (tolérance 24/255 par canal, le bruit du JPEG) ; le texte extrait (le pied
   légal, seul écrit en texte) est comparé ligne à ligne ;

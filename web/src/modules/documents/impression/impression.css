@@ -16,7 +16,9 @@
    remise à zéro l'emporte sur le preflight (couche `base` de Tailwind),
    puisqu'une règle hors couche passe devant toute règle en couche. */
 :where(#printArea, .view-modal, .print-preview, #toastBox),
-:where(#printArea, .view-modal, .print-preview, #toastBox) :where(*) { all: revert; }
+:where(#printArea, .view-modal, .print-preview, #toastBox) :where(*:not(.actions-web, .actions-web *)) { all: revert; }
+/* Les gestes propres à web/ posés dans la fenêtre d'aperçu (D-PDF-06) gardent
+   leurs composants : ils ne viennent pas de l'ancienne feuille. */
 /* Ce que l'ancienne feuille pose sur TOUT le document (index.html l. 67-72). */
 :where(#printArea, .view-modal, .print-preview, #toastBox),
 :where(#printArea, .view-modal, .print-preview, #toastBox) :where(*) { box-sizing: border-box; }
