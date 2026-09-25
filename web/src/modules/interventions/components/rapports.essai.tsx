@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { rendreAvecSession } from "@/test/session-factice";
 import type { RapportDeLaListe } from "../api/rapports";
+import { PageApercuRapport } from "./PageApercuRapport";
 import { PageRapport } from "./PageRapport";
 import { PageRapports } from "./PageRapports";
 
@@ -126,5 +127,44 @@ describe("assistant en quatre étapes (PLN-20, PLN-21)", () => {
     await userEvent.click(screen.getByRole("button", { name: "3. Photos" }));
     expect(screen.queryByRole("region", { name: "Signature client" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Signature du technicien" })).toBeInTheDocument();
+  });
+});
+
+describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", () => {
+  const complet = (s: Partial<RapportDeLaListe>) => ({ rapport: rapport(s), controles: {}, precisionAutre: "", photos: [], signatureClient: null, signatureTechnicien: null });
+  const ouvrir = () =>
+    rendreAvecSession(
+      <Routes>
+        <Route path="/rapports/:id/apercu" element={<PageApercuRapport />} />
+      </Routes>,
+      { role: "admin", chemin: "/rapports/r1/apercu" }
+    );
+
+  it("un rapport sans bon propose les deux pièces", async () => {
+    api.lireRapport.mockResolvedValue(complet({}));
+    ouvrir();
+    expect(await screen.findByRole("button", { name: "Créer le devis" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Créer la facture" })).toBeInTheDocument();
+  });
+
+  it("un rapport lié à un bon renvoie à la facturation du bon, sans facture à côté", async () => {
+    api.lireRapport.mockResolvedValue(complet({ bon_commande_id: "b1" }));
+    ouvrir();
+    expect(await screen.findByRole("button", { name: "Créer le devis" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Créer la facture" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Facturer par le bon lié" })).toHaveAttribute("href", "/commandes/b1");
+  });
+
+  it("le rôle lecture ne voit aucun des deux gestes", async () => {
+    api.lireRapport.mockResolvedValue(complet({}));
+    rendreAvecSession(
+      <Routes>
+        <Route path="/rapports/:id/apercu" element={<PageApercuRapport />} />
+      </Routes>,
+      { role: "lecture", chemin: "/rapports/r1/apercu" }
+    );
+    expect(await screen.findByRole("button", { name: "Imprimer / PDF" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Créer le devis" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Créer la facture" })).not.toBeInTheDocument();
   });
 });
