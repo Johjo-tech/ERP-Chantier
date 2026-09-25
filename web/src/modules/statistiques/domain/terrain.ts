@@ -1,6 +1,6 @@
 import { ajouterJours } from "@/modules/planning/domain/calendrier";
 import type { CartePlanning } from "@/modules/planning/domain/cartes";
-import { cartesDuJour, mesCartesDuJour } from "@/modules/planning/domain/filtres";
+import { cartesDuJour } from "@/modules/planning/domain/filtres";
 
 /**
  * Le tableau de bord du terrain — technicien et sous-traitant
@@ -39,13 +39,21 @@ export interface TableauTerrain {
   pieces: CartePlanning[];
 }
 
+/** L'heure du rendez-vous de la carte ce jour-là (le premier jour, ou une date supplémentaire). */
+function heureDuJour(c: CartePlanning, jour: string): string {
+  return c.rdv.datePlanifiee === jour ? (c.rdv.heurePlanifiee ?? "") : (c.suppl.find((d) => d.date === jour)?.creneau?.heure ?? "");
+}
+
 export function tableauTerrain(cartes: readonly CartePlanning[], a: Affectation, jour: string): TableauTerrain {
-  const miennes = mesCartes(cartes, a);
+  // Sans équipe ni entreprise connue, l'ancien écran montrait TOUT (`mesBonsTechnicien` :
+  // « mieux vaut tout montrer que rien ») — la base, elle, ne sert que ce que le rôle peut lire
+  // (D-VIS-09). « Ma journée », au planning, garde sa règle : rien sans affectation.
+  const miennes = !a.monEquipeId && !a.monSousTraitantId ? [...cartes] : mesCartes(cartes, a);
   const prochains = Array.from({ length: JOURS_A_VENIR }, (_, i) => ajouterJours(jour, i + 1));
   const aVenir = miennes.filter((c) => prochains.some((j) => cartesDuJour([c], j).length > 0));
   return {
     // L'heure d'abord : une journée de terrain se lit dans l'ordre où elle se vit.
-    duJour: mesCartesDuJour(cartes, jour, a.monEquipeId, a.monSousTraitantId),
+    duJour: cartesDuJour(miennes, jour).sort((x, y) => heureDuJour(x, jour).localeCompare(heureDuJour(y, jour))),
     aVenir,
     // « À pointer » : le rendez-vous est passé et le terrain n'a pas tout déclaré fait.
     aPointer: miennes.filter((c) => !!c.rdv.datePlanifiee && c.rdv.datePlanifiee < jour && !(c.taches.length > 0 && c.taches.every((t) => tacheFaite(t.statut)))),

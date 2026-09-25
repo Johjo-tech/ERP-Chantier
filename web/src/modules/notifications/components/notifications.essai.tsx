@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { todayISO } from "@/lib/dates";
 import { rendreAvecSession } from "@/test/session-factice";
+import { ToastBox } from "@/components/ui/toast";
 import { CentreNotifications } from "./CentreNotifications";
 
 const api = vi.hoisted(() => ({ bonsASurveiller: vi.fn(), listerTraitees: vi.fn(), marquerTraitees: vi.fn() }));
@@ -53,11 +54,12 @@ describe("la cloche (TRV-09)", () => {
   });
 
   it("« Marquer comme fait » enregistre les alertes cochées pour la société", async () => {
-    rendreAvecSession(<CentreNotifications />, { role: "admin" });
+    // Les réponses passent par la bulle de l'ancien écran (#toastBox), posée par le cadre.
+    rendreAvecSession(<><CentreNotifications /><ToastBox /></>, { role: "admin" });
     await userEvent.click(await screen.findByRole("button", { name: /Notifications : 2 alertes/ }));
     await userEvent.click(screen.getByRole("button", { name: /Liste des notifications à faire \(2\)/ }));
     await userEvent.click(screen.getByRole("button", { name: /Marquer comme fait/ }));
-    expect(screen.getByText("Cochez au moins une alerte.")).toBeInTheDocument();
+    expect(await screen.findByText("Cochez au moins une alerte.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("checkbox", { name: /BC-2026-001/ }));
     await userEvent.click(screen.getByRole("button", { name: /Marquer comme fait/ }));
     await waitFor(() => expect(api.marquerTraitees).toHaveBeenCalledWith("alpha", ["bc_retard_b1"]));

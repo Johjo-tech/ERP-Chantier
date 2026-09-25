@@ -1667,3 +1667,111 @@ expirée l'efface. Un rechargement du même compte la garde (comme avant).
 - **Course de `bc_generer_facture`** : corrigée par `FOR UPDATE`, mais la
   preuve automatisée ne porte que sur le cas déterministe (D-R4-06).
 
+
+## D-VIS-01 — La comparaison visuelle mesure, écran par écran, contre l'ancienne application
+Exigence du client : `web/` identique à l'ancien écran. `tests/visuel/` (`npm run test:visuel`,
+hors de `npm run check`) connecte les deux applications au même compte, atteint le même écran
+(route d'un côté, gestes `setTab`/état de l'autre), capture en 1400 × 900 et 390 × 844, et mesure
+l'écart de pixels (pixelmatch, seuil de couleur 0,02 : le seuil par défaut 0,1 confondait le gris
+de fond `#F3F5F8` avec du blanc et donnait 4 % à deux écrans sans rapport) et l'écart de texte
+visible (lignes d'`innerText`, en multi-ensembles). Chaque écran a un seuil par taille — un
+**cliquet** : on l'abaisse, on ne le relève pas. Neutralisés : le bandeau « Certaines données
+n'ont pas pu être chargées (chantier_achats) » de l'ancien (la base locale n'a pas cette table ;
+défaut d'environnement, il recouvrait le bouton ☰), les animations, et le texte `.sr-only`
+(réservé aux lecteurs d'écran, invisible). Rapport HTML (ancien / nouveau / différence) dans
+`tests/visuel/rapport/`, ignoré par git.
+
+## D-VIS-02 — L'ancienne feuille, recopiée telle quelle ; Tailwind sans remise à zéro, et perdant
+`src/styles/ancien.css` est la copie verbatim du `<style>` de `src/pages/index.html` (en-tête :
+chemin et commit ; `scripts/copier-css-ancien.py` la refait). Idem pour les deux pages autonomes
+(`connexion.css`, `nouveau-mot-de-passe.css`). Garde-fou `tests/garde-fous-style.essai.ts` : le
+corps de chaque copie doit rester égal à sa source. Ce qui manque à l'ancienne feuille (un lien là
+où l'ancien avait un bouton, l'état « chargement », les messages de champ) va dans
+`complements.css`, chaque règle justifiée par une différence de structure.
+Tailwind ne charge plus son preflight (thème et utilitaires seulement, en `@layer`) : une règle hors
+couche — toutes celles de l'ancienne feuille — l'emporte sur un utilitaire quelle que soit sa
+spécificité. Les jetons façon shadcn (`bg-primary`, `text-muted-foreground`…) pointent sur les
+variables de l'ancienne feuille. La palette de société pose aussi `--accent`, `--accent-2`,
+`--accent-soft`, `--accent-rgb`, `--secondaire*` (comme `appliquerPalette` d'app.js). Même lien
+Google Fonts, même titre d'onglet (« Terrain — Gestion chantier »).
+
+## D-VIS-03 — Connexion et nouveau mot de passe : les pages autonomes de l'ancien, au HTML près
+Feuille de plan, façade qui se trace, cartouche daté (« 25.09.26 »), libellés « Identifiant »,
+« Entrer », « Connexion en cours... », « Saisissez votre email, puis cliquez à nouveau. ». La
+feuille de la page est posée au montage et retirée au démontage (elle vise `body`, `label`,
+`input` sans détour) ; `#root` y prend `display:contents`. Restent de la nouvelle application,
+parce que décidés : les messages d'erreur de connexion en français (D-AUTH-04 — l'ancien affichait
+le message anglais de Supabase), le motif d'une session expirée, la validation de l'adresse du
+« mot de passe oublié ». La page « nouveau mot de passe » reproduit aussi le défaut de l'ancienne
+(`login-card` que sa feuille ne stylait pas). Le formulaire de « Mon compte » garde les composants
+de base.
+
+## D-VIS-04 — Le cadre : le HTML d'index.html, piloté par les classes de <body>
+`#app`, `.planning-menu-toggle` (☰), `#sidebar` (menu du nom, `#navDesktop`, « Garder le menu
+ouvert », pied), `#deskTopStrip` (cloche, interrupteur du mode discret, société), `#topbar`,
+`#content.content-wide`, `#bottomnav` : mêmes identifiants (l'ancienne feuille en vise plusieurs),
+mêmes classes. Comportement de l'ancien : menu replié d'office sauf épinglé ; ☰ l'ouvre/le ferme ;
+ouvrir un formulaire (adresse « nouveau », « modifier » ou fiche désignée par son uuid) le referme
+sauf épinglé ; le planning le masque (`is-planning-view`) et ☰ l'y force (`sidebar-forced`).
+« Voir en tant que » : les six boutons de l'ancien menu du nom (l'ancien `<select>` du nouveau
+écran disparaît). Le bouton ☰ est nommé « Afficher le menu » / « Replier le menu » pour les
+lecteurs d'écran. Les annonces de l'ancien passent par `#toastBox` (`lib/toast.ts`) : mode discret,
+épinglage, version copiée, changement de société, alertes marquées faites. Ajouts assumés, dans
+le style de l'ancien : « Mon compte » dans le menu du nom (AUTH-17, D-SOC-06), le bandeau
+« Aperçu en tant que » en `.bandeau-alerte` (D-010), le bandeau d'échec de lecture alimenté par
+les requêtes en erreur (`BandeauEchecLecture`, l'équivalent de `signalerEchecsDeChargement`).
+Le texte de pied « Données partagées avec toute personne ayant ce lien. », périmé, est repris tel
+quel : identique d'abord.
+
+## D-VIS-05 — La navigation de l'ancien : son menu, ses sous-onglets
+Menu dans l'ordre et sous les libellés de `NAV` : Tableau de bord, Bons de commande, Devis,
+Factures, Rapports, Planning, Chantiers, Clients, **Catalogue** (ex-« Articles »), RH, Véhicules,
+Matériel, **Pièces en commande** (ex-« Pièces »), Statistiques, Réglages ; pictogrammes recopiés
+(`components/ui/icones-traces.ts`). Validation, À facturer, Avoirs et Règlements quittent le menu :
+ce sont les sous-onglets de Factures (`OngletsFacturation`, `.plus-subnav` centré), qui allument
+l'entrée « Factures ». L'import/export quitte le menu : l'ancien le rangeait dans les Réglages
+(« Importer une sauvegarde ») — **reste à y poser le lien** (écran Réglages, vague suivante) ; la
+route `/import-export` reste et allume « Réglages ». Sur téléphone, la barre du bas de l'ancien
+(Tableau, Devis, Factures, Rapports, Plus) et la page « Plus » (`/plus`, `/plus/:onglet` :
+Clients, Bons de commande, Planning, Réglages). Les ROUTES ne changent pas.
+
+## D-VIS-06 — Les composants de base produisent les classes de l'ancien, sans changer d'API
+`Button` → `.btn` (`primary`, `ghost`, `danger`, `small`), `Card` → `.card` (+ `.card-title`,
+`.card-sub`), `Badge` → `.badge` (`gray`, `info`, `success`, `warn`, `yellow`, `danger` ; variantes
+`info` et `jaune` ajoutées), `Alert` → `.wf-banner.ok|alerte` (info : l'encadré orangé), `Input` /
+`Select` / `Textarea` / `Label` → éléments nus (l'ancienne feuille les habille), `Table` →
+`.stats-table` dans `.stats-table-wrap`, champs (`formulaire/Champ`) → `.field` (libellé PUIS
+saisie, pour le libellé flottant de l'ancien), `EnTetePage` → `.page-head`, `Vide` → `.empty`,
+`Erreur` → `.wf-banner.alerte`, `Chargement` → `.chargement` (pas d'équivalent dans l'ancien, qui
+attendait tout avant de dessiner ; `data-chargement` permet à la comparaison d'attendre). Nouveaux :
+`Onglets` / `OngletsLocaux` (`.plus-subnav`), `Modale` / `PiedModale` (`.view-modal`), `ToastBox`.
+Les écrans de modules héritent de ce rendu ; leur HTML propre (grilles Tailwind, listes) reste à
+reprendre écran par écran.
+
+## D-VIS-07 — Le graphique du chiffre d'affaires : la géométrie de l'ancien, le tableau pour les lecteurs d'écran
+Même dessin que `renderYearlyComparisonSVG` (960 × 300, barres ≤ 20 px, N-1 à 32 %, légende en
+haut à droite, bulle `#revenueTooltip` qui suit le pointeur). D-STA-03 voulait un tableau
+équivalent : il reste, mais en `.sr-only` — visible, il ajoutait un « Voir en tableau » que l'ancien
+n'avait pas. Les barres restent parcourables au clavier. Le sélecteur n'offre que les choix de
+l'ancien (6 mois, 12 mois, « Sélectionner les dates » → la fenêtre `revenueCustomModal`) :
+« Depuis janvier » n'y figurait pas. La définition du chiffre (D-STA-02) passe en infobulle du titre.
+
+## D-VIS-08 — Tableau de bord : ce qui reste différent est décidé
+Les trois variantes reprennent le HTML de l'ancien (`.dash-greetrow` et sa main levée,
+`.grid-stats-4`, `.stat-card`, `.traiter-row` et leurs pastilles, `.dash-columns3`, `.progress-bar`,
+`.mesure-conducteur`). Écarts restants, tous décidés : tuile « Encaissé ce mois (TTC) »
+(D-STA-04) ; restant dû lu sur le solde de la base (D-STA-11) ; résumé du mois sans « CA encaissé »
+(D-STA-11) ; classement des clients par fiche (D-STA-05). Les détails que le nouvel écran avait
+ajoutés (« règlements reçus depuis le 1er », « 0 accepté(s) sur 2 devis… », « Part des factures
+émises… ») passent en infobulle ; « Ouvrir Ma journée », le métier des lignes du terrain et les
+sous-titres des tuiles du terrain disparaissent (absents de l'ancien) ; le verdict d'une mesure du
+conducteur est dit aux lecteurs d'écran (`.sr-only`). L'encadré « aucune fiche de conducteur » garde
+la marche à suivre du nouvel écran (D-STA-10), dans l'habit de l'ancien.
+
+## D-VIS-09 — Tableau du terrain sans équipe : tout, comme l'ancien
+L'ancien tableau du technicien sans équipe connue montrait TOUS les bons (`mesBonsTechnicien` :
+« mieux vaut tout montrer que rien ») ; la réécriture n'en montrait aucun, avec un encadré — un
+changement de règle qu'aucune décision ne portait. Le client veut les mêmes règles : on revient à
+l'ancienne (`domain/terrain.ts`, test « sans équipe ni entreprise connue »). Ce n'est pas une
+ouverture de droits : la base ne sert que ce que le rôle peut lire (le sous-traitant, ses seules
+tâches — D-TRV-04). « Ma journée », au planning, garde sa règle propre (rien sans affectation).

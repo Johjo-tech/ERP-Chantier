@@ -17,6 +17,7 @@
     "test:rls": "bash scripts/test-rls.sh",
     "check": "npm run typecheck && npm run lint && npm run test:run",
     "test:e2e": "playwright test",
+    "test:visuel": "playwright test -c tests/visuel/playwright.visuel.config.ts",
     "base:locale": "bash scripts/preparer-base-locale.sh"
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "@testing-library/user-event": "^14.6.7",
     "@types/big.js": "^7.0.0",
     "@types/node": "^26.6.2",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
@@ -54,6 +56,8 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.12.0",
     "jsdom": "^30.1.1",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "supabase": "^2.117.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",

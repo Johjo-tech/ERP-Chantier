@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function connexion(page: Page, email: string) {
+  // Le menu est replié d'office, comme dans l'ancien écran : on l'épingle (même clé que lui) pour le parcourir.
+  await page.addInitScript(() => window.localStorage.setItem("erp.menu.epingle", "1"));
   await page.goto("/connexion");
-  await page.getByLabel("Adresse e-mail").fill(email);
+  await page.getByLabel("Identifiant").fill(email);
   await page.getByLabel("Mot de passe").fill("motdepasse-local");
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("button", { name: "Entrer" }).click();
   await expect(page.getByRole("navigation", { name: "Menu principal" })).toBeVisible();
 }
 
@@ -51,7 +53,7 @@ test("bon chiffré : la secrétaire crée la facture brouillon, le bon passe « 
 
 test("pièces : le conducteur commande chez un fournisseur, puis la pièce arrive", async ({ page }) => {
   await connexion(page, "conducteur.alpha@erp.local");
-  await page.getByRole("navigation", { name: "Menu principal" }).getByRole("link", { name: "Pièces" }).click();
+  await page.getByRole("navigation", { name: "Menu principal" }).getByRole("link", { name: "Pièces en commande" }).click();
   await expect(page.getByText("Mitigeur thermostatique 1/2")).toBeVisible();
   await page.getByLabel("Fournisseur").fill("E2E Plomberie Rhône");
   await page.getByRole("button", { name: "Marquer commandée" }).click();

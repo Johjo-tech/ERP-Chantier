@@ -61,7 +61,7 @@ describe("session expirée en cours de route (AUTH-10)", () => {
   it("renvoie à la connexion, dit pourquoi, et vide le cache métier", async () => {
     const qc = monter();
     expect(await screen.findByText("Votre session a expiré. Reconnectez-vous pour reprendre là où vous en étiez.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Se connecter" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entrer" })).toBeInTheDocument();
     expect(api.fermerSessionLocale).toHaveBeenCalledTimes(1);
     expect(qc.getQueryData(["chantiers", "alpha"])).toBeUndefined();
   });

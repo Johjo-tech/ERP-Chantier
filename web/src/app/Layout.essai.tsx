@@ -17,41 +17,43 @@ function menu(role: RoleMembre, options: { simule?: RoleMembre; niveau?: number 
     .map((l) => l.textContent);
 }
 
-// Attendus tirés de la matrice role_permissions réelle (fixture relevée en base).
+// Attendus tirés de la matrice role_permissions réelle (fixture relevée en base), dans l'ordre
+// et sous les libellés de l'ancien menu (`NAV`, app.js l. 64) : Validation, À facturer et
+// l'import/export n'y sont pas — ils vivent sous Factures et Réglages (D-VIS-05).
 describe("menu principal par rôle", () => {
   it("admin voit tout", () => {
     expect(menu("admin")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "RH", "Véhicules", "Matériel", "Statistiques", "Import / export", "Réglages",
+      "Tableau de bord", "Bons de commande", "Devis", "Factures", "Rapports", "Planning", "Chantiers", "Clients", "Catalogue", "RH", "Véhicules", "Matériel", "Pièces en commande", "Statistiques", "Réglages",
     ]);
   });
 
   it("secrétaire voit toute la gestion", () => {
     expect(menu("secretaire")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "RH", "Véhicules", "Matériel", "Statistiques", "Import / export", "Réglages",
+      "Tableau de bord", "Bons de commande", "Devis", "Factures", "Rapports", "Planning", "Chantiers", "Clients", "Catalogue", "RH", "Véhicules", "Matériel", "Pièces en commande", "Statistiques", "Réglages",
     ]);
   });
 
   it("technicien ne voit ni devis, ni factures, ni clients, ni articles", () => {
-    expect(menu("technicien")).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports", "RH", "Véhicules", "Matériel"]);
+    expect(menu("technicien")).toEqual(["Tableau de bord", "Rapports", "Planning", "Chantiers", "RH", "Véhicules", "Matériel"]);
   });
 
   it("sous-traitant ne voit aucun écran d'argent", () => {
-    expect(menu("sous_traitant")).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports", "Matériel"]);
+    expect(menu("sous_traitant")).toEqual(["Tableau de bord", "Rapports", "Planning", "Chantiers", "Matériel"]);
   });
 
   it("conducteur voit ses chantiers, devis et commandes", () => {
     expect(menu("conducteur")).toEqual([
-      "Tableau de bord", "Clients", "Chantiers", "Devis", "Articles", "Bons de commande", "Pièces", "Factures", "Validation", "À facturer", "Planning", "Rapports", "RH", "Véhicules", "Matériel", "Statistiques", "Import / export", "Réglages",
+      "Tableau de bord", "Bons de commande", "Devis", "Factures", "Rapports", "Planning", "Chantiers", "Clients", "Catalogue", "RH", "Véhicules", "Matériel", "Pièces en commande", "Statistiques", "Réglages",
     ]);
   });
 
   it("« voir en tant que » : l'admin qui simule un technicien voit le menu du technicien", () => {
-    expect(menu("admin", { simule: "technicien" })).toEqual(["Tableau de bord", "Chantiers", "Planning", "Rapports", "RH", "Véhicules", "Matériel"]);
+    expect(menu("admin", { simule: "technicien" })).toEqual(["Tableau de bord", "Rapports", "Planning", "Chantiers", "RH", "Véhicules", "Matériel"]);
     expect(screen.getByRole("status")).toHaveTextContent(/Aperçu en tant que/);
   });
 
   it("l'abonnement ferme ce qui dépasse le niveau souscrit", () => {
-    expect(menu("admin", { niveau: 1 })).toEqual(["Tableau de bord", "Clients", "Chantiers", "Devis", "Planning", "Rapports", "RH", "Véhicules", "Matériel", "Statistiques", "Import / export", "Réglages"]);
+    expect(menu("admin", { niveau: 1 })).toEqual(["Tableau de bord", "Devis", "Rapports", "Planning", "Chantiers", "Clients", "RH", "Véhicules", "Matériel", "Statistiques", "Réglages"]);
   });
 });
 
@@ -81,9 +83,10 @@ describe("mode discret et menu épinglé (TRV-05, TRV-11)", () => {
   it("le mode discret masque les montants de l'écran, et les rend quand on le quitte", async () => {
     avecEcran("/devis");
     expect(screen.getByText(/Total : 1 234,50 €/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("checkbox", { name: /Mode discret/ }));
+    // Deux interrupteurs, comme l'ancien : la barre large et celle du téléphone (la feuille en cache une).
+    await userEvent.click(screen.getAllByRole("checkbox", { name: /Mode discret/ })[0] as HTMLElement);
     expect(screen.getByText("Total : ••• €")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("checkbox", { name: /Mode discret/ }));
+    await userEvent.click(screen.getAllByRole("checkbox", { name: /Mode discret/ })[0] as HTMLElement);
     expect(screen.getByText(/Total : 1 234,50/)).toBeInTheDocument();
   });
 

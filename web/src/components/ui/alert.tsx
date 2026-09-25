@@ -3,18 +3,16 @@ import { cn } from "@/lib/utils";
 
 type Props = ComponentProps<"div"> & { variant?: "info" | "erreur" | "succes" };
 
-export function Alert({ className, variant = "info", ...props }: Props) {
-  return (
-    <div
-      role={variant === "erreur" ? "alert" : "status"}
-      className={cn(
-        "rounded-md border px-4 py-3 text-sm",
-        variant === "erreur" && "border-destructive/40 bg-destructive/10 text-destructive",
-        variant === "succes" && "border-success/40 bg-success/10",
-        variant === "info" && "border-border bg-muted",
-        className
-      )}
-      {...props}
-    />
-  );
+/**
+ * Un message dans le flux d'un écran, dans les habits de l'ancien : les
+ * bandeaux du circuit (`.wf-banner.ok` / `.wf-banner.alerte`) pour une
+ * réussite ou un refus, l'encadré orangé (`.card` sur `--accent-soft`, celui
+ * du tableau de bord du conducteur) pour une information.
+ */
+export function Alert({ className, variant = "info", style, ...props }: Props) {
+  const role = variant === "erreur" ? "alert" : "status";
+  if (variant === "info") {
+    return <div role={role} className={cn("card", className)} style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", ...style }} {...props} />;
+  }
+  return <div role={role} className={cn("wf-banner", variant === "erreur" ? "alerte" : "ok", className)} style={style} {...props} />;
 }

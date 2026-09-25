@@ -1,6 +1,5 @@
 import { useId, type ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 interface Commun {
@@ -14,19 +13,30 @@ interface Commun {
   desactive?: boolean;
 }
 
+/**
+ * Le champ de l'ancien écran (`.field` : le libellé, PUIS la saisie). Cet
+ * ordre n'est pas un détail : la feuille (`.field:has(> label + input)`) pose
+ * alors le libellé en petites capitales DANS la case, en haut à gauche. L'aide
+ * et l'erreur viennent après, pour ne pas le rompre. `className="full"` fait
+ * courir le champ sur toute la largeur d'une `.field-grid`, comme avant.
+ */
 function Cadre({ id, libelle, erreur, aide, requis, className, children }: Commun & { id: string; children: ReactNode }) {
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <Label htmlFor={id}>
+    <div className={cn("field", className)}>
+      <label htmlFor={id}>
         {libelle}
-        {requis && <span aria-hidden="true" className="text-destructive"> *</span>}
-      </Label>
+        {requis && <span aria-hidden="true"> *</span>}
+      </label>
       {children}
-      {aide && !erreur && <p id={`${id}-aide`} className="text-xs text-muted-foreground">{aide}</p>}
+      {aide && !erreur && (
+        <small id={`${id}-aide`} className="champ-aide">
+          {aide}
+        </small>
+      )}
       {erreur && (
-        <p id={`${id}-erreur`} className="text-xs text-destructive">
+        <small id={`${id}-erreur`} className="champ-erreur">
           {erreur}
-        </p>
+        </small>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import { rendreAvecSession, sessionFactice } from "@/test/session-factice";
 import type { RoleMembre } from "../domain/permissions";
 import { SessionContexte } from "../hooks/SessionContexte";
 import { RouteModule } from "./RouteProtegee";
+import { ToastBox } from "@/components/ui/toast";
 import { VersionConstruite } from "./VersionConstruite";
 
 function OuSuisJe() {
@@ -40,7 +41,8 @@ describe("onglet devenu interdit (AUTH-16)", () => {
   it("après un changement de rôle, bascule sur le premier onglet autorisé", async () => {
     render(<Application chemin="/factures" />);
     expect(screen.getByText("Liste des factures")).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText("Voir en tant que"), "technicien");
+    // « Voir en tant que » est dans le menu du nom (deux exemplaires : barre latérale et téléphone).
+    await userEvent.click(screen.getAllByRole("button", { name: "🔧 Technicien" })[0] as HTMLElement);
     await waitFor(() => expect(screen.getByTestId("lieu")).toHaveTextContent(/^\/$/));
     expect(screen.getByText("Accueil")).toBeInTheDocument();
     expect(screen.queryByText("Accès refusé")).not.toBeInTheDocument();
@@ -78,17 +80,17 @@ describe("version construite (AUTH-12)", () => {
     document.head.append(meta);
     const ecrire = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText: ecrire }, configurable: true });
-    render(<VersionConstruite />);
-    expect(screen.getByText("a294c7a · 25/09/2026 11:00")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Copier" }));
+    render(<><VersionConstruite /><ToastBox /></>);
+    // Comme l'ancien menu : « version … », qui se copie au clic et l'annonce.
+    await userEvent.click(screen.getByRole("button", { name: "version a294c7a · 25/09/2026 11:00" }));
     expect(ecrire).toHaveBeenCalledWith("a294c7a · 25/09/2026 11:00");
-    expect(await screen.findByText("Copiée")).toBeInTheDocument();
+    expect(await screen.findByText("Version copiée : a294c7a · 25/09/2026 11:00")).toBeInTheDocument();
     meta.remove();
   });
 
   it("sans marqueur (serveur de développement) : « inconnue », sans casser le menu", () => {
     render(<VersionConstruite />);
-    expect(screen.getByText("inconnue")).toBeInTheDocument();
+    expect(screen.getByText("version inconnue")).toBeInTheDocument();
   });
 });
 

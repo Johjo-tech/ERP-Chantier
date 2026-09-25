@@ -38,13 +38,13 @@ describe("mot de passe oublié (AUTH-03)", () => {
   it("demande l'adresse d'abord", async () => {
     await connexionAnonyme();
     await userEvent.click(screen.getByRole("button", { name: "Mot de passe oublié ?" }));
-    expect(screen.getByText("Saisissez votre adresse e-mail.")).toBeInTheDocument();
+    expect(screen.getByText("Saisissez votre email, puis cliquez à nouveau.")).toBeInTheDocument();
     expect(compte.demanderReinitialisation).not.toHaveBeenCalled();
   });
 
   it("envoie le lien et répond de façon neutre", async () => {
     await connexionAnonyme();
-    await userEvent.type(screen.getByLabelText("Adresse e-mail"), "inconnu@erp.local");
+    await userEvent.type(screen.getByLabelText("Identifiant"), "inconnu@erp.local");
     await userEvent.click(screen.getByRole("button", { name: "Mot de passe oublié ?" }));
     expect(await screen.findByText("Si un compte existe pour inconnu@erp.local, un lien de réinitialisation vient d'être envoyé.")).toBeInTheDocument();
     expect(compte.demanderReinitialisation).toHaveBeenCalledWith("inconnu@erp.local");
@@ -52,7 +52,8 @@ describe("mot de passe oublié (AUTH-03)", () => {
 
   it("affiche la date du jour et aucune société (AUTH-05)", async () => {
     await connexionAnonyme();
-    expect(screen.getByText(/\d{4}$/)).toBeInTheDocument();
+    // Le cartouche de l'ancienne page : « 25.09.26 ».
+    expect(screen.getByText(/^\d{2}\.\d{2}\.\d{2}$/)).toBeInTheDocument();
     expect(screen.queryByText(/ALPHA/)).not.toBeInTheDocument();
   });
 });

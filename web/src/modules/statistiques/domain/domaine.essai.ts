@@ -155,6 +155,18 @@ describe("terrain", () => {
     expect(t.aVenir.map((c) => c.bcId)).toEqual(["b2"]);
     expect(t.aPointer.map((c) => c.bcId)).toEqual(["b3"]);
     expect(t.pieces.map((c) => c.bcId)).toEqual(["b3"]);
-    expect(tableauTerrain(cartes, { monEquipeId: null, monSousTraitantId: null }, "2026-09-25").duJour).toEqual([]);
+  });
+
+  it("sans équipe ni entreprise connue : tout, comme l'ancien (« mieux vaut tout montrer que rien », D-VIS-09)", () => {
+    const cartes = construireCartes(
+      [
+        bonEssai({ id: "b1", date_planifiee: "2026-09-25", date_planifiee_fin: "2026-09-25", heure_planifiee: "14:00", technicien: EQUIPE_A.nom }),
+        bonEssai({ id: "b4", date_planifiee: "2026-09-25", date_planifiee_fin: "2026-09-25", heure_planifiee: "08:00", technicien: "Équipe Karim" }),
+      ],
+      [],
+      ANNUAIRES
+    );
+    // L'heure d'abord : une journée de terrain se lit dans l'ordre où elle se vit.
+    expect(tableauTerrain(cartes, { monEquipeId: null, monSousTraitantId: null }, "2026-09-25").duJour.map((c) => c.bcId)).toEqual(["b4", "b1"]);
   });
 });

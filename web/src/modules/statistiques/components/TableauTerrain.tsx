@@ -1,19 +1,17 @@
 import { Link } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { todayISO } from "@/lib/dates";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { usePlanning } from "@/modules/planning/hooks/usePlanning";
 import { DESTINATIONS } from "../domain/pilotage";
 import { JOURNEE_VISIBLE, tableauTerrain } from "../domain/terrain";
-import { EnTeteTableau, Tuile } from "./Tuile";
+import { EnTeteTableau, Section, Tuile } from "./Tuile";
 import { dateDuJourEnLettres, salutation } from "./format";
 
 /**
- * Le technicien et le sous-traitant : leur journée, jamais un montant. Tout
- * renvoie à « Ma journée » du planning, où l'on pointe et où l'on déclare.
+ * Le technicien et le sous-traitant (`renderDashboardTechnicien`, au HTML
+ * près) : leur journée, jamais un montant. Tout renvoie à « Ma journée » du
+ * planning, où l'on pointe et où l'on déclare.
  */
 export function TableauTerrain({ nom }: { nom: string }) {
   const societe = useSocieteActive();
@@ -25,46 +23,54 @@ export function TableauTerrain({ nom }: { nom: string }) {
   const t = tableauTerrain(planning.cartes, { monEquipeId, monSousTraitantId }, jour);
   const heure = (c: (typeof t.duJour)[number]) => (c.rdv.datePlanifiee === jour ? c.rdv.heurePlanifiee : c.suppl.find((d) => d.date === jour)?.creneau?.heure) ?? null;
   return (
-    <div className="flex flex-col gap-6">
+    <>
       <EnTeteTableau titre={salutation(nom)} sousTitre={`Votre journée sur le terrain — ${societe.nom}`} date={dateDuJourEnLettres()} />
-      {!monEquipeId && !monSousTraitantId ? (
-        <Alert>Votre compte n'est rattaché à aucune équipe ni entreprise sous-traitante : demandez au conducteur de vous affecter pour voir vos interventions.</Alert>
-      ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Tuile libelle="Mes interventions aujourd'hui" valeur={t.duJour.length} ton={t.duJour.length ? "alerte" : "neutre"} vers={DESTINATIONS.maJournee} titre="Ouvrir Ma journée" />
-            <Tuile libelle="Les six prochains jours" valeur={t.aVenir.length} vers={DESTINATIONS.planning} titre="Ouvrir le planning" />
-            <Tuile libelle="Travaux à pointer" valeur={t.aPointer.length} sous="rendez-vous passé, pas tout déclaré fait" ton={t.aPointer.length ? "danger" : "neutre"} vers={DESTINATIONS.planning} titre="Ouvrir le planning" />
-            <Tuile libelle="Pièces que j'ai signalées" valeur={t.pieces.length} sous="en attente de commande" vers={DESTINATIONS.maJournee} titre="Ouvrir Ma journée" />
-          </div>
-          <section aria-labelledby="titre-aujourdhui" className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id="titre-aujourdhui" className="text-lg font-semibold">Aujourd'hui</h2>
-              <Button asChild size="sm"><Link to={DESTINATIONS.maJournee}>Ouvrir Ma journée</Link></Button>
-            </div>
-            <Card>
-              {!t.duJour.length ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">Rien de planifié aujourd'hui.</p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {t.duJour.slice(0, JOURNEE_VISIBLE).map((c) => (
-                    <li key={c.id}>
-                      <Link to={DESTINATIONS.maJournee} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <span className="w-12 font-semibold tabular-nums">{heure(c) ?? "—"}</span>
-                        <span className="flex-1">{c.bon.client_nom}{c.bon.adresse ? ` — ${c.bon.adresse}` : ""}{c.metier ? ` · ${c.metier}` : ""}</span>
-                        <span aria-hidden="true">›</span>
-                      </Link>
-                    </li>
-                  ))}
-                  {t.duJour.length > JOURNEE_VISIBLE && (
-                    <li><Link to={DESTINATIONS.maJournee} className="block px-4 py-3 text-sm font-medium hover:bg-muted">Voir les {t.duJour.length - JOURNEE_VISIBLE} autres dans Ma journée ›</Link></li>
-                  )}
-                </ul>
+      {/* Sans équipe connue, tout ce que la base sert, comme l'ancien (D-VIS-09) : pas d'encadré. */}
+      <div className="grid-stats grid-stats-4">
+        <Tuile libelle="Mes interventions aujourd'hui" valeur={t.duJour.length} ton={t.duJour.length ? "alerte" : "neutre"} icone="planning" vers={DESTINATIONS.maJournee} titre="Ouvrir le planning" />
+        <Tuile libelle="Les six prochains jours" valeur={t.aVenir.length} icone="planning" vers={DESTINATIONS.planning} titre="Ouvrir le planning" />
+        <Tuile libelle="Travaux à pointer" valeur={t.aPointer.length} ton={t.aPointer.length ? "danger" : "neutre"} icone="bonsCommande" vers={DESTINATIONS.planning} titre="Ouvrir le planning" />
+        <Tuile libelle="Pièces que j’ai signalées" valeur={t.pieces.length} icone="bonsCommande" vers={DESTINATIONS.maJournee} titre="Voir les pièces en commande" />
+      </div>
+      <Section titre="Aujourd’hui">
+        <div className="card traiter-card">
+          {!t.duJour.length ? (
+            <div className="empty">🎉 Rien de planifié aujourd’hui.</div>
+          ) : (
+            <>
+              {t.duJour.slice(0, JOURNEE_VISIBLE).map((c) => {
+                const h = heure(c);
+                return (
+                  <Link key={c.id} to={DESTINATIONS.maJournee} className="traiter-row cliquable">
+                    <span className="traiter-ico" style={{ background: "var(--info-soft)" }} aria-hidden="true">
+                      🔧
+                    </span>
+                    <span className="traiter-label">
+                      {c.bon.client_nom || "—"}
+                      {c.bon.adresse ? ` — ${c.bon.adresse}` : ""}
+                    </span>
+                    {h && <span className="traiter-count">{h}</span>}
+                    <span className="traiter-chev" aria-hidden="true">
+                      ›
+                    </span>
+                  </Link>
+                );
+              })}
+              {t.duJour.length > JOURNEE_VISIBLE && (
+                <Link to={DESTINATIONS.maJournee} className="traiter-row cliquable">
+                  <span className="traiter-ico" style={{ background: "var(--accent-soft)" }} aria-hidden="true">
+                    →
+                  </span>
+                  <span className="traiter-label">Voir les {t.duJour.length - JOURNEE_VISIBLE} autres dans le planning</span>
+                  <span className="traiter-chev" aria-hidden="true">
+                    ›
+                  </span>
+                </Link>
               )}
-            </Card>
-          </section>
-        </>
-      )}
-    </div>
+            </>
+          )}
+        </div>
+      </Section>
+    </>
   );
 }

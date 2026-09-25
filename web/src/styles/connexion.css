@@ -1,0 +1,183 @@
+/*
+ * COPIE VERBATIM du <style> de l'application historique — NE PAS MODIFIER.
+ *
+ * Source : src/pages/login.html, lignes 13 à 181 (entre <style> et </style>)
+ * Commit : 648620ac151de5f67dd54fdb94407eb2b82f5a68
+ * Portée : posée par la seule page de connexion, le temps qu'elle est affichée
+ * Recopie : python3 web/scripts/copier-css-ancien.py
+ *
+ * La nouvelle application doit être visuellement identique à l'ancienne : on
+ * reprend sa feuille telle quelle plutôt que de la réécrire, et on produit le
+ * même HTML, avec les mêmes classes. Ce qui manque ou diffère vit dans
+ * `complements.css`, jamais ici : le corps de ce fichier doit rester égal à la
+ * source (garde-fou `tests/garde-fous-style.essai.ts`).
+ */
+    /* ═══════════════════════════════════════════════════════════════════
+       LA FEUILLE DE PLAN.
+       On entre dans le logiciel comme on déplie un plan : trame de calque,
+       façade qui se trace toute seule au fond, cote avec ses flèches, et le
+       cartouche en bas à droite — société, échelle, indice, date — comme sur
+       toute feuille de chantier.
+       Le décor ne s'arrête jamais ; le formulaire, lui, s'immobilise dès
+       qu'il est posé. C'est ce qui fait vivant plutôt qu'agité.
+       ═══════════════════════════════════════════════════════════════════ */
+    :root{
+      --accent:#FF6A1A; --accent-2:#C24E00;
+      --papier:#F4F2ED; --encre:#182233; --mine:#5C6879; --trait:#9AA7BC;
+      --titre:'Manrope','Segoe UI Semibold',system-ui,-apple-system,Arial,sans-serif;
+      --texte:'Inter',-apple-system,BlinkMacSystemFont,system-ui,Arial,sans-serif;
+      --cote:'JetBrains Mono',ui-monospace,Menlo,monospace;
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0; padding:0;}
+    body{
+      font-family:var(--texte); color:var(--encre);
+      background:var(--papier);
+      min-height:100vh; display:flex; align-items:center; justify-content:center;
+      padding:24px; position:relative; overflow:hidden;
+    }
+
+    /* La trame du calque. */
+    .calque{
+      position:fixed; inset:0; z-index:0; pointer-events:none;
+      background-image:
+        linear-gradient(rgba(24,34,51,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24,34,51,.05) 1px, transparent 1px);
+      background-size:22px 22px;
+    }
+
+    /* Le dessin se trace, se tient un moment, puis s'efface par l'autre bout
+       et recommence. Chaque trait part avec son propre retard : une façade ne
+       se dessine pas d'un seul geste. */
+    .dessin{position:fixed; inset:0; width:100%; height:100%; z-index:1; pointer-events:none;}
+    .dessin path{fill:none; stroke:var(--trait); stroke-width:1.2; vector-effect:non-scaling-stroke;}
+    .dessin .t{stroke-dasharray:var(--l); stroke-dashoffset:var(--l); animation:tracer 18s linear infinite;}
+    @keyframes tracer{
+      0%      {stroke-dashoffset:var(--l);}
+      26%,72% {stroke-dashoffset:0;}
+      100%    {stroke-dashoffset:calc(var(--l) * -1);}
+    }
+    .dessin text{fill:var(--mine); font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; opacity:0; animation:paraitre 18s linear infinite;}
+    @keyframes paraitre{0%,22%{opacity:0;} 32%,70%{opacity:.8;} 80%,100%{opacity:0;}}
+
+    /* ── La feuille ─────────────────────────────────────────────────────── */
+    .feuille{
+      position:relative; z-index:3; width:100%; max-width:410px;
+      background:#fff; border:1px solid var(--trait);
+      padding:38px 38px 30px;
+      box-shadow:0 18px 44px rgba(24,34,51,.14);
+      animation:poser .7s cubic-bezier(.2,.9,.3,1) both;
+    }
+    @keyframes poser{from{opacity:0; transform:translateY(18px) rotate(-.6deg);} to{opacity:1; transform:none;}}
+    /* Le liseré se tire de gauche à droite, comme un trait de règle. */
+    .feuille::before{
+      content:''; position:absolute; top:-1px; left:-1px; right:-1px; height:4px;
+      background:var(--accent); transform-origin:left;
+      animation:tirer .6s cubic-bezier(.3,.9,.3,1) .42s both;
+    }
+    @keyframes tirer{from{transform:scaleX(0);} to{transform:scaleX(1);}}
+
+    @keyframes monter{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;}}
+
+    .login-header{display:flex; align-items:center; gap:12px; margin-bottom:26px; animation:monter .5s ease .3s both;}
+    .login-header .sceau{
+      width:38px; height:38px; flex-shrink:0; background:var(--encre); color:#fff;
+      display:flex; align-items:center; justify-content:center; font-size:17px;
+    }
+    .login-header h1{
+      margin:0; font-family:var(--titre); font-weight:800; font-size:20px;
+      text-transform:uppercase; letter-spacing:.02em; line-height:1.1;
+    }
+    .login-header p{
+      margin:2px 0 0; font-family:var(--cote); font-size:9.5px; color:var(--mine);
+      letter-spacing:.16em; text-transform:uppercase;
+    }
+
+    .form-group{margin-bottom:18px;}
+    .form-group:nth-of-type(1){animation:monter .5s ease .42s both;}
+    .form-group:nth-of-type(2){animation:monter .5s ease .52s both;}
+
+    label{
+      display:block; margin-bottom:7px; color:var(--mine);
+      font-family:var(--cote); font-size:9.5px; font-weight:500;
+      letter-spacing:.14em; text-transform:uppercase;
+    }
+    input[type="email"], input[type="password"]{
+      width:100%; padding:11px 13px;
+      border:1px solid var(--trait); border-radius:0;
+      background:#FCFCFA; font-size:14px; font-family:inherit; color:var(--encre);
+      transition:border-color .18s, box-shadow .18s, background .18s;
+    }
+    input[type="email"]::placeholder, input[type="password"]::placeholder{color:#B4BDC9;}
+    input[type="email"]:focus, input[type="password"]:focus{
+      outline:none; background:#fff;
+      border-color:var(--accent);
+      box-shadow:inset 3px 0 0 var(--accent);
+    }
+
+    .btn-login{
+      position:relative; overflow:hidden;
+      width:100%; padding:13px 16px; margin-top:8px;
+      background:var(--accent); color:#fff;
+      border:none; border-radius:0; cursor:pointer;
+      font-family:var(--titre); font-weight:700; font-size:12.5px;
+      text-transform:uppercase; letter-spacing:.12em;
+      transition:background .18s;
+      animation:monter .5s ease .62s both;
+    }
+    /* Un trait de crayon repasse sur le bouton, comme on souligne une cote. */
+    .btn-login::after{
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background:linear-gradient(105deg, transparent 32%, rgba(255,255,255,.42) 50%, transparent 68%);
+      transform:translateX(-120%);
+      animation:crayon 4.8s ease-in-out 1.7s infinite;
+    }
+    @keyframes crayon{0%,74%{transform:translateX(-120%);} 100%{transform:translateX(120%);}}
+    .btn-login:hover{background:var(--accent-2);}
+    .btn-login:disabled{opacity:.55; cursor:not-allowed;}
+    .btn-login:disabled::after{animation:none;}
+
+    .success-message, .error-message, .loading{display:none; margin-top:12px; font-size:13px; line-height:1.45;}
+    .success-message{padding:10px 12px; background:#E8F5EC; color:#1E6B37; border-left:3px solid #1E6B37;}
+    .error-message{padding:10px 12px; background:#FDECEC; color:#A5262C; border-left:3px solid #D9363E;}
+    .loading{font-family:var(--cote); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--mine);}
+    .success-message.show, .error-message.show, .loading.show{display:block;}
+
+    .oubli{margin-top:22px; text-align:center; animation:monter .5s ease .72s both;}
+    #btnForgot{
+      background:none; border:none; cursor:pointer; padding:4px;
+      font-family:var(--cote); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+      color:var(--mine); border-bottom:1px solid var(--trait);
+    }
+    #btnForgot:hover{color:var(--accent-2); border-bottom-color:var(--accent-2);}
+    #btnForgot:disabled{opacity:.5; cursor:not-allowed;}
+
+    /* ── Le cartouche ───────────────────────────────────────────────────── */
+    .cartouche{
+      position:fixed; right:18px; bottom:18px; z-index:4;
+      display:grid; grid-template-columns:auto auto;
+      border:1px solid var(--trait); background:rgba(255,255,255,.92);
+      font-family:var(--cote); font-size:9px; color:var(--mine);
+    }
+    .cartouche div{padding:5px 11px; border-bottom:1px solid var(--trait); animation:remplir .34s ease both;}
+    .cartouche div:nth-child(odd){border-right:1px solid var(--trait); color:#9AA3B2; letter-spacing:.12em;}
+    .cartouche div:nth-last-child(-n+2){border-bottom:none;}
+    @keyframes remplir{from{opacity:0;} to{opacity:1;}}
+    .cartouche div:nth-child(1){animation-delay:.80s} .cartouche div:nth-child(2){animation-delay:.85s}
+    .cartouche div:nth-child(3){animation-delay:.90s} .cartouche div:nth-child(4){animation-delay:.95s}
+    .cartouche div:nth-child(5){animation-delay:1.00s} .cartouche div:nth-child(6){animation-delay:1.05s}
+    .cartouche div:nth-child(7){animation-delay:1.10s} .cartouche div:nth-child(8){animation-delay:1.15s}
+
+    /* Sous 620 px, le cartouche chevaucherait la feuille : il se retire. */
+    @media (max-width:620px){
+      .cartouche{display:none;}
+      .feuille{padding:30px 24px 24px;}
+    }
+
+    @media (prefers-reduced-motion:reduce){
+      .dessin .t{stroke-dashoffset:0; animation:none;}
+      .dessin text{opacity:.8; animation:none;}
+      .feuille, .feuille::before, .login-header, .form-group,
+      .btn-login, .btn-login::after, .oubli, .cartouche div{animation:none;}
+      .feuille::before{transform:none;}
+    }

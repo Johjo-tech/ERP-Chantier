@@ -1,0 +1,51 @@
+/*
+ * Ce que l'ancienne feuille (`ancien.css`, copie verbatim) ne dit pas, parce
+ * que l'ancien HTML n'en avait pas besoin. Chaque règle ici doit se justifier
+ * par une différence de STRUCTURE — jamais par un goût : le rendu visé reste
+ * celui de l'ancienne application.
+ */
+
+/* L'ancien menu, ses sous-onglets et ses tuiles étaient des <button> ; ici ce
+   sont des liens (une route par écran). Un lien se souligne : pas un bouton. */
+a.nav-item,
+a.plus-subnav-btn,
+a.btn,
+a.quick-action,
+a.stat-card,
+a.traiter-row,
+a.activity-row,
+a.topclient-row,
+a.summary-row,
+a.reglages-lien,
+a.notif-item{ text-decoration:none; }
+a.btn, a.quick-action{ cursor:pointer; }
+a.traiter-row, a.activity-row, a.topclient-row, a.summary-row{ color:inherit; }
+a.stat-card{ display:block; color:inherit; }
+/* L'action rapide était un <button> sans couleur de texte : elle prenait celle
+   des boutons du navigateur (`buttontext`), un noir plus franc que le texte. */
+a.quick-action{ display:flex; color:buttontext; }
+/* Un résultat de la recherche du tableau de bord : une carte cliquable (`style="cursor:pointer"` dans l'ancien). */
+a.resultat-recherche{ display:block; color:inherit; text-decoration:none; cursor:pointer; }
+
+/* Le lien d'action de l'ancien écran (`.section-link`, « Voir tout ») était un
+   <a> ; un bouton qui en prend l'habit perd ses bordures de bouton. */
+button.section-link{ background:none; border:none; padding:0; cursor:pointer; font-family:inherit; }
+
+/* Un bouton désactivé : l'ancienne feuille n'en parle pas, le navigateur le
+   grise à peine. Les écrans de l'ancien désactivaient rarement ; les nouveaux
+   le font plus souvent (envoi en cours), il faut que cela se voie. */
+.btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+/* Le bandeau « voir en tant que » (D-010) : absent de l'ancien écran, il en
+   prend le bandeau d'alerte. Deux bandeaux à la fois s'empilent. */
+.bandeau-alerte + .bandeau-alerte{ top:42px; }
+body.has-deux-bandeaux #app{ padding-top:84px; }
+
+/* Les messages d'état des composants de base (erreur d'un champ, aide). */
+.champ-erreur{ font-size:11.5px; color:var(--danger); margin-top:2px; }
+.champ-aide{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+.field input[aria-invalid="true"], .field select[aria-invalid="true"], .field textarea[aria-invalid="true"]{ border-color:var(--danger); }
+
+/* Le chargement : l'ancien écran n'en montrait pas — il attendait tout avant
+   de dessiner. La page pleine d'un écran qui charge reprend donc l'état vide. */
+.chargement{ color:var(--text-dim); font-size:13.5px; padding:30px 10px; text-align:center; }

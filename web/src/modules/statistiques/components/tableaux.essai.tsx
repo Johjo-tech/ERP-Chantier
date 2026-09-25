@@ -69,7 +69,7 @@ describe("tableau de bord de pilotage", () => {
     // RM-70 : 1 − 4 882 / 10 000 → 51 %.
     expect(screen.getByRole("meter", { name: "Taux d'encaissement" })).toHaveAttribute("aria-valuenow", "51");
     expect(screen.getByRole("meter", { name: "Taux de conversion des devis" })).toHaveAttribute("aria-valuenow", "25");
-    const aTraiter = screen.getByRole("heading", { name: /À traiter/ }).parentElement as HTMLElement;
+    const aTraiter = screen.getByRole("region", { name: /À traiter/ });
     expect(within(aTraiter).getByText("Bons de commande à facturer")).toBeInTheDocument();
     expect(within(aTraiter).getByText("Factures échues à relancer")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Nouvelle facture/ })).toHaveAttribute("href", "/factures/nouvelle");
@@ -88,8 +88,8 @@ describe("tableau de bord de pilotage", () => {
     rendreAvecSession(<TableauDeBord />, { role: "admin" });
     await screen.findByText("Encaissé ce mois (TTC)");
     expect(autres.listerDevis).not.toHaveBeenCalled();
-    await userEvent.type(screen.getByRole("searchbox"), "régie");
-    expect(await screen.findByText("1 résultat — Entrée pour passer au suivant")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: /Rechercher/ }), "régie");
+    expect(await screen.findByText("1 résultat")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Régie Sud/ })).toHaveAttribute("href", "/devis/d1");
     expect(screen.queryByText("Encaissé ce mois (TTC)")).not.toBeInTheDocument();
   });
@@ -97,7 +97,8 @@ describe("tableau de bord de pilotage", () => {
   it("le graphique a son tableau équivalent", async () => {
     rendreAvecSession(<TableauDeBord />, { role: "secretaire" });
     expect(await screen.findByRole("img", { name: /Chiffre d'affaires HT par mois/ })).toBeInTheDocument();
-    expect(screen.getByText("Voir en tableau")).toBeInTheDocument();
+    // Le tableau équivalent est là pour les lecteurs d'écran, hors de la vue : le dessin reste celui de l'ancien.
+    expect(screen.getByRole("table", { name: "Chiffre d'affaires HT par mois" })).toBeInTheDocument();
     expect(screen.getAllByText("1 660,00 €").length).toBeGreaterThan(0);
   });
 });
@@ -144,7 +145,9 @@ describe("tableau de bord du terrain", () => {
   it("admin simulant le technicien : l'écran du terrain", async () => {
     autres.lirePlanning.mockResolvedValue({ bons: [], taches: [], equipes: [], sousTraitants: [], metiers: [], monEquipeId: null, monSousTraitantId: null, montantsSousTraitant: {}, telephones: {}, tachesAvecTravaux: [] });
     rendreAvecSession(<TableauDeBord />, { role: "admin", simule: "technicien" });
-    expect(await screen.findByText(/aucune équipe ni entreprise sous-traitante/)).toBeInTheDocument();
+    // Sans équipe connue, les tuiles quand même — comme l'ancien, qui montrait tout (D-VIS-09).
+    expect(await screen.findByText("Mes interventions aujourd'hui")).toBeInTheDocument();
+    expect(screen.getByText("🎉 Rien de planifié aujourd’hui.")).toBeInTheDocument();
   });
 });
 
