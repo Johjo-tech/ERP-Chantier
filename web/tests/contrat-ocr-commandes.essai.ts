@@ -22,7 +22,7 @@ describe("OCR → formulaire de bon", () => {
       },
     });
     if (!("extraction" in r)) throw new Error("extraction attendue");
-    const lu = lirePreRemplissage({ prefill: versPreRemplissage(r.extraction, null) });
+    const lu = lirePreRemplissage({ prefill: versPreRemplissage(r.extraction, null, "2026-09-25") });
     expect(lu).not.toBeNull();
     expect(lu?.numero_bc).toBe("BC-9");
     const lignes = lignesDepuisPreRemplissage(lu, 10);

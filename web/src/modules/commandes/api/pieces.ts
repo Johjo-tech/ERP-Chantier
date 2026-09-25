@@ -1,10 +1,8 @@
-import { z } from "zod";
 import { supabase, type Client } from "@/lib/supabase";
-import { analyser } from "@/lib/validation";
 import { schemaBon } from "../domain/bon";
 import { pieceDuBon, type PieceDuBon } from "../domain/pieces";
 import { schemaTacheBon } from "../domain/workflow";
-import { COLONNES_TACHE } from "./bons";
+import { COLONNES_TACHE, lots, parPages } from "./bons";
 
 const schemaBonDePiece = schemaBon.pick({ id: true, numero_interne: true, numero_bc: true, client_nom: true, adresse: true, ville: true, statut_workflow: true });
 
@@ -14,20 +12,28 @@ const schemaBonDePiece = schemaBon.pick({ id: true, numero_interne: true, numero
  * Seules les tâches qui portent une trace de pièce sont relues.
  */
 export async function listerPieces(societeId: string, client: Client = supabase()): Promise<PieceDuBon[]> {
-  const taches = await client
-    .from("planning_taches")
-    .select(COLONNES_TACHE)
-    .eq("societe_id", societeId)
-    .not("bon_commande_id", "is", null)
-    .or("piece_a_commander.is.true,piece_description.not.is.null,piece_recue_le.not.is.null")
-    .order("cree_le");
-  if (taches.error) throw taches.error;
-  const lues = analyser(z.array(schemaTacheBon), taches.data, "pièces à commander");
+  // Par pages et par lots, comme la liste des bons : au-delà de max_rows la réponse était tronquée sans erreur (relecture 3, M3).
+  const lues = await parPages(
+    (d, f) =>
+      client
+        .from("planning_taches")
+        .select(COLONNES_TACHE)
+        .eq("societe_id", societeId)
+        .not("bon_commande_id", "is", null)
+        .or("piece_a_commander.is.true,piece_description.not.is.null,piece_recue_le.not.is.null")
+        .order("cree_le")
+        .order("id")
+        .range(d, f),
+    schemaTacheBon,
+    "pièces à commander"
+  );
   const ids = [...new Set(lues.map((t) => t.bon_commande_id).filter((id): id is string => id !== null))];
   if (!ids.length) return [];
-  const bons = await client.from("v_bons_commande_terrain").select(Object.keys(schemaBonDePiece.shape).join(", ")).in("id", ids);
-  if (bons.error) throw bons.error;
-  return analyser(z.array(schemaBonDePiece), bons.data, "bons des pièces").map((b) => pieceDuBon(b, lues.filter((t) => t.bon_commande_id === b.id)));
+  const colonnes = Object.keys(schemaBonDePiece.shape).join(", ");
+  const pages = await Promise.all(
+    lots(ids).map((lot) => parPages((d, f) => client.from("v_bons_commande_terrain").select(colonnes).in("id", lot).order("id").range(d, f), schemaBonDePiece, "bons des pièces"))
+  );
+  return pages.flat().map((b) => pieceDuBon(b, lues.filter((t) => t.bon_commande_id === b.id)));
 }
 
 /**

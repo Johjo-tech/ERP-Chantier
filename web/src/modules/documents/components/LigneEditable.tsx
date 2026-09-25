@@ -17,12 +17,14 @@ interface Props {
   onChange: (champ: keyof LigneEdition, valeur: string) => void;
   onRemplacer: (ligne: LigneEdition) => void;
   ChampReference?: ChampReferenceLigne | undefined;
+  /** Métier d'un chapitre (bons de commande), branché par le module qui connaît les métiers. */
+  ChampMetier?: ChampReferenceLigne | undefined;
   onAction: (action: "monter" | "descendre" | "dupliquer" | "retirer") => void;
 }
 
 const versLigne = (l: LigneEdition) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva });
 
-export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lectureSeule, onChange, onRemplacer, ChampReference, onAction }: Props) {
+export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lectureSeule, onChange, onRemplacer, ChampReference, ChampMetier, onAction }: Props) {
   const n = index + 1;
   const erreur = (champ: ErreurLigne["champ"]) => erreurs.find((e) => e.index === index && e.champ === champ)?.message;
   const invalide = (champ: ErreurLigne["champ"]) => (erreur(champ) ? { "aria-invalid": true, title: erreur(champ) } : {});
@@ -48,6 +50,7 @@ export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lec
             onChange={(e) => onChange("designation", e.target.value)}
             {...invalide("designation")}
           />
+          {ligne.type === "chapitre" && ChampMetier && <ChampMetier ligne={ligne} index={index} remplacer={onRemplacer} desactive={lectureSeule} />}
         </Td>
         {actions}
       </Tr>

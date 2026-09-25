@@ -9,13 +9,16 @@ import { formatDateFr } from "@/lib/dates";
 import { formatEuros, montant } from "@/lib/money";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useFonctionnalite } from "@/modules/societes/hooks/useFonctionnalite";
-import { useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
+import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
+import { Alert } from "@/components/ui/alert";
+import { messageErreur } from "@/lib/erreurs";
 import type { BonDeLaListe } from "../api/bons";
-import { conducteursDesBons, filtrerBons, FILTRES_VIDES, type FiltresBons } from "../domain/filtres";
+import { conducteursDesBons, filtrerBons, FILTRES_VIDES, valeursDeFiltre, type FiltresBons } from "../domain/filtres";
 import { LIBELLES_MODE, modeDuBon } from "../domain/regles";
 import { useBons } from "../hooks/useBons";
 import { BadgeEtape } from "./BadgeEtape";
 import { BarreFiltresBons } from "./BarreFiltresBons";
+import { ContactsBon } from "./ContactsBon";
 
 /** Le n° du client, ou le mode quand il n'y en a pas : on ne montre jamais une sentinelle comme un numéro. */
 function NumeroClient({ bon }: { bon: BonDeLaListe }) {
@@ -24,7 +27,7 @@ function NumeroClient({ bon }: { bon: BonDeLaListe }) {
   return <span className="whitespace-pre-line">{bon.numero_bc ?? "—"}</span>;
 }
 
-function LigneBon({ bon, prix }: { bon: BonDeLaListe; prix: boolean }) {
+function LigneBon({ bon, prix, contacts, onResultat }: { bon: BonDeLaListe; prix: boolean; contacts: boolean; onResultat: (m: string, e?: unknown) => void }) {
   return (
     <Tr>
       <Td>
@@ -43,6 +46,7 @@ function LigneBon({ bon, prix }: { bon: BonDeLaListe; prix: boolean }) {
       </Td>
       <Td><BadgeEtape bon={bon} /></Td>
       {prix && <Td className="text-right tabular-nums">{bon.montant === null ? "—" : formatEuros(montant(bon.montant))}</Td>}
+      {contacts && <Td><ContactsBon bon={bon} onResultat={onResultat} /></Td>}
     </Tr>
   );
 }
@@ -55,6 +59,9 @@ export function PageBonsCommande() {
   const liste = filtrerBons(bons.data ?? [], filtres);
   const filtre = JSON.stringify(filtres) !== JSON.stringify(FILTRES_VIDES);
   const ocr = useFonctionnalite("ocr");
+  const contacts = usePermission("bons_commande", "modifier");
+  const [resultat, setResultat] = useState<{ message: string; erreur?: unknown } | null>(null);
+  const onResultat = (message: string, erreur?: unknown) => setResultat({ message, erreur });
 
   return (
     <>
@@ -62,12 +69,13 @@ export function PageBonsCommande() {
         titre="Bons de commande"
         actions={
           <Can module="bons_commande" action="creer">
-            {ocr && <Button asChild variant="outline"><Link to="/commandes/lecture">Lire un bon (PDF, photo)</Link></Button>}
+            {ocr && <Button asChild variant="outline"><Link to="/commandes/lecture">Importer un bon (PDF, photo)</Link></Button>}
             <Button asChild><Link to="/commandes/nouveau">Nouveau bon de commande</Link></Button>
           </Can>
         }
       />
-      <BarreFiltresBons filtres={filtres} onChange={setFiltres} conducteurs={conducteursDesBons(bons.data ?? [])} />
+      <BarreFiltresBons filtres={filtres} onChange={setFiltres} conducteurs={conducteursDesBons(bons.data ?? [])} valeurs={valeursDeFiltre(bons.data ?? [])} />
+      {resultat && <Alert variant={resultat.erreur ? "erreur" : "succes"}>{resultat.erreur ? messageErreur(resultat.erreur) : resultat.message}</Alert>}
       {bons.isPending && <Chargement />}
       {bons.isError && <Erreur erreur={bons.error} reessayer={() => void bons.refetch()} />}
       {bons.isSuccess && liste.length === 0 && <Vide message={filtre ? "Aucun bon de commande ne correspond." : "Aucun bon de commande pour l'instant."} />}
@@ -82,9 +90,10 @@ export function PageBonsCommande() {
               <Th>Réception</Th>
               <Th>Étape</Th>
               {prix && <Th className="text-right">Montant HT</Th>}
+              {contacts && <Th>Contact</Th>}
             </Tr>
           </THead>
-          <TBody>{liste.map((b) => <LigneBon key={b.id} bon={b} prix={prix} />)}</TBody>
+          <TBody>{liste.map((b) => <LigneBon key={b.id} bon={b} prix={prix} contacts={contacts} onResultat={onResultat} />)}</TBody>
         </Table>
       )}
     </>

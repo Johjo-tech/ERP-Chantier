@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { messageErreur } from "@/lib/erreurs";
 import { correspond } from "@/lib/recherche";
-import { ongletDe, parFournisseur, type OngletPieces, type PieceDuBon } from "../domain/pieces";
+import { ongletDe, ongletVoisin, parFournisseur, type OngletPieces, type PieceDuBon } from "../domain/pieces";
 import { usePieces } from "../hooks/useBons";
 import { CartePiece } from "./CartePiece";
 
@@ -48,20 +48,29 @@ export function PagePieces() {
   return (
     <>
       <EnTetePage titre="Pièces en commande" />
-      <div role="tablist" aria-label="État des pièces" className="mb-3 flex flex-wrap gap-2">
+      <label htmlFor="recherche-pieces" className="sr-only">Rechercher une pièce</label>
+      <Input id="recherche-pieces" type="search" className="mb-3 max-w-sm" placeholder="Pièce, fournisseur, client, n° BC…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
+      {/* Onglets ARIA complets : panneau, aria-controls, flèches et Début/Fin, un seul onglet dans l'ordre de tabulation (relecture 3, M8). */}
+      <div role="tablist" aria-label="État des pièces" className="mb-3 flex flex-wrap gap-2" onKeyDown={(e) => {
+        const cible = ongletVoisin(ONGLETS.map((o) => o.cle), onglet, e.key);
+        if (!cible) return;
+        e.preventDefault();
+        setOnglet(cible);
+        document.getElementById(`onglet-${cible}`)?.focus();
+      }}>
         {ONGLETS.map((o) => (
-          <Button key={o.cle} role="tab" aria-selected={o.cle === onglet} variant={o.cle === onglet ? "default" : "outline"} onClick={() => setOnglet(o.cle)}>
+          <Button key={o.cle} id={`onglet-${o.cle}`} role="tab" aria-selected={o.cle === onglet} aria-controls="panneau-pieces" tabIndex={o.cle === onglet ? 0 : -1} variant={o.cle === onglet ? "default" : "outline"} onClick={() => setOnglet(o.cle)}>
             {o.libelle} ({trouvees.filter((p) => ongletDe(p) === o.cle).length})
           </Button>
         ))}
       </div>
-      <label htmlFor="recherche-pieces" className="sr-only">Rechercher une pièce</label>
-      <Input id="recherche-pieces" type="search" className="mb-3 max-w-sm" placeholder="Pièce, fournisseur, client, n° BC…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
-      {resultat && <Alert variant={resultat.erreur ? "erreur" : "succes"}>{resultat.erreur ? messageErreur(resultat.erreur) : resultat.message}</Alert>}
-      {pieces.isPending && <Chargement />}
-      {pieces.isError && <Erreur erreur={pieces.error} reessayer={() => void pieces.refetch()} />}
-      {pieces.isSuccess && liste.length === 0 && <Vide message={recherche ? "Aucune pièce ne correspond." : (courant?.vide ?? "")} />}
-      {liste.length > 0 && (onglet === "commandees" ? <Dossiers pieces={liste} onResultat={onResultat} /> : <Liste pieces={liste} onResultat={onResultat} />)}
+      <div id="panneau-pieces" role="tabpanel" aria-labelledby={`onglet-${onglet}`} tabIndex={0}>
+        {resultat && <Alert variant={resultat.erreur ? "erreur" : "succes"}>{resultat.erreur ? messageErreur(resultat.erreur) : resultat.message}</Alert>}
+        {pieces.isPending && <Chargement />}
+        {pieces.isError && <Erreur erreur={pieces.error} reessayer={() => void pieces.refetch()} />}
+        {pieces.isSuccess && liste.length === 0 && <Vide message={recherche ? "Aucune pièce ne correspond." : (courant?.vide ?? "")} />}
+        {liste.length > 0 && (onglet === "commandees" ? <Dossiers pieces={liste} onResultat={onResultat} /> : <Liste pieces={liste} onResultat={onResultat} />)}
+      </div>
     </>
   );
 }

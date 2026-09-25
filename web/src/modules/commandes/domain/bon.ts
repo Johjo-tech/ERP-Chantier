@@ -7,9 +7,10 @@ import { modeDuBon, numeroAEnregistrer, numeroSaisissable, type ModeBon } from "
 const statutLogement = z.enum(["occupé", "vacant", "commune"]).nullable();
 
 /**
- * Un bon LU PAR LA VUE `v_bons_commande_terrain` : `montant` y vaut NULL pour
- * le technicien et le sous-traitant (BC-56). Le téléphone du locataire n'y
- * figure pas (BC-93) : il n'est donc ni lu ni réécrit.
+ * Un bon LU PAR LA VUE `v_bons_commande_terrain` : `montant` et
+ * `montant_par_metier` y valent NULL pour le technicien et le sous-traitant
+ * (BC-56). Le téléphone du locataire n'y figure pas (BC-93) : il n'est donc ni
+ * lu ni réécrit.
  */
 export const schemaBon = z.object({
   id: z.string(),
@@ -42,6 +43,24 @@ export const schemaBon = z.object({
   statut_workflow: z.string().nullable(),
   conducteur_id: z.string().nullable(),
   conducteur: z.string().nullable(),
+  devis_id: z.string().nullable(),
+  probleme_description: z.string().nullable(),
+  facturation_adresse: z.string().nullable(),
+  facturation_code_postal: z.string().nullable(),
+  facturation_ville: z.string().nullable(),
+  piece_jointe_chemin: z.string().nullable(),
+  piece_jointe_nom: z.string().nullable(),
+  piece_jointe_mime: z.string().nullable(),
+  metier: z.string().nullable(),
+  /** jsonb : l'ancienne app y met un tableau de noms ; la prudence reste (`metiersDuBon`). */
+  metiers: z.unknown(),
+  /** jsonb `{ métier: montant }`, validé à l'usage (`montantsSaisisParMetier`). */
+  montant_par_metier: z.unknown(),
+  gratuite: z.boolean(),
+  gratuite_motif: z.string().nullable(),
+  /** jsonb des appels et SMS sans réponse (`tentativesDuBon`). */
+  tentatives_contact: z.unknown(),
+  rappel_date: z.string().nullable(),
 });
 export type EnteteBon = z.infer<typeof schemaBon>;
 
@@ -91,6 +110,13 @@ export const schemaSaisieBon = z.object({
   numero_logement: texte,
   precision_commune: texte,
   ancien_locataire: texte,
+  devis_id: texte,
+  /** Où envoyer la facture quand ce n'est pas le siège : `bc_generer_facture` les recopie dans `factures.facturation_*`. */
+  facturation_adresse: texte,
+  facturation_code_postal: texte,
+  facturation_ville: texte,
+  /** « Ce qui ne va pas » : la raison d'être d'un SAV. */
+  probleme_description: texte,
 });
 export type SaisieBon = z.infer<typeof schemaSaisieBon>;
 export type ValeursBon = Record<keyof SaisieBon, string>;
@@ -102,6 +128,9 @@ export type ValeursBon = Record<keyof SaisieBon, string>;
 const nombreOuTexte = z.union([z.number(), z.string()]).nullish();
 export const schemaPreRemplissage = z.object({
   client_id: z.string().nullish(),
+  interlocuteur: z.string().nullish(),
+  /** `sans_bc` quand la lecture n'a trouvé aucun numéro (versSaisieBonCommande : `sansBC = !numeroBC`). */
+  mode: z.enum(["normal", "sans_bc", "attente_bc"]).nullish(),
   numero_bc: z.string().nullish(),
   reference_chantier: z.string().nullish(),
   date_reception: z.string().nullish(),
@@ -110,8 +139,26 @@ export const schemaPreRemplissage = z.object({
   code_postal: z.string().nullish(),
   ville: z.string().nullish(),
   nature_travaux: z.string().nullish(),
+  notes: z.string().nullish(),
+  logement_statut: statutLogement.nullish().catch(null),
+  occupant: z.string().nullish(),
+  etage: z.string().nullish(),
+  numero_logement: z.string().nullish(),
+  facturation_adresse: z.string().nullish(),
+  facturation_code_postal: z.string().nullish(),
+  facturation_ville: z.string().nullish(),
+  montant: nombreOuTexte,
   lignes: z
-    .array(z.object({ type: z.enum(["ligne", "chapitre", "commentaire"]).nullish(), designation: z.string().nullish(), quantite: nombreOuTexte, unite: z.string().nullish(), prix_unitaire: nombreOuTexte }))
+    .array(
+      z.object({
+        type: z.enum(["ligne", "chapitre", "commentaire"]).nullish(),
+        designation: z.string().nullish(),
+        quantite: nombreOuTexte,
+        unite: z.string().nullish(),
+        prix_unitaire: nombreOuTexte,
+        tva: nombreOuTexte,
+      })
+    )
     .nullish(),
 });
 export type PreRemplissageBon = z.infer<typeof schemaPreRemplissage>;
@@ -124,9 +171,19 @@ export function lirePreRemplissage(etat: unknown): PreRemplissageBon | null {
   return r.success ? r.data : null;
 }
 
+/**
+ * Le document lu par la lecture automatique, retenu comme pièce jointe du bon
+ * (OCR-04). Un `File` traverse l'état de navigation (clonage structuré) ; tout
+ * autre chose est ignoré.
+ */
+export function lireFichierRetenu(etat: unknown): File | null {
+  const f = typeof etat === "object" && etat !== null && "fichier" in etat ? etat.fichier : null;
+  return f instanceof File ? f : null;
+}
+
 const enTexte = (n: number | string | null | undefined) => (n === null || n === undefined ? "" : String(n).replace(".", ","));
 
-/** Les lignes lues ailleurs deviennent des lignes à relire, à la TVA par défaut de la société. */
+/** Les lignes lues ailleurs deviennent des lignes à relire, à la TVA lue sinon à celle de la société. */
 export function lignesDepuisPreRemplissage(p: PreRemplissageBon | null, tvaDefaut: number): LigneEdition[] {
   return (p?.lignes ?? []).map((l) => {
     const vide = ligneVide(tvaDefaut, l.type ?? "ligne");
@@ -136,6 +193,7 @@ export function lignesDepuisPreRemplissage(p: PreRemplissageBon | null, tvaDefau
       quantite: l.quantite == null ? vide.quantite : enTexte(l.quantite),
       unite: l.unite ?? vide.unite,
       prix_unitaire: l.prix_unitaire == null ? vide.prix_unitaire : enTexte(l.prix_unitaire),
+      tva: l.tva == null ? vide.tva : enTexte(l.tva),
     };
   });
 }
@@ -143,45 +201,82 @@ export function lignesDepuisPreRemplissage(p: PreRemplissageBon | null, tvaDefau
 export function valeursDepuis(b: EnteteBon | null, p: PreRemplissageBon | null): ValeursBon {
   return {
     client_id: b?.client_id ?? p?.client_id ?? "",
-    interlocuteur: b?.interlocuteur ?? "",
+    interlocuteur: b?.interlocuteur ?? p?.interlocuteur ?? "",
     conducteur_id: b?.conducteur_id ?? "",
     numero_bc: b ? numeroSaisissable(b.numero_bc) : (p?.numero_bc ?? ""),
     reference_chantier: b?.reference_chantier ?? p?.reference_chantier ?? "",
     date_reception: b?.date_reception ?? p?.date_reception ?? "",
     date_fin_travaux: b?.date_fin_travaux ?? p?.date_fin_travaux ?? "",
     nature_travaux: b?.nature_travaux ?? p?.nature_travaux ?? "",
-    notes: b?.notes ?? "",
-    montant: enTexte(b?.montant ?? 0),
+    notes: b?.notes ?? p?.notes ?? "",
+    montant: enTexte(b?.montant ?? p?.montant ?? 0),
     // Le lieu des travaux d'un bon vit dans `adresse` (et non `adresse_locataire`) : c'est elle que lit bc_generer_facture.
     adresse_locataire: b?.adresse ?? p?.adresse_locataire ?? "",
     code_postal: b?.code_postal ?? p?.code_postal ?? "",
     ville: b?.ville ?? p?.ville ?? "",
     telephone_locataire: "",
-    logement_statut: b?.logement_statut ?? "",
-    occupant: b?.occupant ?? "",
-    etage: b?.etage ?? "",
-    numero_logement: b?.numero_logement ?? "",
+    logement_statut: b?.logement_statut ?? p?.logement_statut ?? "",
+    occupant: b?.occupant ?? p?.occupant ?? "",
+    etage: b?.etage ?? p?.etage ?? "",
+    numero_logement: b?.numero_logement ?? p?.numero_logement ?? "",
     precision_commune: b?.precision_commune ?? "",
     ancien_locataire: b?.ancien_locataire ?? "",
+    devis_id: b?.devis_id ?? "",
+    facturation_adresse: b?.facturation_adresse ?? p?.facturation_adresse ?? "",
+    facturation_code_postal: b?.facturation_code_postal ?? p?.facturation_code_postal ?? "",
+    facturation_ville: b?.facturation_ville ?? p?.facturation_ville ?? "",
+    probleme_description: b?.probleme_description ?? "",
   };
 }
 
-export const modeInitial = (b: EnteteBon | null): ModeBon => (b ? modeDuBon(b) : "normal");
+export const modeInitial = (b: EnteteBon | null, p: PreRemplissageBon | null = null): ModeBon => (b ? modeDuBon(b) : (p?.mode ?? "normal"));
+
+/** Les montants par métier relus en base, en texte de saisie ; une valeur illisible est ignorée, pas inventée. */
+export function montantsSaisisParMetier(brut: unknown): Record<string, string> {
+  if (typeof brut !== "object" || brut === null || Array.isArray(brut)) return {};
+  const sortie: Record<string, string> = {};
+  for (const [metier, v] of Object.entries(brut)) if (typeof v === "number" || typeof v === "string") sortie[metier] = enTexte(v);
+  return sortie;
+}
+
+/** L'adresse de facturation se replie tant qu'elle est vide : dépliée d'office dès qu'elle porte quelque chose (BC-05). */
+export const facturationRenseignee = (v: Pick<ValeursBon, "facturation_adresse" | "facturation_code_postal" | "facturation_ville">) =>
+  [v.facturation_adresse, v.facturation_code_postal, v.facturation_ville].some((x) => x.trim() !== "");
+
+/** Ce que la saisie des métiers apporte à l'en-tête : la liste et la ventilation. */
+export interface MetiersAEnregistrer {
+  metiers: string[];
+  montantParMetier: Record<string, number> | null;
+}
 
 /**
  * L'en-tête à écrire. `conducteur` part à null : l'étiquette est tenue par un
  * déclencheur d'après `conducteur_id`, et un nom écrit seul serait réécrit.
  * La date de réception vide vaut aujourd'hui, comme dans l'ancien écran.
+ * `metier` = le premier métier coché (BC-35), jamais `""`. Un SAV garde son
+ * numéro de notre série et reste « sans BC » (saveBonCommande, `isSAV`).
  */
-export function enteteAEnregistrer(s: SaisieBon, client: { nom: string }, mode: ModeBon, montant: number, aujourdhui: string) {
+export function enteteAEnregistrer(
+  s: SaisieBon,
+  client: { nom: string },
+  mode: ModeBon,
+  montant: number,
+  aujourdhui: string,
+  m: MetiersAEnregistrer = { metiers: [], montantParMetier: null },
+  numeroSav: string | null = null
+) {
   const { montant: _m, adresse_locataire, telephone_locataire: _t, numero_bc, ...reste } = s;
+  const numero = numeroSav ? { numero_bc: numeroSav, sans_bc: true, en_attente_bc: false } : numeroAEnregistrer(mode, numero_bc);
   return nettoyerLogement({
     ...reste,
-    ...numeroAEnregistrer(mode, numero_bc),
+    ...numero,
     client_nom: client.nom,
     adresse: adresse_locataire,
     date_reception: s.date_reception ?? aujourdhui,
     montant,
+    metiers: m.metiers,
+    metier: m.metiers.at(0) ?? null,
+    montant_par_metier: m.montantParMetier,
     conducteur: null,
   });
 }

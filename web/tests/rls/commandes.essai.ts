@@ -32,6 +32,8 @@ const entete = (surcharges: Partial<EnteteAEnregistrer> = {}): EnteteAEnregistre
   numero_bc: "RLS-ESSAI", sans_bc: false, en_attente_bc: false, reference_chantier: null, date_reception: "2026-09-24", date_fin_travaux: null,
   nature_travaux: "Essai RLS", notes: null, montant: 120, adresse: "1 rue de l'Essai", code_postal: "69001", ville: "Lyon",
   logement_statut: null, occupant: null, etage: null, numero_logement: null, precision_commune: null, ancien_locataire: null,
+  devis_id: null, facturation_adresse: null, facturation_code_postal: null, facturation_ville: null, probleme_description: null,
+  metiers: [], metier: null, montant_par_metier: null,
   ...surcharges,
 });
 const ligne = (designation: string, prix: number): LigneAEnregistrer => ({

@@ -1,11 +1,13 @@
+import { useState } from "react";
 import { useLocation, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import { REGLAGES_DEFAUT } from "@/modules/societes/domain/reglages";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
-import { lirePreRemplissage } from "../domain/bon";
+import { lireFichierRetenu, lirePreRemplissage } from "../domain/bon";
 import { useBon } from "../hooks/useBons";
 import { FormulaireBon } from "./FormulaireBon";
+import { PanneauCircuit } from "./PanneauCircuit";
 
 /** Le message laissé par l'écran précédent (création réussie, ou enregistrement partiel à signaler). */
 function lireMessage(etat: unknown): { texte: string; alerte: boolean } | null {
@@ -14,25 +16,34 @@ function lireMessage(etat: unknown): { texte: string; alerte: boolean } | null {
 }
 
 /**
- * Fiche et formulaire d'un bon. À la création, un autre écran (lecture
- * automatique d'un bon) peut préremplir par `location.state.prefill`.
+ * Fiche et formulaire d'un bon, puis son circuit. À la création, la lecture
+ * automatique peut préremplir par `location.state.prefill` et laisser le
+ * document lu dans `location.state.fichier`.
  */
 export function PageBonCommande({ ChampReference }: { ChampReference?: ChampReferenceLigne }) {
   const { id } = useParams();
   const location = useLocation();
   const bon = useBon(id);
   const reglages = useReglages();
+  // Après un enregistrement, la fiche RELUE remonte le formulaire : les lignes insérées prennent leur uuid (relecture 3, M12).
+  const [generation, setGeneration] = useState<{ n: number; message: string | null }>({ n: 0, message: null });
   if ((id && bon.isPending) || reglages.isPending) return <Chargement />;
   if (id && bon.isError) return <Erreur erreur={bon.error} reessayer={() => void bon.refetch()} />;
   const prefill = id ? null : lirePreRemplissage(location.state);
+  const message = generation.message ? { texte: generation.message, alerte: false } : lireMessage(location.state);
   return (
-    <FormulaireBon
-      key={id ?? "nouveau"}
-      bon={bon.data ?? null}
-      prefill={prefill}
-      reglages={reglages.data ?? REGLAGES_DEFAUT}
-      ChampReference={ChampReference}
-      messageInitial={lireMessage(location.state)}
-    />
+    <div className="flex flex-col gap-4">
+      <FormulaireBon
+        key={`${id ?? "nouveau"}-${generation.n}`}
+        bon={bon.data ?? null}
+        prefill={prefill}
+        fichierLu={id ? null : lireFichierRetenu(location.state)}
+        reglages={reglages.data ?? REGLAGES_DEFAUT}
+        ChampReference={ChampReference}
+        messageInitial={message}
+        onEnregistre={(m) => setGeneration((g) => ({ n: g.n + 1, message: m }))}
+      />
+      {bon.data && <PanneauCircuit bon={bon.data} />}
+    </div>
   );
 }

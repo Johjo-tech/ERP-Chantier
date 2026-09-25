@@ -17,10 +17,12 @@ interface Props {
   lectureSeule?: boolean;
   /** Champ de référence (choix d'article), branché par app/. */
   ChampReference?: ChampReferenceLigne | undefined;
+  /** Métier d'un chapitre (bons de commande), branché par le module qui connaît les métiers. */
+  ChampMetier?: ChampReferenceLigne | undefined;
 }
 
 /** L'éditeur de lignes commun aux devis, factures et bons : lignes, chapitres, commentaires. */
-export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreurs = [], lectureSeule = false, ChampReference }: Props) {
+export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreurs = [], lectureSeule = false, ChampReference, ChampMetier }: Props) {
   const sousTotaux = sousTotauxChapitres(lignes);
   // Le sous-total d'un chapitre s'affiche à la fin du chapitre : avant le suivant, ou en bas.
   const finsDeChapitre = new Map<number, number>();
@@ -72,6 +74,7 @@ export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreu
                   onChange={(champ, v) => onChange(modifier(lignes, i, champ, v))}
                   onRemplacer={(nouvelle) => onChange(lignes.map((x, j) => (j === i ? nouvelle : x)))}
                   ChampReference={ChampReference}
+                  ChampMetier={ChampMetier}
                   onAction={(a) => agir(i, a)}
                 />
                 {st && (

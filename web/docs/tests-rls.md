@@ -45,6 +45,14 @@ Mot de passe de tous : `motdepasse-local`.
 | `comptes.essai.ts` | Compte jetable (inscription) : l'admin change un rôle, un non-admin non (zéro ligne) ; l'admin ne se retire pas son propre rôle (42501) ; accès désactivé = société invisible, réactivé = rendue ; invitation appliquée à l'inscription (membre, rôle, « acceptée ») ; une invitation par adresse et société (casse comprise) ; seul l'admin invite ; chacun renomme son profil, pas celui d'un autre | non |
 | | Un compte ne modifie ni son `actif` ni son adresse | **oui** (20260926010000) |
 | `reglages.essai.ts` | `societes` : admin seul (secrétaire et conducteur : zéro ligne), pas BETA ; `societe_settings` et `compteurs` suivent `reglages/modifier` ; documents légaux : pièce déposée sous `<societe>/…`, illisible et invisible pour BETA, refusée au rôle lecture ; listes et fournisseurs : admin oui, secrétaire non | non |
+| `circuit.essai.ts` | Tâches par métier, déclarées faites, arbitrées, refus motivé, validée non rouverte ; le technicien sans équipe refusé avec le motif de la base ; la secrétaire n'arbitre pas | non |
+| | Validation conducteur refusée (métier sans tâche, tâche non pointée), puis acceptée | non |
+| | Travaux supplémentaires : ajout « à chiffrer » (TVA 10), chiffrage prix + quantité + unité ; secrétaire refusée ; terrain sans prix | non |
+| | Pré-facture dans le circuit (le travail rejoint le chapitre de son métier, « intégré », chiffré ; conducteur refusé ; `bc_chiffrage_valide` refuse un travail à chiffrer) et hors circuit (journal, travaux intégrés) | non |
+| | Clôture gratuite (admin seul, travaux « refusé », motif au journal) ; SAV (`SAV-AAAA-NNNNNN`, en-tête recopié, photo au bucket ; secrétaire refusée) | non |
+| | Pièce jointe au bucket `terrain` (`<société>/bons-commande/<bon>/…`), URL signée lisible, refusée à la secrétaire et à BETA, retrait | non |
+| | Contacts (secrétaire oui, lecture non) ; métiers déclarés (BETA ne voit pas ceux d'ALPHA) | non |
+| | Un bon créé reçoit un numéro « BC- » sans ligne de compteur de l'année | **oui** (20260926030000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 
@@ -55,8 +63,9 @@ Mot de passe de tous : `motdepasse-local`.
   supprime pas.
 - Règlements : le conducteur (`reglements` absent de sa matrice) ne lit ni
   n'écrit aucun règlement.
-- Tables filles restantes : pour chacune des tables dont la suppression
-  est `est_membre()` (véhicules, matériel, photos…), vérifier que `lecture` ne
-  supprime rien — échoue aujourd'hui (les filles du chantier : `chantiers.essai.ts`).
+- Tables filles restantes : pour chacune des 20 tables dont la suppression
+  est `est_membre()` (véhicules, matériel, documents de chantier, photos…),
+  vérifier que `lecture` ne supprime rien — échoue aujourd'hui (les filles du chantier : `chantiers.essai.ts`).
+- Storage (bucket `terrain`) : un compte d'ALPHA ne lit pas `beta/…` (l'inverse est couvert par `circuit.essai.ts`).
 - Edge Functions PDP : elles vérifient l'appartenance mais pas le rôle — un
   compte `lecture` pourrait déclencher une émission.

@@ -22,6 +22,7 @@ import * as regles from "../../src/modules/commandes/domain/regles";
 import { verrouBonCommande } from "../../src/modules/commandes/domain/verrou";
 import * as workflow from "../../src/modules/commandes/domain/workflow";
 import { generateur } from "./aleatoire";
+import { evaluer, fonctionTs, lireAncien, sansTypes } from "./source";
 
 const g = generateur(8431);
 const TIRAGES = 3000;
@@ -124,7 +125,8 @@ describe("parité — circuit et verrou", () => {
   it("etapeValidation, bcTachesTerminees et etapeWorkflow sur des bons tirés", () => {
     for (let i = 0; i < TIRAGES; i++) {
       const taches = Array.from({ length: g.entier(0, 4) }, (_, j) => ({
-        id: `t${j}`, bon_commande_id: "b", metier: g.parmi(["Peinture", "Sol", null]), statut: g.parmi(TACHES), date_tache: g.parmi([null, "2026-09-22"]),
+        id: `t${j}`, bon_commande_id: "b", libelle: null, metier: g.parmi(["Peinture", "Sol", null]), statut: g.parmi(TACHES), date_tache: g.parmi([null, "2026-09-22"]),
+        commentaire: null, refus_motif: null, realisee_le: null, validee_le: null,
         piece_a_commander: null, piece_description: null, piece_fournisseur: null, piece_date_commande: null, piece_recue_le: null,
       }));
       const statut = g.parmi(["en_cours", "pret_a_chiffrer", "chiffre", "facture", "cloture_gratuit", null]);
@@ -146,6 +148,40 @@ describe("parité — circuit et verrou", () => {
     for (let i = 0; i < 500; i++) {
       const factures = Array.from({ length: g.entier(0, 3) }, () => ({ numero: g.parmi([null, "", "  ", `FAC-2026-00000${g.entier(1, 9)}`]) }));
       expect(verrouBonCommande(factures), JSON.stringify(factures)).toEqual(ancienVerrou.verrouBonCommande(factures));
+    }
+  });
+});
+
+describe("parité — champs dérivés des tâches, contre `reconstituerWorkflow` extrait (BC-43, relecture 3 M10)", () => {
+  // Le corps de la boucle de html-adapter.ts, de `const faite` à l'état de la pièce : c'est lui qui pose les champs dérivés.
+  const adaptateur = lireAncien("src/integrations/html-adapter.ts");
+  const debut = adaptateur.indexOf("const faite = (t: TacheBC)");
+  const fin = adaptateur.indexOf("Object.assign(bc, etatPieceDuBon(taches));", debut);
+  if (debut < 0 || fin < 0) throw new Error("reconstituerWorkflow a changé de forme dans html-adapter.ts");
+  const corps = adaptateur.slice(debut, fin) + "Object.assign(bc, etatPieceDuBon(taches));";
+  const { reconstituer } = evaluer<{ reconstituer: (taches: unknown[], bc: Record<string, unknown>) => void }>(
+    [sansTypes(fonctionTs(adaptateur, "export function etatPieceDuBon(")), sansTypes(`function reconstituer(taches: unknown[], bc: Record<string, unknown>) { ${corps} }`)],
+    ["reconstituer"]
+  );
+  const TACHES = ["planifiee", "realisee", "validee", "refusee", null] as const;
+
+  it("nbTaches, tachesNonPointees, metiersFait, dateOrigineFait, valideConducteur, valideDirecteur, pièce", () => {
+    for (let i = 0; i < TIRAGES; i++) {
+      const taches = Array.from({ length: g.entier(0, 4) }, (_, j) => ({
+        id: `t${j}`, bon_commande_id: "b", libelle: null, metier: g.parmi(["Peinture", "Sol", null]), statut: g.parmi(TACHES), date_tache: g.parmi([null, "2026-09-22"]),
+        commentaire: null, refus_motif: null, realisee_le: null, validee_le: g.parmi([null, "2026-09-23T08:00:00Z"]),
+        piece_a_commander: g.parmi([null, false, true]), piece_description: g.parmi([null, "Mitigeur"]), piece_fournisseur: g.parmi([null, "Cedeo"]),
+        piece_date_commande: g.parmi([null, "2026-09-21"]), piece_recue_le: g.parmi([null, "2026-09-24T10:00:00Z"]),
+      }));
+      const statut = g.parmi(["en_cours", "pret_a_chiffrer", "chiffre", "facture", "cloture_gratuit", null]);
+      const bc: Record<string, unknown> = { statutWorkflow: statut };
+      reconstituer(taches, bc);
+      const c = workflow.circuitDuBon(taches, statut);
+      const ctx = JSON.stringify({ taches, statut });
+      expect({ nbTaches: c.nbTaches, tachesNonPointees: c.tachesNonPointees, metiersFait: c.metiersFait, dateOrigineFait: c.dateOrigineFait, valideConducteur: c.valideConducteur, valideDirecteur: c.valideDirecteur }, ctx).toEqual({
+        nbTaches: bc.nbTaches, tachesNonPointees: bc.tachesNonPointees, metiersFait: bc.metiersFait, dateOrigineFait: bc.dateOrigineFait, valideConducteur: bc.valideConducteur, valideDirecteur: bc.valideDirecteur,
+      });
+      expect(c.piece, ctx).toEqual({ pieceACommander: bc.pieceACommander, description: bc.pieceACommanderDetail, fournisseur: bc.pieceACommanderFournisseur, dateCommande: bc.pieceACommanderDateCommande, recueLe: bc.pieceRecueLe });
     }
   });
 });

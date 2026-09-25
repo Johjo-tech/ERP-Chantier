@@ -490,3 +490,101 @@ facturation, qui ne l'offre pas encore : pas de bouton factice.
 Pour un conducteur, `v_salaries_annuaire` masque `cout_horaire_charge` (CHA-55).
 Plutôt que d'élargir la vue (données de paie), l'écran affiche « Coût horaire non
 disponible pour votre rôle : saisissez le montant ».
+
+## D-BC-01 — Bons de commande : un tableau, pas des cartes dépliables
+L'ancienne liste repliait chaque carte et n'en ouvrait qu'une (BC-02). `web/`
+garde le tableau des autres listes : une ligne par bon, la fiche s'ouvre au
+clic. Les trois gestes de contact sont repris sur la ligne (📞 et 💬 notent une
+tentative dans `tentatives_contact`, 📅 programme `rappel_date`), avec le
+compteur des tentatives. L'identifiant d'une tentative est un uuid du
+navigateur : c'est une entrée de jsonb, pas une clé primaire.
+
+## D-BC-02 — La pré-facture est une page, et les travaux se placent seuls
+La modale « Validation directeur » devient `/commandes/:id/prefacture`
+(`PagePrefacture`). Le glisser-déposer d'un travail dans une ligne n'est pas
+repris : chaque travail rejoint le chapitre de son métier (règle de
+`prefacture.ts#placerTravauxDansChapitres`, parité), le reste va sous « Travaux
+supplémentaires constatés sur le chantier ». Les lignes du bon se réordonnent
+au clavier (D-047). Le document affiché est celui qui sera enregistré.
+
+## D-BC-03 — Le circuit se mène depuis la fiche du bon ; le planning n'est pas repris
+Tâches, validation conducteur et travaux supplémentaires vivent dans le panneau
+« Circuit du bon », sous le formulaire, au lieu de modales ouvertes depuis la
+carte. Le planning (section 11) n'existe pas encore dans `web/` : pas de
+bascule vers Planning › technicien après une pièce reçue (BC-21), pas de saisie
+terrain (`tache_sauvegarder_terrain`), et les colonnes de planification du bon
+ne sont jamais envoyées par `enteteAEnregistrer` (elles ne peuvent donc pas
+être écrasées). Le conducteur peut déclarer une tâche faite (la RPC le permet).
+
+## D-BC-04 — Les tâches manquantes se créent par métier, sans date
+« Tâches par métier » : un métier du bon sans tâche en reçoit une depuis la
+fiche (« Créer les tâches manquantes »), `planifiee`, sans `date_tache` — le
+planning la datera. Écriture directe de `planning_taches` (politique
+`peut_ecrire`), la naissance étant gardée par `planning_taches_naissance`. La
+comparaison de métiers est `memeMetier` (une autre rendrait la tâche introuvable).
+
+## D-BC-05 — Hors circuit, les travaux chiffrés rejoignent aussi les lignes
+L'ancien « hors circuit » n'intégrait pas les travaux chiffrés : ils tombaient
+en fin de facture, sans chapitre (BC-91). Les deux chemins de `web/`
+enregistrent les prix, intègrent les travaux chiffrés aux lignes (à la place de
+leur métier) puis passent par la base.
+
+## D-BC-06 — Ce que la base réserve à `peut_ecrire`, l'écran ne le propose pas à la secrétaire
+Travaux supplémentaires, tâches, photos et bucket `terrain` suivent
+`peut_ecrire()` (admin, conducteur, technicien). L'ancien écran laissait la
+secrétaire chiffrer les travaux dans la pré-facture — la base le refusait. Dans
+`web/`, elle modifie les lignes du bon et enregistre, mais les champs de prix
+des travaux et le dépôt de pièce jointe lui sont présentés en lecture, avec la
+raison. Si elle doit les écrire, c'est une migration de droits à proposer.
+
+## D-BC-07 — « Clôturer sans facturation » sur un SAV seulement
+Comme l'ancien écran : le geste est proposé sur un SAV non clos, à
+l'administrateur. `bc_cloturer_gratuit` accepterait tout bon non facturé ; un
+bon ordinaire qui ne se facture pas passe par un SAV ou reste ouvert.
+
+## D-BC-08 — Pas de case « Métiers réalisés »
+`toggleBCMetierFait` écrivait `metiersFait`, sans colonne : rien ne persistait
+(BC-90). L'état par métier se lit sur les tâches (panneau du circuit) et se
+dérive au chargement ; aucune case qui n'écrirait rien n'est proposée.
+
+## D-BC-09 — Une seule préparation pour la lecture et la pièce jointe
+`ocr/api/preparer.ts` (port de `integrations/ocr.ts#preparer`) sert aux deux :
+image hors format ou > 3 Mo → JPEG 0,85 et 2 200 px ; un HEIC est converti
+quand le navigateur sait le décoder (Safari), refusé en le disant sinon.
+
+## D-BC-10 — Lecture automatique : la lecture avant le formulaire, des alertes persistantes
+L'ancien bouton ouvrait un formulaire vierge puis lançait la lecture. `web/`
+lit d'abord (`/commandes/lecture`), montre ce qui est lu, puis ouvre le
+formulaire prérempli avec le document retenu. `web/` n'a pas de toasts : chaque
+issue (annulée, délai, échec) a son alerte persistante avec « Réessayer » et
+« Saisir à la main ».
+
+## D-BC-11 — La file « Validation » ne montre pas un circuit clos
+`etapeValidation` ignore `cloture_gratuit` : un SAV clos gratuitement avec une
+tâche pointée restait « en cours ». `fileValidation` écarte les circuits clos
+(`circuitTermine`, BC-79), et le compteur de chaque filtre est celui de sa
+liste (BC-96).
+
+## D-BC-12 — Une lecture partiellement hors contrat est gardée, champ douteux vidé (remplace D-049)
+Plutôt que refuser en bloc (D-049), `analyserReponse` relit l'extraction champ
+par champ : un champ hors contrat vaut « non lu », une ligne illisible est
+écartée, et l'avertissement « Lecture partiellement incertaine : … » les nomme
+(OCR-31, comme `ecartsDeForme`). Une réponse sans extraction exploitable reste
+refusée.
+
+## D-BC-13 — `statut` libre : posé, jamais réécrit ni affiché
+Deux statuts pour un bon (BC-99) : `web/` écrit « en attente » à la création
+(comme l'ancien), ne le réécrit jamais et ne l'affiche pas. Seul
+`statut_workflow`, tenu par les RPC, dit où en est le bon.
+
+## D-BC-14 — `bc_generer_facture` : correction à écrire avec la facturation
+Mode de paiement forcé à « virement », `conducteur_id` non recopié, TVA 10 du
+forfait (BC-95) : la fonction vient d'être reprise par la chaîne de facturation
+(émetteur figé). Sa correction est listée dans `migrations-proposees.md`
+(« à écrire ») pour ne pas croiser deux réécritures de la même fonction.
+
+## D-BC-15 — `extraire-bc` hors de `web/`
+L'Edge Function ne vérifie ni l'utilisateur ni la société (OCR-40). Elle vit
+dans `supabase/functions/`, hors du périmètre modifiable : le contrôle est un
+prérequis de mise en service (listé dans `migrations-proposees.md`). Côté
+`web/`, la page exige `bons_commande/creer` ET la fonctionnalité `ocr`.
