@@ -25,6 +25,8 @@ const api = vi.hoisted(() => ({
   supprimerPhoto: vi.fn(),
 }));
 vi.mock("../api/planning", () => api);
+const feries = vi.hoisted(() => ({ lireFeriesAlsaceMoselle: vi.fn(), definirFeriesAlsaceMoselle: vi.fn() }));
+vi.mock("@/modules/societes/api/feries", () => feries);
 
 const AUJ = todayISO();
 
@@ -53,6 +55,7 @@ function donnees(s: Partial<DonneesPlanning> = {}): DonneesPlanning {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  feries.lireFeriesAlsaceMoselle.mockResolvedValue(false);
   api.lirePlanning.mockResolvedValue(donnees());
   api.appliquerPlan.mockResolvedValue(undefined);
   api.lignesDuBon.mockResolvedValue([
@@ -198,5 +201,25 @@ describe("planning — terrain (PLN-01, PLN-08, PLN-09)", () => {
   it("un compte terrain sans équipe est prévenu au lieu de voir une journée vide", async () => {
     rendreAvecSession(<PagePlanning />, { role: "technicien" });
     expect(await screen.findByText(/rattaché à aucune équipe/)).toBeInTheDocument();
+  });
+});
+
+describe("fériés d'Alsace-Moselle (PLN-53)", () => {
+  const vendrediSaint2027 = async () => {
+    rendreAvecSession(<PagePlanning />, { role: "conducteur" });
+    fireEvent.change(await screen.findByLabelText("Aller à la semaine de cette date"), { target: { value: "2027-03-22" } });
+    return () => document.querySelector('[data-jour="2027-03-26"]');
+  };
+
+  it("sans le réglage, le Vendredi saint est ouvré", async () => {
+    const colonne = await vendrediSaint2027();
+    await waitFor(() => expect(colonne()).not.toBeNull());
+    expect(colonne()?.textContent).not.toContain("Férié");
+  });
+
+  it("avec le réglage de la société, il est férié et grisé", async () => {
+    feries.lireFeriesAlsaceMoselle.mockResolvedValue(true);
+    const colonne = await vendrediSaint2027();
+    await waitFor(() => expect(colonne()?.textContent).toContain("Férié"));
   });
 });

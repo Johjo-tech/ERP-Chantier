@@ -1,3 +1,4 @@
+import { useOptionsFeries } from "@/modules/societes/hooks/useFeries";
 import { dansLaPlage, estFerie, joursDeLaSemaine, libelleSemaine } from "../domain/calendrier";
 import type { CartePlanning } from "../domain/cartes";
 import { usePlanningContexte } from "./contexte";
@@ -12,6 +13,7 @@ const NON_ASSIGNE = "Non assigné";
  */
 export function PlanningImprimable({ cartes, lundi, societe }: { cartes: CartePlanning[]; lundi: string; societe: string }) {
   const { affectation, nomEquipe, nomSousTraitant } = usePlanningContexte();
+  const feries = useOptionsFeries();
   const jours = joursDeLaSemaine(lundi);
   const semaine = cartes.filter((c) => jours.some((j) => dansLaPlage(j.iso, c.rdv.datePlanifiee, c.rdv.datePlanifieeFin)));
   const colonneDe = (c: CartePlanning) => (affectation === "sous_traitant" ? nomSousTraitant(c.sousTraitantId) : nomEquipe(c.equipeId)) ?? NON_ASSIGNE;
@@ -31,7 +33,7 @@ export function PlanningImprimable({ cartes, lundi, societe }: { cartes: CartePl
         <tbody>
           {jours.map((j) => (
             <tr key={j.iso}>
-              <td className="border px-1 align-top font-semibold">{j.libelle}<br />{j.numero} {j.mois}{estFerie(j.iso) && <><br />Férié</>}</td>
+              <td className="border px-1 align-top font-semibold">{j.libelle}<br />{j.numero} {j.mois}{estFerie(j.iso, feries) && <><br />Férié</>}</td>
               {colonnes.map((col) => {
                 const items = semaine.filter((c) => dansLaPlage(j.iso, c.rdv.datePlanifiee, c.rdv.datePlanifieeFin) && colonneDe(c) === col).sort((a, b) => (a.rdv.heurePlanifiee ?? "").localeCompare(b.rdv.heurePlanifiee ?? ""));
                 return (
