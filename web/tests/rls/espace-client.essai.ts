@@ -81,11 +81,16 @@ describe("[proposition] espace client : ne voit que ce qui est à lui", () => {
     const { data: societes } = await client.from("societes").select("id");
     expect(societes ?? []).toEqual([]);
     // Les noms de tables en union épuisent l'inférence de supabase-js : on les passe un à un.
-    const tables = ["articles", "membres_societe", "v_bons_commande_terrain", "v_salaries_annuaire", "interlocuteurs", "reglements"];
+    const tables = ["articles", "membres_societe", "v_bons_commande_terrain", "v_salaries_annuaire", "interlocuteurs"];
     for (const table of tables) {
       const { data } = await client.from(table as "articles").select("id").limit(5);
       expect(data ?? [], table).toEqual([]);
     }
+    // Depuis 20260926042000 : les règlements de SES factures émises, et aucun autre (D-FAC-10).
+    const { data: regs } = await client.from("reglements").select("facture_id");
+    const { data: siennes } = await client.from("factures").select("id");
+    const ids = new Set((siennes ?? []).map((f) => f.id));
+    for (const r of regs ?? []) expect(ids.has(r.facture_id)).toBe(true);
     const { data: beta } = await client.from("clients").select("id").eq("societe_id", BETA);
     expect(beta ?? []).toEqual([]);
   });
