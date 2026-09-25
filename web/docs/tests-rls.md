@@ -39,6 +39,8 @@ Mot de passe de tous : `motdepasse-local`.
 | `articles.essai.ts` | Terrain sans accès au catalogue, conducteur lit sans écrire, secrétaire écrit, BETA invisible | non |
 | `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
 | `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
+| `chantiers.essai.ts` | Statut / notes / PPSPS, compte-rendu « non lu », métier d'une ligne de DPGF ; to-do du technicien sur SON chantier seulement ; lecture ne supprime ni to-do ni document ; achats et affectations sous « chantiers / modifier » (l'affectation ouvre et ferme la vue du chantier au terrain) ; bucket `terrain` (dépôt, URL signée, BETA refusée, lecture ne dépose pas) ; bon + tâche liée à la ligne de DPGF | **oui** (20260926020000, 20260926021000) pour les cas marqués |
+| `chantiers-api.essai.ts` | Les fonctions `chantiers/api/*` elles-mêmes (client remplacé par un compte connecté) : chaque lecture passe son schéma Zod ; import de DPGF, planification d'une part, dépôt et retrait d'un compte-rendu (fichier compris) ; le technicien lit la fiche mais reçoit un DPGF et des achats vides | oui (colonnes proposées) |
 | | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
@@ -50,9 +52,8 @@ Mot de passe de tous : `motdepasse-local`.
   supprime pas.
 - Règlements : le conducteur (`reglements` absent de sa matrice) ne lit ni
   n'écrit aucun règlement.
-- Tables filles restantes : pour chacune des 20 tables dont la suppression
-  est `est_membre()` (véhicules, matériel, documents de chantier, photos…),
-  vérifier que `lecture` ne supprime rien — échoue aujourd'hui.
-- Storage (bucket `terrain`) : un compte d'ALPHA ne lit pas `beta/…`.
+- Tables filles restantes : pour chacune des tables dont la suppression
+  est `est_membre()` (véhicules, matériel, photos…), vérifier que `lecture` ne
+  supprime rien — échoue aujourd'hui (les filles du chantier : `chantiers.essai.ts`).
 - Edge Functions PDP : elles vérifient l'appartenance mais pas le rôle — un
   compte `lecture` pourrait déclencher une émission.
