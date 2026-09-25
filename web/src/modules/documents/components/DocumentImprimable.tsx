@@ -8,6 +8,8 @@ import { BlocTotaux } from "./BlocTotaux";
 interface Partie {
   nom: string;
   lignes: (string | null | undefined)[];
+  /** Le logo de l'émetteur, en data-URL (`lireIdentiteDocument`) ; absent, l'en-tête reste sobre. */
+  logo?: string | null | undefined;
 }
 
 interface Props {
@@ -32,6 +34,7 @@ export function DocumentImprimable({ titre, numero, date, emetteur, destinataire
     <article className="mx-auto flex max-w-3xl flex-col gap-6 bg-white p-8 text-sm text-black print:p-0">
       <header className="flex justify-between gap-6">
         <div>
+          {emetteur.logo && <img src={emetteur.logo} alt={`Logo de ${emetteur.nom}`} className="mb-2 h-16 w-auto object-contain" />}
           <p className="text-lg font-bold">{emetteur.nom}</p>
           <p className="text-xs">{texte(emetteur.lignes)}</p>
         </div>

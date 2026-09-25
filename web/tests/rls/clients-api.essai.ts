@@ -5,6 +5,7 @@
  * sur la facture. Tout ce qui est créé porte « Essai CLI » et est retiré.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Database } from "../../src/lib/database.types";
 import { ALPHA, COMPTES, connecte, type Client } from "./cible";
 
 const courant = vi.hoisted(() => ({ client: null as unknown }));
@@ -21,8 +22,8 @@ const MARQUE = `Essai CLI ${Date.now().toString(36)}`;
 let secretaire: Client;
 const ids = { clients: [] as string[], factures: [] as string[] };
 
-async function unClient(saisie: Record<string, unknown>): Promise<string> {
-  const { data, error } = await secretaire.from("clients").insert({ societe_id: ALPHA, ...saisie }).select("id").single();
+async function unClient(saisie: Omit<Database["public"]["Tables"]["clients"]["Insert"], "societe_id">): Promise<string> {
+  const { data, error } = await secretaire.from("clients").insert({ ...saisie, societe_id: ALPHA }).select("id").single();
   if (error) throw error;
   ids.clients.push(data.id);
   return data.id;
