@@ -4,7 +4,7 @@ import { ChampChoix } from "@/components/formulaire/Champ";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatDateFr } from "@/lib/dates";
+import { formatDateFr, todayISO } from "@/lib/dates";
 import type { ExtractionBC } from "../domain/contrat";
 import { versPreRemplissage } from "../domain/prefill";
 import { rapprocherClient } from "../domain/rapprochement";
@@ -18,12 +18,25 @@ function Champ({ libelle, valeur }: { libelle: string; valeur: string | null }) 
   );
 }
 
+type ClientConnu = { id: string; nom: string };
+
+/**
+ * Les options du client, par IDENTIFIANT (relecture 3, M5) : deux homonymes
+ * restent deux choix, et une suggestion n'apparaît qu'une fois. Les
+ * suggestions viennent en tête, sans doublon dans la liste complète.
+ */
+function optionsClients(clients: readonly ClientConnu[], suggestions: readonly string[]) {
+  const suggeres = clients.filter((c) => suggestions.includes(c.nom));
+  const autres = clients.filter((c) => !suggeres.includes(c));
+  return [{ valeur: "", libelle: "— Choisir —" }, ...suggeres.map((c) => ({ valeur: c.id, libelle: `${c.nom} (suggestion)` })), ...autres.map((c) => ({ valeur: c.id, libelle: c.nom }))];
+}
+
 /** Ce que la lecture a trouvé, à RELIRE : rien n'est enregistré avant le formulaire du bon. */
-export function ResultatLecture({ extraction, clients }: { extraction: ExtractionBC; clients: readonly { id: string; nom: string }[] }) {
+export function ResultatLecture({ extraction, fichier, clients }: { extraction: ExtractionBC; fichier: File; clients: readonly ClientConnu[] }) {
   const navigate = useNavigate();
   const r = rapprocherClient(extraction.client, clients.map((c) => c.nom));
-  const [clientNom, setClientNom] = useState(r.reconnu ? r.nom : "");
-  const clientId = clients.find((c) => c.nom === clientNom)?.id ?? null;
+  // Un nom reconnu désigne la PREMIÈRE fiche de ce nom : l'homonyme reste à un choix de distance.
+  const [clientId, setClientId] = useState(r.reconnu ? (clients.find((c) => c.nom === r.nom)?.id ?? "") : "");
   const e = extraction;
 
   return (
@@ -36,10 +49,10 @@ export function ResultatLecture({ extraction, clients }: { extraction: Extractio
       )}
       <ChampChoix
         libelle={`Client (lu : « ${e.client ?? "rien"} »)`}
-        valeur={clientNom}
-        onChange={setClientNom}
+        valeur={clientId}
+        onChange={setClientId}
         aide={r.reconnu ? "Reconnu dans votre fichier clients." : "Pas de correspondance certaine : choisissez le client."}
-        options={[{ valeur: "", libelle: "— Choisir —" }, ...(r.reconnu ? [] : r.suggestions.map((s) => ({ valeur: s, libelle: `${s} (suggestion)` }))), ...clients.map((c) => ({ valeur: c.nom, libelle: c.nom }))]}
+        options={optionsClients(clients, r.reconnu ? [] : r.suggestions)}
       />
       <dl className="grid gap-3 sm:grid-cols-3">
         <Champ libelle="N° de bon (client)" valeur={e.numeroBC} />
@@ -48,6 +61,9 @@ export function ResultatLecture({ extraction, clients }: { extraction: Extractio
         <Champ libelle="Lieu d'intervention" valeur={[e.adresse, e.codePostal, e.ville].filter(Boolean).join(" ") || null} />
         <Champ libelle="Référence chantier" valeur={e.referenceChantier} />
         <Champ libelle="Nature des travaux" valeur={e.natureTravaux} />
+        <Champ libelle="Interlocuteur" valeur={e.interlocuteur} />
+        <Champ libelle="Logement" valeur={[e.logementStatut, e.numeroLogement && `n° ${e.numeroLogement}`, e.etage && `étage ${e.etage}`, e.occupant].filter(Boolean).join(" · ") || null} />
+        <Champ libelle="Adresse de facturation" valeur={[e.facturationAdresse, e.facturationCodePostal, e.facturationVille].filter(Boolean).join(" ") || null} />
       </dl>
       {e.lignes.length > 0 && (
         <Table>
@@ -63,7 +79,7 @@ export function ResultatLecture({ extraction, clients }: { extraction: Extractio
           </TBody>
         </Table>
       )}
-      <Button className="self-start" onClick={() => void navigate("/commandes/nouveau", { state: { prefill: versPreRemplissage(e, clientId) } })}>
+      <Button className="self-start" onClick={() => void navigate("/commandes/nouveau", { state: { prefill: versPreRemplissage(e, clientId || null, todayISO()), fichier } })}>
         Préremplir un nouveau bon de commande
       </Button>
     </div>

@@ -56,15 +56,39 @@ export const schemaReponse = z.union([
   z.object({ erreur: z.string() }),
 ]);
 
+/**
+ * Le même contrat, champ par champ : ce qui s'écarte de la forme attendue vaut
+ * « non lu » au lieu de faire tomber toute la lecture (`ecartsDeForme` de
+ * l'Edge Function, OCR-31). Une ligne illisible est écartée, pas réparée.
+ */
+const schemaExtractionTolerante = z.object({
+  ...Object.fromEntries(Object.entries(schemaExtraction.shape).map(([cle, s]) => [cle, (s as z.ZodType).catch(null)])),
+  lignes: z.array(z.unknown()).catch([]).transform((ls) => ls.flatMap((l) => {
+    const r = schemaLigneLue.safeParse(l);
+    return r.success ? [r.data] : [];
+  })),
+  avertissements: z.array(z.string()).catch([]),
+});
+
+export type LectureAnalysee = { extraction: ExtractionBC; incertaine: string[] } | { erreur: string } | null;
+
+/**
+ * La réponse du service : conforme, partiellement incertaine (les champs
+ * écartés sont nommés dans un avertissement), ou illisible (`null`).
+ */
+export function analyserReponse(donnees: unknown): LectureAnalysee {
+  const stricte = schemaReponse.safeParse(donnees);
+  if (stricte.success) return "erreur" in stricte.data ? stricte.data : { extraction: stricte.data.extraction, incertaine: [] };
+  const brut = typeof donnees === "object" && donnees !== null && "extraction" in donnees ? donnees.extraction : undefined;
+  if (typeof brut !== "object" || brut === null) return null;
+  const tolerante = schemaExtractionTolerante.safeParse(brut);
+  if (!tolerante.success) return null;
+  const ecarts = schemaExtraction.safeParse(brut);
+  const incertaine = ecarts.success ? [] : [...new Set(ecarts.error.issues.map((i) => String(i.path[0] ?? "réponse")))];
+  return { extraction: tolerante.data as ExtractionBC, incertaine };
+}
+
 /** Les formats que la fonction accepte, et sa limite (~14 Mo une fois décodé). */
 export const MIMES_ACCEPTES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
-export const TAILLE_MAX_OCTETS = 14 * 1024 * 1024;
-
-export function refusFichier(f: { type: string; size: number }): string | null {
-  if (!(MIMES_ACCEPTES as readonly string[]).includes(f.type)) {
-    return "Format non pris en charge : PDF, JPEG, PNG ou WebP seulement (convertissez une photo HEIC en JPEG).";
-  }
-  if (f.size > TAILLE_MAX_OCTETS) return "Fichier trop volumineux (14 Mo au plus) : envoyez un PDF allégé.";
-  if (f.size === 0) return "Le fichier est vide.";
-  return null;
-}
+/** La limite de la fonction (charge utile) — celle de l'ancien `preparer` : 14 000 000 octets. */
+export const TAILLE_MAX_OCTETS = 14_000_000;
