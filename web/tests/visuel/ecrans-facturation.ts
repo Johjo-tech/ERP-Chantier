@@ -88,8 +88,8 @@ export function ecransFacturation(): Ecran[] {
   return [
     factures("factures", "Factures › liste", { facturesView: "liste" }, "/factures", seuils({ pixels: 0.002, texte: ACOMPTES }, { pixels: 0.002, texte: ACOMPTES })),
     factures("factures-avoirs", "Factures › Avoirs", { facturesView: "avoirs" }, "/factures/avoirs", seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 })),
-    factures("factures-validation", "Factures › Validation", { facturesView: "validation" }, "/facturation/validation", seuils({ pixels: 0.05, texte: 36 }, { pixels: 1, texte: 10_000 })),
-    factures("factures-a-facturer", "Factures › À facturer", { facturesView: "afacturer" }, "/facturation/a-facturer", seuils({ pixels: 0.09, texte: 40 }, { pixels: 1, texte: 10_000 })),
+    factures("factures-validation", "Factures › Validation", { facturesView: "validation" }, "/facturation/validation", seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 })),
+    factures("factures-a-facturer", "Factures › À facturer", { facturesView: "afacturer" }, "/facturation/a-facturer", seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 })),
     factures("factures-reglements", "Factures › Règlements › Par client", { facturesView: "reglements", reglementsVue: "clients", reglementsClient: null }, "/factures/reglements", seuils({ pixels: 0.002, texte: ACOMPTES }, { pixels: 0.002, texte: ACOMPTES })),
     factures("factures-reglements-par-facture", "Factures › Règlements › Par facture", { facturesView: "reglements", reglementsVue: "factures", reglementsClient: null }, "/factures/reglements/par-facture", seuils({ pixels: 0.002, texte: 2 * ACOMPTES }, { pixels: 0.002, texte: 2 * ACOMPTES })),
     factures("factures-reglements-tous", "Factures › Règlements › Tous les règlements", { facturesView: "reglements", reglementsVue: "tous", reglementsClient: null }, "/factures/reglements/tous", seuils({ pixels: MEME_INSTANT, texte: 0 }, { pixels: 0.002, texte: 0 })),
@@ -101,7 +101,15 @@ export function ecransFacturation(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("devis") },
       nouveau: { chemin: "/devis" },
-      seuils: seuils({ pixels: 0.27, texte: 41 }, { pixels: 1, texte: 10_000 }),
+      seuils: seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 }),
+    },
+    {
+      id: "devis-envoyes",
+      titre: "Devis › filtrés (Envoyé)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: onglet("devis", { devisStatutFilter: "envoyé" }) },
+      nouveau: { chemin: "/devis?statut=envoy%C3%A9" },
+      seuils: seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 }),
     },
   ];
 }

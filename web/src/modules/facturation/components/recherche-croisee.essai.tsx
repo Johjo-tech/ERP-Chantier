@@ -23,7 +23,9 @@ vi.mock("../api/factures", async (original) => ({ ...(await original<typeof impo
 const soldes = vi.hoisted(() => ({ soldesDesFactures: vi.fn() }));
 vi.mock("../api/soldes", () => soldes);
 const devis = vi.hoisted(() => ({ listerDevis: vi.fn(), totauxDesDevis: vi.fn() }));
-vi.mock("@/modules/devis/api/devis", () => devis);
+vi.mock("@/modules/devis/api/devis", async (original) => ({ ...(await original<typeof import("@/modules/devis/api/devis")>()), ...devis }));
+// La liste des devis lit l'en-tête entier (`api/ecran`) : les mêmes devis, en carte.
+vi.mock("@/modules/devis/api/ecran", () => ({ listerDevisEcran: vi.fn(async () => (await devis.listerDevis()).map((d: Record<string, unknown>) => ({ ...d, intervention_id: null, code_postal: null, occupant: null, etage: null, numero_logement: null, precision_commune: null, ancien_locataire: null, remise_pourcentage: 0, cree_le: "2026-09-01T08:00:00Z" }))) }));
 vi.mock("@/modules/societes/api/conducteurs", () => ({ listerConducteurs: vi.fn(async () => []) }));
 // L'écran des factures lit l'en-tête entier et les totaux de la base (`api/ecran`) : la même pièce, en carte.
 const ecran = vi.hoisted(() => ({ listerFacturesEcran: vi.fn(), totauxDesFactures: vi.fn(), referencesDevis: vi.fn(async () => []), referencesRapports: vi.fn(async () => []), interlocuteursDeLaSociete: vi.fn(async () => []) }));
@@ -122,15 +124,16 @@ describe("filtres dans l'adresse (D-CLI-10)", () => {
 
   it("la tuile « Devis en attente » ouvre les devis envoyés ; un montant se cherche ; Entrée met en évidence", async () => {
     ouvrir("/devis?statut=envoy%C3%A9");
-    expect(await screen.findByRole("link", { name: "DEV-2026-000001" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "DEV-2026-000002" })).not.toBeInTheDocument();
+    expect(await screen.findByText("DEV-2026-000001")).toBeInTheDocument();
+    expect(screen.queryByText("DEV-2026-000002")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Filtrer par statut")).toHaveValue("envoyé");
     await userEvent.selectOptions(screen.getByLabelText("Filtrer par statut"), "");
     const champ = screen.getByLabelText("Rechercher un devis");
     await userEvent.type(champ, "1 234,50");
-    await waitFor(() => expect(screen.queryByRole("link", { name: "DEV-2026-000001" })).not.toBeInTheDocument());
-    expect(screen.getByRole("link", { name: "DEV-2026-000003" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("DEV-2026-000001")).not.toBeInTheDocument());
+    expect(screen.getByText("DEV-2026-000003")).toBeInTheDocument();
     await userEvent.type(champ, "{Enter}");
-    expect(screen.getByRole("row", { name: /DEV-2026-000003/ })).toHaveClass("ring-2");
+    // La carte trouvée s'encadre comme dans l'ancien (`.search-focus`).
+    expect(document.getElementById("devis-card-d3")).toHaveClass("search-focus");
   });
 });
