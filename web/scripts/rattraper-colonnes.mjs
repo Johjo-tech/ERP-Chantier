@@ -16,6 +16,8 @@ import ts from "typescript";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const CONTENEUR = "supabase_db_erp-chantier-web";
+// Une base temporaire du même conteneur (essai « base neuve ») : BASE_LOCALE=essai_…
+const BASE = process.env.BASE_LOCALE || "postgres";
 const source = readFileSync(join(ICI, "../src/lib/database.types.ts"), "utf8");
 const fichier = ts.createSourceFile("t.ts", source, ts.ScriptTarget.Latest, true);
 
@@ -52,7 +54,7 @@ function typeSql(col, texteType) {
 const existantes = new Map();
 const sortie = execFileSync(
   "docker",
-  ["exec", "-i", CONTENEUR, "psql", "-U", "postgres", "-At", "-F", "|", "-c",
+  ["exec", "-i", CONTENEUR, "psql", "-U", "postgres", "-d", BASE, "-At", "-F", "|", "-c",
    "select table_name, column_name from information_schema.columns where table_schema='public'"],
   { encoding: "utf8" }
 );
