@@ -119,7 +119,8 @@ create or replace view public.v_espace_client_bons with (security_barrier = true
 comment on view public.v_espace_client_bons is
   'Espace client : ses bons, sans montant ni note interne. Proposition 20260926042000.';
 
-revoke all on public.v_espace_client_bons from anon;
+-- Lecture seule : les droits d'écriture que Supabase accorde par défaut sont retirés (relecture 4, B1).
+revoke all on public.v_espace_client_bons from public, anon, authenticated;
 grant select on public.v_espace_client_bons to authenticated;
 
 -- 4. L'EN-TÊTE DES PIÈCES. Le client ne lit pas `societes` (tout membre y a
@@ -158,5 +159,6 @@ create or replace view public.v_mes_acces_clients with (security_barrier = true)
   join societes s on s.id = a.societe_id
   where a.profile_id = auth.uid() and a.actif;
 
-revoke all on public.v_mes_acces_clients from anon;
+-- Lecture seule : les droits d'écriture que Supabase accorde par défaut sont retirés (relecture 4, B1).
+revoke all on public.v_mes_acces_clients from public, anon, authenticated;
 grant select on public.v_mes_acces_clients to authenticated;

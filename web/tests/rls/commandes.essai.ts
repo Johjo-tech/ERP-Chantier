@@ -62,11 +62,10 @@ describe("lecture par les vues terrain (BC-56, BC-61)", () => {
     expect(lignesTable).toEqual([]);
   });
 
-  it("le sous-traitant non plus ne lit aucun prix", async () => {
+  it("le sous-traitant ne lit pas un bon qui ne lui est pas confié (relecture 4, I5)", async () => {
+    // Sur SES bons, il les lit sans aucun prix : tests/rls/politiques.essai.ts (I4 et I5).
     const st = await connecte(COMPTES.sousTraitantAlpha);
-    const bon = await lireBon(BON_CHIFFRE_SEED, st);
-    expect(bon.montant).toBeNull();
-    expect(bon.lignes.every((l) => l.prix_unitaire === null)).toBe(true);
+    await expect(lireBon(BON_CHIFFRE_SEED, st)).rejects.toBeTruthy();
   });
 
   it("la secrétaire lit les montants", async () => {

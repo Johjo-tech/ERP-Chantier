@@ -20,7 +20,8 @@
 --     `numero_interne` d'un bon —, ce qui laisse l'écran historique, qui
 --     fournit le sien, inchangé.
 --
--- Validé par : tests/rls/interventions.essai.ts (« [proposition] … »).
+-- Validé par : tests/rls/interventions.essai.ts (« [proposition] … ») et
+-- tests/rls/politiques.essai.ts (« [proposition] relecture 4 » : M1, M3).
 
 alter table public.interventions
   add column if not exists bon_commande_id uuid references public.bons_commande(id) on delete set null,
@@ -75,7 +76,46 @@ as $function$
           or (p_sous_traitant is not null and p_sous_traitant = mon_sous_traitant(p_societe)));
 $function$;
 
+revoke all on function public.rapport_visible(uuid, uuid) from public, anon;
 grant execute on function public.rapport_visible(uuid, uuid) to authenticated;
+
+-- Le bon et l'entreprise cités par un rapport sont ceux de SA société : avec
+-- l'index unique « un rapport par bon », un compte qui connaît l'uuid d'un bon
+-- d'une autre société (ou un sous-traitant, celui d'un bon qui n'est pas le
+-- sien) « occupait » ce bon et bloquait le vrai rapport (relecture 4, M3).
+create or replace function public.intervention_references_coherentes()
+ returns trigger
+ language plpgsql
+ security definer
+ set search_path to 'public', 'pg_temp'
+as $function$
+begin
+  if new.bon_commande_id is not null
+     and (tg_op = 'INSERT' or new.bon_commande_id is distinct from old.bon_commande_id) then
+    if not exists (select 1 from bons_commande b where b.id = new.bon_commande_id and b.societe_id = new.societe_id) then
+      raise exception 'Ce bon de commande n''appartient pas à la société du rapport.' using errcode = 'check_violation';
+    end if;
+    if auth.uid() is not null and not coalesce(bon_lisible(new.societe_id, new.bon_commande_id), false) then
+      raise exception 'Ce bon de commande ne vous est pas confié.' using errcode = 'insufficient_privilege';
+    end if;
+  end if;
+  if new.sous_traitant_id is not null
+     and (tg_op = 'INSERT' or new.sous_traitant_id is distinct from old.sous_traitant_id)
+     and not exists (select 1 from sous_traitants st where st.id = new.sous_traitant_id and st.societe_id = new.societe_id) then
+    raise exception 'Ce sous-traitant n''appartient pas à la société du rapport.' using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$function$;
+
+-- Après `interventions_a_la_naissance` (ordre alphabétique des déclencheurs) :
+-- le sous-traitant y a déjà reçu SA propre entreprise.
+drop trigger if exists interventions_references_coherentes on public.interventions;
+create trigger interventions_references_coherentes
+  before insert or update of bon_commande_id, sous_traitant_id, societe_id on public.interventions
+  for each row execute function public.intervention_references_coherentes();
+
+revoke all on function public.intervention_references_coherentes() from public, anon, authenticated;
 
 drop policy if exists interventions_select on public.interventions;
 create policy interventions_select on public.interventions

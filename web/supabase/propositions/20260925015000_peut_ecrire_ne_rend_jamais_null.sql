@@ -1,4 +1,4 @@
--- PROPOSITION DE SÉCURITÉ — non appliquée en production. À appliquer en premier.
+-- PROPOSITION DE SÉCURITÉ — non appliquée en production. Classée deuxième : la n° 1 n'emploie pas `peut_ecrire`, l'ordre des fichiers suffit.
 --
 -- `peut_ecrire(societe)` vaut `mon_role(societe) in ('admin', …)`. Pour un
 -- compte qui n'est PAS membre de la société, `mon_role` rend NULL, et

@@ -45,11 +45,15 @@ describe("[proposition] le numéro d'une facture ne se fournit pas", () => {
     await c.from("factures").delete().eq("id", data?.id ?? "");
   });
 
-  it("la reprise de l'historique comptable garde son numéro d'origine", async () => {
-    const c = await connecte(COMPTES.secretaireAlpha);
+  it("[proposition] la reprise de l'historique comptable est réservée à l'administrateur, et porte ses lignes (relecture 4, I1)", async () => {
+    // Le chemin complet (brouillon → lignes → numéro d'origine) : tests/rls/import-export.essai.ts.
+    const sec = await connecte(COMPTES.secretaireAlpha);
     const legacy = `compta:essai-${Date.now()}`;
-    const { data, error } = await c.from("factures").insert({ societe_id: ALPHA, client_nom: "Reprise", numero: `HIST-${Date.now()}`, statut: "brouillon", legacy_id: legacy }).select("id").single();
-    expect(error).toBeNull();
-    await c.from("factures").delete().eq("id", data?.id ?? "");
+    const refus = await sec.from("factures").insert({ societe_id: ALPHA, client_nom: "Reprise", numero: `HIST-${Date.now()}`, statut: "brouillon", legacy_id: legacy }).select("id").single();
+    expect(refus.error?.code).toBe("42501");
+
+    const admin = await connecte(COMPTES.adminAlpha);
+    const sansLigne = await admin.from("factures").insert({ societe_id: ALPHA, client_nom: "Reprise", numero: `HIST-${Date.now()}`, statut: "impayée", legacy_id: legacy }).select("id").single();
+    expect(sansLigne.error?.message).toMatch(/sans ligne/);
   });
 });

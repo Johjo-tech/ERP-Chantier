@@ -36,7 +36,93 @@
 
 -- 1. L'annuaire ne montre plus le suivi médical ni les notes hors RH -----------
 
-create or replace view public.v_salaries_annuaire as
+-- La production a divergé de la base locale (88 migrations passées par le
+-- tableau de bord) : une vue refaite d'après un texte écrit ici pourrait
+-- DÉMASQUER une colonne que la production masque, à noms et types égaux, sans
+-- la moindre erreur (relecture 4, I6). On compare donc la définition VIVANTE
+-- à celle attendue avant cette proposition — les deux passées par le même
+-- serveur (vues temporaires), donc au même format — et on s'arrête si elle
+-- diffère. Déjà appliquée : rien à refaire (rejouable).
+-- `security_barrier` dès ici (relecture 4, M2) : CREATE OR REPLACE VIEW sans
+-- WITH retire les options, et la barrière ne revenait qu'avec 20260926104000.
+do $bloc$
+declare
+  v_avant constant text := $avant$
+ SELECT id,
+    societe_id,
+    legacy_id,
+    nom,
+    prenom,
+    poste,
+    email,
+    telephone,
+    date_entree,
+    date_sortie,
+    cree_le,
+    maj_le,
+    type_contrat,
+    carte_btp_numero,
+    carte_btp_validite,
+    visite_medicale_date,
+    visite_medicale_prochaine,
+    technicien_id,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN salaire_mensuel_net
+            ELSE NULL::numeric
+        END AS salaire_mensuel_net,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN cout_horaire_charge
+            ELSE NULL::numeric
+        END AS cout_horaire_charge,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN solde_cp_initial
+            ELSE NULL::numeric
+        END AS solde_cp_initial,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN date_naissance
+            ELSE NULL::date
+        END AS date_naissance,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN nationalite
+            ELSE NULL::text
+        END AS nationalite,
+    sexe,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN lieu_naissance
+            ELSE NULL::text
+        END AS lieu_naissance,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN situation_familiale
+            ELSE NULL::text
+        END AS situation_familiale,
+    adresse,
+    code_postal,
+    ville,
+    statut_cadre,
+    temps_travail,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN iban
+            ELSE NULL::text
+        END AS iban,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN mutuelle
+            ELSE NULL::text
+        END AS mutuelle,
+        CASE
+            WHEN a_permission(societe_id, 'rh'::text, 'modifier'::text) THEN retraite
+            ELSE NULL::text
+        END AS retraite,
+    medecine_travail,
+    manager_id,
+    departement,
+    photo_url,
+    actif,
+    notes,
+    profile_id
+   FROM salaries s
+  WHERE est_membre(societe_id)
+$avant$;
+  v_apres constant text := $apres$
  SELECT id,
     societe_id,
     legacy_id,
@@ -118,7 +204,31 @@ create or replace view public.v_salaries_annuaire as
         END AS notes,
     profile_id
    FROM salaries s
-  WHERE est_membre(societe_id);
+  WHERE est_membre(societe_id)
+$apres$;
+  v_vivante text := pg_get_viewdef('public.v_salaries_annuaire'::regclass);
+  v_attendue_avant text;
+  v_attendue_apres text;
+begin
+  execute 'create temporary view essai_salaries_avant as ' || v_avant;
+  execute 'create temporary view essai_salaries_apres as ' || v_apres;
+  v_attendue_avant := pg_get_viewdef('pg_temp.essai_salaries_avant'::regclass);
+  v_attendue_apres := pg_get_viewdef('pg_temp.essai_salaries_apres'::regclass);
+  drop view pg_temp.essai_salaries_avant;
+  drop view pg_temp.essai_salaries_apres;
+
+  if v_vivante = v_attendue_apres then
+    raise notice 'v_salaries_annuaire : déjà refaite, rien à changer.';
+  elsif v_vivante = v_attendue_avant then
+    execute 'create or replace view public.v_salaries_annuaire with (security_barrier = true) as ' || v_apres;
+  else
+    raise exception 'v_salaries_annuaire : la définition vivante diffère de celle attendue — proposition NON appliquée.'
+      using detail = 'Définition vivante : ' || v_vivante,
+            hint = 'Refaire le texte de la proposition depuis pg_get_viewdef(''public.v_salaries_annuaire'') de CETTE base (docs/migrations-proposees.md, « vues refaites »).';
+  end if;
+  execute 'alter view public.v_salaries_annuaire set (security_barrier = true)';
+end
+$bloc$;
 
 -- 2. Le dossier RH du seau `terrain` suit `rh / modifier` -------------------
 
@@ -137,6 +247,7 @@ as $function$
       or coalesce(a_permission(uuid_ou_null(split_part(p_nom, '/', 1)), 'rh', 'modifier'), false);
 $function$;
 
+revoke all on function public.terrain_rh_autorise(text) from public, anon;
 grant execute on function public.terrain_rh_autorise(text) to authenticated;
 
 -- Une politique RESTRICTIVE plutôt que la réécriture des quatre politiques du

@@ -38,7 +38,7 @@ returns void
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 begin
   if not coalesce(public.a_permission(p_societe, 'statistiques', 'voir'), false) then
@@ -52,7 +52,7 @@ create or replace function public.stats_ht_compte(p_type public.facture_type_doc
 returns numeric
 language sql
 immutable
-set search_path = public
+set search_path = public, pg_temp
 as $$
   select case
     when p_numero is null and p_statut = 'brouillon' then null
@@ -68,7 +68,7 @@ returns boolean
 language sql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
   select coalesce(p_statut_workflow, '') not in ('chiffre', 'facture', 'cloture_gratuit')
     and not exists (select 1 from public.factures f where f.bon_commande_id = p_bon)
@@ -95,7 +95,7 @@ returns table (
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 declare
@@ -134,7 +134,7 @@ returns table (mois date, ht numeric, nb integer)
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin
@@ -161,7 +161,7 @@ returns table (nature text, id uuid, quand timestamptz, client text, numero text
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin
@@ -199,7 +199,7 @@ returns table (client_id uuid, client_nom text, ht numeric, nb_factures integer,
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin
@@ -255,7 +255,7 @@ returns table (
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin
@@ -330,7 +330,7 @@ returns table (metier text, bons integer, sav integer, en_retard integer, ht num
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin
@@ -388,7 +388,7 @@ returns table (equipe_id uuid, equipe text, mois date, ht numeric)
 language plpgsql
 stable
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 #variable_conflict use_column
 begin

@@ -17,7 +17,8 @@
 -- dépôt ouvert à qui écrit au planning ET au sous-traitant ; retrait réservé
 -- à qui écrit (`peut_ecrire`).
 --
--- Validé par : tests/rls/planning.essai.ts (« [proposition] … photos »).
+-- Validé par : tests/rls/planning.essai.ts (« [proposition] … photos ») et
+-- tests/rls/politiques.essai.ts (« [proposition] relecture 4 » : I3, M1).
 
 create or replace function public.societe_du_bon(p_bc uuid)
  returns uuid
@@ -37,18 +38,26 @@ as $function$
   select coalesce(peut_ecrire(p_societe) or mon_role(p_societe) = 'sous_traitant', false);
 $function$;
 
+-- Sans le retrait nommé à `anon`, un anonyme lisait la société de n'importe
+-- quel bon dont il connaissait l'uuid (relecture 4, M1).
+revoke all on function public.societe_du_bon(uuid) from public, anon;
+revoke all on function public.peut_deposer_terrain(uuid) from public, anon;
 grant execute on function public.societe_du_bon(uuid) to authenticated;
 grant execute on function public.peut_deposer_terrain(uuid) to authenticated;
 
+-- Le sous-traitant ne voit et ne complète que les photos des bons où il a une
+-- tâche (`bon_lisible`, proposition 20260926050000) : sans quoi il déposait
+-- sur le bon d'un confrère et lisait tous les chemins (relecture 4, I3, I5).
 drop policy if exists bon_commande_photos_select on public.bon_commande_photos;
 create policy bon_commande_photos_select on public.bon_commande_photos
   for select to authenticated
-  using (est_membre(societe_du_bon(bon_commande_id)));
+  using (bon_lisible(societe_du_bon(bon_commande_id), bon_commande_id));
 
 drop policy if exists bon_commande_photos_insert on public.bon_commande_photos;
 create policy bon_commande_photos_insert on public.bon_commande_photos
   for insert to authenticated
-  with check (peut_deposer_terrain(societe_du_bon(bon_commande_id)));
+  with check (peut_deposer_terrain(societe_du_bon(bon_commande_id))
+              and bon_lisible(societe_du_bon(bon_commande_id), bon_commande_id));
 
 drop policy if exists bon_commande_photos_update on public.bon_commande_photos;
 create policy bon_commande_photos_update on public.bon_commande_photos
@@ -61,6 +70,8 @@ create policy bon_commande_photos_delete on public.bon_commande_photos
   for delete to authenticated
   using (peut_ecrire(societe_du_bon(bon_commande_id)));
 
+-- Le dépôt dans le seau est ensuite resserré par domaine et par entité
+-- (`peut_ecrire_terrain`, proposition 20260926100000, relecture 4 I3).
 drop policy if exists terrain_ajout on storage.objects;
 create policy terrain_ajout on storage.objects
   for insert to authenticated
