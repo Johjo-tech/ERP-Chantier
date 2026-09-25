@@ -109,6 +109,9 @@ export function FicheIntervention({ carte, jour, onFermer }: Props) {
           Ce bon de commande a {autres.length} autre(s) date(s) planifiée(s) — {restantes ? `${restantes} encore à valider` : "toutes déjà validées"}.
         </p>
       )}
+      <Can module="bons_commande">
+        <Button asChild variant="link" size="sm" className="self-start px-0"><Link to={`/commandes/${carte.bcId}`}>Ouvrir le bon de commande{carte.bon.piece_jointe_nom ? ` (📎 ${carte.bon.piece_jointe_nom})` : ""}</Link></Button>
+      </Can>
       <Can module="rapports" action="creer">
         <Button asChild variant="outline" size="sm" className="self-start"><Link to={`/rapports/nouveau?bon=${carte.bcId}`}>📝 Rédiger le rapport d'intervention</Link></Button>
       </Can>

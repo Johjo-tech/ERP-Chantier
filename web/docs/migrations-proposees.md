@@ -16,6 +16,10 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 5 | `20260925040000_le_numero_ne_se_fournit_pas.sql` | **Intégrité** | Un INSERT (ou UPDATE d'un brouillon) qui fournit lui-même `numero` crée une facture émise hors série légale et sans ligne. Refusé, sauf reprise historique (`legacy_id` « compta: »). Constaté en local avec le compte secrétaire. | `tests/rls/numerotation.essai.ts` |
 | 6 | `20260925050000_les_lignes_d_un_bon_facture_sont_figees.sql` | **Intégrité** | `bon_commande_facture_fige` protège l'en-tête d'un bon facturé, pas ses lignes : un conducteur les modifiait, supprimait ou complétait après émission de la facture. Même critère (facture numérotée), renommage de métier toléré. Relecture 3, I3. | `tests/rls/commandes.essai.ts` (« [proposition] … lignes … figées ») |
 | 7 | `20260925060000_un_bon_nait_au_debut_du_circuit.sql` | **Intégrité** | `circuit_etat_reserve` ne veille qu'à l'UPDATE : un INSERT créait un bon directement « chiffré ». Ramené à `en_cours` (pas refusé : l'écran historique envoie la clé — D-051). Relecture 3, I4. | `tests/rls/commandes.essai.ts` (« [proposition] … naît quand même au début ») |
+| 8 | `20260926050000_le_sous_traitant_pointe_ses_taches.sql` | Droits | `est_de_l_equipe` ignore le sous-traitant : il ne peut pointer aucune de ses tâches ; `mon_sous_traitant`, `mes_montants_sous_traitant` (« Votre montant » sans ouvrir la vue), travaux supplémentaires sur SES bons (D-PLN-05). | `tests/rls/planning.essai.ts` (« [proposition] … sous-traitant ») |
+| 9 | `20260926051000_les_photos_du_terrain.sql` | Droits | `bon_commande_photos` illisible au terrain (sous-requête sur une table à prix), suppression ouverte au rôle lecture, seau `terrain` fermé au sous-traitant (D-PLN-06). | `tests/rls/planning.essai.ts` (« [proposition] … photo ») |
+| 10 | `20260926052000_rapports_d_intervention_complets.sql` | Fonction + droits | Rapport : lien au bon (un par bon), émetteur sous-traitant, signature du technicien, numéro posé par la base ; le sous-traitant ne voit que ses rapports (PLN-52) ; tables filles sur la matrice « rapports ». Dépend du n° 8 (D-PLN-07). | `tests/rls/interventions.essai.ts` |
+| 11 | `20260926053000_le_terrain_joint_le_locataire.sql` | Fonction | Téléphone de l'occupant, absent de la vue terrain : `telephones_locataires(societe)` pour les membres (D-PLN-10). | `tests/rls/planning.essai.ts` (« [proposition] … téléphone ») |
 
 ## Comment les appliquer (par un humain)
 
@@ -36,6 +40,9 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
    `web/src/lib/` ; supprimer alors `web/src/lib/database.propositions.ts`.
 
 ## Migrations à écrire ensuite (non rédigées)
+
+- **Planning restreint au terrain** : `planning_taches` se lit sous `est_membre` — un sous-traitant lit toutes les tâches de la société, celles de ses confrères comprises (AUTH-72). L'écran filtre ; la base devrait le faire.
+- **Réglage Alsace-Moselle** : une colonne de société pour activer Vendredi saint et 26 décembre (D-PLN-09).
 
 - **Suppression dans les autres tables filles** : 20 tables (véhicules, matériel,
   documents de chantier, photos…) suppriment encore sous `est_membre()` — même

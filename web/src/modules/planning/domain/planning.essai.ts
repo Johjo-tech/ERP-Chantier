@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { estFerie, joursFeries, lundiDe, libelleSemaine, indiceHeure, dansLaPlage } from "./calendrier";
 import { construireCartes, datesSupplementaires, metiersDuBon, rendezVousDe, tacheDuJour, tachesHorsMetier, tentativesDuBon } from "./cartes";
 import { ajouterTentative, lienTelephone, refusRappel, retirerTentative } from "./contacts";
-import { cartesDuCalendrier, cartesDuJour, enAttente, FILTRES_VIDES, nonPlanifiees, semaineDuResultat } from "./filtres";
+import { cartesDuCalendrier, cartesDuJour, enAttente, FILTRES_VIDES, mesCartesDuJour, nonPlanifiees, semaineDuResultat, tachesAReprendre } from "./filtres";
+import { dureeDesCases, heureDeLaCase, placementDuJour } from "./grille";
 import {
   affectationConnue,
   MSG_DATE_EN_DOUBLE,
@@ -15,6 +16,8 @@ import {
   planCreneauJournee,
   planDateFin,
   planDeplanifier,
+  planEtirer,
+  planMaterialiser,
   planPoser,
   planRetirerDate,
   questionDeplanifier,
@@ -255,6 +258,59 @@ describe("planification (PLN-04 à PLN-06, PLN-32, PLN-33)", () => {
 
   it("rdvAEcrire ignore le sous-traitant d'un bon mono-métier (il vit sur les tâches)", () => {
     expect(rdvAEcrire({ metierKey: null, bon: bonEssai() }, { sousTraitant: "Serge SARL" })).toBeNull();
+  });
+});
+
+describe("grille et poignée (PLN-05, PLN-34)", () => {
+  const t = tacheEssai({ date_tache: "2026-09-21", heure_debut: "10:00", heure_fin: "11:00" });
+  const [c] = construireCartes(
+    [bonEssai({ date_planifiee: "2026-09-21", date_planifiee_fin: "2026-09-23", heure_planifiee: "10:00", duree_heures: 3, heure_dernier_jour: "13:00", duree_dernier_jour: 2 })],
+    [t, tacheEssai({ date_tache: "2026-09-25", heure_debut: "14:00", heure_fin: "16:00" })],
+    ANNUAIRES
+  );
+
+  it("placement : origine à son heure (la pause comptée), suite sur la journée, dernier jour à son heure, journée supplémentaire à son créneau", () => {
+    const carte = une(c);
+    expect(placementDuJour(carte, "2026-09-21")).toMatchObject({ variante: "origine", indiceDebut: 2, cases: 4 });
+    expect(placementDuJour(carte, "2026-09-22")).toMatchObject({ variante: "suite", indiceDebut: 0, cases: 9 });
+    expect(placementDuJour(carte, "2026-09-23")).toMatchObject({ variante: "dernier", indiceDebut: 5, cases: 2 });
+    expect(placementDuJour(carte, "2026-09-25")).toMatchObject({ variante: "suppl", indiceDebut: 6, cases: 2 });
+    expect(heureDeLaCase(3)).toBe("11:00");
+  });
+
+  it("les cases tirées redeviennent une durée — midi compté une seule fois — et la colonne visée la date de fin", () => {
+    expect(dureeDesCases(2, 4)).toBe(3);
+    expect(dureeDesCases(5, 2)).toBe(2);
+    const plan = planEtirer(une(c), { cases: 5, indiceDebut: 2, fin: "2026-09-24", dernierJour: false });
+    expect(plan.bon).toEqual({ duree_heures: 4, date_planifiee_fin: "2026-09-24" });
+    expect(plan.taches).toEqual([{ type: "maj", id: t.id, champs: { heure_debut: "10:00", heure_fin: "14:00" } }]);
+    expect(planEtirer(une(c), { cases: 1, indiceDebut: 5, fin: null, dernierJour: true }).bon).toEqual({ duree_dernier_jour: 1 });
+    expect(planEtirer(une(c), { cases: 2, indiceDebut: 2, fin: "2026-09-01", dernierJour: false }).bon).toEqual({ duree_heures: 2, date_planifiee_fin: "2026-09-23" });
+  });
+
+  it("préparer la fiche d'une carte posée par l'ancien écran crée la tâche du jour, avec l'équipe et le créneau", () => {
+    const [sansTache] = construireCartes([bonEssai({ date_planifiee: "2026-09-21", heure_planifiee: "09:00", duree_heures: 2, technicien: "eqA" })], [], ANNUAIRES);
+    expect(planMaterialiser(une(sansTache), "Plomberie", "2026-09-21").taches).toEqual([
+      { type: "creer", tache: expect.objectContaining({ metier: "Plomberie", date_tache: "2026-09-21", technicien_id: "eqA", heure_debut: "09:00", heure_fin: "11:00" }) },
+    ]);
+    expect(planMaterialiser(une(c), "Plomberie", "2026-09-21").taches).toEqual([]);
+  });
+});
+
+describe("ma journée (écran terrain)", () => {
+  it("les cartes du jour de mon équipe, par heure, et ce qu'on m'a renvoyé", () => {
+    const cartes = construireCartes(
+      [
+        bonEssai({ id: "b1", date_planifiee: "2026-09-21", heure_planifiee: "13:00", technicien: "eqA" }),
+        bonEssai({ id: "b2", date_planifiee: "2026-09-21", heure_planifiee: "08:00", technicien: "eqB" }),
+        bonEssai({ id: "b3", date_planifiee: "2026-09-21", heure_planifiee: "09:00" }),
+      ],
+      [tacheEssai({ bon_commande_id: "b3", technicien_id: "eqA", date_tache: "2026-09-21", statut: "refusee", refus_motif: "À reprendre" })],
+      ANNUAIRES
+    );
+    expect(mesCartesDuJour(cartes, "2026-09-21", "eqA", null).map((c) => c.bcId)).toEqual(["b3", "b1"]);
+    expect(mesCartesDuJour(cartes, "2026-09-21", null, null)).toEqual([]);
+    expect(tachesAReprendre(cartes, "eqA", null).map((x) => x.tache.refus_motif)).toEqual(["À reprendre"]);
   });
 });
 

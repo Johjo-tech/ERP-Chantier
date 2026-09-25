@@ -51,7 +51,7 @@ export function BandeauTache({ tache, metier, horsMetier = false, constats }: Pr
       {statut === "refusee" && tache.refus_motif && <p className="text-xs text-destructive">↩ {tache.refus_motif}</p>}
       {tache.realisee_le && <p className="text-xs text-muted-foreground">Déclarés faits le {formatDateFr(tache.realisee_le)}</p>}
       {tache.validee_le && <p className="text-xs text-muted-foreground">Validés le {formatDateFr(tache.validee_le)}</p>}
-      <p className="text-xs">{statut === "validee" ? "✓ Circuit terminé pour cette tâche" : cestMonTour ? `⏳ À vous de jouer — ${prochainActeur(statut)}` : `⏳ En attente de ${prochainActeur(statut)}`}</p>
+      <p className="text-xs">{statut === "validee" ? "✓ Circuit terminé pour cette tâche" : cestMonTour ? `⏳ À vous de jouer — ${prochainActeur(statut)}` : `⏳ En attente : ${prochainActeur(statut)}`}</p>
       <div className="flex flex-wrap gap-2">
         {droits.peutSaisir && <Button size="sm" variant="outline" disabled={enCours} onClick={() => sauver.mutate({ tacheId: tache.id, constats }, suite("Constats enregistrés."))}>💾 Enregistrer mes constats</Button>}
         {droits.peutCloturer && <Button size="sm" disabled={enCours} onClick={() => terminer.mutate({ tacheId: tache.id, constats }, suite("Travaux déclarés faits — en attente de validation."))}>✓ Travaux terminés</Button>}

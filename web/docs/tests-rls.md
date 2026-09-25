@@ -40,6 +40,10 @@ Mot de passe de tous : `motdepasse-local`.
 | `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
 | `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
 | | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
+| `planning.essai.ts` | Le conducteur pose une carte (rendez-vous sur le bon, tâche avec équipe et créneau) et ajoute une journée ; le technicien lit sans aucun montant, connaît son équipe, ne planifie pas ; BETA ne voit rien | non |
+| | Circuit : l'équipe consigne puis déclare faite ; l'état ne s'écrit pas en direct ; une autre équipe est refusée en toutes lettres ; refus sans motif refusé, avec motif renvoyé | non |
+| | Sous-traitant : pointe ses tâches et pas celles d'un confrère, lit SON montant seul, signale un travail sur SON bon ; photos déposées et lues par le terrain, pas effacées par le rôle lecture ; téléphone de l'occupant | **oui** (20260926050000, 051000, 053000) |
+| `interventions.essai.ts` | Rapport du technicien : numéro INT par la base, contrôles, photo et signatures ; vacant : pas de signature client ; le sous-traitant rédige au nom de son entreprise et ne voit que ses rapports ; lecture ne supprime rien ; un rapport par bon | **oui** (20260926052000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

@@ -117,6 +117,18 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
     expect(api.appliquerPlan).not.toHaveBeenCalled();
   });
 
+  it("impression de la semaine en paysage : une colonne par équipe ayant du travail (PLN-11)", async () => {
+    const imprimer = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const { container } = rendreAvecSession(<PagePlanning />, { role: "conducteur" });
+    await userEvent.click(await screen.findByRole("button", { name: "🖨️ Imprimer" }));
+    expect(imprimer).toHaveBeenCalled();
+    const zone = container.querySelector(".zone-impression");
+    expect(zone?.querySelector("style")?.textContent).toContain("landscape");
+    expect([...(zone?.querySelectorAll("th") ?? [])].map((th) => th.textContent)).toEqual(["", "Équipe Thomas"]);
+    expect(zone?.textContent).toContain("OPAC du Rhône");
+    imprimer.mockRestore();
+  });
+
   it("le rôle lecture voit le planning sans aucun réglage", async () => {
     rendreAvecSession(<PagePlanning />, { role: "lecture" });
     const carte = await screen.findByRole("button", { name: /OPAC du Rhône, CMD-1/ });

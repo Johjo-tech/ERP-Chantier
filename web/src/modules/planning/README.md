@@ -50,3 +50,9 @@ tâche, constats, pièce, croquis, photos, contacts, travaux supplémentaires),
 - **Non repris** : génération IA des rapports (PLN-51, D-PLN-11), noms des
   auteurs dans l'historique d'une tâche (profils illisibles aux membres),
   aperçu de la pièce jointe du bon depuis la carte (lien vers le bon).
+
+**Essayer en local** : le jeu d'essai ne crée ni équipe ni sous-traitant (les tests RLS
+créent et retirent les leurs). Pour voir « Ma journée » du technicien :
+`insert into techniciens (societe_id, nom, metiers) values ('a0000000-0000-0000-0000-00000000000a', 'Équipe Thomas', '{}');`
+puis un salarié `profile_id = 'a1000000-0000-0000-0000-000000000004'` rattaché à cette équipe,
+et poser une carte au planning avec le compte conducteur.
