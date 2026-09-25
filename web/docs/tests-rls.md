@@ -40,6 +40,14 @@ Mot de passe de tous : `motdepasse-local`.
 | `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
 | `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
 | | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
+| `circuit.essai.ts` | Tâches par métier, déclarées faites, arbitrées, refus motivé, validée non rouverte ; le technicien sans équipe refusé avec le motif de la base ; la secrétaire n'arbitre pas | non |
+| | Validation conducteur refusée (métier sans tâche, tâche non pointée), puis acceptée | non |
+| | Travaux supplémentaires : ajout « à chiffrer » (TVA 10), chiffrage prix + quantité + unité ; secrétaire refusée ; terrain sans prix | non |
+| | Pré-facture dans le circuit (le travail rejoint le chapitre de son métier, « intégré », chiffré ; conducteur refusé ; `bc_chiffrage_valide` refuse un travail à chiffrer) et hors circuit (journal, travaux intégrés) | non |
+| | Clôture gratuite (admin seul, travaux « refusé », motif au journal) ; SAV (`SAV-AAAA-NNNNNN`, en-tête recopié, photo au bucket ; secrétaire refusée) | non |
+| | Pièce jointe au bucket `terrain` (`<société>/bons-commande/<bon>/…`), URL signée lisible, refusée à la secrétaire et à BETA, retrait | non |
+| | Contacts (secrétaire oui, lecture non) ; métiers déclarés (BETA ne voit pas ceux d'ALPHA) | non |
+| | Un bon créé reçoit un numéro « BC- » sans ligne de compteur de l'année | **oui** (20260926030000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 
@@ -53,6 +61,6 @@ Mot de passe de tous : `motdepasse-local`.
 - Tables filles restantes : pour chacune des 20 tables dont la suppression
   est `est_membre()` (véhicules, matériel, documents de chantier, photos…),
   vérifier que `lecture` ne supprime rien — échoue aujourd'hui.
-- Storage (bucket `terrain`) : un compte d'ALPHA ne lit pas `beta/…`.
+- Storage (bucket `terrain`) : un compte d'ALPHA ne lit pas `beta/…` (l'inverse est couvert par `circuit.essai.ts`).
 - Edge Functions PDP : elles vérifient l'appartenance mais pas le rôle — un
   compte `lecture` pourrait déclencher une émission.

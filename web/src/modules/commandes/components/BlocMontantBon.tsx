@@ -18,11 +18,9 @@ interface Props {
 }
 
 function NoteLignes({ lignes, ventile }: { lignes: readonly LigneEdition[]; ventile: boolean }) {
-  const nb = lignes.filter((l) => l.type === "ligne").length;
-  const quoi = nb === 1 ? "la ligne" : `les ${nb} lignes`;
   return (
     <p className="text-sm" aria-live="polite">
-      Montant du bon (HT, d'après {quoi}) : <strong className="tabular-nums">{formatEuros(montantDuBon(lignes, 0))}</strong>
+      Montant du bon (HT, d'après les lignes) : <strong className="tabular-nums">{formatEuros(montantDuBon(lignes, 0))}</strong>
       {ventile && <span className="block text-xs text-muted-foreground">Le total enregistré est celui des lignes ; la répartition par métier ne sert qu'à ventiler.</span>}
     </p>
   );

@@ -70,7 +70,7 @@ export function ChampPieceJointe({ doc, enAttente, onChange, peutDeposer, lectur
   }
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor="piece-jointe-bon">Pièce jointe (bon du client)</Label>
+      <Label htmlFor="piece-jointe-bon">Pièce jointe (document reçu)</Label>
       {actuel?.chemin && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span>📎 {actuel.nom ?? "Bon du client"}</span>
