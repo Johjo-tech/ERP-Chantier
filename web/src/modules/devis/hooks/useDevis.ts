@@ -1,8 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { clesBons } from "@/modules/commandes/hooks/useBons";
 import { todayISO } from "@/lib/dates";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { depuisBase, lignesPourEnregistrement } from "@/modules/documents/domain/lignes";
+import { construireModele, type ModeleDocument } from "@/modules/documents/domain/modele";
+import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { enregistrerDevis, listerDevis, lireDevis, supprimerDevis, totauxDesDevis } from "../api/devis";
+import { bonDepuisDevis, devisDepuisIntervention } from "../api/operations";
+import type { Devis } from "../domain/devis";
+import { pieceDeDevis } from "../domain/impression";
 import type { EnteteAEnregistrer } from "../domain/devis";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 
@@ -66,4 +72,31 @@ export function useDupliquerDevis() {
 export function useSupprimerDevis() {
   const invalider = useInvaliderDevis();
   return useMutation({ mutationFn: supprimerDevis, onSuccess: () => invalider() });
+}
+
+/** Le bon de commande du devis (DEV-14) : créé, puis ouvert pour relecture. */
+export function useBonDepuisDevis() {
+  const societe = useSocieteActive();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (devisId: string) => bonDepuisDevis(societe.id, devisId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: clesBons.racine(societe.id) }),
+  });
+}
+
+/** Un rapport d'intervention devient un devis brouillon (DEV-17). */
+export function useDevisDepuisIntervention() {
+  const societe = useSocieteActive();
+  const invalider = useInvaliderDevis();
+  return useMutation({
+    mutationFn: ({ interventionId, tvaDefaut }: { interventionId: string; tvaDefaut: number }) => devisDepuisIntervention(societe.id, interventionId, tvaDefaut),
+    onSuccess: (id) => invalider(id),
+  });
+}
+
+/** Le modèle imprimable du devis : un seul pour l'aperçu, le PDF et l'e-mail. Pas de mentions de facture. */
+export function useModeleDevis(devis: Devis | null, validiteJours: number): ModeleDocument | null {
+  const doc = useIdentiteDocument();
+  if (!devis || !doc.data) return null;
+  return construireModele(pieceDeDevis(devis, validiteJours), doc.data.identite, doc.data.reglages, []);
 }

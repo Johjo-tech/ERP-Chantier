@@ -128,6 +128,8 @@ export interface EnteteAEnregistrer {
   numero_logement: string | null;
   precision_commune: string | null;
   ancien_locataire: string | null;
+  /** Le rapport d'intervention d'origine (DEV-17) ; absent d'une modification ordinaire, donc jamais effacé. */
+  intervention_id?: string | null;
 }
 
 /**

@@ -114,3 +114,20 @@ export function refusImputation(montantRecu: unknown, factures: readonly Facture
   if (m.minus(du).gt(DEMI_CENTIME)) return `Le montant reçu dépasse le total dû (${formatEuros(du)}). Un trop-perçu ne s'impute pas.`;
   return null;
 }
+
+const LIBELLES_MODES: Record<string, string> = {
+  virement: "Virement", cheque: "Chèque", prelevement: "Prélèvement", carte: "Carte bancaire", especes: "Espèces",
+  // Les ponts d'une imputation : pas des modes de saisie, mais des façons dont une pièce s'éteint.
+  avoir: "Avoir", imputation: "Imputation",
+};
+
+/**
+ * Le mode en clair (`libelleModeReglement`, app.js l. 11256) : les anciens
+ * règlements stockent le libellé (« Virement », « CB »), les récents le code.
+ * Les deux se lisent ; aucun n'est réécrit.
+ */
+export function libelleModeReglement(mode: string | null | undefined): string {
+  const brut = String(mode ?? "").trim();
+  if (!brut) return "—";
+  return LIBELLES_MODES[brut] ?? brut;
+}

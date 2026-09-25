@@ -6,7 +6,10 @@ import { dateEcheance, delaiPaiementRetenu, libelleDelaiPaiement } from "@/modul
 import { lireDevis } from "@/modules/devis/api/devis";
 import { depuisBase, lignesPourEnregistrement, type LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import { chargerReglages } from "@/modules/societes/api/reglages";
+import { lignesDevisDuRapport } from "@/modules/devis/domain/preconisations";
+import { nettoyerLogement } from "@/modules/documents/domain/logement";
 import { refusAvoir } from "../domain/avoir";
+import { copieDeFacture, refusDuplication } from "../domain/duplication";
 import { designationSituation, refusSituation, type LigneSituation } from "../domain/situation";
 import { creerFacture, emettreFacture, lireFacture, listerFactures } from "./factures";
 
@@ -38,6 +41,54 @@ export async function factureDepuisDevis(societeId: string, devisId: string): Pr
 }
 
 /**
+ * Un rapport d'intervention devient une facture BROUILLON (FAC-15,
+ * `transformerInterventionEn('facture')`, app.js l. 4282). Refusé si une
+ * facture porte déjà ce rapport. L'ancien écran renvoyait un rapport rattaché
+ * à un bon vers la facture du bon ; la table `interventions` de production ne
+ * porte pas ce rattachement (aucune colonne `bon_commande_id`) : sans objet ici.
+ */
+export async function factureDepuisIntervention(societeId: string, interventionId: string, tvaDefaut: number): Promise<string> {
+  const db = supabase();
+  const [deja, lu] = await Promise.all([
+    db.from("factures").select("id, numero").eq("intervention_id", interventionId).limit(1),
+    db.from("interventions").select("id, client_id, client_nom, interlocuteur, adresse, adresse_locataire, code_postal, ville, logement_statut, occupant, etage, numero_logement, precision_commune, ancien_locataire, constatations, preconisations, metier, conducteur_id").eq("id", interventionId).single(),
+  ]);
+  if (deja.error) throw deja.error;
+  if (lu.error) throw lu.error;
+  const existante = deja.data?.[0];
+  if (existante) throw { code: "P0001", message: `Ce rapport a déjà été transformé en facture (${existante.numero ?? "brouillon en cours"}). Ouvrez-la directement pour la modifier.` };
+  const r = lu.data;
+  const date = todayISO();
+  return creerFacture(
+    societeId,
+    {
+      client_id: r.client_id,
+      client_nom: r.client_nom ?? "",
+      adresse: r.adresse,
+      interlocuteur: r.interlocuteur,
+      adresse_locataire: r.adresse_locataire,
+      code_postal: r.code_postal,
+      ville: r.ville,
+      ...nettoyerLogement({ logement_statut: r.logement_statut, occupant: r.occupant, etage: r.etage, numero_logement: r.numero_logement, precision_commune: r.precision_commune, ancien_locataire: r.ancien_locataire }),
+      conducteur_id: r.conducteur_id,
+      intervention_id: r.id,
+      date,
+      remise_pourcentage: 0,
+      ...(await conditions(societeId, r.client_id, date)),
+    },
+    lignesDevisDuRapport(r, tvaDefaut)
+  );
+}
+
+/** Dupliquer (FAC-07) : un nouveau brouillon daté du jour, liens d'origine coupés, échéance recalculée. */
+export async function dupliquerFacture(societeId: string, factureId: string): Promise<string> {
+  const f = await lireFacture(factureId);
+  const refus = refusDuplication(f);
+  if (refus) throw { code: "P0001", message: refus };
+  return creerFacture(societeId, copieDeFacture(f, todayISO()), copieDesLignes(f.lignes));
+}
+
+/**
  * Avoir sur une facture émise : mêmes lignes (positives, le type donne le
  * sens), l'émetteur DE LA FACTURE D'ORIGINE, puis émission immédiate —
  * numéroté dans la série « AV » par la base, comme dans l'ancienne app.
@@ -46,8 +97,12 @@ export async function etablirAvoir(societeId: string, factureId: string, motif: 
   const f = await lireFacture(factureId);
   const refus = refusAvoir(f, motif);
   if (refus) throw { code: "P0001", message: refus };
-  const { id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, intervention_id: _it, ...entete } = f;
+  const {
+    id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, intervention_id: _it,
+    statut_cycle: _sc, pdp_identifiant: _pi, pdp_transmission_id: _pt, ...entete
+  } = f;
   // Ni devis, ni bon, ni intervention : ces liens disent « ce travail a été facturé » ; l'avoir ne facture rien.
+  // Ni cycle ni identifiant de plateforme : l'avoir aura les siens.
   const avoirId = await creerFacture(
     societeId,
     { ...entete, type_document: "avoir", date: todayISO(), facture_rectifiee_id: factureId, motif_rectification: motif.trim(), acomptes_deduits: 0, retenue_garantie_pourcentage: null },

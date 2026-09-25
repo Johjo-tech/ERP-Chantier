@@ -180,7 +180,7 @@ export function FormulaireBon({ bon, prefill, fichierLu, reglages, ChampReferenc
           <h2 className="text-base font-semibold">Travaux à réaliser</h2>
           {prix ? (
             <>
-              <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} unites={reglages.unites} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={lectureSeule} ChampReference={ChampReference} ChampMetier={ChampMetierChapitre} />
+              <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={lectureSeule} ChampReference={ChampReference} ChampMetier={ChampMetierChapitre} />
               <BlocMontantBon
                 lignes={lignes}
                 montant={valeurs.montant}

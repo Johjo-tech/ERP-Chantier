@@ -53,6 +53,10 @@ Mot de passe de tous : `motdepasse-local`.
 | | Pièce jointe au bucket `terrain` (`<société>/bons-commande/<bon>/…`), URL signée lisible, refusée à la secrétaire et à BETA, retrait | non |
 | | Contacts (secrétaire oui, lecture non) ; métiers déclarés (BETA ne voit pas ceux d'ALPHA) | non |
 | | Un bon créé reçoit un numéro « BC- » sans ligne de compteur de l'année | **oui** (20260926030000) |
+| `facturation.essai.ts` | `v_facture_solde` : avoir jamais dû, facture à 0 € réglée, acomptes et retenue (la retenue non levée n'est pas un retard), reprise historique, accord avec `etatPiece` | oui (20260926040000) |
+| | Statut stocké recalé par le déclencheur ; règlement groupé : imputation = `imputer` de l'ancien, trop-perçu refusé avec son message, un avoir dans la sélection fait tout refuser, le rôle lecture n'écrit rien | oui (20260926041000) |
+| | `imputer_avoir` : deux règlements liés, refus dans l'ordre et avec les mots de `refusImputationAvoir` ; note de frais « NDF- » | oui (20260926041000, 20260926043000) |
+| `espace-client-bons.essai.ts` | Le client suit ses bons (jamais ceux d'un autre client ni de BETA), aucune colonne interne dans la vue ; lit les règlements et le solde de SES factures, n'écrit aucun règlement ; accès nominatif restreint à l'interlocuteur, qu'il ne peut pas élargir lui-même | oui (20260926042000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

@@ -22,6 +22,9 @@ import { PageApercuFacture } from "@/modules/facturation/components/PageApercuFa
 import { PageFacture } from "@/modules/facturation/components/PageFacture";
 import { PageFactures } from "@/modules/facturation/components/PageFactures";
 import { PageSituation } from "@/modules/facturation/components/PageSituation";
+import { PageDossierClient } from "@/modules/facturation/components/PageDossierClient";
+import { PageFilesBons } from "@/modules/facturation/components/PageFilesBons";
+import { PageReglements } from "@/modules/facturation/components/PageReglements";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
 import { PageBonCommande } from "@/modules/commandes/components/PageBonCommande";
@@ -38,6 +41,7 @@ import { ReferenceArticleLigne } from "@/modules/articles/components/ReferenceAr
 import { LayoutEspaceClient } from "@/modules/espace-client/components/LayoutEspaceClient";
 import { PageDocumentClient } from "@/modules/espace-client/components/PageDocumentClient";
 import { PageEspaceClient } from "@/modules/espace-client/components/PageEspaceClient";
+import { PageBonsClient } from "@/modules/espace-client/components/PageBonsClient";
 import { PageLectureBon } from "@/modules/ocr/components/PageLectureBon";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
@@ -55,6 +59,7 @@ export const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <PageEspaceClient /> },
+      { path: "bons", element: <PageBonsClient /> },
       { path: "devis/:id", element: <PageDocumentClient nature="devis" /> },
       { path: "factures/:id", element: <PageDocumentClient nature="facture" /> },
     ],
@@ -100,6 +105,13 @@ export const routes: RouteObject[] = [
       { path: "devis/:id/apercu", element: <RouteModule module="devis"><PageApercuDevis /></RouteModule> },
       { path: "chantiers/:id/situation", element: <RouteModule module="factures" action="creer"><PageSituation /></RouteModule> },
       { path: "factures", element: <RouteModule module="factures"><PageFactures /></RouteModule> },
+      { path: "factures/avoirs", element: <RouteModule module="factures"><PageFactures vue="avoirs" /></RouteModule> },
+      { path: "factures/validation", element: <RouteModule module="bons_commande"><PageFilesBons file="validation" /></RouteModule> },
+      { path: "factures/a-facturer", element: <RouteModule module="bons_commande"><PageFilesBons file="aFacturer" /></RouteModule> },
+      { path: "factures/reglements", element: <RouteModule module="reglements"><PageReglements vue="clients" /></RouteModule> },
+      { path: "factures/reglements/par-facture", element: <RouteModule module="reglements"><PageReglements vue="factures" /></RouteModule> },
+      { path: "factures/reglements/tous", element: <RouteModule module="reglements"><PageReglements vue="tous" /></RouteModule> },
+      { path: "factures/reglements/dossier", element: <RouteModule module="reglements"><PageDossierClient /></RouteModule> },
       { path: "factures/nouvelle", element: <RouteModule module="factures" action="creer"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id", element: <RouteModule module="factures"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id/apercu", element: <RouteModule module="factures"><PageApercuFacture /></RouteModule> },

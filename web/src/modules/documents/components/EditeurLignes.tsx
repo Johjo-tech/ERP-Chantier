@@ -5,13 +5,15 @@ import { formatEuros } from "@/lib/money";
 import { deplacer, dupliquer, ligneVide, modifier, retirer, type ErreurLigne, type LigneEdition } from "../domain/lignes";
 import type { ChampReferenceLigne } from "./reference";
 import { sousTotauxChapitres } from "../domain/totaux";
+import { useUnitesLignes } from "../hooks/useUnites";
 import { LigneEditable } from "./LigneEditable";
 
 interface Props {
   lignes: LigneEdition[];
   onChange: (lignes: LigneEdition[]) => void;
   tvaDefaut: number;
-  unites: readonly string[];
+  /** Absent : le référentiel « unite » de la société, sinon la liste de repli (DEV-08). */
+  unites?: readonly string[];
   taux: readonly number[];
   erreurs?: readonly ErreurLigne[];
   lectureSeule?: boolean;
@@ -22,7 +24,9 @@ interface Props {
 }
 
 /** L'éditeur de lignes commun aux devis, factures et bons : lignes, chapitres, commentaires. */
-export function EditeurLignes({ lignes, onChange, tvaDefaut, unites, taux, erreurs = [], lectureSeule = false, ChampReference, ChampMetier }: Props) {
+export function EditeurLignes({ lignes, onChange, tvaDefaut, unites: imposees, taux, erreurs = [], lectureSeule = false, ChampReference, ChampMetier }: Props) {
+  const referentiel = useUnitesLignes();
+  const unites = imposees ?? referentiel;
   const sousTotaux = sousTotauxChapitres(lignes);
   // Le sous-total d'un chapitre s'affiche à la fin du chapitre : avant le suivant, ou en bas.
   const finsDeChapitre = new Map<number, number>();

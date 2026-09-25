@@ -10,7 +10,7 @@ const ENTETE =
 const LIGNES = "id, position, type, designation, quantite, prix_unitaire, unite, tva, article_reference, commentaire, metier";
 
 const schemaListe = z.array(
-  schemaEnteteDevis.pick({ id: true, numero: true, client_id: true, client_nom: true, chantier_id: true, date: true, statut: true, conducteur: true, interlocuteur: true, ville: true, adresse_locataire: true })
+  schemaEnteteDevis.pick({ id: true, numero: true, client_id: true, client_nom: true, chantier_id: true, date: true, statut: true, conducteur: true, conducteur_id: true, logement_statut: true, interlocuteur: true, ville: true, adresse_locataire: true })
 );
 export type DevisListe = z.infer<typeof schemaListe>[number];
 
@@ -19,7 +19,7 @@ const schemaTotaux = z.array(z.object({ devis_id: z.string().nullable(), ht: z.n
 export async function listerDevis(societeId: string, filtre: { chantierId?: string; clientId?: string } = {}) {
   let requete = supabase()
     .from("devis")
-    .select("id, numero, client_id, client_nom, chantier_id, date, statut, conducteur, interlocuteur, ville, adresse_locataire")
+    .select("id, numero, client_id, client_nom, chantier_id, date, statut, conducteur, conducteur_id, logement_statut, interlocuteur, ville, adresse_locataire")
     .eq("societe_id", societeId);
   if (filtre.chantierId) requete = requete.eq("chantier_id", filtre.chantierId);
   if (filtre.clientId) requete = requete.eq("client_id", filtre.clientId);

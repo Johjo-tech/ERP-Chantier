@@ -1,56 +1,40 @@
 import { Link, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Button } from "@/components/ui/button";
-import { formatDateFr } from "@/lib/dates";
-import { DocumentImprimable } from "@/modules/documents/components/DocumentImprimable";
-import { depuisBase } from "@/modules/documents/domain/lignes";
+import { ApercuModele } from "@/modules/documents/components/ApercuModele";
+import { BoutonPdf } from "@/modules/documents/components/BoutonPdf";
+import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { REGLAGES_DEFAUT } from "@/modules/societes/domain/reglages";
-import { useIdentite } from "@/modules/societes/hooks/useIdentite";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
-import { finDeValidite } from "../domain/validite";
-import { useDevis } from "../hooks/useDevis";
+import { useDevis, useModeleDevis } from "../hooks/useDevis";
 
+/**
+ * Le devis imprimable — le MÊME modèle que le PDF (DEV-15) : « Valable
+ * jusqu'au » et sa durée, signature « Bon pour accord » du client seul, aucune
+ * mention légale de facture.
+ */
 export function PageApercuDevis() {
   const { id } = useParams();
   const devis = useDevis(id);
-  const identite = useIdentite();
   const reglages = useReglages();
+  const identite = useIdentiteDocument();
+  const modele = useModeleDevis(devis.data ?? null, (reglages.data ?? REGLAGES_DEFAUT).validiteDevisJours);
   if (devis.isPending || identite.isPending) return <Chargement />;
   if (devis.isError) return <Erreur erreur={devis.error} reessayer={() => void devis.refetch()} />;
   if (identite.isError) return <Erreur erreur={identite.error} reessayer={() => void identite.refetch()} />;
   const d = devis.data;
-  const s = identite.data;
-  const validite = finDeValidite(d.date, (reglages.data ?? REGLAGES_DEFAUT).validiteDevisJours);
 
   return (
     <GardeSociete societeId={d.societe_id} retour="/devis">
-      <div className="mb-4 flex gap-2 print:hidden">
-        <Button onClick={() => window.print()}>Imprimer / enregistrer en PDF</Button>
+      <div className="mb-4 flex flex-wrap gap-2 print:hidden">
+        <Button onClick={() => window.print()}>Imprimer</Button>
+        <BoutonPdf modele={modele} />
         <Button variant="ghost" asChild>
           <Link to={`/devis/${d.id}`}>Retour au devis</Link>
         </Button>
       </div>
-      <DocumentImprimable
-        titre="DEVIS"
-        numero={d.numero}
-        date={d.date}
-        emetteur={{
-          nom: s.raison_sociale_legale || s.nom,
-          lignes: [s.adresse, [s.code_postal, s.ville].filter(Boolean).join(" "), s.telephone, s.email, s.siret && `SIRET ${s.siret}`, s.tva_intracom && `TVA ${s.tva_intracom}`],
-        }}
-        destinataire={{ nom: d.client_nom, lignes: [d.interlocuteur && `À l'attention de ${d.interlocuteur}`, d.adresse] }}
-        meta={[
-          ...(validite ? [{ libelle: "Valable jusqu'au", valeur: formatDateFr(validite) }] : []),
-          ...(d.adresse_locataire ? [{ libelle: "Lieu :", valeur: [d.adresse_locataire, d.code_postal, d.ville].filter(Boolean).join(" ") }] : []),
-        ]}
-        lignes={d.lignes.map(depuisBase)}
-        remise={String(d.remise_pourcentage)}
-        pied={
-          // Devis : seul le client signe (« Bon pour accord ») ; pas de mentions légales de facture.
-          <div className="ml-auto mt-6 h-28 w-72 rounded border border-gray-400 p-2 text-xs">Bon pour accord — date et signature du client</div>
-        }
-      />
+      {modele ? <ApercuModele m={modele} /> : <Chargement />}
     </GardeSociete>
   );
 }

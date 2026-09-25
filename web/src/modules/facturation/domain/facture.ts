@@ -67,6 +67,17 @@ export const schemaEnteteFacture = z.object({
   ref_contrat: z.string().nullable(),
   devise: z.string(),
   intervention_id: z.string().nullable(),
+  // Identité du client figée à l'émission (ou au cadenas) : imprimée sur la pièce.
+  client_siret: z.string().nullable(),
+  client_siren: z.string().nullable(),
+  client_tva_intracom: z.string().nullable(),
+  client_pays_code: z.string().nullable(),
+  client_code_routage: z.string().nullable(),
+  client_code_service: z.string().nullable(),
+  // Cycle de la facture électronique : lu (FAC-70), jamais recopié sur une autre pièce.
+  statut_cycle: z.string(),
+  pdp_identifiant: z.string().nullable(),
+  pdp_transmission_id: z.string().nullable(),
 });
 export type EnteteFacture = z.infer<typeof schemaEnteteFacture>;
 

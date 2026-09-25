@@ -1,22 +1,22 @@
 import { clesBons } from "@/modules/commandes/hooks/useBons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Montant } from "@/lib/money";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
-import { statutReglement } from "../domain/reglements";
 import {
-  ajouterReglement, creerFacture, emettreFacture, imputerAvoirSurFacture, listerFactures, lireFacture, modifierBrouillon,
-  reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, synchroniserStatut, totauxDesFactures,
+  ajouterReglement, contexteImpression, creerFacture, deverrouillerBrouillon, emettreFacture, listerFactures, lireFacture, modifierBrouillon,
+  reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, verrouillerBrouillon,
 } from "../api/factures";
-import { etablirAvoir, factureDepuisDevis, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
+import { dupliquerFacture, etablirAvoir, factureDepuisDevis, factureDepuisIntervention, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
+import { enregistrerReglementGroupe, imputerAvoir, modifierReglement } from "../api/reglements";
+import { soldesDesFactures } from "../api/soldes";
 import type { EnteteAEnregistrer } from "../domain/facture";
 import type { LigneSituation } from "../domain/situation";
 
 const cles = {
   racine: (s: string) => ["factures", s] as const,
   liste: (s: string, f: object) => ["factures", s, "liste", f] as const,
-  totaux: (s: string) => ["factures", s, "totaux"] as const,
   reglements: (s: string) => ["factures", s, "reglements"] as const,
+  soldes: (s: string) => ["factures", s, "soldes"] as const,
   fiche: (id: string) => ["facture", id] as const,
 };
 
@@ -24,13 +24,17 @@ export function useFactures(filtre: { chantierId?: string } = {}) {
   const s = useSocieteActive();
   return useQuery({ queryKey: cles.liste(s.id, filtre), queryFn: () => listerFactures(s.id, filtre) });
 }
-export function useTotauxFactures() {
-  const s = useSocieteActive();
-  return useQuery({ queryKey: cles.totaux(s.id), queryFn: () => totauxDesFactures(s.id) });
-}
 export function useReglements() {
   const s = useSocieteActive();
   return useQuery({ queryKey: cles.reglements(s.id), queryFn: () => reglementsDeLaSociete(s.id) });
+}
+/** Les soldes calculés par la base (v_facture_solde) : reste, état, retard. */
+export function useSoldes() {
+  const s = useSocieteActive();
+  return useQuery({ queryKey: cles.soldes(s.id), queryFn: () => soldesDesFactures(s.id) });
+}
+export function useContexteImpression(f: { id: string; devis_id: string | null; facture_rectifiee_id: string | null } | null) {
+  return useQuery({ queryKey: ["facture-contexte", f?.id ?? "", f?.devis_id, f?.facture_rectifiee_id], queryFn: () => contexteImpression(f as NonNullable<typeof f>), enabled: !!f });
 }
 export function useFacture(id: string | undefined) {
   return useQuery({ queryKey: cles.fiche(id ?? ""), queryFn: () => lireFacture(id as string), enabled: !!id });
@@ -82,32 +86,24 @@ export function useSupprimerBrouillon() {
   });
 }
 
-/** Ajouter ou retirer un règlement recale le statut stocké de la facture (écrit seulement s'il change). */
-export function useReglementsFacture(factureId: string, ttc: Montant) {
+/** Les règlements d'une facture, pris dans ceux de la société (une seule lecture pour tous les écrans). */
+export function useReglementsFacture(factureId: string) {
+  const tous = useReglements();
+  return { reglements: (tous.data ?? []).filter((r) => r.facture_id === factureId), chargement: tous };
+}
+
+/**
+ * Un règlement unitaire. Le statut stocké de la facture (payée / impayée) est
+ * recalé PAR LA BASE (déclencheur, proposition 20260926041000) : l'écran ne
+ * l'écrit plus — un onglet fermé trop tôt le laissait mentir.
+ */
+export function useAjouterReglement(factureId: string) {
   const s = useSocieteActive();
   const invalider = useInvalider();
-  const tous = useReglements();
-  const siens = (tous.data ?? []).filter((r) => r.facture_id === factureId);
-  const recaler = async () => {
-    const apres = await reglementsDeLaSociete(s.id);
-    const cle = statutReglement(ttc, apres.filter((r) => r.facture_id === factureId)).cle;
-    await synchroniserStatut(factureId, cle === "reglee" ? "payée" : "impayée");
-  };
-  const ajouter = useMutation({
-    mutationFn: async (r: { date: string; montant: number; mode: string; reference: string | null }) => {
-      await ajouterReglement(s.id, { ...r, facture_id: factureId });
-      await recaler();
-    },
+  return useMutation({
+    mutationFn: (r: { date: string; montant: number; mode: string; reference: string | null }) => ajouterReglement(s.id, { ...r, facture_id: factureId }),
     onSettled: () => invalider(factureId),
   });
-  const retirer = useMutation({
-    mutationFn: async (id: string) => {
-      await supprimerReglement(id);
-      await recaler();
-    },
-    onSettled: () => invalider(factureId),
-  });
-  return { reglements: siens, chargement: tous, ajouter, retirer };
 }
 
 export function useFactureDepuisDevis() {
@@ -122,13 +118,54 @@ export function useEtablirAvoir() {
   return useMutation({ mutationFn: ({ factureId, motif }: { factureId: string; motif: string }) => etablirAvoir(s.id, factureId, motif), onSuccess: (id) => invalider(id) });
 }
 
+/** Lettrage / « Régler par un avoir » : la base contrôle et écrit les deux règlements liés. */
 export function useImputerAvoir() {
+  const invalider = useInvalider();
+  return useMutation({ mutationFn: (r: Parameters<typeof imputerAvoir>[0]) => imputerAvoir(r), onSettled: () => invalider() });
+}
+
+/** Un virement réparti sur plusieurs factures, imputé par la base (tout ou rien). */
+export function useReglementGroupe() {
+  const invalider = useInvalider();
+  return useMutation({ mutationFn: (r: Parameters<typeof enregistrerReglementGroupe>[0]) => enregistrerReglementGroupe(r), onSettled: () => invalider() });
+}
+
+export function useModifierReglement() {
+  const invalider = useInvalider();
+  return useMutation({
+    mutationFn: ({ id, ...r }: { id: string; date: string; montant: number; mode: string; reference: string | null }) => modifierReglement(id, r),
+    onSettled: () => invalider(),
+  });
+}
+
+export function useSupprimerReglement() {
+  const invalider = useInvalider();
+  return useMutation({ mutationFn: supprimerReglement, onSettled: () => invalider() });
+}
+
+/** Un rapport d'intervention devient une facture brouillon (FAC-15). */
+export function useFactureDepuisIntervention() {
   const s = useSocieteActive();
   const invalider = useInvalider();
   return useMutation({
-    mutationFn: (r: Parameters<typeof imputerAvoirSurFacture>[1]) => imputerAvoirSurFacture(s.id, r),
-    onSuccess: () => invalider(),
+    mutationFn: ({ interventionId, tvaDefaut }: { interventionId: string; tvaDefaut: number }) => factureDepuisIntervention(s.id, interventionId, tvaDefaut),
+    onSuccess: (id) => invalider(id),
   });
+}
+
+export function useDupliquerFacture() {
+  const s = useSocieteActive();
+  const invalider = useInvalider();
+  return useMutation({ mutationFn: (id: string) => dupliquerFacture(s.id, id), onSuccess: (id) => invalider(id) });
+}
+
+/** Le cadenas d'une facture brouillon imprimée ou envoyée (FAC-12), et sa levée (FAC-09). */
+export function useCadenas(factureId: string) {
+  const s = useSocieteActive();
+  const invalider = useInvalider();
+  const poser = useMutation({ mutationFn: (clientId: string | null) => verrouillerBrouillon(s.id, { id: factureId, client_id: clientId }), onSettled: () => invalider(factureId) });
+  const lever = useMutation({ mutationFn: () => deverrouillerBrouillon(factureId), onSettled: () => invalider(factureId) });
+  return { poser, lever };
 }
 
 export function useFacturerSituation() {
