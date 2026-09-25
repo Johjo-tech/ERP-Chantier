@@ -391,6 +391,22 @@ export interface OptionsImportFactures {
 /** Un centime de tolérance, et pas davantage : ce sont des pièces comptables. */
 const TOLERANCE = 0.011;
 
+/**
+ * Les taux de TVA qui existent en France. Tout le reste est une MOYENNE.
+ *
+ * Une pièce qui mêle deux taux n'en a pas un : l'export du client y écrit la
+ * moyenne pondérée, arrondie à deux décimales — 7,93 %, 8,80 %, 7,16 %. Sur
+ * l'export 2025, FAC000258 porte ainsi 675 € HT et 53,55 € de TVA : 310 € à
+ * 5,5 % et 365 € à 10 %. Aucun taux unique ne redonne ce montant, et le
+ * recalculer depuis la moyenne arrondie ne peut pas retomber juste.
+ */
+const TAUX_LEGAUX = [20, 10, 5.5, 2.1, 0];
+
+/** Ce taux est-il un vrai taux, ou la moyenne d'une pièce à plusieurs taux ? */
+function tauxLegal(taux: number): boolean {
+  return TAUX_LEGAUX.some((t) => Math.abs(t - taux) < 0.001);
+}
+
 const vide: TotauxFichier = {
   pieces: 0,
   factures: 0,
@@ -697,7 +713,23 @@ export function analyserExportFactures(
     }
 
     const tva = nombre(champ(ENTETE_TVA));
-    if (tva !== null && Math.abs((ht * taux) / 100 - tva) > TOLERANCE) {
+    /* Recalculer la TVA n'a de sens que depuis un VRAI taux. Sur une pièce à
+       plusieurs taux, la colonne porte leur moyenne arrondie : le contrôle
+       refusait alors six pièces parfaitement justes de l'export 2025, et avec
+       elles le fichier entier. On dit ce qu'on ne peut pas vérifier, plutôt
+       que de le vérifier de travers — et `TTC = HT + TVA`, la seule identité
+       qui engage vraiment, reste contrôlée juste en dessous. */
+    if (tva !== null && !tauxLegal(taux)) {
+      signalements.push({
+        ligne: l.numero,
+        code: numero,
+        motif:
+          `Taux ${taux} % : ce n'est pas un taux de TVA, mais la moyenne d'une pièce ` +
+          `à plusieurs taux. Les montants sont repris tels quels et le TTC est vérifié ; ` +
+          `la ventilation par taux, elle, est perdue — la pièce ne pourra pas être ` +
+          `transmise en facture électronique.`,
+      });
+    } else if (tva !== null && Math.abs((ht * taux) / 100 - tva) > TOLERANCE) {
       refuser(
         `TVA incohérente : ${tva} annoncé, ${((ht * taux) / 100).toFixed(2)} attendu (${ht} × ${taux} %).`
       );
