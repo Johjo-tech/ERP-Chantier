@@ -334,7 +334,7 @@ qu'à l'interface (aucune politique RLS ne les cite).
 
 - [x] **DEV-50** La secrétaire ne peut pas numéroter un devis (`prochain_numero` exige `peut_ecrire`). Voir AUTH-70. _Source : schéma §10.3-1_ — ✔ proposition `20260925020000`, `tests/rls/filles.essai.ts` (« la secrétaire obtient un numéro de devis ») — D-018
 - [x] **DEV-51** Aucun geste pour passer un devis en `envoyé` / `accepté` / `refusé` dans l'écran relevé. _Source : `app-1.md §2.6`_ — ✔ D-021 : statut dans l'en-tête (`PageEditionDevis.tsx`), sous `devis/modifier`
-- [x] **DEV-52** Colonne TVA du PDF imprimée brute « 5.5% » (point, sans espace) au lieu de « 5,5 % ». _Source : `app-1.md §4.3`_ — ✔ `DocumentImprimable.tsx` (`formatTaux` → « 5,5 % »)
+- [x] **DEV-52** Colonne TVA du PDF imprimée brute « 5.5% » (point, sans espace) au lieu de « 5,5 % ». _Source : `app-1.md §4.3`_ — ✔ `documents/domain/modele.ts` (`formatTaux` → « 5,5 % » dans l'aperçu et le PDF ; `pdf/rendu.essai.ts`)
 - [x] **DEV-53** `devisChapterTotals` fusionne deux chapitres homonymes ; `devisSelectOptions` exclut les devis déjà liés à un BC. _Source : `app.js:2820`, `app-1.md §4.2-11`_ — ✔ sous-totaux par position (`sousTotauxChapitres`) ; un devis déjà lié à un bon est refusé à la création du bon (`bonDepuisDevis`, message de l'ancien)
 
 ---
