@@ -122,12 +122,14 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
 
   it("impression de la semaine en paysage : une colonne par équipe ayant du travail (PLN-11)", async () => {
     const imprimer = vi.spyOn(window, "print").mockImplementation(() => undefined);
-    const { container } = rendreAvecSession(<PagePlanning />, { role: "conducteur" });
+    rendreAvecSession(<PagePlanning />, { role: "conducteur" });
     await userEvent.click(await screen.findByRole("button", { name: "🖨️ Imprimer" }));
-    expect(imprimer).toHaveBeenCalled();
-    const zone = container.querySelector(".zone-impression");
-    expect(zone?.querySelector("style")?.textContent).toContain("landscape");
-    expect([...(zone?.querySelectorAll("th") ?? [])].map((th) => th.textContent)).toEqual(["", "Équipe Thomas"]);
+    await waitFor(() => expect(imprimer).toHaveBeenCalled());
+    // La zone et la feuille de l'ancien (`printPlanning`) : #printArea en paysage, grille .p-print-grid.
+    expect(document.getElementById("printOrientationStyle")?.textContent).toContain("landscape");
+    const zone = document.getElementById("printArea");
+    expect(zone?.classList.contains("is-landscape")).toBe(true);
+    expect([...(zone?.querySelectorAll(".p-print-grid th") ?? [])].map((th) => th.textContent)).toEqual(["", "Équipe Thomas"]);
     expect(zone?.textContent).toContain("OPAC du Rhône");
     imprimer.mockRestore();
   });

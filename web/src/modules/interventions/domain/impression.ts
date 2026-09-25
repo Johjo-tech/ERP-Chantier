@@ -1,4 +1,4 @@
-import { renderPrintIntervention } from "@/modules/documents/impression/gabarit-rapport";
+import { renderPrintIntervention } from "./gabarit-rapport";
 import type { EmetteurImprimable } from "@/modules/documents/impression/pieces";
 import type { PieceImprimee } from "@/modules/documents/impression/zone";
 import { CONTROLES_PAR_METIER, type MetierRapport } from "./rapport";

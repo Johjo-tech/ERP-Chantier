@@ -13,6 +13,7 @@ import { metiersDuBon, type CartePlanning } from "../domain/cartes";
 import { cartesDuCalendrier, enAttente, FILTRES_VIDES, nonPlanifiees, semaineDuResultat, type Affectation, type VuePlanning } from "../domain/filtres";
 import { referentielMetiers } from "../domain/metiers";
 import { affectationConnue, planAjouterDate, planPoser, type AffectationChoisie, type Plan } from "../domain/planification";
+import { useImpressionPlanning } from "../hooks/useImpressionPlanning";
 import { useAppliquerPlan, usePlanning } from "../hooks/usePlanning";
 import { BarreOutils } from "./BarreOutils";
 import { Calendrier } from "./Calendrier";
@@ -22,7 +23,6 @@ import { EnAttente } from "./EnAttente";
 import { FicheIntervention } from "./FicheIntervention";
 import { MaJournee } from "./MaJournee";
 import { ModaleAffectation, ModaleDateSupplementaire } from "./Modales";
-import { PlanningImprimable } from "./PlanningImprimable";
 
 type Onglet = VuePlanning | "ma_journee";
 const LIBELLES: Record<Onglet, string> = { ma_journee: "Ma journée", technicien: "Planning technicien", sous_traitant: "Planning sous-traitant", attente: "En attente technicien", attente_st: "En attente sous-traitant" };
@@ -95,6 +95,14 @@ function Contenu({ donnees, cartes, initial }: { donnees: DonneesPlanning; carte
   const carteDate = dateSuppl ? cartes.find((c) => c.id === dateSuppl) : undefined;
   const calendrier = onglet === "technicien" || onglet === "sous_traitant";
   const nomST = (c: CartePlanning) => valeur.nomSousTraitant(c.sousTraitantId);
+  const imprimer = useImpressionPlanning({
+    cartes: cartesDuCalendrier(cartes, filtresEffectifs, affectation),
+    lundi: premierLundi,
+    societe: societe.nom,
+    affectation,
+    nomEquipe: valeur.nomEquipe,
+    nomSousTraitant: valeur.nomSousTraitant,
+  });
 
   return (
     <ContextePlanning.Provider value={valeur}>
@@ -120,7 +128,7 @@ function Contenu({ donnees, cartes, initial }: { donnees: DonneesPlanning; carte
           onSemaine={setPremierLundi}
           metiers={metiers}
           calendrier={calendrier}
-          onImprimer={() => window.print()}
+          onImprimer={imprimer}
         />
       )}
       {(onglet === "attente" || onglet === "attente_st") && <EnAttente cartes={enAttente(cartes, affectation, filtres.recherche, nomST)} mode={affectation} />}
@@ -132,7 +140,6 @@ function Contenu({ donnees, cartes, initial }: { donnees: DonneesPlanning; carte
           <div className="min-w-0 flex-1 print:hidden">
             <Calendrier cartes={cartesDuCalendrier(cartes, filtresEffectifs, affectation)} premierLundi={premierLundi} glissee={glissee} onGlisser={setGlissee} />
           </div>
-          <PlanningImprimable cartes={cartesDuCalendrier(cartes, filtresEffectifs, affectation)} lundi={premierLundi} societe={societe.nom} />
         </div>
       )}
       {carteFiche && fiche && <FicheIntervention key={`${carteFiche.id}|${fiche.jour ?? ""}`} carte={carteFiche} jour={fiche.jour} onFermer={() => setFiche(null)} />}

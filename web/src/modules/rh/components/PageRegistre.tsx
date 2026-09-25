@@ -4,7 +4,9 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
+import { imprimerZonePaysage } from "@/modules/documents/impression/zone";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
+import { htmlRegistreImprime } from "../domain/impression";
 import { libelleSexe, registreDuPersonnel } from "../domain/salarie";
 import { useSalariesRh } from "../hooks/useRh";
 
@@ -28,14 +30,18 @@ export function PageRegistre() {
         actions={
           <>
             <Button asChild variant="ghost"><Link to="/rh">← Retour RH</Link></Button>
-            <Button onClick={() => window.print()}>🖨️ Imprimer</Button>
+            <Button
+              onClick={() =>
+                // La feuille de l'ancien (`imprimerRegistrePersonnel`), pas l'écran : en-têtes abrégés, paysage.
+                void imprimerZonePaysage(htmlRegistreImprime(societe.nom, salaries.data, todayISO())).catch((e: unknown) => console.error("Registre non imprimé", e))
+              }
+            >
+              🖨️ Imprimer
+            </Button>
           </>
         }
       />
-      <div className="zone-impression overflow-x-auto">
-        <style>{"@media print { @page { size: A4 landscape; margin: 8mm; } body * { visibility: hidden; } .zone-impression, .zone-impression * { visibility: visible; } .zone-impression { position: absolute; inset: 0; } }"}</style>
-        <h2 className="hidden print:block">{societe.nom} — Registre unique du personnel</h2>
-        <p className="hidden text-xs print:block">Document tenu à jour au {formatDateFr(todayISO())} — Code du travail, art. L.1221-13</p>
+      <div className="overflow-x-auto">
         <Table>
           <THead>
             <Tr>
