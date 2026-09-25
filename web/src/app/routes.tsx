@@ -23,10 +23,9 @@ import { PageFacture } from "@/modules/facturation/components/PageFacture";
 import { PageFactures } from "@/modules/facturation/components/PageFactures";
 import { PageSituation } from "@/modules/facturation/components/PageSituation";
 import { PageDossierClient } from "@/modules/facturation/components/PageDossierClient";
-import { PageFilesBons } from "@/modules/facturation/components/PageFilesBons";
 import { PageReglements } from "@/modules/facturation/components/PageReglements";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router";
+import { Link, Navigate } from "react-router";
 import { PageBonCommande } from "@/modules/commandes/components/PageBonCommande";
 import { PageBonsCommande } from "@/modules/commandes/components/PageBonsCommande";
 import { PagePieces } from "@/modules/commandes/components/PagePieces";
@@ -124,8 +123,9 @@ export const routes: RouteObject[] = [
       { path: "chantiers/:id/situation", element: <RouteModule module="factures" action="creer"><PageSituation /></RouteModule> },
       { path: "factures", element: <RouteModule module="factures"><PageFactures /></RouteModule> },
       { path: "factures/avoirs", element: <RouteModule module="factures"><PageFactures vue="avoirs" /></RouteModule> },
-      { path: "factures/validation", element: <RouteModule module="bons_commande"><PageFilesBons file="validation" /></RouteModule> },
-      { path: "factures/a-facturer", element: <RouteModule module="bons_commande"><PageFilesBons file="aFacturer" /></RouteModule> },
+      // Anciennes adresses des files : une seule file, celle du menu (relecture 4, B3).
+      { path: "factures/validation", element: <Navigate to="/facturation/validation" replace /> },
+      { path: "factures/a-facturer", element: <Navigate to="/facturation/a-facturer" replace /> },
       { path: "factures/reglements", element: <RouteModule module="reglements"><PageReglements vue="clients" /></RouteModule> },
       { path: "factures/reglements/par-facture", element: <RouteModule module="reglements"><PageReglements vue="factures" /></RouteModule> },
       { path: "factures/reglements/tous", element: <RouteModule module="reglements"><PageReglements vue="tous" /></RouteModule> },

@@ -15,7 +15,9 @@ imprimable, PDF et e-mail.
   `reglements` (voir : aussi le rôle lecture) ; files de bons sous
   `bons_commande/voir`. Le terrain n'y a aucun accès.
 - **Écrans** : `/factures` (+ bandeau « à relancer »), `/factures/avoirs`,
-  `/factures/validation`, `/factures/a-facturer`, `/factures/reglements`
+  onglets Validation / À facturer (les files du menu, `/facturation/…` ; les
+  anciennes adresses `/factures/validation`, `/factures/a-facturer` y
+  redirigent — D-R4-02), `/factures/reglements`
   (Par client), `/par-facture`, `/tous` (critères dans l'adresse),
   `/factures/reglements/dossier?client=…` (groupé, lettrage, ✎ / ✕).
 - **Règles** (`domain/`, parités `tests/parite/facturation.essai.ts`,

@@ -4,13 +4,16 @@ import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
+import { correspond } from "@/lib/recherche";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
+import { OngletsFacturation } from "@/modules/facturation/components/OngletsFacturation";
 import type { BonDeLaListe } from "../api/bons";
 import { actionsFacturation, actionsTache } from "../domain/circuit";
 import { aFacturer, fileValidation, filtrerFile, type FiltreValidation } from "../domain/files";
@@ -53,6 +56,31 @@ function TableBons({ bons, prix, action, detail }: { bons: readonly BonDeLaListe
   );
 }
 
+/**
+ * Recherche et ordre par client (FAC-14) : l'ancien onglet rangeait ces files en
+ * dossiers par client ; le tableau, trié par client, garde ce regroupement sans
+ * cacher un bon derrière un dossier replié (D-R4-02).
+ */
+function RechercheFile({ valeur, onChange }: { valeur: string; onChange: (v: string) => void }) {
+  return (
+    <>
+      <label htmlFor="recherche-file" className="sr-only">Rechercher un bon</label>
+      <Input id="recherche-file" type="search" className="mb-3 max-w-sm" placeholder="Client, n° de bon, adresse…" value={valeur} onChange={(e) => onChange(e.target.value)} />
+    </>
+  );
+}
+
+function retenir<B extends BonDeLaListe>(bons: readonly B[], recherche: string): B[] {
+  return bons
+    .filter((b) => correspond(recherche, b.client_nom, b.numero_bc, b.numero_interne, b.adresse, b.ville))
+    .sort((a, b) => (a.client_nom ?? "").localeCompare(b.client_nom ?? "", "fr"));
+}
+
+/** Une file non vide dont rien ne correspond n'est pas une file vide : les confondre ferait croire qu'il n'y a plus rien à traiter. */
+function messageVide(file: number, recherche: string, vide: string): string {
+  return file > 0 && recherche ? "Aucun bon de commande ne correspond à votre recherche." : vide;
+}
+
 const FILTRES: { cle: FiltreValidation; libelle: string }[] = [
   { cle: "tous", libelle: "Tous" },
   { cle: "pret", libelle: "Prêts à chiffrer" },
@@ -70,8 +98,10 @@ export function PageValidation() {
   const prix = useVoitLesPrix();
   const { roleEffectif } = useSession();
   const [filtre, setFiltre] = useState<FiltreValidation>("tous");
-  const file = fileValidation(bons.data ?? []);
+  const [recherche, setRecherche] = useState("");
+  const file = fileValidation(retenir(bons.data ?? [], recherche));
   const liste = filtrerFile(file, filtre);
+  const total = fileValidation(bons.data ?? []).length;
   const droits = actionsFacturation(roleEffectif);
   const arbitre = actionsTache("realisee", roleEffectif).peutArbitrer;
   const action = (b: BonDeLaListe) => {
@@ -83,6 +113,8 @@ export function PageValidation() {
   return (
     <>
       <EnTetePage titre="Validation" sousTitre="Bons dont les travaux sont pointés ou en cours : la décision du conducteur, puis du directeur." />
+      <OngletsFacturation />
+      <RechercheFile valeur={recherche} onChange={setRecherche} />
       <div role="group" aria-label="Filtrer la file de validation" className="mb-3 flex flex-wrap gap-2">
         {FILTRES.map((f) => (
           <Button key={f.cle} variant={filtre === f.cle ? "default" : "outline"} aria-pressed={filtre === f.cle} onClick={() => setFiltre(f.cle)}>
@@ -92,7 +124,7 @@ export function PageValidation() {
       </div>
       {bons.isPending && <Chargement />}
       {bons.isError && <Erreur erreur={bons.error} reessayer={() => void bons.refetch()} />}
-      {bons.isSuccess && !liste.length && <Vide message="Aucun bon n'attend de validation." />}
+      {bons.isSuccess && !liste.length && <Vide message={messageVide(total, recherche, "Aucun bon n'attend de validation.")} />}
       {liste.length > 0 && (
         <TableBons
           bons={liste.map((x) => x.bon)}
@@ -125,14 +157,18 @@ export function PageAFacturer() {
   const bons = useBons();
   const prix = useVoitLesPrix();
   const [erreur, setErreur] = useState<unknown>(null);
-  const liste = aFacturer(bons.data ?? []);
+  const [recherche, setRecherche] = useState("");
+  const file = aFacturer(bons.data ?? []);
+  const liste = retenir(file, recherche);
   return (
     <>
       <EnTetePage titre="À facturer" sousTitre="Bons dont la pré-facture est validée : la facture naît en brouillon, à relire avant émission." />
+      <OngletsFacturation />
+      <RechercheFile valeur={recherche} onChange={setRecherche} />
       {erreur !== null && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
       {bons.isPending && <Chargement />}
       {bons.isError && <Erreur erreur={bons.error} reessayer={() => void bons.refetch()} />}
-      {bons.isSuccess && !liste.length && <Vide message="Aucun bon à facturer." />}
+      {bons.isSuccess && !liste.length && <Vide message={messageVide(file.length, recherche, "Aucun bon à facturer.")} />}
       {liste.length > 0 && (
         <TableBons
           bons={liste}
