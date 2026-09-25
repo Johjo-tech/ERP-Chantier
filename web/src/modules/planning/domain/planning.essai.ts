@@ -192,6 +192,14 @@ describe("planification (PLN-04 à PLN-06, PLN-32, PLN-33)", () => {
     ]);
   });
 
+  it("le bon né du DPGF : sa tâche sans date est DATÉE, pas doublée (D-CHA-04)", () => {
+    const b = bonEssai({ metier: "Peinture", metiers: ["Peinture"] });
+    const t = tacheEssai({ metier: "Peinture", date_tache: null, heure_debut: null, heure_fin: null, technicien_id: null });
+    const [c] = construireCartes([b], [t], annuaires);
+    const plan = planPoser(une(c), "2026-10-12", "09:00", { type: "equipe", equipe: EQUIPE_A });
+    expect(plan.taches).toEqual([{ type: "maj", id: t.id, champs: { technicien_id: "eqA", date_tache: "2026-10-12", heure_debut: "09:00", heure_fin: "10:00" } }]);
+  });
+
   it("une carte faite et datée ne se déplace pas ; sans date elle se pose (PLN-33)", () => {
     const faite = tacheEssai({ statut: "realisee" });
     const [datee] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [faite], annuaires);
