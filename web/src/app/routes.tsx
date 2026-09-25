@@ -20,6 +20,9 @@ import { PageFactures } from "@/modules/facturation/components/PageFactures";
 import { PageSituation } from "@/modules/facturation/components/PageSituation";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
+import { PageBonCommande } from "@/modules/commandes/components/PageBonCommande";
+import { PageBonsCommande } from "@/modules/commandes/components/PageBonsCommande";
+import { PagePieces } from "@/modules/commandes/components/PagePieces";
 import { PageArticles } from "@/modules/articles/components/PageArticles";
 import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
 import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";
@@ -82,6 +85,10 @@ export const routes: RouteObject[] = [
       { path: "factures/nouvelle", element: <RouteModule module="factures" action="creer"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id", element: <RouteModule module="factures"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id/apercu", element: <RouteModule module="factures"><PageApercuFacture /></RouteModule> },
+      { path: "commandes", element: <RouteModule module="bons_commande"><PageBonsCommande /></RouteModule> },
+      { path: "commandes/nouveau", element: <RouteModule module="bons_commande" action="creer"><PageBonCommande ChampReference={ReferenceArticleLigne} /></RouteModule> },
+      { path: "commandes/:id", element: <RouteModule module="bons_commande"><PageBonCommande ChampReference={ReferenceArticleLigne} /></RouteModule> },
+      { path: "pieces", element: <RouteModule module="bons_commande"><PagePieces /></RouteModule> },
       { path: "articles", element: <RouteModule module="articles"><PageArticles /></RouteModule> },
       // Toute écriture au catalogue suit le droit « modifier », comme l'ancien écran (ART-06).
       { path: "articles/nouveau", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },

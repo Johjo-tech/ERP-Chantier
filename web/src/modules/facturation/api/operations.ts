@@ -46,7 +46,8 @@ export async function etablirAvoir(societeId: string, factureId: string, motif: 
   const f = await lireFacture(factureId);
   const refus = refusAvoir(f, motif);
   if (refus) throw { code: "P0001", message: refus };
-  const { id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, ...entete } = f;
+  const { id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, intervention_id: _it, ...entete } = f;
+  // Ni devis, ni bon, ni intervention : ces liens disent « ce travail a été facturé » ; l'avoir ne facture rien.
   const avoirId = await creerFacture(
     societeId,
     { ...entete, type_document: "avoir", date: todayISO(), facture_rectifiee_id: factureId, motif_rectification: motif.trim(), acomptes_deduits: 0, retenue_garantie_pourcentage: null },

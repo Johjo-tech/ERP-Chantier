@@ -204,3 +204,87 @@ cohérence de société obligatoire (`est_mon_client(client, societe)`) (relectu
 Ils émettent des factures, qui ne se suppriment pas : `tests/e2e/preparation.ts`
 refuse toute autre cible, et Playwright ne réutilise jamais un serveur déjà lancé
 (l'application historique écoute aussi sur 5173) (relecture 2, I-7).
+## D-040 — Bons de commande : lus par les vues terrain, écrits dans les tables
+La table `bons_commande` n'est lisible qu'à qui voit les prix ; les vues
+`v_bons_commande_terrain` / `v_bon_commande_lignes_terrain` servent tout membre,
+prix à NULL pour le technicien et le sous-traitant. **Décision** : `web/` lit
+TOUJOURS par les vues (un seul chemin, quel que soit le rôle) et écrit dans les
+tables. La matrice ne donne pas `bons_commande/voir` au technicien : la route lui
+reste fermée, comme dans l'ancienne app ; si elle s'ouvrait, la liste n'a pas de
+colonne montant et la fiche montre les travaux sans prix, en consultation
+(`commandes.essai.tsx`, `tests/rls/commandes.essai.ts`). Conséquence connue : le
+technicien ne lit pas `factures` ; l'étape d'un bon facturé lui apparaîtrait
+« À facturer » — sans objet tant que l'écran lui est fermé.
+
+## D-041 — Le lieu d'un bon vit dans `adresse` ; le téléphone du locataire n'est pas géré
+Le formulaire historique saisit le lieu des travaux dans `bons_commande.adresse`
+(c'est elle que `bc_generer_facture` reporte en `adresse_locataire` de la
+facture). **Décision** : le champ « Adresse du lieu » de `SectionLieu` est écrit
+dans `adresse` ; `adresse_locataire` du bon n'est ni lu ni écrit. La vue n'expose
+pas `telephone_locataire` (BC-93) : le champ est masqué et la colonne n'est
+JAMAIS envoyée — l'écrire vide effacerait une valeur qu'on ne peut pas relire.
+Corriger la vue (ajout EN FIN, depuis `pg_get_viewdef`) est une migration à proposer.
+
+## D-042 — La secrétaire modifie les bons mais n'en crée pas
+La consigne disait « secrétaire / conducteur écrivent ». En base
+(`role_permissions`), la secrétaire a `bons_commande/modifier` mais pas `creer`,
+et l'insertion lui est refusée (42501). **Décision** : `web/` suit la base — pas
+de bouton « Nouveau bon de commande » pour elle ; elle modifie, pose « BC reçu »
+et crée la facture du bon (`factures/creer`). Si elle doit créer, c'est une
+migration de `role_permissions` à proposer, pas un contournement d'écran.
+
+## D-043 — Pièces : « commandée » par écriture directe, trois onglets
+Aucune RPC ne pose la commande d'une pièce ; la politique `planning_taches_update`
+(`peut_ecrire` : admin, conducteur, technicien) permet l'écriture directe de
+`piece_date_commande` / `piece_fournisseur`. **Décision** : écriture directe sur
+TOUTES les tâches du bon qui portent le drapeau (l'ancien pont visait une seule
+tâche, et la date se relisait parfois sur une autre) ; boutons sous
+`planning/modifier` (admin, conducteur), comme `bc_piece_recue`. Date et
+fournisseur se saisissent ensemble (l'ancien posait « aujourd'hui » au clic). Un
+échec d'écriture remonte (BC-97). Un onglet « Reçues » s'ajoute aux deux anciens :
+l'historique de la pièce survit à sa réception (`etatPieceDuBon`). Les refus métier
+de `bc_piece_recue` (`check_violation`) sont affichés tels que la base les rédige.
+
+## D-044 — Montant d'un bon : décimal exact, arrondi au centime à l'écriture
+L'ancien écran envoyait le HT flottant brut, arrondi en silence par
+`numeric(14,2)` (BC-98). **Décision** : HT des lignes en décimal exact, arrondi au
+centime (demi s'éloignant de zéro, comme `numeric`) au moment d'écrire ; même
+valeur stockée, sans flottant. Parité au 1e-6 près sur 3 000 bons tirés
+(`tests/parite/commandes.essai.ts`).
+
+## D-045 — Parité contre `app.js` : la source extraite, pas recopiée
+`etapeWorkflow`, `bcTachesTerminees` et `bcLignesOntDuContenu` vivent dans le
+monolithe, qu'on ne peut pas importer. **Décision** : le test de parité extrait
+leur SOURCE du fichier et l'évalue ; une modification de l'ancien écran casse
+donc le test. Seule la branche « tâches relues » de `bcTachesTerminees` est
+portée : son repli sur les cases par métier servait aux bons jamais rechargés,
+ce qui n'arrive pas dans `web/` (le circuit est dérivé des tâches à chaque lecture).
+
+## D-046 — Jeu d'essai : numéros internes fixes, préfixe local « BON- »
+La base locale n'a pas de ligne `compteurs` qui fixe le préfixe « BC » : un bon
+créé localement reçoit `BON-2026-…` (même cause que BC-94 en 2027). **Décision** :
+le jeu d'essai pose des numéros fixes `BC-2026-9000xx` ; les tests n'exigent que
+la forme `XXX-AAAA-NNNNNN` d'un numéro posé par la base.
+
+## D-047 — Lignes réordonnées au clavier, pas par glisser-déposer
+L'ancien éditeur déplaçait les lignes à la souris (DEV-03). `web/` propose ↑ / ↓
+sur chaque ligne : même effet, utilisable au clavier et sur téléphone. Le
+glisser-déposer pourra s'ajouter par-dessus.
+
+## D-048 — Taux de TVA proposés par défaut : la liste des réglages
+Sans taux réglés, l'ancien écran ne proposait que le taux par défaut (DEV-09) ;
+`web/` lit la liste `tauxTva` des réglages, qui vaut par défaut 0 / 2,1 / 5,5 /
+10 / 20 % (`fusionnerReglages` de l'ancienne app) — un taux enregistré hors liste
+reste proposé.
+
+## D-049 — Une lecture automatique mal formée est refusée, pas « incertaine »
+L'Edge Function signale déjà ses propres écarts par un avertissement. Côté
+écran, une réponse qui ne respecte pas le contrat Zod (OCR-31) est refusée avec
+un message : mieux vaut ressaisir que préremplir de travers.
+
+## D-050 — Soldes affichés : TTC de la base, règlements additionnés à l'écran
+Le TTC vient de `v_facture_totaux` ; le reste dû est calculé à l'écran avec les
+règles portées (arrondi au centime, avoirs, reprise historique), parce que la
+vue `v_facture_solde` ignore le signe des avoirs, les acomptes et la retenue
+(FAC-93). À basculer sur une vue corrigée (migration à écrire) — écart assumé
+avec la règle « pas de solde recalculé côté client » du dépôt.

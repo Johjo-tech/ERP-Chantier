@@ -7,7 +7,8 @@ import type { ReactNode } from "react";
 type ChampEntete = "client_id" | "interlocuteur" | "date" | "chantier_id" | "conducteur_id";
 
 interface Props {
-  valeurs: Record<ChampEntete, string>;
+  /** Date et chantier sont facultatifs : un bon de commande n'a pas de colonne chantier, et sa date est celle de réception. */
+  valeurs: Record<"client_id" | "interlocuteur" | "conducteur_id", string> & Partial<Record<"date" | "chantier_id", string>>;
   erreurs: Record<string, string>;
   changer: (champ: ChampEntete, v: string) => void;
   conducteurCourant: string | null;
@@ -50,14 +51,18 @@ export function ChampsEnteteDocument({ valeurs, erreurs, changer, conducteurCour
       ) : (
         <div />
       )}
-      <ChampTexte libelle="Date" type="date" valeur={valeurs.date} erreur={erreurs.date} onChange={(v) => changer("date", v)} desactive={lectureSeule} />
-      <ChampChoix
-        libelle="Chantier"
-        valeur={valeurs.chantier_id}
-        desactive={lectureSeule}
-        onChange={(v) => changer("chantier_id", v)}
-        options={[{ valeur: "", libelle: "— Aucun —" }, ...(chantiers.data ?? []).map((c) => ({ valeur: c.id, libelle: c.nom }))]}
-      />
+      {valeurs.date !== undefined && (
+        <ChampTexte libelle="Date" type="date" valeur={valeurs.date} erreur={erreurs.date} onChange={(v) => changer("date", v)} desactive={lectureSeule} />
+      )}
+      {valeurs.chantier_id !== undefined && (
+        <ChampChoix
+          libelle="Chantier"
+          valeur={valeurs.chantier_id}
+          desactive={lectureSeule}
+          onChange={(v) => changer("chantier_id", v)}
+          options={[{ valeur: "", libelle: "— Aucun —" }, ...(chantiers.data ?? []).map((c) => ({ valeur: c.id, libelle: c.nom }))]}
+        />
+      )}
       <ChampChoix
         libelle="Conducteur de travaux"
         valeur={valeurs.conducteur_id}

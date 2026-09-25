@@ -152,3 +152,58 @@ begin
     on conflict (profile_id, client_id) do nothing
   $i$;
 end $$;
+
+-- Bons de commande (module commandes). Clés et numéros internes fixes, pour
+-- que les parcours et les tests les désignent sans chercher. Un conducteur
+-- d'ALPHA relié à son compte : sans fiche, le sélecteur serait vide.
+do $$
+declare
+  v_alpha constant uuid := 'a0000000-0000-0000-0000-00000000000a';
+  v_beta  constant uuid := 'b0000000-0000-0000-0000-00000000000b';
+begin
+  insert into public.conducteurs (id, societe_id, nom, profile_id)
+  values ('a7000000-0000-0000-0000-000000000001', v_alpha, 'Christophe Conducteur', 'a1000000-0000-0000-0000-000000000003')
+  on conflict (id) do nothing;
+
+  -- Le circuit (`statut_workflow`) est réservé aux RPC ; le jeu d'essai, joué
+  -- par postgres, peut poser directement un bon « chiffré » à facturer.
+  insert into public.bons_commande (
+    id, societe_id, numero_interne, numero_bc, sans_bc, en_attente_bc, client_id, client_nom, interlocuteur,
+    adresse, code_postal, ville, date, date_reception, date_fin_travaux, nature_travaux, reference_chantier,
+    montant, statut, statut_workflow, conducteur_id
+  ) values
+    ('a5000000-0000-0000-0000-000000000001', v_alpha, 'BC-2026-900001', 'CMD-OPAC-7781', false, false,
+     'a2000000-0000-0000-0000-000000000001', 'OPAC du Rhône', null, '14 rue Garibaldi, apt 12', '69003', 'Lyon',
+     '2026-09-05', '2026-09-05', '2026-09-30', 'Remise en état salle d''eau', 'Bât. C', 471.00, 'en attente', 'chiffre',
+     'a7000000-0000-0000-0000-000000000001'),
+    ('a5000000-0000-0000-0000-000000000002', v_alpha, 'BC-2026-900002', 'En attente de BC', false, true,
+     'a2000000-0000-0000-0000-000000000001', 'OPAC du Rhône', null, '3 place Bellecour', '69002', 'Lyon',
+     '2026-09-12', '2026-09-12', null, 'Fuite sous évier', null, 0, 'en attente', 'en_cours', null),
+    ('a5000000-0000-0000-0000-000000000003', v_alpha, 'BC-2026-900003', 'Sans BC', true, false,
+     'a2000000-0000-0000-0000-000000000002', 'Mme Durand', null, '5 impasse des Lilas', '69100', 'Villeurbanne',
+     '2026-09-15', '2026-09-15', null, 'Remplacement mitigeur', null, 180.00, 'en attente', 'en_cours',
+     'a7000000-0000-0000-0000-000000000001')
+  on conflict (id) do nothing;
+
+  insert into public.bons_commande (id, societe_id, numero_interne, numero_bc, sans_bc, en_attente_bc, client_id, client_nom, adresse, ville, date, montant, statut, statut_workflow)
+  values ('b5000000-0000-0000-0000-000000000001', v_beta, 'BC-2026-B00001', 'SECRET-BETA-1', false, false, 'b2000000-0000-0000-0000-000000000001',
+          'Client secret de BETA', '1 rue Secrète', 'Grenoble', '2026-09-10', 999.00, 'en attente', 'en_cours')
+  on conflict (id) do nothing;
+
+  -- Comme les lignes de devis : posées seulement sur un bon qui n'en a aucune.
+  insert into public.bon_commande_lignes (bon_commande_id, position, type, designation, quantite, prix_unitaire, unite, tva, montant_ht)
+  select v.bc::uuid, v.position, v.type, v.designation, v.quantite, v.prix_unitaire, v.unite, v.tva, v.quantite * v.prix_unitaire from (values
+    ('a5000000-0000-0000-0000-000000000001', 0, 'ligne'::public.ligne_type, 'Dépose faïence', 6, 35.00, 'm²', 10),
+    ('a5000000-0000-0000-0000-000000000001', 1, 'ligne', 'Pose faïence neuve', 6, 43.50, 'm²', 10),
+    ('a5000000-0000-0000-0000-000000000002', 0, 'ligne', 'Recherche de fuite', 1, 0, 'forfait', 10),
+    ('a5000000-0000-0000-0000-000000000003', 0, 'ligne', 'Fourniture et pose mitigeur thermostatique', 1, 180.00, 'u', 10),
+    ('b5000000-0000-0000-0000-000000000001', 0, 'ligne', 'Travaux secrets', 1, 999.00, 'forfait', 20)
+  ) as v(bc, position, type, designation, quantite, prix_unitaire, unite, tva)
+  where not exists (select 1 from public.bon_commande_lignes l where l.bon_commande_id = v.bc::uuid);
+
+  -- Une tâche au planning qui attend une pièce (écran « Pièces »).
+  insert into public.planning_taches (id, societe_id, libelle, bon_commande_id, metier, date_tache, piece_a_commander, piece_description)
+  values ('a6000000-0000-0000-0000-000000000001', v_alpha, 'Mitigeur Durand', 'a5000000-0000-0000-0000-000000000003', 'Plomberie',
+          '2026-09-22', true, 'Mitigeur thermostatique 1/2')
+  on conflict (id) do nothing;
+end $$;

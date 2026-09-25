@@ -57,12 +57,14 @@ export async function enregistrerDevis(
   societeId: string,
   id: string | null,
   entete: EnteteAEnregistrer,
-  lignes: readonly LigneAEnregistrer[]
+  lignes: readonly LigneAEnregistrer[],
+  /** Libellé d'un ANCIEN devis sans conducteur_id, à conserver tel quel (sinon il serait perdu). */
+  conducteurHistorique: string | null = null
 ): Promise<string> {
   const client = supabase();
   // Le libellé du conducteur est tenu par un déclencheur d'après conducteur_id :
   // on l'envoie à null, sans quoi un conducteur retiré serait retrouvé par son nom.
-  const ligne = { ...entete, conducteur: null };
+  const ligne = { ...entete, conducteur: entete.conducteur_id ? null : conducteurHistorique };
   let devisId = id;
   if (devisId) {
     const { error } = await client.from("devis").update(ligne).eq("id", devisId);

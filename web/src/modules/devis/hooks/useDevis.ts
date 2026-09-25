@@ -41,8 +41,8 @@ export function useEnregistrerDevis(id: string | undefined) {
   const societe = useSocieteActive();
   const invalider = useInvaliderDevis();
   return useMutation({
-    mutationFn: ({ entete, lignes }: { entete: EnteteAEnregistrer; lignes: LigneAEnregistrer[] }) =>
-      enregistrerDevis(societe.id, id ?? null, entete, lignes),
+    mutationFn: ({ entete, lignes, conducteurHistorique = null }: { entete: EnteteAEnregistrer; lignes: LigneAEnregistrer[]; conducteurHistorique?: string | null }) =>
+      enregistrerDevis(societe.id, id ?? null, entete, lignes, conducteurHistorique),
     onSuccess: (devisId) => invalider(devisId),
     onError: () => invalider(id),
   });

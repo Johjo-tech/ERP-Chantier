@@ -75,7 +75,12 @@ function FormulaireDevis({ devis, reglages, actions, ChampReference }: PropsForm
     }
     const pct = Math.min(100, Math.max(0, remise.data));
     enregistrer.mutate(
-      { entete: enteteAEnregistrer(saisie, client, pct), lignes: l.lignes },
+      {
+        entete: enteteAEnregistrer(saisie, client, pct),
+        lignes: l.lignes,
+        // Un devis ancien portait parfois le NOM du conducteur sans sa fiche : on le garde (DEV-26).
+        conducteurHistorique: devis && !devis.conducteur_id ? devis.conducteur : null,
+      },
       {
         onSuccess: (nouvelId) => {
           setMessage("Devis enregistré.");
