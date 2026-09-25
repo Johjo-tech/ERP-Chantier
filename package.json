@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check": "npm run type-check && npm run type-check:ecran && npm run test:run && npm run build",
     "type-check": "tsc --noEmit",
     "type-check:ecran": "tsc -p tsconfig.ecran.json",
     "test": "vitest --passWithNoTests",
