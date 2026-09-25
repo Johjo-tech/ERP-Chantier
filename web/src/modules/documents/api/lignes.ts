@@ -51,7 +51,12 @@ export async function synchroniserLignes(
   const gardees = new Set(existantes.map((l) => l.id));
   const aSupprimer = [...idsAvant].filter((id) => !gardees.has(id));
   if (aSupprimer.length) {
-    const { error } = await t().delete().in("id", aSupprimer);
+    // Un refus de la RLS ne lève rien : il supprime zéro ligne. Sans ce compte, les
+    // lignes « supprimées » réapparaissaient au rechargement, sans un mot (relecture 4, M3).
+    const { data, error } = await t().delete().in("id", aSupprimer).select("id");
     if (error) throw error;
+    if ((data?.length ?? 0) < aSupprimer.length) {
+      throw { code: "P0001", message: "Des lignes retirées n'ont pas pu être supprimées : vous n'avez pas le droit de les retirer de ce document." };
+    }
   }
 }

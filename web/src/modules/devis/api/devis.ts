@@ -79,8 +79,11 @@ export async function enregistrerDevis(
   const ligne = { ...entete, conducteur: entete.conducteur_id ? null : conducteurHistorique };
   let devisId = id;
   if (devisId) {
-    const { error } = await client.from("devis").update(ligne).eq("id", devisId);
+    // Zéro ligne touchée n'est pas une erreur pour PostgREST : sans ce compte, un
+    // refus de la RLS passait, puis les lignes partaient seules (relecture 4, M2).
+    const { data, error } = await client.from("devis").update(ligne).eq("id", devisId).select("id");
     if (error) throw error;
+    if (!data?.length) throw { code: "P0001", message: "Enregistrement refusé : ce devis n'existe plus, ou vous n'avez pas le droit de le modifier." };
   } else {
     const numero = await client.rpc("prochain_numero", { p_societe: societeId, p_type: "devis" });
     if (numero.error) throw numero.error;
