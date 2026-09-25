@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
@@ -18,6 +19,9 @@ export function MenuUtilisateur() {
       <div>
         <p className="font-medium">{utilisateur.nom}</p>
         <p className="text-xs text-muted-foreground">{roleReel ? ROLES_LIBELLES[roleReel] : "Sans rôle"}</p>
+        <Link to="/mon-compte" className="text-xs text-primary underline-offset-2 hover:underline">
+          Mon compte
+        </Link>
       </div>
       {peutSimuler(roleReel) && (
         <div className="flex flex-col gap-1">
