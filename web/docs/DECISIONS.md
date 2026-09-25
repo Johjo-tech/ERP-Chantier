@@ -1490,3 +1490,86 @@ U+00A0 avant « € ») : un montant ne se coupe plus en fin de ligne. Le PDF, d
 la police ne connaît pas U+202F, les convertit déjà (`texteWinAnsi`). L'arrondi
 reste décimal exact avant formatage (1,005 € → 1,01 € ; l'ancien affichait
 1,00 € : seul écart, au demi-centime, déjà admis par D-006).
+
+## D-SQL-01 — Les vues de l'espace client sont en lecture seule, par les droits
+Relecture 4, B1. Une vue aux droits de son propriétaire qui ne lit qu'une table
+est modifiable, et la RLS de la table n'y joue pas. Plutôt qu'un déclencheur
+`instead of`, les propositions 20260925030000 et 20260926042000 retirent TOUS
+les droits (`public`, `anon`, `authenticated`) puis rendent `select` : c'est la
+correction de `20260921144700_les_vues_ne_s_ecrivent_pas`, qu'on ne réinvente
+pas. Test : `politiques.essai.ts` (B1).
+
+## D-SQL-02 — La reprise « compta: » est réservée à l'administrateur
+Relecture 4, I1. L'import se fait depuis le navigateur (pas de `service_role`)
+et une RPC dédiée demanderait de réécrire l'import de l'écran historique (hors
+`web/`). Retenu : `facture_attribuer_numero` refuse à tout autre que l'admin de
+la société de poser, d'ajouter ou de retirer le marqueur, et de fournir un
+numéro sous lui ; une reprise ne reçoit son numéro qu'avec des lignes. Une
+session sans JWT (maintenance) n'est pas concernée. Conséquence assumée :
+dans l'écran historique, « Reprendre un historique » échoue pour la secrétaire
+(motif de la base affiché) ; la reprise est un geste unique d'administration.
+Côté `web/` : `BoutonImport adminSeul` et `PageImportFactures` n'ouvrent la
+reprise qu'à l'admin. Tests : `numerotation`, `import-export`, `politiques` (I1),
+`import.essai.tsx`.
+
+## D-SQL-03 — Ce qui signe une reprise : « compta: », payée, aucun règlement
+Relecture 4, B3. `legacy_id` porte aussi l'identifiant base 36 de chaque pièce
+créée par l'écran historique : il ne signe rien à lui seul. Une colonne
+`reprise_reglee` posée à l'import aurait été plus juste, mais elle demande une
+colonne nouvelle, que l'écran historique relirait et renverrait (types
+régénérés) ; le marqueur, désormais réservé à l'admin (D-SQL-02), suffit.
+Cas limite accepté : une reprise sur laquelle on saisit par erreur un règlement
+partiel, puis qu'on le supprime, repasse « impayée » (le recalage a suivi le
+règlement) — l'admin la remet « payée » à la main (liste blanche de l'en-tête
+figé). Tests : `politiques` (B3), `facturation` (reprise).
+
+## D-SQL-04 — Le crédit d'un avoir se compte en valeur absolue
+Relecture 4, I2. Le TTC d'un avoir arrive signé de l'écran historique
+(`regles-avoir.ts`), positif du nouvel écran : `v_facture_solde` calcule
+`reste`, `net_a_payer` et `credit` sur `abs(ttc)` pour un avoir, et expose
+`ttc` tel quel (colonnes existantes inchangées). Test : `politiques` (I2).
+
+## D-SQL-05 — Le terrain signale, il ne chiffre pas : valeurs forcées, pas refusées
+Relecture 4, B2. Pour qui ne voit pas les prix (technicien, sous-traitant),
+`travail_supplementaire_du_terrain` force à l'INSERT statut « à chiffrer »,
+prix NULL, origine « technicien », auteur = le compte connecté, et garde à
+l'UPDATE les valeurs d'avant. Forcer plutôt que refuser : l'écran historique
+envoie ces champs à leurs valeurs par défaut, un refus casserait le geste
+légitime. Une tâche citée doit être une tâche du bon (pour tous les rôles ;
+pour le sous-traitant, l'une des siennes). Les RPC du circuit (admin,
+secrétaire) voient les prix et ne sont pas touchées. Test : `politiques` (B2).
+
+## D-SQL-06 — « Le sous-traitant : ses bons » en une seule fonction
+Relecture 4, I3 à I5. `bon_lisible(société, bon)` (20260926050000) : membre,
+et pour le sous-traitant une tâche sur le bon. Elle filtre photos (lecture et
+dépôt), téléphones des occupants, vues terrain des bons et de leurs lignes, et
+l'écriture au seau (`peut_ecrire_terrain`, 20260926100000 : `societe` et
+`documents-legaux` sous « réglages / modifier », technicien selon le domaine,
+modifier et retirer gardent `peut_ecrire`). `sous_traitants` : le sous-traitant
+ne lit que sa fiche. Le technicien et l'encadrement ne perdent rien, sauf le
+dépôt du logo et des documents légaux, réservé aux réglages. Tests adaptés :
+`planning` (le sous-traitant dépose sur un bon où il a une tâche), `rh` (le
+technicien dépose sous un bon), `commandes` (le sous-traitant ne lit pas un bon
+qui ne lui est pas confié).
+
+## D-SQL-07 — Verrous du bon facturé : SECURITY DEFINER, pas de tolérance à la réinsertion
+Relecture 4, I8. Les deux verrous (lignes, et en-tête par `ALTER FUNCTION` sans
+toucher à son corps) cherchent la facture hors de la RLS de l'appelant.
+L'écran historique réécrit les lignes par suppression PUIS insertion, en deux
+requêtes : aucun déclencheur ne peut reconnaître une réécriture « identique »
+à travers deux transactions. Mais `remplacerEnfants` compare avant d'écrire
+(`enfantsIdentiques`) : un bon facturé enregistré sans toucher aux lignes ne
+les réécrit pas. La mise à jour à l'identique traverse déjà. Le contrôle à
+faire en production avant d'appliquer (positions non contiguës) est dans
+`migrations-proposees.md`, n° 6. Test : `politiques` (I8).
+
+## D-SQL-08 — Une vue de production ne se refait que sous garde ; tout se rejoue sur base neuve
+Relecture 4, I6. `v_facture_solde` et `v_salaries_annuaire` ne sont refaites
+que si `pg_get_viewdef` en place égale la définition attendue avant la
+proposition (ou celle qu'elle pose), comparées par le même serveur (vues
+temporaires) ; les vues terrain ne changent que leur filtre, sur la définition
+vivante. Une révision antérieure de 20260926040000, reconnue à son commentaire,
+n'existe que sur les bases locales et est remplacée. `scripts/essai-base-neuve.sh`
+rejoue migrations, rattrapage et propositions (deux passes) sur une base
+temporaire du conteneur local ; `rejouer-migrations.sh` et
+`rattraper-colonnes.mjs` acceptent `BASE_LOCALE` pour cela.
