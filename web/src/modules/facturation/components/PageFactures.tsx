@@ -12,6 +12,7 @@ import { formatEuros, montant } from "@/lib/money";
 import { correspond } from "@/lib/recherche";
 import { cn } from "@/lib/utils";
 import { Can } from "@/modules/auth-roles/components/Can";
+import { BoutonImport } from "@/modules/import-export/components/Recapitulatif";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { estAvoir } from "@/modules/documents/domain/totaux";
 import { libelleDelai } from "../domain/etat";
@@ -70,11 +71,14 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
       <EnTetePage
         titre={vue === "avoirs" ? "Avoirs" : "Factures"}
         actions={
-          <Can module="factures" action="creer">
-            <Button asChild>
-              <Link to="/factures/nouvelle">Nouvelle facture</Link>
-            </Button>
-          </Can>
+          <>
+            {vue !== "avoirs" && <BoutonImport module="factures" vers="/factures/import" libelle="Reprendre un historique" />}
+            <Can module="factures" action="creer">
+              <Button asChild>
+                <Link to="/factures/nouvelle">Nouvelle facture</Link>
+              </Button>
+            </Can>
+          </>
         }
       />
       <OngletsFacturation />

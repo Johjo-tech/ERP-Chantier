@@ -851,3 +851,70 @@ sous-traitants. `web/` montre les internes par défaut et un filtre
 Devis et facture exigent `client_id` (délais, cadre, adresse). Un rapport
 rédigé sur un nom libre doit d'abord recevoir son client ; les lignes partent
 sans prix (préconisations « x2 m² » → quantité et unité).
+
+## D-EFA-01 — Facture électronique : un module `efacture`, le XML fabriqué dans le navigateur
+Comme l'ancien (`regles-en16931.ts` + `regles-cii.ts`), la charge EN 16931 et
+le CII sont produits côté navigateur, sous tests de parité (`tests/parite/efacture.essai.ts`,
+sortie CII identique octet pour octet) et un test de structure
+(`efacture/domain/cii.essai.ts` : séquences XSD, obligatoires, BR-CO-10 à 16,
+BR-S-08). L'Edge Function recontrôle numéro et total contre la base.
+
+## D-EFA-02 — Arrondis EN 16931 et reprise : décimal exact
+La charge (remise → déductions BG-20, ventilation BG-23, totaux) et les
+contrôles de la reprise d'historique calculent en `Big` (`@/lib/money`) là où
+l'ancien arrondissait des flottants. Seul un demi-centime exact peut différer
+(ex. 2,90 × 5 % : l'ancien donne 0,14, web/ 0,15) — cas nommé dans la parité ;
+sur 800 tirages quelconques, l'écart reste ≤ 0,01 €.
+
+## D-EFA-03 — Factur-X sans pdf-lib : mise à jour incrémentale du PDF jsPDF
+L'ancien embarquait le XML avec pdf-lib. web/ n'ajoute pas de dépendance :
+`efacture/pdf/facturx.ts` appose une mise à jour incrémentale (pièce jointe
+`factur-x.xml` `/AFRelationship /Data`, `/AF`, `/EmbeddedFiles`, XMP Factur-X
+EN 16931, intention de sortie sRGB — même profil que l'ancien), sans toucher un
+octet du PDF rendu. Comme l'ancien, pas de PDF/A-3 strict (polices standard non
+embarquées). Un manque ne prive jamais du PDF : le PDF simple part, le motif est
+dit si la pièce relève de la facture électronique.
+
+## D-EFA-04 — Plateforme : l'Edge Function historique, inchangée, non redéployée
+Le dépôt appelle `pdp-emit-invoice` telle qu'elle existe (`../supabase/functions`).
+web/ ne crée, ne modifie ni ne déploie aucune fonction et ne manipule aucune clé.
+Les autres fonctions `pdp-*` (OAuth, réception, e-reporting, cycle de vie,
+webhook) n'avaient aucun écran dans l'ancienne app : pas d'écran non plus ici
+(EFA-06). Les tables PDP existent déjà en production (EFA-07) : rien à proposer.
+
+## D-EFA-05 — Rôle vérifié à l'écran seulement ; défauts des fonctions PDP signalés
+`pdp-emit-invoice` ne vérifie que l'appartenance (EFA-20) et `pdp-webhook`
+compare son secret avec `!==` sans `verify_jwt=false` déclaré (EFA-21). Les
+corriger impose de modifier des fonctions hors de web/, interdit ici. web/ masque
+« Transmettre » à qui n'a pas `factures / modifier` ; la correction serveur
+(`a_permission('factures','modifier')` dans la fonction, comparaison à temps
+constant, `verify_jwt` déclaré) reste à faire par un humain avant la bascule.
+
+## D-EFA-06 — Import de clients : pas d'annuaire des entreprises
+L'ancien interrogeait l'annuaire à l'aperçu (corrections, B2G par catégorie
+juridique). web/ n'a pas encore d'intégration annuaire (CLI-23, hors périmètre) :
+l'import écrit ce que le fichier dit ; type déduit = particulier sans
+immatriculation, international hors de France, sinon entreprise française —
+l'aperçu invite à vérifier un acheteur public. Aucune correction d'annuaire.
+
+## D-EFA-07 — Import de clients : une mise à jour n'efface rien
+L'ancien réécrivait toute la fiche d'un client rapproché, cases vides et
+colonnes absentes comprises (un export partiel effaçait e-mail, adresse…), et
+le type déduit. Sans annuaire, ce type rétrograderait un B2G. web/ n'envoie en
+mise à jour que les valeurs renseignées (pays seulement s'il est lu dans le
+fichier — `paysExplicite`), jamais le nom, le type ni `eligibilite_*`. Les
+créations suivent l'ancien, clés uniformisées. `tests/rls/import-export.essai.ts`.
+
+## D-EFA-08 — Sauvegarde : export seulement
+L'export JSON (`version: 2`, `terrain-sauvegarde-AAAA-MM-JJ.json` — le nom que
+l'écran demandait ; l'adaptateur servait en fait « terrain-export-… ») reprend
+les collections de `loadAllData` avec les droits de l'utilisateur. La
+restauration par écrasement n'est pas reprise : elle réécrivait sans garde de
+rôle des pièces numérotées et figées que la base refuse désormais de modifier.
+
+## D-EFA-09 — DPGF : l'import de `chantiers` fait foi, défauts reproduits
+IMP-30 est CHA-08 (même port, même parité). Les bizarreries d'IMP-31 (« 1.234 »
+lu 1,234, `;` retenu seulement sans virgule en 1re ligne, prix jamais deviné par
+le contenu) sont gardées à l'identique, faute de quoi des fichiers préparés
+pour l'ancien liraient autrement ; le remplacement sans confirmation est
+tempéré par D-CHA-07 (l'écran annonce ce qui sera remplacé, lignes figées gardées).
