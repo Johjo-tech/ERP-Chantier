@@ -851,3 +851,64 @@ sous-traitants. `web/` montre les internes par défaut et un filtre
 Devis et facture exigent `client_id` (délais, cadre, adresse). Un rapport
 rédigé sur un nom libre doit d'abord recevoir son client ; les lignes partent
 sans prix (préconisations « x2 m² » → quantité et unité).
+
+## D-VEH-01 — Les prêts du parc ont leur table et leur durée (proposition 20260926070000)
+L'ancien écran rangeait prêts et entretiens dans le JSON de la fiche, sans
+colonne : tout disparaissait au rechargement (VEH-20). **Décision** :
+`vehicule_prets`, `materiel_prets`, `vehicule_entretiens` sont écrites ;
+`date_debut` = prêt, `duree_jours` (proposée) = durée prévue, `date_fin` =
+retour RÉEL. Un index partiel interdit deux prêts en cours pour un même objet.
+Prêts, entretiens et documents d'un véhicule suivent « véhicules / modifier »,
+les prêts de matériel « matériel / modifier » : la secrétaire (véhicules :
+tout) prête enfin un véhicule, le technicien (véhicules : voir) ne note plus
+d'entretien, le rôle lecture ne supprime plus rien. Contrôles périodiques,
+cartes et consommations (sans écran) : seule la suppression s'aligne sur
+l'écriture.
+
+## D-VEH-02 — Schéma d'état dans le jsonb du prêt
+`etat_depart` = `{ etat, marques }`, `etat_retour` = `{ marques }` (repère
+220 × 420 de l'ancien SVG), lus avec tolérance (texte seul, tableau nu). Les
+marques se posent aussi au clavier (zones nommées).
+
+## D-VEH-03 — Fichiers du parc au seau `terrain`
+Facture d'achat (l'ancien `factureAchatFiles`, sans colonne), carte grise,
+assurance, photos : `vehicule_documents` + `<société>/vehicules/<véhicule>/…`.
+Facture d'entretien : `vehicule_entretiens.fichier_chemin` (l'ancien data-URL
+était perdu). Politiques Storage AJOUTÉES pour ce chemin (« véhicules /
+modifier ») : sans elles la secrétaire ne déposait rien.
+
+## D-VEH-04 — Échéances aux seuils des réglages
+L'ancienne liste codait « 30 » pour le CT. Retenu : CT et documents qui
+expirent → `seuils.vehiculeControle`, cartes carburant et télépéage →
+`seuils.vehiculeCarte` (défauts 30, donc inchangé sans réglage). Le bloc
+« Échéances à surveiller » de la liste ajoute le CT, que l'ancienne cloche ne
+voyait pas, et nomme le véhicule par sa plaque (l'ancienne lisait `nom`,
+vide). Pas encore de cloche globale dans `web/` : `alertesVehicule` est prête.
+
+## D-VEH-05 — La validité de la carte carburant est une date
+Le champ texte « Validité / code PIN » écrivait dans une colonne `date` : tout
+l'enregistrement était refusé dès qu'on y tapait un code. Champ date ; un code
+PIN n'a rien à faire dans l'application.
+
+## D-VEH-06 — Vente d'un véhicule (VEH-04, FAC-96 renvoyé par la facturation)
+Suit D-FAC-11 : acheteur = fiche du répertoire (l'ancien : texte libre), taux
+choisi dans la liste des réglages (20 ou 0 proposé selon « TVA sur ce
+véhicule »), désignation mot pour mot celle de l'ancien écran, facture émise
+aussitôt comme avant. Ordre sans double : brouillon → véhicule « vendu » (si et
+seulement s'il ne l'était pas, sinon le brouillon est retiré) → émission ; si
+l'émission échoue, le véhicule est vendu et sa facture attend en brouillon.
+Droits : « véhicules / modifier » ET « factures / créer » (le conducteur ne
+vend pas). La note « Vente de véhicule » n'est pas reprise : `factures` n'a pas
+de colonne de notes (l'ancien la perdait déjà). `conditions()` de
+`facturation/api/operations.ts` est désormais exportée pour cela.
+
+## D-VEH-07 — Hors périmètre : sinistres, amendes, cartes multiples
+L'ancienne app ne gère ni sinistres ni amendes ; `vehicule_controles_periodiques`,
+`vehicule_cartes_carburant`, `vehicule_consommations` n'ont aucun écran
+historique. Non repris. Ajouté : suppression d'un véhicule (droit
+« supprimer »), montants masqués à qui ne voit pas les prix, confirmation
+avant de supprimer un prêt.
+
+## D-VEH-08 — Parc ouvert à tous les niveaux d'abonnement
+Aucun niveau ne porte véhicules ni matériel : entrées de menu sans
+fonctionnalité, comme le planning (D-PLN-12).
