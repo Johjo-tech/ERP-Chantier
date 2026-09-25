@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { correspond } from "@/lib/recherche";
 import { Can } from "@/modules/auth-roles/components/Can";
+import { BoutonImport } from "@/modules/import-export/components/Recapitulatif";
 import { libelleCadre } from "../domain/client";
 import { useClients } from "../hooks/useClients";
 
@@ -29,11 +30,14 @@ export function PageClients() {
         titre="Clients"
         sousTitre={clients.data ? `${clients.data.length} client(s)` : undefined}
         actions={
-          <Can module="clients" action="creer">
-            <Button asChild>
-              <Link to="/clients/nouveau">Nouveau client</Link>
-            </Button>
-          </Can>
+          <>
+            <BoutonImport module="clients" vers="/clients/import" libelle="Importer un fichier" />
+            <Can module="clients" action="creer">
+              <Button asChild>
+                <Link to="/clients/nouveau">Nouveau client</Link>
+              </Button>
+            </Can>
+          </>
         }
       />
       <div className="mb-3 max-w-sm">

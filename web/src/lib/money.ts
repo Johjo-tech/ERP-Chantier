@@ -52,6 +52,15 @@ export function depuisCentimes(c: number): Montant {
   return new Big(c).div(100);
 }
 
+/**
+ * « 12.50 » : la forme décimale qu'attendent la norme EN 16931 et le CII —
+ * deux décimales, un point, jamais « -0.00 » (un avoir à zéro n'a pas de signe).
+ */
+export function enDecimal2(m: Montant): string {
+  const a = arrondiCentimes(m);
+  return (a.eq(0) ? ZERO : a).toFixed(DECIMALES_EURO);
+}
+
 const formatEuro = new Intl.NumberFormat("fr-FR", {
   style: "currency",
   currency: "EUR",

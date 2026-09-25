@@ -37,6 +37,9 @@ import { PageAFacturer, PageValidation } from "@/modules/commandes/components/Pa
 import { PageArticles } from "@/modules/articles/components/PageArticles";
 import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
 import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";
+import { PageImportClients } from "@/modules/import-export/components/PageImportClients";
+import { PageImportExport } from "@/modules/import-export/components/PageImportExport";
+import { PageImportFactures } from "@/modules/import-export/components/PageImportFactures";
 import { ReferenceArticleLigne } from "@/modules/articles/components/ReferenceArticleLigne";
 import { LayoutEspaceClient } from "@/modules/espace-client/components/LayoutEspaceClient";
 import { PageDocumentClient } from "@/modules/espace-client/components/PageDocumentClient";
@@ -85,6 +88,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Accueil /> },
       { path: "clients", element: <RouteModule module="clients"><PageClients /></RouteModule> },
+      { path: "clients/import", element: <RouteModule module="clients" action="creer"><PageImportClients /></RouteModule> },
       { path: "clients/nouveau", element: <RouteModule module="clients" action="creer"><PageFormulaireClient /></RouteModule> },
       { path: "clients/:id", element: <RouteModule module="clients"><PageFicheClient complements={(c) => <DevisLies clientId={c.id} />} /></RouteModule> },
       { path: "clients/:id/modifier", element: <RouteModule module="clients" action="modifier"><PageFormulaireClient /></RouteModule> },
@@ -123,6 +127,7 @@ export const routes: RouteObject[] = [
       { path: "factures/reglements/par-facture", element: <RouteModule module="reglements"><PageReglements vue="factures" /></RouteModule> },
       { path: "factures/reglements/tous", element: <RouteModule module="reglements"><PageReglements vue="tous" /></RouteModule> },
       { path: "factures/reglements/dossier", element: <RouteModule module="reglements"><PageDossierClient /></RouteModule> },
+      { path: "factures/import", element: <RouteModule module="factures" action="creer"><PageImportFactures /></RouteModule> },
       { path: "factures/nouvelle", element: <RouteModule module="factures" action="creer"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id", element: <RouteModule module="factures"><PageFacture ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "factures/:id/apercu", element: <RouteModule module="factures"><PageApercuFacture /></RouteModule> },
@@ -141,6 +146,7 @@ export const routes: RouteObject[] = [
       { path: "articles/:id/modifier", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
       { path: "articles/import", element: <RouteModule module="articles" action="modifier"><PageImportArticles /></RouteModule> },
       { path: "commandes/lecture", element: <RouteModule module="bons_commande" action="creer"><PageLectureBon /></RouteModule> },
+      { path: "import-export", element: <RouteModule module="reglages"><PageImportExport /></RouteModule> },
       { path: "reglages", element: <RouteModule module="reglages"><PageReglages /></RouteModule> },
       { path: "reglages/:rubrique", element: <RouteModule module="reglages"><PageReglages /></RouteModule> },
       // Mon compte : ouvert à tous les rôles, le nom appartient à la personne (AUTH-17).

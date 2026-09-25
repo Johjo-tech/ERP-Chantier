@@ -30,5 +30,6 @@ export const NAVIGATION: readonly EntreeNavigation[] = [
   { chemin: "/materiel", libelle: "Matériel", module: "materiel" },
   // Aucun niveau d'abonnement ne porte les statistiques (D-STA-08) : ouvertes selon la matrice seule.
   { chemin: "/statistiques", libelle: "Statistiques", module: "statistiques" },
+  { chemin: "/import-export", libelle: "Import / export", module: "reglages" },
   { chemin: "/reglages", libelle: "Réglages", module: "reglages" },
 ];
