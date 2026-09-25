@@ -1,7 +1,6 @@
-import * as LabelPrimitive from "@radix-ui/react-label";
 import type { ComponentProps } from "react";
-import { cn } from "@/lib/utils";
 
-export function Label({ className, ...props }: ComponentProps<typeof LabelPrimitive.Root>) {
-  return <LabelPrimitive.Root className={cn("text-sm font-medium leading-none", className)} {...props} />;
+/** Un libellé nu : dans un `.field`, l'ancienne feuille le pose en petites capitales au-dessus de la saisie. */
+export function Label(props: ComponentProps<"label">) {
+  return <label {...props} />;
 }
