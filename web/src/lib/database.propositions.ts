@@ -17,6 +17,31 @@ type AccesClientsLigne = {
 
 type Public = Database["public"];
 
+/**
+ * Colonnes AJOUTÉES à des tables existantes par
+ * 20260926020000_le_chantier_garde_ce_que_l_ecran_saisit.sql.
+ */
+type AjoutChantier = {
+  statut: string;
+  notes: string | null;
+  ppsps_lot: string | null;
+  ppsps_maitre_ouvrage: string | null;
+  ppsps_maitre_oeuvre: string | null;
+  ppsps_coordinateur_sps: string | null;
+  ppsps_effectif_moyen: string | null;
+};
+type AvecColonnes<T extends keyof Public["Tables"], A> = {
+  Row: Public["Tables"][T]["Row"] & A;
+  Insert: Public["Tables"][T]["Insert"] & Partial<A>;
+  Update: Public["Tables"][T]["Update"] & Partial<A>;
+  Relationships: Public["Tables"][T]["Relationships"];
+};
+type TablesEnrichies = {
+  chantiers: AvecColonnes<"chantiers", AjoutChantier>;
+  chantier_comptes_rendus: AvecColonnes<"chantier_comptes_rendus", { vu: boolean }>;
+  chantier_dpgf_lignes: AvecColonnes<"chantier_dpgf_lignes", { metier: string | null }>;
+};
+
 type VueMesAcces = {
   client_id: string;
   client_nom: string;
@@ -42,7 +67,7 @@ export type DatabaseAvecPropositions = Omit<Database, "public"> & {
       v_mes_acces_clients: { Row: VueMesAcces; Relationships: [] };
       v_espace_client_chantiers: { Row: VueChantierClient; Relationships: [] };
     };
-    Tables: Public["Tables"] & {
+    Tables: Omit<Public["Tables"], keyof TablesEnrichies> & TablesEnrichies & {
       acces_clients: {
         Row: AccesClientsLigne;
         Insert: {
