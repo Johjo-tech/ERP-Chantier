@@ -15,7 +15,7 @@ import * as ancienEfacture from "../../../src/api/regles-efacture";
 import * as ancienTotaux from "../../../src/api/regles-totaux";
 import { finDeValidite } from "../../src/modules/devis/domain/validite";
 import { renderPrintDoc, type ContexteImpression, type DocImprimable, type SocieteImprimable, type TypeImprimable } from "../../src/modules/documents/impression/gabarit";
-import { renderPrintIntervention, type InterventionImprimable } from "../../src/modules/documents/impression/gabarit-rapport";
+import { renderPrintIntervention, type InterventionImprimable } from "../../src/modules/interventions/domain/gabarit-rapport";
 import { CONTROLES_PAR_METIER } from "../../src/modules/interventions/domain/rapport";
 import { generateur } from "./aleatoire";
 import { appJs, constanteDe, sourceDe } from "./source-app";
@@ -44,9 +44,27 @@ interface Ancien {
 
 const SOCIETE = { id: "soc-alpha", nom: "ALPHA" };
 
+/**
+ * Le correctif 4f129c7 de l'ancien (« un brouillon dit qu'il n'est pas émis »),
+ * publié sur main après la version d'où cette branche est partie : tant que
+ * l'arbre porte l'ancienne ligne, on l'applique à l'extrait — mot pour mot le
+ * diff du commit —, pour comparer au comportement de référence d'aujourd'hui.
+ */
+const AVANT_4F129C7 = "const l = [['Numéro', esc(doc.numero)], [\"Date d'émission\", fmtDate(doc.date)]];";
+const APRES_4F129C7 = `const numero = String(doc.numero || '').trim();
+  const l = [
+    [numero? 'Numéro' : 'État', numero? esc(numero) : 'Brouillon — non émis'],
+    ["Date d'émission", fmtDate(doc.date)],
+  ];`;
+
+function sourceDeReference(nom: string): string {
+  const source = sourceDe(nom);
+  return nom === "metaDocHTML" ? source.replace(AVANT_4F129C7, APRES_4F129C7) : source;
+}
+
 /** L'ancien écran, reconstitué autour de SA source : globales `state`, `SOCIETES`, `window`. */
 function ancienEcran(etat: Etat, validiteDevisJours: number): Ancien {
-  const source = [...CONSTANTES.map((c) => constanteDe(c)), ...FONCTIONS.map((f) => sourceDe(f))];
+  const source = [...CONSTANTES.map((c) => constanteDe(c)), ...FONCTIONS.map((f) => sourceDeReference(f))];
   const window = { ...ancienTotaux, ...ancienEfacture, libelleDocument: ancienAvoir.libelleDocument };
   const reglagesCourants = () => ({ documents: { validiteDevisJours } });
   return new Function("state", "SOCIETES", "window", "reglagesCourants", `${source.join("\n")}\nreturn { renderPrintDoc, renderPrintIntervention };`)(
@@ -303,5 +321,18 @@ describe("la feuille des pièces est celle de l'ancien", () => {
 
   it("le gabarit n'a pas bougé dans app.js depuis le port (sinon : reporter, puis régénérer)", () => {
     expect(appJs).toContain("function renderPrintDoc(type, id, hidePrices, lignesOverride){");
+    expect(sourceDeReference("metaDocHTML")).toContain("'Brouillon — non émis'");
+  });
+
+  it("un brouillon (sans numéro) dit qu'il n'est pas émis, au lieu d'un « Numéro » vide (4f129c7)", () => {
+    for (let i = 0; i < 200; i++) {
+      const t = tirage(true);
+      t.doc.numero = g.parmi([null, "", "   "]);
+      if (t.type === "bonCommande") Object.assign(t.doc, { numeroInterne: null, numeroBC: g.parmi([null, ""]) });
+      const ancien = ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer);
+      const nouveau = renderPrintDoc(contexteWeb(t));
+      expect(nouveau).toBe(ancien);
+      expect(nouveau).toContain("<dt>État</dt><dd>Brouillon — non émis</dd>");
+    }
   });
 });

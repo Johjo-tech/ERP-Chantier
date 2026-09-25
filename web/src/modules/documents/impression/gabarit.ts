@@ -247,7 +247,14 @@ function factureDocMetaLignes(doc: DocImprimable, c: ContexteImpression): [strin
 }
 
 function metaDocHTML(c: ContexteImpression, doc: DocImprimable): string {
-  const l: [string, string][] = [["Numéro", esc(doc.numero)], ["Date d'émission", fmtDate(doc.date)]];
+  /* Un brouillon sortait avec un champ « Numéro » VIDE sous un titre qui annonce
+     une facture — un document qui a l'air d'une pièce comptable et n'en est pas
+     (correctif 4f129c7 de l'ancien : vaut aussi pour les devis et les bons). */
+  const numero = String(doc.numero || "").trim();
+  const l: [string, string][] = [
+    [numero ? "Numéro" : "État", numero ? esc(numero) : "Brouillon — non émis"],
+    ["Date d'émission", fmtDate(doc.date)],
+  ];
   if (c.type === "devis") {
     const v = c.validite;
     if (v) {
