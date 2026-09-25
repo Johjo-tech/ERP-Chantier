@@ -47,6 +47,7 @@ import { PagePlanning } from "@/modules/planning/components/PagePlanning";
 import { PageApercuRapport } from "@/modules/interventions/components/PageApercuRapport";
 import { PageRapport } from "@/modules/interventions/components/PageRapport";
 import { PageRapports } from "@/modules/interventions/components/PageRapports";
+import { PageStatistiques } from "@/modules/statistiques/components/PageStatistiques";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -144,6 +145,7 @@ export const routes: RouteObject[] = [
       { path: "rapports/nouveau", element: <RouteModule module="rapports" action="creer"><PageRapport /></RouteModule> },
       { path: "rapports/:id", element: <RouteModule module="rapports" action="modifier"><PageRapport /></RouteModule> },
       { path: "rapports/:id/apercu", element: <RouteModule module="rapports"><PageApercuRapport /></RouteModule> },
+      { path: "statistiques", element: <RouteModule module="statistiques"><PageStatistiques /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

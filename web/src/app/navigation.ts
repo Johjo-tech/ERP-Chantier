@@ -25,5 +25,7 @@ export const NAVIGATION: readonly EntreeNavigation[] = [
   // Planning et rapports : aucun niveau d'abonnement ne les porte encore (D-PLN-12), ouverts à tous.
   { chemin: "/planning", libelle: "Planning", module: "planning" },
   { chemin: "/rapports", libelle: "Rapports", module: "rapports" },
+  // Aucun niveau d'abonnement ne porte les statistiques (D-STA-08) : ouvertes selon la matrice seule.
+  { chemin: "/statistiques", libelle: "Statistiques", module: "statistiques" },
   { chemin: "/reglages", libelle: "Réglages", module: "reglages" },
 ];
