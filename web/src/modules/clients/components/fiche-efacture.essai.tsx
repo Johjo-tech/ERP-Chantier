@@ -10,6 +10,9 @@ const api = vi.hoisted(() => ({ listerClients: vi.fn(), lireClient: vi.fn(), cre
 vi.mock("../api/clients", () => api);
 const geo = vi.hoisted(() => ({ communesDuCodePostal: vi.fn() }));
 vi.mock("../api/communes", () => geo);
+// Hors ligne : ni l'annuaire des entreprises ni la Base Adresse Nationale ne sont appelés par les tests.
+vi.mock("../api/annuaire", () => ({ rechercherEntreprise: vi.fn(async () => ({ type: "erreur", code: "NON_TROUVE", message: "Aucun résultat" })) }));
+vi.mock("../api/adresses", () => ({ rechercherAdresse: vi.fn(async () => []), CARACTERES_MINIMUM_ADRESSE: 3 }));
 
 function ouvrir() {
   return rendreAvecSession(
