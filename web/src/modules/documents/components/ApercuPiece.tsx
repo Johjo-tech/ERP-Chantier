@@ -19,7 +19,9 @@ interface Props {
  */
 export function ApercuPiece({ piece, fermer, actions, options }: Props) {
   const imprimer = useImprimerPiece();
-  useEffect(assurerPolices, []);
+  useEffect(() => {
+    assurerPolices();
+  }, []);
   const lancer = (action: "open" | "save") => imprimer.mutate({ piece, action, avant: options?.avant, apres: options?.apres });
   // `closeViewOnBackdrop` : seul un clic sur le voile referme, pas un clic dans la page.
   const surVoile = (ev: MouseEvent) => {

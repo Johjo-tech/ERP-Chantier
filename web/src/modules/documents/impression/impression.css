@@ -23,6 +23,21 @@
 :where(#printArea, .view-modal, .print-preview) :where(h1, h2, h3) { font-family: var(--police-titre); font-weight: 800; }
 :where(#printArea, .view-modal, .print-preview) :where(button) { font-family: inherit; cursor: pointer; }
 :where(#printArea, .view-modal, .print-preview) :where(a) { color: inherit; }
+/* Le 1 px de marge intérieure des cellules n'est pas une règle de la feuille du
+   navigateur mais un attribut implicite du tableau (`cellpadding`), que
+   `all: revert` efface aussi : sans lui, la signature glissait d'un pixel. */
+:where(#printArea, .view-modal, .print-preview) :where(td, th) { padding: 1px; }
+/* Ce que Tailwind pose sur <html> et qui, hérité, changerait la mise en page :
+   l'interligne (1,5 au lieu de « normal ») décalait chaque ligne du document. */
+:where(#printArea, .view-modal, .print-preview, #toastBox) {
+  line-height: normal; font-feature-settings: normal; font-variation-settings: normal;
+  tab-size: 8; -webkit-text-size-adjust: auto; text-size-adjust: auto; -webkit-font-smoothing: antialiased;
+}
+/* html2canvas mesure la ligne de base de chaque police avec une image posée
+   dans un <div> enfant de <body> ; le preflight en fait un bloc, la mesure
+   tombe à côté et tout le texte du PDF glissait de 4 px vers le bas. Le temps
+   de la capture (zone.ts), cette image redevient ce qu'elle est dans l'ancien. */
+body.capture-pdf > div > img { display: inline; vertical-align: baseline; }
 /* Le toast hérite, dans l'ancien, la police du corps de page. */
 :where(#toastBox) { font-family: var(--police-texte); }
 /* Les variables de `:root` de l'ancienne feuille (l. 10-58) que ces blocs lisent.

@@ -2,7 +2,8 @@
  * PORT LITTÉRAL de src/integrations/facturx.ts (commit 6f6ac74) : le même
  * assemblage pdf-lib que l'ancien, sur le PDF que html2pdf vient de produire
  * (D-PDF-05, remplace la mise à jour incrémentale écrite à la main de D-EFA-03).
- * Seuls changent les deux chemins d'import.
+ * Seuls changent les chemins d'import, et pdf-lib qui se charge au premier
+ * PDF (400 ko que l'écran n'a pas à télécharger d'avance).
  */
 /**
  * Le PDF Factur-X : le document lisible, et la facture structurée dedans.
@@ -28,7 +29,7 @@
  * complète est un chantier à part, qui suppose de fabriquer le PDF autrement.
  */
 
-import { AFRelationship, PDFDocument, PDFName, PDFString } from "pdf-lib";
+import type { PDFDocument } from "pdf-lib";
 import { NOM_FICHIER_FACTURX } from "../domain/cii";
 import { CONDITION_SORTIE, profilSRGB } from "./srgb";
 
@@ -120,7 +121,9 @@ export async function embarquerFacturX(
   xml: string,
   options: OptionsFacturX
 ): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(pdf);
+  const lib = await import("pdf-lib");
+  const { AFRelationship, PDFName } = lib;
+  const doc = await lib.PDFDocument.load(pdf);
 
   doc.setTitle(`Facture ${options.numero}`);
   doc.setSubject("Facture électronique — Factur-X / EN 16931");
@@ -148,7 +151,7 @@ export async function embarquerFacturX(
   });
   doc.catalog.set(PDFName.of("Metadata"), doc.context.register(flux));
 
-  poserIntentionDeSortie(doc);
+  poserIntentionDeSortie(doc, lib);
 
   return doc.save();
 }
@@ -160,7 +163,7 @@ export async function embarquerFacturX(
  * quoi ces valeurs correspondent — soit toutes nos pages. C'était le seul
  * défaut relevé par le validateur, deux assertions sur six cent deux.
  */
-function poserIntentionDeSortie(doc: PDFDocument): void {
+function poserIntentionDeSortie(doc: PDFDocument, { PDFName, PDFString }: typeof import("pdf-lib")): void {
   const icc = doc.context.flateStream(profilSRGB(), {
     // Trois composantes : c'est un profil RVB.
     N: 3,

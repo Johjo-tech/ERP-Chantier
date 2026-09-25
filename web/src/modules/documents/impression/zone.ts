@@ -20,16 +20,49 @@ const DUREE_AVIS_MS = 6000;
 const FONDU_AVIS_MS = 250;
 /* Un refus de la base se lit plus longtemps qu'un avis d'avancement (app.js l. 3606). */
 const DUREE_REFUS_MS = 8000;
+/** `--bg` de l'ancienne feuille, fond de son `<body>` (index.html l. 11, 69). */
+const FOND_ANCIEN = "#F3F5F8";
 /* L'ancien laissait au navigateur ce délai pour ouvrir sa boîte d'impression
    avant de vider la zone (app.js l. 5101). */
 const NETTOYAGE_IMPRESSION_MS = 500;
 
-export function assurerPolices(): void {
-  if (document.querySelector(`link[href="${POLICES}"]`)) return;
+/** Les graisses que le gabarit emploie ; html2canvas ne dessine que ce qui est déjà chargé. */
+const FACES = ["400 10px Inter", "500 10px Inter", "600 10px Inter", "700 10px Inter", "600 10px Manrope", "700 10px Manrope", "800 10px Manrope", '500 10px "JetBrains Mono"', '600 10px "JetBrains Mono"'];
+/* Hors ligne, la feuille des polices ne répond jamais : au-delà, on imprime avec
+   les polices de repli, comme l'ancien dans la même situation. */
+const ATTENTE_POLICES_MS = 5000;
+
+/**
+ * Les polices de l'ancien squelette, posées dans `<head>` comme il le faisait.
+ * web/index.html les charge déjà ; ce repli sert l'espace client et les tests.
+ */
+export function assurerPolices(): HTMLLinkElement {
+  const existant = document.querySelector<HTMLLinkElement>(`link[href="${POLICES}"]`);
+  if (existant) return existant;
   const lien = document.createElement("link");
   lien.rel = "stylesheet";
   lien.href = POLICES;
   document.head.appendChild(lien);
+  return lien;
+}
+
+/**
+ * Attend que les polices du gabarit soient chargées : l'ancien les avait
+ * depuis l'ouverture de la page, et une capture faite avant tombe sur Arial —
+ * autres largeurs, autres coupures de ligne, autre PDF.
+ */
+async function policesPretes(): Promise<void> {
+  const lien = assurerPolices();
+  // Un environnement sans chargeur de polices (tests) imprime avec ce qu'il a.
+  if (!("fonts" in document)) return;
+  const feuille = lien.sheet
+    ? Promise.resolve()
+    : new Promise<void>((resoudre) => {
+        lien.addEventListener("load", () => resoudre(), { once: true });
+        lien.addEventListener("error", () => resoudre(), { once: true });
+      });
+  const chargement = feuille.then(() => Promise.allSettled(FACES.map((f) => document.fonts.load(f)))).then(() => document.fonts.ready);
+  await Promise.race([chargement, new Promise((r) => setTimeout(r, ATTENTE_POLICES_MS))]).catch((e: unknown) => console.warn("Polices du gabarit non chargées, repli", e));
 }
 
 export function zoneImpression(): HTMLElement {
@@ -108,14 +141,44 @@ export async function imprimerPiece(piece: PieceImprimee, action: ActionPdf, { a
   area.innerHTML = piece.html;
   area.style.display = "block";
   showToast(action === "save" ? "Enregistrement du PDF…" : "Génération du PDF…", "success");
+  const fonds = fondsDeLAncien();
   try {
-    await document.fonts.ready;
+    await policesPretes();
     await lancerGenerationPdf(area, piece.nomFichier, { action, apres });
   } catch (err) {
     console.error("PDF generation error", err);
     showToast("Impossible de produire le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
     throw err;
+  } finally {
+    fonds();
   }
+}
+
+/**
+ * html2canvas lit toujours le fond de `<html>` et de `<body>`, et le calque de
+ * html2pdf hérite de `<body>` sa couleur de texte ; or il ne sait pas lire les
+ * couleurs `oklch()` des jetons de web/, et refuse alors toute la capture. Le
+ * temps de la photographie, la page reprend le corps de l'ancien squelette
+ * (`html` transparent, `body{background:var(--bg); color:var(--text);
+ * font-family:var(--police-texte)}`, index.html l. 69) — ce qui est
+ * photographié ne change pas (D-PDF-04).
+ */
+function fondsDeLAncien(): () => void {
+  const html = document.documentElement.style;
+  const body = document.body.style;
+  const avant = { fond: html.backgroundColor, corps: body.backgroundColor, encre: body.color, police: body.fontFamily };
+  html.backgroundColor = "transparent";
+  body.backgroundColor = FOND_ANCIEN;
+  body.color = "var(--text)";
+  body.fontFamily = "var(--police-texte)";
+  document.body.classList.add("capture-pdf");
+  return () => {
+    document.body.classList.remove("capture-pdf");
+    html.backgroundColor = avant.fond;
+    body.backgroundColor = avant.corps;
+    body.color = avant.encre;
+    body.fontFamily = avant.police;
+  };
 }
 
 /** `setPrintOrientation` : l'orientation de la page imprimée par le navigateur. */
@@ -133,8 +196,8 @@ function setPrintOrientation(orientation: "portrait" | "landscape"): void {
  * Impression par le navigateur d'une zone en paysage — planning de la semaine
  * et registre du personnel (`printPlanning`, `imprimerRegistrePersonnel`).
  */
-export function imprimerZonePaysage(html: string, variables?: Record<string, string>): void {
-  assurerPolices();
+export async function imprimerZonePaysage(html: string, variables?: Record<string, string>): Promise<void> {
+  await policesPretes();
   const area = zoneImpression();
   poserPalette(area, variables);
   area.innerHTML = html;
