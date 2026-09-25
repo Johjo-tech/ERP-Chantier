@@ -49,9 +49,33 @@ export interface ClientConnu {
 }
 
 export type RapprochementClient =
-  | { type: "exact" | "prefixe"; client: ClientConnu }
+  | { type: "exact" | "prefixe" | "contenu"; client: ClientConnu }
   | { type: "ambigu"; candidats: ClientConnu[] }
   | { type: "aucun" };
+
+/** En deçà, un fragment ne distingue plus rien : « sci » est dans tout. */
+const FRAGMENT_MIN = 4;
+
+/** Ce qui sépare deux mots dans un nom : ce qui peut ouvrir ou fermer un sigle. */
+const BORNE_MOT = /[\s(),.\-\/]/;
+
+/**
+ * `fragment` apparaît-il dans `nom` en ouvrant ET en fermant un mot ?
+ *
+ * L'ancrage des deux côtés est ce qui distingue ce rapprochement d'un
+ * « contient » : « milly » ne retrouve pas « millyon », et « sem4v » ne
+ * retrouve pas « sem4value ».
+ */
+function fragmentAncre(nom: string, fragment: string): boolean {
+  for (let i = nom.indexOf(fragment); i !== -1; i = nom.indexOf(fragment, i + 1)) {
+    const avant = i === 0 ? "" : nom.charAt(i - 1);
+    const apres = nom.charAt(i + fragment.length);
+    if ((avant === "" || BORNE_MOT.test(avant)) && (apres === "" || BORNE_MOT.test(apres))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * À quel client cette pièce se rattache-t-elle ?
@@ -66,10 +90,27 @@ export type RapprochementClient =
  * Sur les douze clients de l'export 2025, l'égalité exacte en reconnaît deux ;
  * le préfixe en reconnaît deux de plus, dont le deuxième client de la société.
  *
- * ── POURQUOI LE PRÉFIXE ET PAS « CONTIENT » ────────────────────────────────
- * Le préfixe est ancré : un nom commercial complet COMMENCE par la raison
- * sociale. « contient » rapprocherait « HABITAT » de tout, et l'ancrage est ce
- * qui rend la règle explicable à quelqu'un qui relit le rapport.
+ * ── LE PRÉFIXE, PUIS LE FRAGMENT ANCRÉ ─────────────────────────────────────
+ * Le préfixe est ancré à gauche : un nom commercial complet COMMENCE par la
+ * raison sociale. Mais tous ne la portent pas en tête — un SIGLE se met
+ * volontiers en FIN de nom, et le logiciel comptable, lui, ne garde que lui.
+ * « SEM4V » est ainsi le dernier mot d'une raison sociale que le fichier
+ * n'écrit pas : ni exact, ni préfixe, et la pièce partait créer un doublon.
+ *
+ * D'où un troisième niveau, sous trois gardes qui le rendent aussi explicable
+ * que les deux premiers :
+ *
+ *   1. le fragment est ANCRÉ des DEUX côtés — il ouvre et ferme un mot. Sans
+ *      quoi « SCI MILLY » attraperait « SCI MILLYON » ;
+ *   2. il compte au moins quatre caractères : en deçà, un sigle ne distingue
+ *      rien ;
+ *   3. il ne désigne qu'UN client. Deux candidats ne se départagent pas —
+ *      c'était déjà la règle du préfixe, et c'est ce qui empêche « HABITAT »
+ *      de se rapprocher de tout : il en trouverait trois, donc aucun.
+ *
+ * Le rapport le nomme à part : « probablement » n'est pas « trouvé », et sur
+ * des pièces qu'on ne pourra plus supprimer, la nuance doit se lire avant
+ * d'écrire.
  *
  * L'exact passe AVANT le préfixe, et cet ordre n'est pas cosmétique : « CDC
  * HABITAT » est le préfixe de « CDC HABITAT SOCIAL… » autant que de lui-même.
@@ -91,8 +132,26 @@ export function rapprocherClient(nom: string, existants: ClientConnu[]): Rapproc
     const k = cleNom(c.nom);
     return k.startsWith(cle) && /[\s(,-]/.test(k.charAt(cle.length));
   });
-  if (prefixes.length === 1) return { type: "prefixe", client: prefixes[0] };
-  if (prefixes.length > 1) return { type: "ambigu", candidats: prefixes };
+  /* Le sigle en fin de nom, ou au milieu. Ancré des deux côtés, et assez long
+     pour distinguer — les deux premières gardes détaillées plus haut. */
+  const fragments =
+    cle.length >= FRAGMENT_MIN
+      ? existants.filter((c) => fragmentAncre(cleNom(c.nom), cle))
+      : [];
+
+  /* La troisième garde, et elle compte les deux niveaux ENSEMBLE. Un préfixe
+     et un sigle qui désignent deux fiches différentes — « SEM4V ANNECY » et
+     « REGIE SEM4V » — ne se départagent pas : le préfixe l'emportait en
+     silence, alors que rien ne dit laquelle des deux a émis la pièce. Mieux
+     vaut une fiche créée en trop, visible dans l'aperçu, qu'une facture
+     indestructible attachée au mauvais client. */
+  const candidats = [...new Set([...prefixes, ...fragments])];
+  if (candidats.length > 1) return { type: "ambigu", candidats };
+  if (candidats.length === 1) {
+    return prefixes.length === 1
+      ? { type: "prefixe", client: candidats[0] }
+      : { type: "contenu", client: candidats[0] };
+  }
 
   return { type: "aucun" };
 }
@@ -390,6 +449,22 @@ export interface OptionsImportFactures {
 
 /** Un centime de tolérance, et pas davantage : ce sont des pièces comptables. */
 const TOLERANCE = 0.011;
+
+/**
+ * Les taux de TVA qui existent en France. Tout le reste est une MOYENNE.
+ *
+ * Une pièce qui mêle deux taux n'en a pas un : l'export du client y écrit la
+ * moyenne pondérée, arrondie à deux décimales — 7,93 %, 8,80 %, 7,16 %. Sur
+ * l'export 2025, FAC000258 porte ainsi 675 € HT et 53,55 € de TVA : 310 € à
+ * 5,5 % et 365 € à 10 %. Aucun taux unique ne redonne ce montant, et le
+ * recalculer depuis la moyenne arrondie ne peut pas retomber juste.
+ */
+const TAUX_LEGAUX = [20, 10, 5.5, 2.1, 0];
+
+/** Ce taux est-il un vrai taux, ou la moyenne d'une pièce à plusieurs taux ? */
+function tauxLegal(taux: number): boolean {
+  return TAUX_LEGAUX.some((t) => Math.abs(t - taux) < 0.001);
+}
 
 const vide: TotauxFichier = {
   pieces: 0,
@@ -697,7 +772,23 @@ export function analyserExportFactures(
     }
 
     const tva = nombre(champ(ENTETE_TVA));
-    if (tva !== null && Math.abs((ht * taux) / 100 - tva) > TOLERANCE) {
+    /* Recalculer la TVA n'a de sens que depuis un VRAI taux. Sur une pièce à
+       plusieurs taux, la colonne porte leur moyenne arrondie : le contrôle
+       refusait alors six pièces parfaitement justes de l'export 2025, et avec
+       elles le fichier entier. On dit ce qu'on ne peut pas vérifier, plutôt
+       que de le vérifier de travers — et `TTC = HT + TVA`, la seule identité
+       qui engage vraiment, reste contrôlée juste en dessous. */
+    if (tva !== null && !tauxLegal(taux)) {
+      signalements.push({
+        ligne: l.numero,
+        code: numero,
+        motif:
+          `Taux ${taux} % : ce n'est pas un taux de TVA, mais la moyenne d'une pièce ` +
+          `à plusieurs taux. Les montants sont repris tels quels et le TTC est vérifié ; ` +
+          `la ventilation par taux, elle, est perdue — la pièce ne pourra pas être ` +
+          `transmise en facture électronique.`,
+      });
+    } else if (tva !== null && Math.abs((ht * taux) / 100 - tva) > TOLERANCE) {
       refuser(
         `TVA incohérente : ${tva} annoncé, ${((ht * taux) / 100).toFixed(2)} attendu (${ht} × ${taux} %).`
       );

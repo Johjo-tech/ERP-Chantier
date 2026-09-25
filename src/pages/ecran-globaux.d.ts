@@ -34,6 +34,7 @@ declare global {
     UNITES_DEFAUT: any;
     XLSX: any;
     actionsFacturation: any;
+    actionsFacture: any;
     actionsTache: any;
     adresseElectroniqueParDefaut: any;
     affichePrix: any;
@@ -171,6 +172,7 @@ declare global {
     montantPropose: any;
     montantsParMetier: any;
     motifLectureSeule: any;
+    motifRoleFacture: any;
     multiWordMatch: any;
     natureDuFichier: any;
     nextNumero: any;
@@ -208,6 +210,7 @@ declare global {
     referentielCompose: any;
     referentielMetiers: any;
     refusAvoir: any;
+    refusGesteFacture: any;
     refusImputation: any;
     refusImputationAvoir: any;
     refusReglement: any;

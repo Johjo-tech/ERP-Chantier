@@ -273,14 +273,17 @@ export interface SaisieAvoir {
 }
 
 /**
- * Ce qui interdit d'établir cet avoir, ou `null` si rien.
+ * Ce qui interdit de rectifier CETTE pièce, le motif mis à part.
  *
  * L'avoir rectifie une pièce **déjà émise** : tant que la facture est un
  * brouillon, elle se corrige elle-même, et un avoir n'aurait rien à annuler —
  * il consommerait un numéro de la série pour rien.
+ *
+ * Séparé du motif parce que la question se pose deux fois, et pas au même
+ * moment : l'écran doit savoir s'il propose le geste **avant** d'ouvrir la
+ * saisie, là où aucun motif n'existe encore.
  */
-export function refusAvoir(saisie: SaisieAvoir): string | null {
-  const facture = saisie?.facture;
+export function refusAvoirSurPiece(facture?: SaisieAvoir["facture"]): string | null {
   if (!facture) return "Facture introuvable.";
 
   if (!String(facture.numero ?? "").trim()) {
@@ -290,6 +293,20 @@ export function refusAvoir(saisie: SaisieAvoir): string | null {
   if (estAvoir(facture.typeDocument)) {
     return "Un avoir ne s'annule pas par un autre avoir : il faut refacturer.";
   }
+
+  return null;
+}
+
+/**
+ * Ce qui interdit d'établir cet avoir, ou `null` si rien.
+ *
+ * La pièce d'abord, le motif ensuite : l'ordre compte, un brouillon sans motif
+ * doit s'entendre dire qu'il n'a rien à rectifier, pas qu'il lui manque une
+ * justification.
+ */
+export function refusAvoir(saisie: SaisieAvoir): string | null {
+  const refus = refusAvoirSurPiece(saisie?.facture);
+  if (refus) return refus;
 
   if (String(saisie?.motif ?? "").trim().length < LONGUEUR_MOTIF_MIN) {
     return "Le motif est obligatoire : il s'imprime sur l'avoir et justifie la rectification.";

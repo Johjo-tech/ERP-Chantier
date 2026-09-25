@@ -1329,6 +1329,14 @@ async function changerSociete(code){
      les garder afficherait une liste filtrée sans que la barre, hors écran,
      explique pourquoi. */
   state.recherches = {};
+  /* Le catalogue ne vit pas en mémoire comme les autres collections : `loadAll`
+     ne le rafraîchit donc pas, et son état survivait à la bascule. L'écran
+     gardait les articles, la page ET le nombre de pages de la société qu'on
+     venait de quitter — `chargement` étant à false, il n'interrogeait même pas
+     la base. Cliquer « Suivant » envoyait alors chercher une page qui
+     n'existait que dans l'autre catalogue, et la réponse vide s'annonçait
+     « Le catalogue est vide ». */
+  state.catalogue = null;
   state.currentRole = window.roleEffectif();
   appliquerCouleurSociete();
   document.body.classList.toggle('role-technicien', state.currentRole==='technicien');
@@ -3578,7 +3586,21 @@ async function rechargerType(type){
   if(COLLECTIONS_ETAT[type]) await recharger(type);
   else await loadAll();
 }
+/* Ce qui interdit de supprimer, selon le type — AVANT la confirmation, et avec
+   la phrase que la base opposerait. `deleteItem` sert quinze collections : la
+   règle propre à l'une d'elles se lit dans cette table, elle ne s'écrit pas
+   dans le geste générique. Les types absents ne refusent rien, comme avant. */
+const REFUS_SUPPRESSION = {
+  facture: id => {
+    const f = state.factures.find(x => x.id === id);
+    return f && window.refusGesteFacture ? window.refusGesteFacture('supprimer', f) : null;
+  },
+};
 async function deleteItem(type, id){
+  /* Avant la confirmation : demander « supprimer définitivement ? » pour
+     refuser ensuite est exactement le défaut qu'on ferme. */
+  const refusSuppression = REFUS_SUPPRESSION[type] && REFUS_SUPPRESSION[type](id);
+  if(refusSuppression){ showToast(refusSuppression, 'danger', 8000); return; }
   if(!confirm('Supprimer définitivement cet élément ?')) return;
   /* Les tables filles partent en cascade avec le salarié, mais pas les
      fichiers du bucket : sans ce passage, le stockage garderait les contrats
@@ -3960,7 +3982,15 @@ function validiteDevis(doc){
 }
 
 function metaDocHTML(type, doc){
-  const l = [['Numéro', esc(doc.numero)], ["Date d'émission", fmtDate(doc.date)]];
+  /* Un brouillon sortait avec un champ « Numéro » VIDE sous un titre qui annonce
+     une facture — un document qui a l'air d'une pièce comptable et n'en est pas.
+     L'application ne l'imprime plus, mais un Cmd+P sur l'aperçu, lui, ne passe
+     par aucun bouton. */
+  const numero = String(doc.numero || '').trim();
+  const l = [
+    [numero? 'Numéro' : 'État', numero? esc(numero) : 'Brouillon — non émis'],
+    ["Date d'émission", fmtDate(doc.date)],
+  ];
   if(type==='devis'){
     const v = validiteDevis(doc);
     /* La durée EN PLUS de la date : « 24/10/2026 » ne dit pas si l'offre tenait
@@ -4045,8 +4075,9 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
   const em = {
     /* La raison sociale AVANT le nom d'usage : « KTA PLOMBERIE » est ce que le
        client doit lire sur une facture, pas « KTA Plomberie », qui n'est qu'un
-       libellé de navigation. `instantaneIdentite` fige déjà la première — on
-       retombait sur la seconde dès qu'un document ne la portait pas. */
+       libellé de navigation. `identiteEmetteur` fige déjà la première à la
+       naissance de la pièce — on retombait sur la seconde dès qu'un document
+       ne la portait pas. */
     nom: doc.emetteurNom || s.raisonSocialeLegale || socName,
     adresse: doc.emetteurAdresse || s.adresse,
     /* Jamais relus, alors qu'ils sont enregistrés des deux côtés : l'en-tête
@@ -4328,7 +4359,15 @@ function printDocument(type, id, action){
   const doc = resolu && resolu.doc;
   const area = document.getElementById('printArea');
   if(!area || !doc) return;
-  if(type==='facture') marquerFactureVerrouillee(id);
+  /* Le garde vit ICI et pas seulement sur les boutons de la carte : la fenêtre
+     d'aperçu (`printCurrentView`, ses deux boutons sont dans index.html) et le
+     modal d'envoi passent par le même chemin. Masquer trois boutons en
+     laisserait deux autres grands ouverts, et un brouillon sortirait en deux
+     clics. */
+  if(type==='facture'){
+    const refus = window.refusGesteFacture && window.refusGesteFacture('imprimer', doc);
+    if(refus){ showToast(refus, 'danger', 7000); return; }
+  }
   if(typeof html2pdf === 'undefined'){
     showToast("Le générateur de PDF n'a pas pu se charger (connexion internet bloquée ?). Utilisez Ctrl+P / Cmd+P pour imprimer ou enregistrer en PDF depuis le navigateur.");
     return;
@@ -4743,6 +4782,8 @@ async function transmettreALaPlateforme(factureId){
     showToast("La transmission n'est pas disponible.");
     return;
   }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('transmettre', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
   if(!confirm(`Déposer la facture ${f.numero} sur la plateforme ?\n\nUne facture transmise ne peut plus être modifiée : il faudrait émettre un avoir.`)) return;
 
   showToast('Transmission en cours…');
@@ -5157,6 +5198,9 @@ function renderFactures(){
      le défaut que ce fichier a déjà connu avec les factures de sous-traitants.
      L'onglet ne les isole pas, il les rend trouvables. */
   const avoirs = list.filter(f=>window.estAvoir(f.typeDocument));
+  /* Le rôle ne change pas d'une carte à l'autre : il se dit une fois, en tête,
+     plutôt que cinquante fois sous cinquante barres d'actions. */
+  const motifRole = window.motifRoleFacture();
   return `
     <div class="plus-subnav" style="justify-content:center;">
       <button class="plus-subnav-btn ${view==='liste'?'active':''}" onclick="setFacturesView('liste')">Factures</button>
@@ -5167,7 +5211,8 @@ function renderFactures(){
     </div>
     <div class="page-head"><h1>${view==='reglements'?'Règlements': view==='avoirs'?'Avoirs':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : `<div style="display:flex; gap:8px;">
       ${peutImporterFactures()? '<button class="btn" onclick="ouvrirImportFactures()">📥 Reprendre un historique</button>':''}
-      <button class="btn primary" onclick="openForm('facture')">+ Nouvelle facture</button></div>`}</div>
+      ${(!window.autorise || window.autorise('factures','creer'))? `<button class="btn primary" onclick="openForm('facture')">+ Nouvelle facture</button>`:''}</div>`}</div>
+    ${motifRole? `<div class="card-sub" style="margin:0 0 12px;">${esc(motifRole)}</div>` : ''}
     ${(state.formOpen.facture || view==='reglements') ? '' : barreFiltresFactures(view)}
     ${view==='liste'? `<div id="formZoneFacture">${state.formOpen.facture? factureForm() : ''}</div>
     ${state.formOpen.facture ? '' : `<div id="factureListZone">${renderFacturesListHTML(list)}</div>`}` : ''}
@@ -5285,6 +5330,7 @@ function telechargerRapportFactures(){
   (a? a.clients : []).forEach(c => lignes.push({ ligne:0,
     motif:`Client « ${c.nom} » — ${c.rapprochement === 'exact' ? 'fiche trouvée'
       : c.rapprochement === 'prefixe' ? 'rapproché de « '+c.versNom+' »'
+      : c.rapprochement === 'contenu' ? 'probablement « '+c.versNom+' » (nom retrouvé dans la raison sociale)'
       : 'aucune fiche : elle sera créée'} (${c.pieces} pièces)`, contenu:c.code||'' }));
   lignes.sort((a2,b2)=>a2.ligne-b2.ligne);
   const blob = new Blob(['﻿' + window.rapportRejetsCsv(lignes)], {type:'text/csv;charset=utf-8'});
@@ -5387,6 +5433,10 @@ function importFacturesHTML(){
       <ul style="margin:0; padding-left:18px;">${a.clients.map(c=>`<li>${esc(c.nom)} <span class="card-sub">— ${c.pieces} pièce${c.pieces>1?'s':''}, ${moneyDisplay(c.ht)}</span> : ${
         c.rapprochement==='exact'? 'fiche existante'
         : c.rapprochement==='prefixe'? `rapproché de <b>${esc(c.versNom)}</b>`
+        /* « probablement », et pas « rapproché » : le nom du fichier n'est qu'un
+           fragment de la raison sociale — un sigle en fin de nom. Sur des pièces
+           qu'on ne pourra plus supprimer, la nuance se lit avant d'écrire. */
+        : c.rapprochement==='contenu'? `<b>probablement</b> ${esc(c.versNom)} <span class="card-sub">— « ${esc(c.nom)} » retrouvé dans la raison sociale, à vérifier</span>`
         : '<b>aucune fiche — elle sera créée</b>'}</li>`).join('')}</ul>
       ${a.clientsACreer.length? `<div class="card-sub" style="margin-top:6px;">${a.clientsACreer.length>1
         ? `${a.clientsACreer.length} fiches seront créées avec le seul nom du fichier. Complétez-les ensuite`
@@ -5856,6 +5906,79 @@ function factureMatchesSearch(f, q){
 
    Supprimées, donc, au profit de `filterFactureCritere` + `rafraichirZoneFactures`.
    Rien ne signalait ce doublon : ce fichier échappe au contrôle de types. */
+/**
+ * La barre d'actions d'une facture : ce que l'état de la pièce et le rôle
+ * laissent faire, rien d'autre.
+ *
+ * Plus aucun bouton grisé. Un geste indisponible ne s'affiche pas — et ce que
+ * la barre ne dit plus, la ligne posée sous elle le dit une fois, avec la
+ * phrase que le refus opposerait. Un `title` sur un bouton désactivé ne se lit
+ * pas : c'est ce qui laissait cliquer « Supprimer » sur une facture émise pour
+ * ne rien obtenir.
+ *
+ * Même forme que `bandeauTacheHTML` : un tableau qu'on pousse, jamais une
+ * cascade de ternaires — c'est là que vivaient les quatre conditions absentes.
+ */
+function boutonsFactureHTML(f, actions, verrou){
+  const id = jsAttr(f.id);
+  const boutons = [];
+
+  /* Un bouton pour deux gestes. « Modifier » sur une facture émise était un
+     mensonge : le formulaire s'ouvrait en lecture seule et la base refusait
+     toute écriture. Le titre porte la phrase qu'elle opposerait. */
+  boutons.push(actions.peutModifier
+    ? `<button class="btn small" onclick="editItem('facture','${id}')">Modifier</button>`
+    : `<button class="btn small" onclick="editItem('facture','${id}')"${verrou? ` title="${esc(verrou.libelle)}"`:''}>👁 Consulter</button>`);
+
+  /* Sans numéro, la pièce ne sort pas : le document imprimé porterait un champ
+     « Numéro » vide sous un titre qui annonce une facture. */
+  if(actions.peutImprimer){
+    boutons.push(`<button class="btn small" onclick="printDocument('facture','${id}','save')">Imprimer / PDF</button>`);
+  }
+  if(actions.peutEnvoyer){
+    boutons.push(`<button class="btn small" onclick="envoyerDocumentEmail('facture','${id}')">Envoyer par email</button>`);
+  }
+
+  /* L'ÉMISSION. `emettreFacture` existait, exposée sur window — et rien ne
+     l'appelait : une facture née d'un devis, d'un rapport ou d'une situation de
+     travaux restait en brouillon SANS NUMÉRO, indéfiniment. Sans numéro elle ne
+     peut être ni remise au client, ni transmise à la plateforme. Le seul
+     déblocage qui restait était d'y saisir un règlement : le statut basculait,
+     et la base numérotait — le numéro légal attribué par un encaissement, hors
+     de tout ordre chronologique. C'est précisément ce que la migration de
+     numérotation interdit, au nom de l'article 242 nonies A de l'annexe II au
+     CGI. */
+  if(actions.peutEmettre){
+    boutons.push(`<button class="btn small primary" onclick="emettreLaFacture('${id}')" title="Attribuer son numéro définitif et la rendre transmissible">🧾 Émettre</button>`);
+  }
+
+  /* Pas de dépôt pour un particulier ni pour une entreprise étrangère : ces
+     opérations relèvent de l'e-reporting et n'ont rien à faire sur une
+     plateforme. Le cadre se lit sur la FICHE CLIENT, que la règle n'a pas —
+     cette condition-là reste donc ici. */
+  if(actions.peutTransmettre && passeParUnePlateforme(f)){
+    boutons.push(`<button class="btn small" onclick="transmettreALaPlateforme('${id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>`);
+  }
+
+  if(actions.peutEtablirAvoir){
+    boutons.push(`<button class="btn small" onclick="etablirAvoirPour('${id}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`);
+  }
+
+  /* Le stock d'avoirs du client ne se lit pas non plus dans la règle : elle dit
+     que le geste est ouvert, l'écran vérifie qu'il a de quoi l'alimenter. */
+  if(actions.peutImputerAvoir && peutReglerParAvoir(f)){
+    boutons.push(`<button class="btn small" onclick="reglerParAvoir('${id}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>`);
+  }
+
+  if(actions.peutDupliquer){
+    boutons.push(`<button class="btn small" onclick="dupliquerFacture('${id}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`);
+  }
+  if(actions.peutSupprimer){
+    boutons.push(`<button class="btn small danger" onclick="deleteItem('facture','${id}')">Supprimer</button>`);
+  }
+
+  return boutons;
+}
 function renderFacturesListHTML(list, vue){
   const criteres = criteresFactures(vue || 'liste');
   const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
@@ -5876,6 +5999,7 @@ function renderFacturesListHTML(list, vue){
        moitié se lisait « impayée » sans qu'on sache qu'un acompte était tombé. */
     const reg = reglementStatutFacture(f);
     const verrou = window.verrouFacture(f);
+    const actions = window.actionsFacture(f);
     const numerosBC = numerosBCdeLaFacture(f);
     const estUnAvoir = window.estAvoir(f.typeDocument);
     const rectifiee = f.factureRectifieeId ? state.factures.find(x=>x.id===f.factureRectifieeId) : null;
@@ -5899,51 +6023,15 @@ function renderFacturesListHTML(list, vue){
         : `<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}`}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      ${/* « Modifier » sur une facture émise était un mensonge : le formulaire
-            s'ouvrait en lecture seule et la base refusait toute écriture. Le
-            bouton dit maintenant ce qu'il fait. */''}
-      ${verrou && verrou.code === 'emise'
-        ? `<button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')" title="${esc(verrou.libelle)}">👁 Consulter</button>`
-        : `<button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')">Modifier</button>`}
-      <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
-      <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
-      ${/* L'ÉMISSION. `emettreFacture` existait, testée et exposée sur window —
-            et rien ne l'appelait : aucun bouton, aucun sélecteur de statut. Une
-            facture née d'un devis, d'un rapport ou d'une situation de travaux
-            restait donc en brouillon SANS NUMÉRO, indéfiniment. 46 en base, dont
-            13 hors jeu d'essai, la plus ancienne du 31 juillet.
-
-            Sans numéro elle ne peut être ni remise au client, ni transmise à la
-            plateforme. Le seul déblocage qui restait était d'y saisir un
-            règlement : le statut basculait, et la base numérotait — le numéro
-            légal attribué par un encaissement, hors de tout ordre chronologique.
-            C'est précisément ce que la migration de numérotation interdit, au nom
-            de l'article 242 nonies A de l'annexe II au CGI. */''}
-      ${!f.numero && !estUnAvoir && (!window.actionsFacturation || window.actionsFacturation().peutFacturer)
-        ? `<button class="btn small primary" onclick="emettreLaFacture('${jsAttr(f.id)}')" title="Attribuer son numéro définitif et la rendre transmissible">🧾 Émettre</button>`
-        : ''}
-      ${/* Pas de dépôt pour un particulier ni pour une entreprise étrangère :
-            ces opérations relèvent de l'e-reporting et n'ont rien à faire sur
-            une plateforme. Le bouton s'affichait dès que la facture avait un
-            numéro, ouvrait une confirmation alarmante sur l'irréversibilité,
-            puis refusait à tous les coups. */''}
-      ${(f.numero && passeParUnePlateforme(f))? `<button class="btn small" onclick="transmettreALaPlateforme('${jsAttr(f.id)}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
-      ${/* Le bouton absent ne s'expliquait pas : sur un brouillon — et les
-            brouillons sont en TÊTE de liste, la plus récente d'abord — on
-            cherchait un avoir qui n'était nulle part. Il reste donc visible,
-            désactivé, et dit pourquoi. */''}
-      ${estUnAvoir? '' : (f.numero
-        ? `<button class="btn small" onclick="etablirAvoirPour('${jsAttr(f.id)}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
-        : `<button class="btn small" disabled title="Cette facture n'est pas émise : elle n'a pas de numéro, et se corrige directement par « Modifier ». Un avoir n'aurait rien à rectifier.">↩ Établir un avoir</button>`)}
-      ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
-      ${estUnAvoir? '' : `<button class="btn small" onclick="dupliquerFacture('${jsAttr(f.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
-      ${/* Le refus venait de la base, en 23001, avec une phrase que personne ne
-            lisait : le bouton partait, la confirmation s'affichait, et rien ne
-            se passait. Il reste visible, désactivé, et dit pourquoi. */''}
-      ${verrou && verrou.code === 'emise'
-        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
-        : `<button class="btn small danger" onclick="deleteItem('facture','${jsAttr(f.id)}')">Supprimer</button>`}
-    </div></div>`;
+      ${boutonsFactureHTML(f, actions, verrou).join('')}
+    </div>
+    ${/* Les boutons masqués emportent leur explication avec eux : un brouillon
+          n'a plus ni « Imprimer », ni « Envoyer », ni « Établir un avoir », et
+          rien ne disait pourquoi. Elle se lit maintenant une fois, sous la
+          barre, plutôt que dans le `title` de trois boutons grisés que
+          personne n'ouvrait. Une pièce émise, elle, n'a rien à justifier. */''}
+    ${actions.peutImprimer? '' : `<div class="card-sub" style="margin-top:8px;">${esc(window.refusGesteFacture('imprimer', f))}</div>`}
+    </div>`;
   }).join('');
 }
 function factureForm(){
@@ -5956,7 +6044,15 @@ function factureForm(){
   const verrou = e.id ? window.verrouFacture(e) : null;
   const emise = !!(verrou && verrou.code === 'emise');
   const verrouillee = !!(verrou && verrou.code === 'telechargee');
-  const fige = !!verrou;
+  /* Trois raisons de ne pas écrire, un seul voile : la pièce est émise, elle
+     attend son déverrouillage, ou le rôle ne donne que la lecture — un compte
+     lecture saisissait jusqu'ici la facture entière avant que la RLS ne la
+     refuse. Une pièce qui n'existe pas encore n'a pas d'état : c'est
+     `factures/creer` qui décide. */
+  const peutEcrire = e.id
+    ? window.actionsFacture(e).peutModifier
+    : (!window.autorise || window.autorise('factures','creer'));
+  const fige = !peutEcrire;
   const unAvoir = window.estAvoir(e.typeDocument);
   const rectifieeEcran = e.factureRectifieeId ? state.factures.find(f=>f.id===e.factureRectifieeId) : null;
   return `
@@ -5968,7 +6064,7 @@ function factureForm(){
       ${unAvoir? '' : `<button type="button" class="btn small" onclick="etablirAvoirPour('${jsAttr(e.id)}')" title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>`}
     </div>` : verrouillee? `<div class="facture-verrou-banner">
       <span>🔒 ${esc(verrou.libelle)}</span>
-      <button type="button" class="btn small danger" onclick="deverrouillerFacture('${jsAttr(e.id)}')">🔓 Déverrouiller pour modifier</button>
+      ${(!window.autorise || window.autorise('factures','modifier'))? `<button type="button" class="btn small danger" onclick="deverrouillerFacture('${jsAttr(e.id)}')">🔓 Déverrouiller pour modifier</button>`:''}
     </div>` : ''}
     ${unAvoir && rectifieeEcran? `<div class="numref" style="margin-bottom:10px;">Rectifie la facture ${esc(rectifieeEcran.numero)} du ${fmtDate(rectifieeEcran.date)}${e.motifRectification? ' — '+esc(e.motifRectification):''}</div>`:''}
     <div style="${fige? 'pointer-events:none; opacity:.55;' : ''}">
@@ -6041,12 +6137,17 @@ function factureForm(){
             règlement — les deux derniers sont dans le bandeau ci-dessus et
             dans l'onglet Règlements. */''}
       ${emise
-        ? `${unAvoir? '' : `<button class="btn primary" onclick="dupliquerFacture('${jsAttr(e.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
+        ? `${(e.id && window.actionsFacture(e).peutDupliquer)? `<button class="btn primary" onclick="dupliquerFacture('${jsAttr(e.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`:''}
            <button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`
-        : `<button class="btn primary" onclick="saveFacture()" ${verrouillee?'disabled':''}>Enregistrer la facture</button>
-           <button class="btn" onclick="saveFacture(true)" ${verrouillee?'disabled':''} title="Garder la saisie en cours sans refermer, et sans attribuer de numéro">💾 Enregistrer le brouillon</button>
+        : peutEcrire
+          ? `<button class="btn primary" onclick="saveFacture()">Enregistrer la facture</button>
+           <button class="btn" onclick="saveFacture(true)" title="Garder la saisie en cours sans refermer, et sans attribuer de numéro">💾 Enregistrer le brouillon</button>
            <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>
-           ${horodatageBrouillonHTML()}`}
+           ${horodatageBrouillonHTML()}`
+          /* Verrouillée, ou rôle sans écriture : le bandeau au-dessus dit
+             laquelle des deux, et le seul geste qui reste est de refermer. Un
+             « Enregistrer » grisé n'apprenait rien à personne. */
+          : `<button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`}
     </div>
   </div>`;
 }
@@ -6060,8 +6161,10 @@ function factureForm(){
  * qu'on affiche ailleurs.
  */
 function refusEnregistrementFacture(e){
-  const verrou = e && e.id ? window.verrouFacture(e) : null;
-  return verrou && !verrou.reversible ? verrou.libelle : null;
+  /* Une pièce qui n'existe pas encore n'a pas d'état : sa création relève de
+     `factures/creer`, que le formulaire lit de son côté. */
+  if(!e || !e.id) return null;
+  return window.refusGesteFacture ? window.refusGesteFacture('modifier', e) : null;
 }
 
 async function saveFacture(brouillon){
@@ -6170,10 +6273,8 @@ async function saveFacture(brouillon){
 async function dupliquerFacture(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
-  if(window.estAvoir(f.typeDocument)){
-    showToast("Un avoir rectifie une facture précise : il ne se duplique pas.", 'danger', 6000);
-    return;
-  }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('dupliquer', f);
+  if(refus){ showToast(refus, 'danger', 6000); return; }
 
   const id = uid();
   const copie = {
@@ -6243,7 +6344,8 @@ async function emettreLaFacture(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.emettreFacture){ showToast("L'émission n'est pas disponible."); return; }
-  if(f.numero){ showToast(`Déjà émise sous le n° ${f.numero}.`); return; }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('emettre', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
 
   const t = computeDocTotals(f);
   if(!confirm(`Émettre la facture de ${esc(f.client)} pour ${moneyDisplay(t.ttc)} TTC ?\n\nElle recevra son numéro définitif. Son contenu ne pourra plus être modifié, et une correction devra passer par un avoir.`)) return;
@@ -6298,6 +6400,8 @@ function etablirAvoirPour(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.etablirAvoir){ showToast("L'établissement d'un avoir n'est pas disponible."); return; }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('avoir', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
 
   state.avoirCible = factureId;
   const ttc = Math.abs(computeDocTotals(f).ttc);
@@ -6412,6 +6516,8 @@ function reglerParAvoir(factureId){
   const f = state.factures.find(x=>x.id===factureId);
   if(!f) return;
   if(!window.imputerAvoir){ showToast("L'imputation n'est pas disponible."); return; }
+  const refus = window.refusGesteFacture && window.refusGesteFacture('imputerAvoir', f);
+  if(refus){ showToast(refus, 'danger', 7000); return; }
 
   const dispos = avoirsDisponiblesPour(f);
   if(!dispos.length){ showToast("Aucun avoir disponible pour ce client."); return; }
@@ -11831,8 +11937,6 @@ function emailModalDownload(){
   if(btn) btn.textContent = '✓ Téléchargé — vérifiez votre dossier Téléchargements';
 }
 function emailModalOpenMailClient(){
-  const ctx = state.emailModalCtx;
-  if(ctx && ctx.docType==='facture' && ctx.docId) marquerFactureVerrouillee(ctx.docId);
   const dest = document.getElementById('email_dest').value;
   const subject = encodeURIComponent(document.getElementById('email_subject').value);
   const body = encodeURIComponent(document.getElementById('email_body').value);
@@ -11860,56 +11964,15 @@ function envoyerRapportEmail(){
   const body = `Client : ${e.client||''}\n${infosLogement.join('\n')}\nDate : ${fmtDate(e.date)}\n\nConstatations :\n${r.constatations||''}\n\nPréconisations :\n${r.preconisations||''}`;
   openEmailComposeModal({dest, subject, body, pdfAction: ()=> printInterventionDraft('save')});
 }
-/**
- * Identité des deux parties, figée sur la facture.
- *
- * Jusqu'ici l'en-tête était recomposé à l'impression depuis les réglages
- * courants : changer le SIRET de la société réécrivait l'en-tête de toutes les
- * factures déjà émises. La facturation électronique l'interdit — une facture
- * transmise doit rester ce qu'elle était le jour de son émission.
- */
-function instantaneIdentite(f){
-  const s = state.settings[state.societeId] || {};
-  const client = (state.clients||[]).find(c => c.societeId===state.societeId && c.nom===f.client) || {};
-  const vide = (v) => (v===undefined || v===null || v==='') ? undefined : v;
+/* Le cadenas d'écran ne se pose plus : un brouillon ne s'imprime ni ne s'envoie
+   depuis qu'il faut un numéro pour sortir, et c'étaient ses deux seules
+   naissances. `deverrouillerFacture` reste pour les pièces qui le portent
+   déjà — elles doivent pouvoir s'ouvrir.
 
-  return {
-    emetteurNom: vide(s.raisonSocialeLegale) || vide(societeName(state.societeId)),
-    emetteurSiren: vide(s.siren) || vide(window.sirenDuSiret(s.siret)),
-    emetteurSiret: vide(s.siret),
-    emetteurTvaIntracom: vide(s.tvaIntracom),
-    emetteurAdresse: vide(s.adresse),
-    emetteurCodePostal: vide(s.codePostal),
-    emetteurVille: vide(s.ville),
-    emetteurPaysCode: vide(s.paysCode) || paysDefaut(),
-    emetteurIban: vide(s.iban),
-
-    clientSiren: vide(client.siren) || vide(window.sirenDuSiret(client.siret)),
-    clientSiret: vide(client.siret),
-    clientTvaIntracom: vide(client.tvaIntracom),
-    clientCodeRoutage: vide(client.codeRoutage),
-    clientCodeService: vide(client.codeService),
-    clientPaysCode: vide(client.paysCode) || paysDefaut(),
-    cadreFacturation: vide(client.cadreFacturation),
-  };
-}
-
-/* Le verrouillage est le moment où la facture part : c'est là qu'on fige. */
-async function marquerFactureVerrouillee(id){
-  const f = state.factures.find(x=>x.id===id);
-  if(!f || f.verrouillee) return;
-  /* Une facture ÉMISE est déjà figée par la base, définitivement : lui poser en
-     plus le verrou d'écran est sans objet, et l'écriture est refusée — 23001,
-     « son en-tête ne peut plus être modifié ». Imprimer une facture émise
-     laissait donc une erreur dans la console et une requête en 400, à chaque
-     fois. Le formulaire fait déjà cette distinction : `emise` l'emporte sur
-     `verrouillee`. */
-  if(f.numero) return;
-  f.verrouillee = true;
-  Object.assign(f, instantaneIdentite(f));
-  await window.stSet('facture:'+id, f);
-  await recharger('facture');
-}
+   L'instantané d'identité qui l'accompagnait est parti avec lui, sans rien
+   emporter : l'émetteur est figé par `createFacture` et `emettreFacture`
+   (`identiteEmetteur`), et le client par `rattacherClient`, à chaque écriture.
+   Le figer au TÉLÉCHARGEMENT était de toute façon le mauvais moment. */
 async function deverrouillerFacture(id){
   if(!confirm("Cette facture a déjà été téléchargée ou envoyée. Confirmez-vous vouloir la déverrouiller pour la modifier ?\n\nAttention : si le client a déjà reçu une version, pensez à lui renvoyer la version corrigée.")) return;
   const f = state.factures.find(x=>x.id===id);
@@ -11932,6 +11995,12 @@ function lignesLogementPourEmail(doc){
 function envoyerDocumentEmail(type, id){
   const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
   if(!doc) return;
+  /* Enfermée dans le type : un devis n'a pas de numéro à l'envoi, et la même
+     garde posée sans discernement les empêcherait tous de partir. */
+  if(type==='facture'){
+    const refus = window.refusGesteFacture && window.refusGesteFacture('envoyer', doc);
+    if(refus){ showToast(refus, 'danger', 7000); return; }
+  }
   const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===doc.client);
   const dest = client && client.email ? client.email : '';
   /* « Notre facture » sur un avoir, avec un montant négatif dans la phrase :
@@ -14373,11 +14442,16 @@ function chantierFacturesHTML(c){
     </div>
     ${facturesLiees.length? facturesLiees.map(f=>{
       const t = computeDocTotals(f);
+      /* La même pièce, la même règle : ces deux boutons vivaient ici sans aucune
+         condition, et sortaient un brouillon que la liste principale refuse. */
+      const actions = window.actionsFacture(f);
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
-        <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${jsAttr(f.id)}')">🧾 ${esc(f.numero)} — ${moneyDisplay(t.ttc)} TTC</a>
+        ${/* `esc(f.numero)` sur un brouillon donnait un lien sans libellé :
+              « 🧾  — 1 234,00 € TTC ». La liste sait déjà le dire. */''}
+        <a href="javascript:void(0)" onclick="ouvrirFactureDepuisChantier('${jsAttr(f.id)}')">🧾 ${f.numero? esc(f.numero) : 'Brouillon — non émise'} — ${moneyDisplay(t.ttc)} TTC</a>
         <span class="badge ${f.statut==='payée'?'success':f.statut==='impayée'?'danger':'info'}">${esc(f.statut||'brouillon')}</span>
-        <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
-        <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
+        ${actions.peutImprimer? `<button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>`:''}
+        ${actions.peutEnvoyer? `<button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>`:''}
       </div>`;
     }).join('') : '<div class="empty">Aucune facture pour l\'instant.</div>'}
   </div>`;
@@ -18780,6 +18854,19 @@ async function rafraichirCatalogue(){
     c.pages = page.pages;
     c.familles = familles;
     c.chargement = false;
+    /* L'échec précédent s'efface avec la réussite. Il ne s'effaçait nulle part :
+       une seule panne marquait l'écran à vie, « Catalogue indisponible » restant
+       affiché par-dessus des données parfaitement chargées. */
+    c.erreur = null;
+
+    /* Une page au-delà de la dernière ne laisse rien à afficher, et la liste
+       vide emportait la pagination avec elle : plus de « Précédent », donc plus
+       de retour possible. On revient de nous-mêmes — une seule fois, puisque
+       la page vaut 1 ensuite. */
+    if(!c.articles.length && c.page > 1){
+      c.page = 1;
+      c.chargement = true;
+    }
   }catch(err){
     console.error('Catalogue indisponible', err);
     c.chargement = false;
@@ -18830,7 +18917,20 @@ function catalogueListeHTML(c){
     </div>`;
 
   if(c.chargement) return filtres + '<div class="empty">Chargement du catalogue…</div>';
-  if(!c.articles.length) return filtres + `<div class="empty">${c.recherche||c.type||c.famille? 'Aucun article ne correspond.' : 'Le catalogue est vide. Importez un fichier ou créez un premier article.'}</div>`;
+  if(!c.articles.length){
+    /* « Le catalogue est vide » sur une page au-delà de la dernière faisait
+       douter de ce qu'il y avait en base. Trois situations, trois phrases — et
+       un bouton quand il y a quelque part où revenir. */
+    const message = c.page > 1
+      ? `Cette page n'existe plus : le catalogue en compte ${c.pages}.`
+      : (c.recherche||c.type||c.famille
+          ? 'Aucun article ne correspond.'
+          : 'Le catalogue est vide. Importez un fichier ou créez un premier article.');
+    const retour = c.page > 1
+      ? `<div style="margin-top:10px;"><button class="btn small" onclick="relancerCatalogue('page', 1)">← Revenir à la première page</button></div>`
+      : '';
+    return filtres + `<div class="empty">${esc(message)}${retour}</div>`;
+  }
 
   const lignes = c.articles.map(a=>`
     <tr${a.actif? '' : ' style="opacity:.55;"'}>
@@ -19689,7 +19789,6 @@ Object.assign(window, {
   importerBonCommande,
   imprimerRegistrePersonnel,
   initSignaturePad,
-  instantaneIdentite,
   integrerTravailDansLignes,
   interlocuteurForm,
   interlocuteurOptions,
@@ -19769,7 +19868,6 @@ Object.assign(window, {
   majSectionsEfacture,
   majTravailDirecteur,
   marquerFactureSTPayee,
-  marquerFactureVerrouillee,
   marquerMaterielRendu,
   marquerNotifsCocheesFaites,
   marquerPieceCommandee,

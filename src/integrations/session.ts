@@ -67,9 +67,18 @@ import {
   SECONDAIRE_DEFAUT,
 } from "@/api/regles-theme";
 import {
+  actionsFacture as reglesActionsFacture,
+  motifRoleFacture as reglesMotifRoleFacture,
+  refusGesteFacture as reglesRefusGesteFacture,
+  type ActionsFacture,
+  type DroitsFacture,
+  type GesteFacture,
+} from "@/api/regles-actions-facture";
+import {
   bonEstFacture,
   verrouBonCommande,
   verrouFacture,
+  type FactureVerrouillable,
 } from "@/api/regles-verrouillage";
 import {
   CRITERES_REGLEMENTS_VIDES,
@@ -632,6 +641,51 @@ export function actionsFacturation(
   };
 }
 
+export type { ActionsFacture, DroitsFacture, GesteFacture };
+
+/**
+ * Les droits du rôle courant sur une facture, résolus une fois.
+ *
+ * La matrice vit en base : `regles-actions-facture` ne peut pas l'interroger,
+ * et reçoit donc des booléens. Ils se résolvent ICI, au même endroit pour les
+ * trois écrans qui les lisent — la carte, le formulaire, la fiche chantier.
+ * Ailleurs, chacun en aurait sa version, et elles finiraient par différer.
+ */
+export function droitsFacture(role: RoleMembre | null = roleEffectif()): DroitsFacture {
+  return {
+    modifier: peut(role, "factures", "modifier"),
+    creer: peut(role, "factures", "creer"),
+    supprimer: peut(role, "factures", "supprimer"),
+    /* Hors matrice, et c'est un écart connu : `actionsFacturation` code le
+       circuit de facturation en dur. Le lire ici évite au module de règles
+       d'en recopier une seconde version. */
+    emettre: actionsFacturation(role).peutFacturer,
+    imputerAvoir: peut(role, "reglements", "creer"),
+  };
+}
+
+/** Ce que l'état de la pièce et le rôle laissent faire. */
+export function actionsFacture(
+  facture: FactureVerrouillable,
+  droits: DroitsFacture = droitsFacture()
+): ActionsFacture {
+  return reglesActionsFacture(facture, droits);
+}
+
+/** Le même refus que celui qui a masqué le bouton, mot pour mot. */
+export function refusGesteFacture(
+  geste: GesteFacture,
+  facture: FactureVerrouillable | null | undefined,
+  droits: DroitsFacture = droitsFacture()
+): string | null {
+  return reglesRefusGesteFacture(geste, facture, droits);
+}
+
+/** Pourquoi cet écran ne propose aucune écriture — `null` sinon. */
+export function motifRoleFacture(droits: DroitsFacture = droitsFacture()): string | null {
+  return reglesMotifRoleFacture(droits);
+}
+
 /** Fonctions mises à disposition du HTML historique. */
 export function injecterSession() {
   if (typeof window === "undefined") return;
@@ -846,6 +900,13 @@ export function injecterSession() {
   w.verrouFacture = verrouFacture;
   w.verrouBonCommande = verrouBonCommande;
   w.bonEstFacture = bonEstFacture;
+
+  /* Ce que l'état de la pièce ET le rôle laissent faire. Le même module dit le
+     geste ouvert et la phrase qui refuse les autres : la barre d'actions ne
+     peut donc pas proposer ce que le geste rejettera. */
+  w.actionsFacture = actionsFacture;
+  w.refusGesteFacture = refusGesteFacture;
+  w.motifRoleFacture = motifRoleFacture;
 
   /* Les filtres de l'écran des règlements. Le total suit la liste affichée :
      les deux sortent de la même fonction, ils ne peuvent pas diverger. */
