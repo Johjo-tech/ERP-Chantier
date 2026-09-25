@@ -23,6 +23,9 @@ a.btn, a.quick-action{ cursor:pointer; }
    passe sur deux lignes le montrait : « Importer un / fichier » centré dans
    l'ancien, calé à gauche ici. */
 a.btn{ text-align:center; justify-content:center; }
+/* Même chose pour un sous-onglet, qui s'étire à la hauteur du plus haut
+   (« Bons de commande » sur deux lignes) : le <button> centre aussi en hauteur. */
+a.plus-subnav-btn{ text-align:center; display:flex; align-items:center; justify-content:center; }
 a.traiter-row, a.activity-row, a.topclient-row, a.summary-row{ color:inherit; }
 a.stat-card{ display:block; color:inherit; }
 /* L'action rapide était un <button> sans couleur de texte : elle prenait celle

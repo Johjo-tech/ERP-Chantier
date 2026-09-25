@@ -16,7 +16,12 @@ import {
 const COLONNES =
   "id, societe_id, nom, cadre_facturation, siret, siren, tva_intracom, pays_code, adresse, code_postal, ville, email, telephone, contact_nom, facturation_adresse, facturation_code_postal, facturation_ville, delai_paiement_jours, delai_paiement_mode, mode_paiement, notes, code_service, code_routage, reference_engagement, numero_marche, reference_acheteur, adresse_electronique_schema, adresse_electronique_valeur, livraison_adresse, livraison_code_postal, livraison_ville, contact_telephone, contact_email";
 
-const schemaClientListe = schemaClient.extend({ interlocuteurs: z.array(z.object({ nom: z.string() })) });
+/** La liste montre chaque interlocuteur sous sa carte, comme l'ancien écran : il faut donc tout son contact. */
+const schemaClientListe = schemaClient.extend({
+  interlocuteurs: z.array(
+    z.object({ id: z.string(), nom: z.string(), fonction: z.string().nullable(), telephone: z.string().nullable(), email: z.string().nullable() })
+  ),
+});
 export type ClientListe = z.infer<typeof schemaClientListe>;
 
 /** Toute la liste, ou un refus : jamais une liste coupée par le plafond du serveur (TRV-10). */
@@ -25,7 +30,7 @@ export async function listerClients(societeId: string): Promise<ClientListe[]> {
     (debut, fin) =>
       supabase()
         .from("clients")
-        .select(`${COLONNES}, interlocuteurs(nom)`, { count: "exact" })
+        .select(`${COLONNES}, interlocuteurs(id, nom, fonction, telephone, email)`, { count: "exact" })
         .eq("societe_id", societeId)
         .order("nom")
         .order("id")

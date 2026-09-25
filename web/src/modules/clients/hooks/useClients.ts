@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { creerClient, listerClients, listerClientsRapprochables, lireClient, modifierClient, supprimerClient, usagesDuClient } from "../api/clients";
-import { creerInterlocuteur, listerInterlocuteurs, supprimerInterlocuteur } from "../api/interlocuteurs";
+import { creerInterlocuteur, listerInterlocuteurs, modifierInterlocuteur, supprimerInterlocuteur } from "../api/interlocuteurs";
 import type { SaisieClient } from "../domain/client";
 import type { SaisieInterlocuteur } from "../domain/interlocuteur";
 
@@ -56,22 +56,48 @@ export function useUsagesClient(id: string) {
   return useQuery({ queryKey: ["usages-client", id], queryFn: () => usagesDuClient(id) });
 }
 
+/** Les usages lus au moment du clic : la liste n'a pas à compter les pièces de chaque client pour rien. */
+export function useLireUsagesClient() {
+  const qc = useQueryClient();
+  return (id: string) => qc.fetchQuery({ queryKey: ["usages-client", id], queryFn: () => usagesDuClient(id) });
+}
+
 export function useInterlocuteurs(clientId: string) {
   return useQuery({ queryKey: clesClients.interlocuteurs(clientId), queryFn: () => listerInterlocuteurs(clientId) });
 }
 
-export function useAjouterInterlocuteur(clientId: string) {
+/** La liste des clients porte leurs interlocuteurs : toute écriture la relit aussi. */
+function useInvaliderInterlocuteurs(clientId: string) {
+  const societe = useSocieteActive();
   const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: clesClients.interlocuteurs(clientId) });
+    void qc.invalidateQueries({ queryKey: clesClients.liste(societe.id) });
+  };
+}
+
+export function useAjouterInterlocuteur(clientId: string) {
+  const invalider = useInvaliderInterlocuteurs(clientId);
   return useMutation({
     mutationFn: (s: SaisieInterlocuteur) => creerInterlocuteur(clientId, s),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: clesClients.interlocuteurs(clientId) }),
+    onSuccess: invalider,
+  });
+}
+
+/** Créer ou modifier, selon qu'un identifiant est donné (le formulaire de l'ancien sert aux deux). */
+export function useEnregistrerInterlocuteur(clientId: string) {
+  const invalider = useInvaliderInterlocuteurs(clientId);
+  return useMutation({
+    mutationFn: ({ id, saisie }: { id: string | null; saisie: SaisieInterlocuteur }) =>
+      id ? modifierInterlocuteur(id, saisie) : creerInterlocuteur(clientId, saisie),
+    onSuccess: invalider,
   });
 }
 
 export function useSupprimerInterlocuteur(clientId: string) {
-  const qc = useQueryClient();
+  const invalider = useInvaliderInterlocuteurs(clientId);
   return useMutation({
     mutationFn: supprimerInterlocuteur,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: clesClients.interlocuteurs(clientId) }),
+    onSuccess: invalider,
   });
 }

@@ -196,8 +196,7 @@ export const ECRANS: readonly Ecran[] = [
     compte: "admin",
     ancien: { chemin: "/", gestes: onglet("plus", { plusTab: "clients" }) },
     nouveau: { chemin: "/plus" },
-    seuils: { mobile: { pixels: 0.43, texte: 29 } },
-    aFaire: "Le cadre est repris ; la liste des clients dessous est un écran de module.",
+    seuils: { mobile: { pixels: 0.001, texte: 0 } },
   },
   // ── Les trois tableaux de bord ───────────────────────────────────────────
   {
