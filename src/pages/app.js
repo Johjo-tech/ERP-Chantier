@@ -4059,8 +4059,9 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
   const em = {
     /* La raison sociale AVANT le nom d'usage : « KTA PLOMBERIE » est ce que le
        client doit lire sur une facture, pas « KTA Plomberie », qui n'est qu'un
-       libellé de navigation. `instantaneIdentite` fige déjà la première — on
-       retombait sur la seconde dès qu'un document ne la portait pas. */
+       libellé de navigation. `identiteEmetteur` fige déjà la première à la
+       naissance de la pièce — on retombait sur la seconde dès qu'un document
+       ne la portait pas. */
     nom: doc.emetteurNom || s.raisonSocialeLegale || socName,
     adresse: doc.emetteurAdresse || s.adresse,
     /* Jamais relus, alors qu'ils sont enregistrés des deux côtés : l'en-tête
@@ -4351,7 +4352,6 @@ function printDocument(type, id, action){
     const refus = window.refusGesteFacture && window.refusGesteFacture('imprimer', doc);
     if(refus){ showToast(refus, 'danger', 7000); return; }
   }
-  if(type==='facture') marquerFactureVerrouillee(id);
   if(typeof html2pdf === 'undefined'){
     showToast("Le générateur de PDF n'a pas pu se charger (connexion internet bloquée ?). Utilisez Ctrl+P / Cmd+P pour imprimer ou enregistrer en PDF depuis le navigateur.");
     return;
@@ -11916,8 +11916,6 @@ function emailModalDownload(){
   if(btn) btn.textContent = '✓ Téléchargé — vérifiez votre dossier Téléchargements';
 }
 function emailModalOpenMailClient(){
-  const ctx = state.emailModalCtx;
-  if(ctx && ctx.docType==='facture' && ctx.docId) marquerFactureVerrouillee(ctx.docId);
   const dest = document.getElementById('email_dest').value;
   const subject = encodeURIComponent(document.getElementById('email_subject').value);
   const body = encodeURIComponent(document.getElementById('email_body').value);
@@ -11945,56 +11943,15 @@ function envoyerRapportEmail(){
   const body = `Client : ${e.client||''}\n${infosLogement.join('\n')}\nDate : ${fmtDate(e.date)}\n\nConstatations :\n${r.constatations||''}\n\nPréconisations :\n${r.preconisations||''}`;
   openEmailComposeModal({dest, subject, body, pdfAction: ()=> printInterventionDraft('save')});
 }
-/**
- * Identité des deux parties, figée sur la facture.
- *
- * Jusqu'ici l'en-tête était recomposé à l'impression depuis les réglages
- * courants : changer le SIRET de la société réécrivait l'en-tête de toutes les
- * factures déjà émises. La facturation électronique l'interdit — une facture
- * transmise doit rester ce qu'elle était le jour de son émission.
- */
-function instantaneIdentite(f){
-  const s = state.settings[state.societeId] || {};
-  const client = (state.clients||[]).find(c => c.societeId===state.societeId && c.nom===f.client) || {};
-  const vide = (v) => (v===undefined || v===null || v==='') ? undefined : v;
+/* Le cadenas d'écran ne se pose plus : un brouillon ne s'imprime ni ne s'envoie
+   depuis qu'il faut un numéro pour sortir, et c'étaient ses deux seules
+   naissances. `deverrouillerFacture` reste pour les pièces qui le portent
+   déjà — elles doivent pouvoir s'ouvrir.
 
-  return {
-    emetteurNom: vide(s.raisonSocialeLegale) || vide(societeName(state.societeId)),
-    emetteurSiren: vide(s.siren) || vide(window.sirenDuSiret(s.siret)),
-    emetteurSiret: vide(s.siret),
-    emetteurTvaIntracom: vide(s.tvaIntracom),
-    emetteurAdresse: vide(s.adresse),
-    emetteurCodePostal: vide(s.codePostal),
-    emetteurVille: vide(s.ville),
-    emetteurPaysCode: vide(s.paysCode) || paysDefaut(),
-    emetteurIban: vide(s.iban),
-
-    clientSiren: vide(client.siren) || vide(window.sirenDuSiret(client.siret)),
-    clientSiret: vide(client.siret),
-    clientTvaIntracom: vide(client.tvaIntracom),
-    clientCodeRoutage: vide(client.codeRoutage),
-    clientCodeService: vide(client.codeService),
-    clientPaysCode: vide(client.paysCode) || paysDefaut(),
-    cadreFacturation: vide(client.cadreFacturation),
-  };
-}
-
-/* Le verrouillage est le moment où la facture part : c'est là qu'on fige. */
-async function marquerFactureVerrouillee(id){
-  const f = state.factures.find(x=>x.id===id);
-  if(!f || f.verrouillee) return;
-  /* Une facture ÉMISE est déjà figée par la base, définitivement : lui poser en
-     plus le verrou d'écran est sans objet, et l'écriture est refusée — 23001,
-     « son en-tête ne peut plus être modifié ». Imprimer une facture émise
-     laissait donc une erreur dans la console et une requête en 400, à chaque
-     fois. Le formulaire fait déjà cette distinction : `emise` l'emporte sur
-     `verrouillee`. */
-  if(f.numero) return;
-  f.verrouillee = true;
-  Object.assign(f, instantaneIdentite(f));
-  await window.stSet('facture:'+id, f);
-  await recharger('facture');
-}
+   L'instantané d'identité qui l'accompagnait est parti avec lui, sans rien
+   emporter : l'émetteur est figé par `createFacture` et `emettreFacture`
+   (`identiteEmetteur`), et le client par `rattacherClient`, à chaque écriture.
+   Le figer au TÉLÉCHARGEMENT était de toute façon le mauvais moment. */
 async function deverrouillerFacture(id){
   if(!confirm("Cette facture a déjà été téléchargée ou envoyée. Confirmez-vous vouloir la déverrouiller pour la modifier ?\n\nAttention : si le client a déjà reçu une version, pensez à lui renvoyer la version corrigée.")) return;
   const f = state.factures.find(x=>x.id===id);
@@ -19785,7 +19742,6 @@ Object.assign(window, {
   importerBonCommande,
   imprimerRegistrePersonnel,
   initSignaturePad,
-  instantaneIdentite,
   integrerTravailDansLignes,
   interlocuteurForm,
   interlocuteurOptions,
@@ -19865,7 +19821,6 @@ Object.assign(window, {
   majSectionsEfacture,
   majTravailDirecteur,
   marquerFactureSTPayee,
-  marquerFactureVerrouillee,
   marquerMaterielRendu,
   marquerNotifsCocheesFaites,
   marquerPieceCommandee,

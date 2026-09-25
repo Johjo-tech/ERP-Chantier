@@ -9,6 +9,12 @@
  *    en est le miroir, pour que l'écran n'ouvre pas une saisie qui finirait
  *    rejetée et que le motif affiché soit celui qui sera opposé.
  *
+ *  - le **cadenas d'écran** (`telechargee`) ne se pose plus. Il naissait au
+ *    premier téléchargement ou envoi d'un BROUILLON ; depuis qu'il faut un
+ *    numéro pour qu'une pièce sorte, ces deux moments n'existent plus. La
+ *    branche reste pour les lignes qui le portent déjà : elles doivent pouvoir
+ *    se déverrouiller.
+ *
  *  - un **bon de commande facturé** a produit une créance. Le modifier
  *    ferait mentir la facture qui en découle : le client tient un document
  *    qui décrit des travaux, et le bon dirait autre chose.
