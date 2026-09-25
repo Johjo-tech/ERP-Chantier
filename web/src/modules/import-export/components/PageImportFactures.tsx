@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
 import { rapportRejetsCsv } from "@/modules/articles/domain/import";
 import { telechargerTexte } from "@/modules/articles/components/telechargement";
-import { usePermission } from "@/modules/auth-roles/hooks/useSession";
+import { usePermission, useSession } from "@/modules/auth-roles/hooks/useSession";
 import type { ResultatImportFactures } from "../api/factures";
 import { lignesRapportFactures } from "../domain/apercu-factures";
 import { natureDuFichier, type CategorieTva } from "../domain/factures";
@@ -28,7 +28,10 @@ interface Fichier {
  * se supprime plus : l'aperçu, et ses totaux, sont le seul moment de vérité.
  */
 export function PageImportFactures() {
-  const autorise = usePermission("factures", "modifier");
+  // La base réserve le marqueur « compta: » à l'administrateur (D-SQL-02).
+  const modifier = usePermission("factures", "modifier");
+  const { roleEffectif } = useSession();
+  const autorise = modifier && roleEffectif === "admin";
   const [entetes, setEntetes] = useState<Fichier | null>(null);
   const [lignes, setLignes] = useState<Fichier | null>(null);
   const [categorie, setCategorie] = useState<CategorieTva | undefined>(undefined);
@@ -37,7 +40,7 @@ export function PageImportFactures() {
   const ecrire = useEcrireFactures((fait, total) => setProgres(`Écriture : ${fait} / ${total} pièces`));
 
   const titre = <EnTetePage titre="Reprendre un historique de facturation" actions={<Button variant="ghost" asChild><Link to="/factures">Retour aux factures</Link></Button>} />;
-  if (!autorise) return <>{titre}<Alert variant="erreur">La reprise crée des factures définitives : il faut pouvoir créer ET modifier les factures.</Alert></>;
+  if (!autorise) return <>{titre}<Alert variant="erreur">La reprise crée des factures définitives, hors de la numérotation de la société : elle est réservée à l'administrateur.</Alert></>;
 
   function relancer(e: Fichier | null, l: Fichier | null, c: CategorieTva | undefined) {
     if (e) apercu.mutate({ entetes: e.octets, lignes: l?.octets ?? null, categorieTauxZero: c });

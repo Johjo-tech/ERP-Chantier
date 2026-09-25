@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { ModuleId } from "@/modules/auth-roles/domain/permissions";
-import { usePermission } from "@/modules/auth-roles/hooks/useSession";
+import { usePermission, useSession } from "@/modules/auth-roles/hooks/useSession";
 
 export function Chiffre({ valeur, libelle, alerte = false }: { valeur: number | string; libelle: string; alerte?: boolean }) {
   return (
@@ -32,11 +32,14 @@ export function ListeMotifs({ titre, lignes, max, variant = "info" }: { titre: s
 /**
  * Le bouton d'import d'une liste : un import CRÉE et MET À JOUR, il faut donc
  * les deux droits (CLI-08, IMP-23) — la RLS refuserait de toute façon le reste.
+ * `adminSeul` : la reprise d'un historique déjà numéroté, que la base réserve à
+ * l'administrateur (proposition 20260925040000, D-SQL-02).
  */
-export function BoutonImport({ module, vers, libelle }: { module: ModuleId; vers: string; libelle: string }) {
+export function BoutonImport({ module, vers, libelle, adminSeul = false }: { module: ModuleId; vers: string; libelle: string; adminSeul?: boolean }) {
   const creer = usePermission(module, "creer");
   const modifier = usePermission(module, "modifier");
-  if (!creer || !modifier) return null;
+  const { roleEffectif } = useSession();
+  if (!creer || !modifier || (adminSeul && roleEffectif !== "admin")) return null;
   return (
     <Button variant="outline" asChild>
       <Link to={vers}>{libelle}</Link>
