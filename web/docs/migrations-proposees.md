@@ -28,6 +28,7 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 17 | `20260926051000_les_photos_du_terrain.sql` | Droits | `bon_commande_photos` illisible au terrain (sous-requête sur une table à prix), suppression ouverte au rôle lecture, seau `terrain` fermé au sous-traitant (D-PLN-06). | `tests/rls/planning.essai.ts` (« [proposition] … photo ») |
 | 18 | `20260926052000_rapports_d_intervention_complets.sql` | Fonction + droits | Rapport : lien au bon (un par bon), émetteur sous-traitant, signature du technicien, numéro posé par la base ; le sous-traitant ne voit que ses rapports (PLN-52) ; tables filles sur la matrice « rapports ». Dépend du n° 8 (D-PLN-07). | `tests/rls/interventions.essai.ts` |
 | 19 | `20260926053000_le_terrain_joint_le_locataire.sql` | Fonction | Téléphone de l'occupant, absent de la vue terrain : `telephones_locataires(societe)` pour les membres (D-PLN-10). | `tests/rls/planning.essai.ts` (« [proposition] … téléphone ») |
+| 20 | `20260926060000_les_donnees_rh_restent_aux_rh.sql` | **Sécurité** | `v_salaries_annuaire` montrait à tout membre les dates du suivi médical et les notes (données de santé) ; le seau `terrain` laissait tout membre lire `<société>/salaries/` et empêchait la secrétaire (`rh / modifier`) d'y déposer. Vue refaite depuis sa définition vivante (trois expressions masquées, colonnes inchangées) ; politique RESTRICTIVE + trois permissives sur le sous-dossier `salaries` (les autres politiques du seau ne sont pas refaites) ; contrainte `salarie_absences_fin_apres_debut` NOT VALID ; suppression des documents de sous-traitant sous `peut_ecrire` (AUTH-71). Essai à blanc : `select visite_medicale_prochaine from v_salaries_annuaire limit 5;` sous un compte technicien → attendu NULL ; `select policyname, permissive from pg_policies where tablename='objects';`. D-RH-01, D-RH-02. | `tests/rls/rh.essai.ts` (« [proposition] … ») |
 
 ## Comment les appliquer (par un humain)
 
@@ -53,6 +54,9 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
    `web/src/lib/` ; supprimer alors `web/src/lib/database.propositions.ts`.
 
 ## Migrations à écrire ensuite (non rédigées)
+
+- **Équipes et sous-traitants par la secrétaire** (D-RH-05) : si le métier le veut, `techniciens`, `sous_traitants`, `sous_traitant_documents` et `conducteurs` devraient suivre `a_permission(…, 'rh', …)` plutôt que `peut_ecrire`.
+- **Habilitations** (D-RH-03) : migrer les `salarie_documents` de type `habilitation` vers `salarie_habilitations` (ou supprimer cette table inutilisée).
 
 - **Planning restreint au terrain** : `planning_taches` se lit sous `est_membre` — un sous-traitant lit toutes les tâches de la société, celles de ses confrères comprises (AUTH-72). L'écran filtre ; la base devrait le faire.
 - **Réglage Alsace-Moselle** : une colonne de société pour activer Vendredi saint et 26 décembre (D-PLN-09).
