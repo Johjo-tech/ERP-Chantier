@@ -9,3 +9,5 @@ coverage
 !.env.example
 test-results
 playwright-report
+# La comparaison visuelle écrit ses captures ici (tests/visuel/README.md).
+tests/visuel/rapport/
