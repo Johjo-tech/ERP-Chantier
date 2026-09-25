@@ -87,21 +87,21 @@ export function filtrerDossiers<T extends { bilan: ConformiteRh }>(lignes: reado
  *  - `sensible` : fiche complète, dossiers, visites, congés, registre, coûts —
  *    ce que `rh/modifier` ouvre (les politiques de `salaries` et de ses tables
  *    filles l'exigent, la vue d'annuaire masque le reste).
- *  - `intervenants` : créer ou modifier équipes et sous-traitants. La matrice
- *    les range sous `rh` (onglet historique), la base exige `peut_ecrire()` :
- *    l'écran demande les deux, soit l'administrateur (D-RH-05).
+ *  - `intervenants` : créer ou modifier équipes et sous-traitants, et la fiche
+ *    conducteur. La matrice les range sous `rh` (onglet historique) ; la base
+ *    n'exigeait que `peut_ecrire()`, ce qui écartait la secrétaire. La
+ *    proposition 20260926110000 ajoute « rh » aux politiques : l'écran suit la
+ *    matrice seule (D-RH-05 tranché par D-AUTH-05).
  */
-export function droitsRh(peut: (action: "voir" | "creer" | "modifier" | "supprimer") => boolean, role: RoleMembre | null) {
-  const ecritLeTerrain = role === "admin" || role === "conducteur" || role === "technicien";
+export function droitsRh(peut: (action: "voir" | "creer" | "modifier" | "supprimer") => boolean, _role: RoleMembre | null) {
   return {
     voir: peut("voir"),
     sensible: peut("modifier"),
     creer: peut("creer"),
     modifier: peut("modifier"),
     supprimer: peut("supprimer"),
-    intervenants: peut("modifier") && ecritLeTerrain,
-    /** La fiche conducteur (`conducteurs`) s'écrit sous `peut_ecrire()`. */
-    conducteur: peut("modifier") && ecritLeTerrain,
+    intervenants: peut("modifier"),
+    conducteur: peut("modifier"),
   };
 }
 export type DroitsRh = ReturnType<typeof droitsRh>;

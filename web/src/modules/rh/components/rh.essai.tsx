@@ -135,10 +135,10 @@ describe("fiche salarié (RH-05, RH-06, AUTH-20)", () => {
     await waitFor(() => expect(intervenants.appliquerPlanConducteur).toHaveBeenCalledWith("alpha", { geste: "rien" }));
   });
 
-  it("la secrétaire tient la fiche mais ne touche ni la fiche conducteur (peut_ecrire) ni les comptes", async () => {
+  it("la secrétaire tient la fiche et la fiche conducteur (rh / modifier, proposition 20260926110000), pas les comptes", async () => {
     salaries.listerSalaries.mockResolvedValue([{ ...paul, profileId: null }]);
     fiche("secretaire");
-    expect(await screen.findByLabelText(/Conducteur de travaux — proposé/)).toBeDisabled();
+    expect(await screen.findByLabelText(/Conducteur de travaux — proposé/)).toBeEnabled();
     expect(screen.getByText("⚠ Sans compte. Seul un administrateur peut lui en créer un.")).toBeInTheDocument();
   });
 
