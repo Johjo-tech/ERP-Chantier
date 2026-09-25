@@ -22,5 +22,8 @@ export const NAVIGATION: readonly EntreeNavigation[] = [
   { chemin: "/factures", libelle: "Factures", module: "factures", fonctionnalite: "factures" },
   { chemin: "/facturation/validation", libelle: "Validation", module: "bons_commande", fonctionnalite: "commandes" },
   { chemin: "/facturation/a-facturer", libelle: "À facturer", module: "bons_commande", fonctionnalite: "commandes" },
+  // Planning et rapports : aucun niveau d'abonnement ne les porte encore (D-PLN-12), ouverts à tous.
+  { chemin: "/planning", libelle: "Planning", module: "planning" },
+  { chemin: "/rapports", libelle: "Rapports", module: "rapports" },
   { chemin: "/reglages", libelle: "Réglages", module: "reglages" },
 ];

@@ -57,6 +57,10 @@ Mot de passe de tous : `motdepasse-local`.
 | | Statut stocké recalé par le déclencheur ; règlement groupé : imputation = `imputer` de l'ancien, trop-perçu refusé avec son message, un avoir dans la sélection fait tout refuser, le rôle lecture n'écrit rien | oui (20260926041000) |
 | | `imputer_avoir` : deux règlements liés, refus dans l'ordre et avec les mots de `refusImputationAvoir` ; note de frais « NDF- » | oui (20260926041000, 20260926043000) |
 | `espace-client-bons.essai.ts` | Le client suit ses bons (jamais ceux d'un autre client ni de BETA), aucune colonne interne dans la vue ; lit les règlements et le solde de SES factures, n'écrit aucun règlement ; accès nominatif restreint à l'interlocuteur, qu'il ne peut pas élargir lui-même | oui (20260926042000) |
+| `planning.essai.ts` | Le conducteur pose une carte (rendez-vous sur le bon, tâche avec équipe et créneau) et ajoute une journée ; le technicien lit sans aucun montant, connaît son équipe, ne planifie pas ; BETA ne voit rien | non |
+| | Circuit : l'équipe consigne puis déclare faite ; l'état ne s'écrit pas en direct ; une autre équipe est refusée en toutes lettres ; refus sans motif refusé, avec motif renvoyé | non |
+| | Sous-traitant : pointe ses tâches et pas celles d'un confrère, lit SON montant seul, signale un travail sur SON bon ; photos déposées et lues par le terrain, pas effacées par le rôle lecture ; téléphone de l'occupant | **oui** (20260926050000, 051000, 053000) |
+| `interventions.essai.ts` | Rapport du technicien : numéro INT par la base, contrôles, photo et signatures ; vacant : pas de signature client ; le sous-traitant rédige au nom de son entreprise et ne voit que ses rapports ; lecture ne supprime rien ; un rapport par bon | **oui** (20260926052000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

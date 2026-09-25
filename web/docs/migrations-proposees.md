@@ -24,6 +24,10 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 13 | `20260926041000_les_reglements_s_imputent_en_base.sql` | **Intégrité** | Déclencheur qui recale `factures.statut` à chaque règlement ; RPC `enregistrer_reglement_groupe` (virement réparti, tout ou rien, trop-perçu refusé) et `imputer_avoir` (lettrage, contrôles de `refusImputationAvoir`). SECURITY INVOKER : la RLS de `reglements` reste la barrière. D-FAC-02. | `tests/rls/facturation.essai.ts` (« [proposition] … groupe », « imputer_avoir », « déclencheur ») |
 | 14 | `20260926042000_espace_client_bons_et_reglements.sql` | Fonction | Après le n° 4 : `acces_clients.interlocuteur` (accès nominatif), `est_mon_document()`, politiques devis / factures / lignes resserrées, lecture des règlements de SES factures émises, vue `v_espace_client_bons` (sans montant ni note), identité légale et mentions de l'émetteur en fin de `v_mes_acces_clients`. D-FAC-10. | `tests/rls/espace-client-bons.essai.ts`, `tests/rls/espace-client.essai.ts` |
 | 15 | `20260926043000_prefixes_de_numerotation_complets.sql` | Intégrité | `numero_suivant_interne` : `note_frais` → NDF (sortait « NOT- »), `bon_commande` → BC. **Refait la même fonction que `20260926030000` (commandes) et en garde l'union** : l'appliquer APRÈS elle. D-FAC-07. | `tests/rls/facturation.essai.ts` (« [proposition] préfixes ») |
+| 16 | `20260926050000_le_sous_traitant_pointe_ses_taches.sql` | Droits | `est_de_l_equipe` ignore le sous-traitant : il ne peut pointer aucune de ses tâches ; `mon_sous_traitant`, `mes_montants_sous_traitant` (« Votre montant » sans ouvrir la vue), travaux supplémentaires sur SES bons (D-PLN-05). | `tests/rls/planning.essai.ts` (« [proposition] … sous-traitant ») |
+| 17 | `20260926051000_les_photos_du_terrain.sql` | Droits | `bon_commande_photos` illisible au terrain (sous-requête sur une table à prix), suppression ouverte au rôle lecture, seau `terrain` fermé au sous-traitant (D-PLN-06). | `tests/rls/planning.essai.ts` (« [proposition] … photo ») |
+| 18 | `20260926052000_rapports_d_intervention_complets.sql` | Fonction + droits | Rapport : lien au bon (un par bon), émetteur sous-traitant, signature du technicien, numéro posé par la base ; le sous-traitant ne voit que ses rapports (PLN-52) ; tables filles sur la matrice « rapports ». Dépend du n° 8 (D-PLN-07). | `tests/rls/interventions.essai.ts` |
+| 19 | `20260926053000_le_terrain_joint_le_locataire.sql` | Fonction | Téléphone de l'occupant, absent de la vue terrain : `telephones_locataires(societe)` pour les membres (D-PLN-10). | `tests/rls/planning.essai.ts` (« [proposition] … téléphone ») |
 
 ## Comment les appliquer (par un humain)
 
@@ -49,6 +53,9 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
    `web/src/lib/` ; supprimer alors `web/src/lib/database.propositions.ts`.
 
 ## Migrations à écrire ensuite (non rédigées)
+
+- **Planning restreint au terrain** : `planning_taches` se lit sous `est_membre` — un sous-traitant lit toutes les tâches de la société, celles de ses confrères comprises (AUTH-72). L'écran filtre ; la base devrait le faire.
+- **Réglage Alsace-Moselle** : une colonne de société pour activer Vendredi saint et 26 décembre (D-PLN-09).
 
 - **Suppression dans les autres tables filles** : 20 tables (véhicules, matériel,
   photos…) suppriment encore sous `est_membre()` — même défaut que le n° 2 (les

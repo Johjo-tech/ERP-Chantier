@@ -721,3 +721,133 @@ rien ; l'ancien les montrait à 0). Les gestes du devis (PDF, e-mail, dupliquer,
 facturer, bon de commande, supprimer) vivent sur sa fiche, à un clic de la
 liste (DEV-01). Un règlement « avoir » / « imputation » se retire mais ne se
 corrige pas : ses deux moitiés doivent rester égales.
+
+## D-PLN-01 — Le planning écrit le rendez-vous sur le bon ET les journées dans les tâches
+L'écran historique, qui partage la base, place ses cartes d'après les colonnes
+du bon (`date_planifiee`…, `technicien`) ou `schedule_par_metier[métier]`, et
+dérive les journées supplémentaires des tâches. **Décision** : `web/` lit et
+écrit les deux, de la même façon (clés camelCase du jsonb, autres clés
+conservées), pour que les deux écrans montrent le même planning pendant la
+coexistence. Les gestes sont calculés par le domaine (`planification.ts`, un
+`Plan`) et appliqués bon d'abord, tâches ensuite ; l'état ne passe que par les
+RPC `tache_*`.
+
+## D-PLN-02 — La tâche naît à la planification
+L'ancien écran créait la tâche au premier pointage ou à l'ouverture de la
+fiche. Or le terrain retrouve sa journée par ses tâches, et une tâche créée
+sans équipe n'en recevait plus. **Décision** : poser une carte (ou une journée
+supplémentaire) crée la tâche du jour avec son équipe et son créneau ; une
+carte posée par l'ancien écran propose « Préparer la fiche de ce jour ». Sans
+effet sur le circuit : `bc_passer_pret_a_chiffrer` exige déjà tous les métiers
+du bon.
+
+## D-PLN-03 — Un bon mono-métier dont seul `metiers` est rempli garde son métier
+`planningItems` prenait `b.metier` ; un bon qui ne portait que `metiers: ["Sol"]`
+sortait sans métier et échappait au filtre. **Décision** : le métier de la carte
+est le métier de la clé, sinon `metier`, sinon le premier de `metiers`.
+
+## D-PLN-04 — « Non planifiés » ne liste plus les bons au circuit clos
+Chiffré, facturé ou clôturé : la base refuse de replanifier (`bc_piece_recue`),
+l'ancien écran laissait ces bons dans la colonne indéfiniment. Ils restent
+visibles au calendrier s'ils sont datés.
+
+## D-PLN-05 — Le sous-traitant pointe ses tâches (proposition 20260926050000)
+`est_de_l_equipe` ne connaissait que compte → salarié → équipe : un
+sous-traitant, qui n'est pas salarié, ne pouvait déclarer faite aucune tâche,
+alors que l'écran lui proposait « Valider les travaux ». La proposition ajoute
+la chaîne tâche → `sous_traitant_id` → `contact_profile_id`, le montant du
+sous-traitant (`mes_montants_sous_traitant`, sans ouvrir la vue) et
+l'insertion de travaux supplémentaires sur SES bons. La fiche du sous-traitant
+est la même que celle du technicien : « Travaux terminés » remplace la case
+« date faite » (qui écrivait un champ sans colonne).
+
+## D-PLN-06 — Photos du terrain persistées (proposition 20260926051000)
+Les photos de la fiche (`technicienPhotos`) n'avaient aucune colonne : elles
+disparaissaient à l'enregistrement. Et `bon_commande_photos` vérifiait la
+société par une sous-requête sur `bons_commande`, illisible au terrain.
+**Décision** : photos dans le seau `terrain` + `bon_commande_photos` ; la
+proposition lit la société par une fonction SECURITY DEFINER, ouvre le dépôt au
+sous-traitant, et réserve la suppression à `peut_ecrire` (le rôle lecture
+pouvait effacer).
+
+## D-PLN-07 — Rapports complets (proposition 20260926052000), avec repli
+Lien au bon, entreprise émettrice et signature du technicien n'avaient pas de
+colonne ; le sous-traitant lisait tous les rapports (PLN-52). **Décision** :
+colonnes ajoutées (index unique : un rapport par bon), émetteur et numéro posés
+par la base, visibilité restreinte au sous-traitant, tables filles alignées
+sur la matrice « rapports ». Tant que la production n'a pas la proposition,
+`web/` lit sans ces colonnes, numérote par `prochain_numero`, et refuse le lien
+au bon en le disant.
+
+## D-PLN-08 — Déplacer une carte déplace sa journée
+L'ancien écran changeait la date du bon mais laissait la tâche à l'ancienne
+date, qui réapparaissait en « Suppl. ». **Décision** : la tâche de l'ancienne
+date (si elle n'est pas pointée) prend la nouvelle.
+
+## D-PLN-09 — Fériés triés ; Alsace-Moselle en attente d'un réglage
+La liste est triée (PLN-53). Vendredi saint et 26 décembre existent au domaine
+(`alsaceMoselle`) mais ne sont pas activés : aucune colonne ne dit qu'une
+société est en Alsace-Moselle. À brancher sur un réglage de société.
+
+## D-PLN-10 — Téléphone de l'occupant par une fonction (proposition 20260926053000)
+La vue terrain ne sert pas `telephone_locataire` (D-041) : le lien `tel:` de la
+carte ne s'affichait jamais. Plutôt que de refaire une vue du module des bons,
+`telephones_locataires(societe)` le rend aux membres.
+
+## D-PLN-11 — Pas de génération de rapport par IA (PLN-51)
+L'ancien écran appelait le fournisseur depuis le navigateur, sans clé : échec
+par construction, et une clé côté navigateur serait publique. Non reprise ; à
+refaire, si besoin, derrière une Edge Function.
+
+## D-PLN-12 — Planning et rapports ouverts à tous les niveaux d'abonnement
+Aucun niveau ne les porte dans `FONCTIONNALITES` (module `societes`) : les
+entrées de menu n'ont pas de fonctionnalité, comme le tableau de bord.
+
+## D-PLN-13 — Contacts réservés à qui modifie le bon
+Tentatives et rappel s'écrivent sur `bons_commande` ; la RLS le refusait au
+technicien, à qui l'ancien écran montrait pourtant les boutons. Ils sont
+proposés sous `bons_commande/modifier` ; le terrain voit la trace.
+
+## D-PLN-14 — « Terminée le » dérivée des tâches (PLN-54)
+Plus d'écriture de `date_intervention_terminee` : la date affichée est la
+dernière réalisation quand toutes les tâches de la carte sont faites. Un refus
+du conducteur l'efface donc de lui-même.
+
+## D-PLN-15 — Journée supplémentaire d'un bon multi-métiers : par métier
+Chaque métier a sa carte et son équipe ; « + Autre date » sur une carte crée la
+journée de CE métier (l'ancien la créait pour tous les métiers du bon).
+
+## D-PLN-16 — L'équipe n'est pas redemandée à chaque déplacement
+Déposer une carte sans filtre d'équipe redemandait l'équipe même quand la
+carte en avait une. On reprend l'affectation connue ; la modale (obligatoire)
+reste pour une carte qui n'en a pas.
+
+## D-PLN-17 — La poignée compte la case de midi une seule fois
+`dureeDesCases` est l'inverse exact de `calculerSpanRows` ; l'ancien calcul
+pouvait ajouter l'heure de midi deux fois.
+
+## D-PLN-18 — Historique d'une tâche sans le nom des auteurs
+`realisee_par` / `validee_par` désignent des profils que les membres ne lisent
+pas : la fiche dit « Déclarés faits le … », sans nom.
+
+## D-PLN-19 — Un écran « Ma journée » pour le terrain
+Ajout : les interventions du jour de l'équipe (ou de l'entreprise
+sous-traitante), dans l'ordre des heures, et les tâches renvoyées « À
+reprendre ». Première vue du technicien et du sous-traitant.
+
+## D-PLN-20 — Rapport rédigé depuis le planning, photos catégorisées
+« Rédiger le rapport » ouvre l'assistant avec `?bon=` : client, lieu, logement
+et conducteur repris du bon sans écraser la saisie. La catégorie d'une photo
+(constatation / préconisation) est rangée dans `intervention_photos.legende` ;
+les signatures sont des PNG du seau. Un rapport lié à un bon ne se facture pas
+à côté : « Facturer le bon lié » renvoie au bon.
+
+## D-PLN-21 — Liste des rapports : émetteur au choix de l'encadrement
+L'ancien écran cachait entièrement aux internes les rapports des
+sous-traitants. `web/` montre les internes par défaut et un filtre
+« Émetteur » ; le sous-traitant n'a que les siens (RLS).
+
+## D-PLN-22 — Transformer un rapport exige un client du répertoire
+Devis et facture exigent `client_id` (délais, cadre, adresse). Un rapport
+rédigé sur un nom libre doit d'abord recevoir son client ; les lignes partent
+sans prix (préconisations « x2 m² » → quantité et unité).

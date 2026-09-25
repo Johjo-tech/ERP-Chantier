@@ -43,6 +43,10 @@ import { PageDocumentClient } from "@/modules/espace-client/components/PageDocum
 import { PageEspaceClient } from "@/modules/espace-client/components/PageEspaceClient";
 import { PageBonsClient } from "@/modules/espace-client/components/PageBonsClient";
 import { PageLectureBon } from "@/modules/ocr/components/PageLectureBon";
+import { PagePlanning } from "@/modules/planning/components/PagePlanning";
+import { PageApercuRapport } from "@/modules/interventions/components/PageApercuRapport";
+import { PageRapport } from "@/modules/interventions/components/PageRapport";
+import { PageRapports } from "@/modules/interventions/components/PageRapports";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -134,6 +138,12 @@ export const routes: RouteObject[] = [
       { path: "reglages/:rubrique", element: <RouteModule module="reglages"><PageReglages /></RouteModule> },
       // Mon compte : ouvert à tous les rôles, le nom appartient à la personne (AUTH-17).
       { path: "mon-compte", element: <PageMonCompte /> },
+      { path: "planning", element: <RouteModule module="planning"><PagePlanning /></RouteModule> },
+      { path: "planning/ma-journee", element: <RouteModule module="planning"><PagePlanning vue="ma_journee" /></RouteModule> },
+      { path: "rapports", element: <RouteModule module="rapports"><PageRapports /></RouteModule> },
+      { path: "rapports/nouveau", element: <RouteModule module="rapports" action="creer"><PageRapport /></RouteModule> },
+      { path: "rapports/:id", element: <RouteModule module="rapports" action="modifier"><PageRapport /></RouteModule> },
+      { path: "rapports/:id/apercu", element: <RouteModule module="rapports"><PageApercuRapport /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

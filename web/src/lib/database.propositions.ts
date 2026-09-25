@@ -190,3 +190,28 @@ export type DatabaseAvecPropositions = Omit<Database, "public"> & {
     };
   };
 };
+
+/* ---------- Propositions du planning et des rapports (2026092605xxxx) ----------
+ * Colonnes ajoutées à `interventions` et fonctions nouvelles, absentes des
+ * types de production. Type à part, AJOUTÉ plutôt que mêlé au précédent : la
+ * fusion avec les propositions d'autres modules reste une juxtaposition. */
+type PubP = DatabaseAvecPropositions["public"];
+type Interventions = Public["Tables"]["interventions"];
+type ColonnesRapport = { bon_commande_id: string | null; sous_traitant_id: string | null; signature_technicien_chemin: string | null };
+
+export type DatabasePlanning = Omit<DatabaseAvecPropositions, "public"> & {
+  public: Omit<PubP, "Tables" | "Functions"> & {
+    Tables: Omit<PubP["Tables"], "interventions"> & {
+      interventions: Omit<Interventions, "Row" | "Insert" | "Update"> & {
+        Row: Interventions["Row"] & ColonnesRapport;
+        Insert: Interventions["Insert"] & Partial<ColonnesRapport>;
+        Update: Interventions["Update"] & Partial<ColonnesRapport>;
+      };
+    };
+    Functions: PubP["Functions"] & {
+      mon_sous_traitant: { Args: { p_societe: string }; Returns: string | null };
+      mes_montants_sous_traitant: { Args: { p_societe: string }; Returns: { bon_commande_id: string; montant: number | null }[] };
+      telephones_locataires: { Args: { p_societe: string }; Returns: { bon_commande_id: string; telephone: string }[] };
+    };
+  };
+};
