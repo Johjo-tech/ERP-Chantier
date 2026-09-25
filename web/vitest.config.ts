@@ -18,5 +18,8 @@ export default defineConfig({
     exclude: ["tests/rls/**"],
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Les parités tirent des milliers de documents et les écrans montent l'appli entière :
+    // sous une machine chargée (CI, agents en parallèle), 5 s par défaut coupaient des tests justes.
+    testTimeout: 20_000,
   },
 });
