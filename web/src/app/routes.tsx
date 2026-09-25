@@ -1,5 +1,8 @@
 import { createBrowserRouter, type RouteObject } from "react-router";
 import { PageConnexion } from "@/modules/auth-roles/components/PageConnexion";
+import { PageMonCompte } from "@/modules/auth-roles/components/PageMonCompte";
+import { PageNouveauMotDePasse } from "@/modules/auth-roles/components/PageNouveauMotDePasse";
+import { PageReglages } from "@/modules/reglages/components/PageReglages";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { RouteConnectee, RouteModule } from "@/modules/auth-roles/components/RouteProtegee";
 import { PageClients } from "@/modules/clients/components/PageClients";
@@ -37,6 +40,7 @@ import { PageIntrouvable } from "./PageIntrouvable";
 
 export const routes: RouteObject[] = [
   { path: "/connexion", element: <PageConnexion /> },
+  { path: "/nouveau-mot-de-passe", element: <PageNouveauMotDePasse /> },
   {
     path: "/espace-client",
     element: (
@@ -95,6 +99,10 @@ export const routes: RouteObject[] = [
       { path: "articles/:id/modifier", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
       { path: "articles/import", element: <RouteModule module="articles" action="modifier"><PageImportArticles /></RouteModule> },
       { path: "commandes/lecture", element: <RouteModule module="bons_commande" action="creer"><PageLectureBon /></RouteModule> },
+      { path: "reglages", element: <RouteModule module="reglages"><PageReglages /></RouteModule> },
+      { path: "reglages/:rubrique", element: <RouteModule module="reglages"><PageReglages /></RouteModule> },
+      // Mon compte : ouvert à tous les rôles, le nom appartient à la personne (AUTH-17).
+      { path: "mon-compte", element: <PageMonCompte /> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
