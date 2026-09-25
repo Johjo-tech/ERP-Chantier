@@ -36,9 +36,10 @@ export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
   const libelle = `${carte.bon.client_nom}, ${numeroDeLaCarte(carte)}${placement.variante === "suite" ? " (suite)" : ""}`;
 
   return (
+    // Un groupe, pas un bouton : la carte porte ses propres réglages (heure, durée, retrait), et un
+    // bouton qui contient des contrôles est illisible au lecteur d'écran (axe « nested-interactive »).
     <div
-      role="button"
-      tabIndex={0}
+      role="group"
       aria-label={libelle}
       draggable={deplacable}
       onDragStart={(e) => {
@@ -53,7 +54,6 @@ export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
         }
         ouvrirFiche(carte, jour);
       }}
-      onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && ouvrirFiche(carte, jour)}
       style={style}
       className={cn(
         "absolute inset-x-0.5 overflow-hidden rounded-md border bg-card p-1 text-left shadow-sm hover:z-10 hover:overflow-visible hover:shadow-md focus-visible:z-10 focus-visible:outline-2",
@@ -62,6 +62,16 @@ export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
         carte.isSav && "border-l-4 border-l-destructive"
       )}
     >
+      <button
+        type="button"
+        className="sr-only focus:not-sr-only focus:text-xs focus:underline"
+        onClick={(e) => {
+          e.stopPropagation();
+          ouvrirFiche(carte, jour);
+        }}
+      >
+        Ouvrir la fiche
+      </button>
       {placement.variante === "origine" && (
         <>
           <InfosCarte carte={carte} compacte />

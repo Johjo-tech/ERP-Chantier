@@ -76,7 +76,7 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Planning technicien", "Planning sous-traitant", "En attente technicien", "En attente sous-traitant"]);
     expect(within(colonne).getByText("Non planifiés (2)")).toBeInTheDocument();
     expect(within(colonne).getByText("Régie Sud")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /OPAC du Rhône, CMD-1/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /OPAC du Rhône, CMD-1/ })).toBeInTheDocument();
   });
 
   it("poser une carte au clavier demande l'équipe — obligatoire — puis écrit rendez-vous et tâche", async () => {
@@ -114,7 +114,7 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
   it("une carte faite ne se retire pas du planning : le refus est dit, rien n'est écrit (PLN-50)", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ taches: [tacheEssai({ id: "t1", bon_commande_id: "b1", date_tache: AUJ, technicien_id: "eqA", statut: "realisee" })] }));
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    const carte = await screen.findByRole("button", { name: /OPAC du Rhône, CMD-1/ });
+    const carte = await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ });
     await userEvent.click(within(carte).getByRole("button", { name: "Retirer du planning" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("validée par le technicien");
     expect(api.appliquerPlan).not.toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
 
   it("le rôle lecture voit le planning sans aucun réglage", async () => {
     rendreAvecSession(<PagePlanning />, { role: "lecture" });
-    const carte = await screen.findByRole("button", { name: /OPAC du Rhône, CMD-1/ });
+    const carte = await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ });
     expect(within(carte).queryByRole("button", { name: "Retirer du planning" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Planifier le")).not.toBeInTheDocument();
   });
@@ -142,7 +142,7 @@ describe("planning — encadrement (PLN-01, PLN-02, PLN-04)", () => {
   it("le conducteur arbitre une tâche déclarée faite ; un refus exige un motif", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ taches: [tacheEssai({ id: "t1", bon_commande_id: "b1", date_tache: AUJ, technicien_id: "eqA", statut: "realisee", realisee_le: `${AUJ}T15:00:00Z` })] }));
     rendreAvecSession(<PagePlanning />, { role: "conducteur" });
-    await userEvent.click(await screen.findByRole("button", { name: /OPAC du Rhône, CMD-1/ }));
+    await userEvent.click(await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ }));
     const fiche = await screen.findByRole("dialog");
     await userEvent.click(within(fiche).getByRole("button", { name: "✕ Refuser" }));
     const confirmer = within(fiche).getByRole("button", { name: "Confirmer le refus" });
@@ -176,7 +176,7 @@ describe("planning — terrain (PLN-01, PLN-08, PLN-09)", () => {
   it("un technicien d'une autre équipe lit la fiche sans pouvoir agir, et sait pourquoi", async () => {
     api.lirePlanning.mockResolvedValue(donnees({ monEquipeId: "eqB" }));
     rendreAvecSession(<PagePlanning vue="technicien" />, { role: "technicien" });
-    await userEvent.click(await screen.findByRole("button", { name: /OPAC du Rhône, CMD-1/ }));
+    await userEvent.click(await screen.findByRole("group", { name: /OPAC du Rhône, CMD-1/ }));
     const fiche = await screen.findByRole("dialog");
     expect(within(fiche).getByText("Cette tâche est confiée à une autre équipe.")).toBeInTheDocument();
     expect(within(fiche).queryByRole("button", { name: "✓ Travaux terminés" })).not.toBeInTheDocument();
@@ -194,8 +194,8 @@ describe("planning — terrain (PLN-01, PLN-08, PLN-09)", () => {
     expect(document.body.textContent).not.toMatch(/777|480/);
     await userEvent.click(within(fiche).getByRole("button", { name: "Fermer" }));
     await userEvent.click(screen.getByRole("tab", { name: /Mon planning/ }));
-    expect(screen.queryByRole("button", { name: /OPAC du Rhône/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Syndic Bellecour/ })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /OPAC du Rhône/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /Syndic Bellecour/ })).toBeInTheDocument();
   });
 
   it("un compte terrain sans équipe est prévenu au lieu de voir une journée vide", async () => {
