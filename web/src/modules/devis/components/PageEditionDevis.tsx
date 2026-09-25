@@ -137,7 +137,7 @@ function FormulaireDevis({ devis, reglages, actions, ChampReference }: PropsForm
         lignes={lignes}
         onChange={setLignes}
         tvaDefaut={reglages.tvaDefaut}
-        unites={reglages.unites}
+       
         taux={reglages.tauxTva}
         erreurs={erreursLignes}
         lectureSeule={lectureSeule}

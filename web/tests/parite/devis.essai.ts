@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { conducteurIdDe, tauxConversion } from "../../src/modules/devis/domain/liste";
-import { lignesDesPreconisations } from "../../src/modules/devis/domain/preconisations";
+import { lignesDesPreconisations, lignesDevisDuRapport } from "../../src/modules/devis/domain/preconisations";
 import { generateur } from "./aleatoire";
 import { sourceDe } from "./source-app";
 
@@ -30,6 +30,15 @@ describe("parité : préconisations en lignes de devis (DEV-17)", () => {
       const t = Array.from({ length: g.entier(0, 12) }, () => g.parmi(mots)).join(g.parmi([" ", ""]));
       expect(lignesDesPreconisations(t).map((l) => [l.designation, l.quantite, l.unite]), JSON.stringify(t)).toEqual(ancien(t).map((l) => [l.designation, l.qte, l.unite]));
     }
+  });
+});
+
+describe("lignes d'un devis ou d'une facture nés d'un rapport (DEV-17, FAC-15)", () => {
+  it("préconisations d'abord ; sinon les constatations, puis le métier, en une ligne à chiffrer", () => {
+    const l = lignesDevisDuRapport({ preconisations: "Reprise enduit x25 m²\nNettoyage", constatations: "Fissure", metier: "peinture" }, 10);
+    expect(l.map((x) => [x.designation, x.quantite, x.unite, x.prix_unitaire, x.tva, x.position])).toEqual([["Reprise enduit", 25, "m²", 0, 10, 0], ["Nettoyage", 1, "u", 0, 10, 1]]);
+    expect(lignesDevisDuRapport({ preconisations: "  ", constatations: "Fissure au plafond", metier: "peinture" }, 20).map((x) => x.designation)).toEqual(["Fissure au plafond"]);
+    expect(lignesDevisDuRapport({ preconisations: null, constatations: null, metier: "plomberie" }, 20).map((x) => x.designation)).toEqual(["plomberie"]);
   });
 });
 

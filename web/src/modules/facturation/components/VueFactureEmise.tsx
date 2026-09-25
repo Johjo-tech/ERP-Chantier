@@ -65,7 +65,7 @@ export function VueFactureEmise({ facture, reglages }: { facture: Facture; regla
       {verrou && <Alert>{verrou.libelle}</Alert>}
       {avoir && facture.motif_rectification && <Alert>Motif : {facture.motif_rectification}</Alert>}
       {avoirOuvert && <FormulaireAvoir facture={facture} fermer={() => setAvoirOuvert(false)} />}
-      <EditeurLignes lignes={lignes} onChange={() => undefined} tvaDefaut={reglages.tvaDefaut} unites={reglages.unites} taux={reglages.tauxTva} lectureSeule />
+      <EditeurLignes lignes={lignes} onChange={() => undefined} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} lectureSeule />
       <BlocTotaux
         lignes={lignes}
         remise={String(facture.remise_pourcentage)}

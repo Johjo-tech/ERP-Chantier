@@ -12,7 +12,8 @@ import { montant, formatEuros } from "../../src/lib/money";
 import { brouillonEmail, lignesLogementPourEmail } from "../../src/modules/documents/domain/email";
 import { identifiantsLegaux, lireReglagesImpression, piedDePage, type IdentiteEmettrice } from "../../src/modules/documents/domain/identite";
 import { generateur } from "./aleatoire";
-import { sourceDe } from "./source-app";
+import { constanteDe, sourceDe } from "./source-app";
+import { UNITES_REPLI, unitesDeLaSociete } from "../../src/modules/documents/domain/unites";
 
 const g = generateur(40926);
 const peutEtre = <T>(v: T) => g.parmi([v, null, ""]);
@@ -87,6 +88,25 @@ describe("parité des réglages d'impression", () => {
         mentionAcceptation: a.mentionAcceptation,
         siteWeb: a.siteWeb,
       });
+    }
+  });
+});
+
+describe("parité des unités proposées (DEV-08)", () => {
+  it("le référentiel de la société dans l'ordre de entreesDuDomaine, sinon la liste de repli d'app.js", async () => {
+    const { entreesDuDomaine } = await import("../../../src/api/regles-referentiels");
+    const repliAncien = new Function(`${constanteDe("UNITES")}; return UNITES;`)() as string[];
+    expect([...UNITES_REPLI]).toEqual(repliAncien);
+    for (let i = 0; i < 500; i++) {
+      const entrees = Array.from({ length: g.entier(0, 6) }, (_, j) => ({
+        id: `e${j}`,
+        domaine: g.parmi(["unite", "unite", "categorie_achat"]),
+        libelle: g.parmi(["m²", "ml", "U", "forfait", "Épaisseur", "", "heure"]),
+        position: g.parmi([0, 1, 2, 5]),
+        societeId: "s",
+      }));
+      const declarees = entreesDuDomaine(entrees, "unite", "s").map((r) => r.libelle).filter(Boolean);
+      expect(unitesDeLaSociete(entrees)).toEqual(declarees.length ? declarees : repliAncien);
     }
   });
 });

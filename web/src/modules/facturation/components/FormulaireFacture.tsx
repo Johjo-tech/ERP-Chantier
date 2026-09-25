@@ -127,7 +127,7 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
           <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={!peutEcrire} sansTelephone />
         </CardContent>
       </Card>
-      <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} unites={reglages.unites} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} ChampReference={ChampReference} />
+      <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} ChampReference={ChampReference} />
       <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={peutEcrire ? (v) => changer("remise_pourcentage", v) : undefined} deductions={facture ? { acomptes: facture.acomptes_deduits, retenuePct: facture.retenue_garantie_pourcentage } : undefined} />
       <div className="flex flex-wrap gap-2">
         {peutEcrire && <Button type="submit" disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer le brouillon"}</Button>}

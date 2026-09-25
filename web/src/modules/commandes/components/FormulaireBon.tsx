@@ -135,7 +135,7 @@ export function FormulaireBon({ bon, prefill, reglages, ChampReference, messageI
       <h2 className="text-base font-semibold">Travaux à réaliser</h2>
       {prix ? (
         <>
-          <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} unites={reglages.unites} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={lectureSeule} ChampReference={ChampReference} />
+          <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={lectureSeule} ChampReference={ChampReference} />
           <BlocMontantBon lignes={lignes} montant={valeurs.montant} onMontant={(v) => changer("montant", v)} erreur={montantIllisible ? "Montant illisible." : undefined} lectureSeule={lectureSeule} />
         </>
       ) : (
