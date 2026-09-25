@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { ecransParcRh } from "./ecrans-parc-rh";
 
 /**
  * La table de correspondance « écran ancien ↔ route nouvelle ».
@@ -108,14 +109,15 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   "factures-avoirs": { bureau: { pixels: 0.14, texte: 34 } },
   "factures-reglements": { bureau: { pixels: 0.27, texte: 21 } },
   "factures-validation": { bureau: { pixels: 0.05, texte: 36 } },
-  materiel: { bureau: { pixels: 0.02, texte: 6 } },
+  // Repris (D-ECR-PAR-02) : identique sur le jeu `jeux/parc-rh.sql`.
+  materiel: { bureau: { pixels: 0.001, texte: 0 } },
   "pieces-en-commande": { bureau: { pixels: 0.17, texte: 31 } },
   planning: { bureau: { pixels: 0.55, texte: 46 } },
   rapports: { bureau: { pixels: 0.03, texte: 7 } },
   reglages: { bureau: { pixels: 0.51, texte: 86 } },
   rh: { bureau: { pixels: 0.08, texte: 4 } },
   statistiques: { bureau: { pixels: 0.33, texte: 50 } },
-  vehicules: { bureau: { pixels: 0.03, texte: 5 } },
+  vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };
 
 const TEMPS_RELATIF = [".activity-time"] as const;
@@ -230,6 +232,7 @@ export const ECRANS: readonly Ecran[] = [
   },
   // ── Les écrans des modules (vague suivante) ─────────────────────────────
   ...ecransModules(),
+  ...ecransParcRh({ onglet, cliquer, partout }),
 ];
 
 interface Module {

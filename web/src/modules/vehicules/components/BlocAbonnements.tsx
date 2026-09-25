@@ -1,8 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
@@ -12,26 +9,27 @@ import { etiquetteEcheance } from "../domain/echeances";
 import type { Vehicule } from "../domain/vehicule";
 import { FormulaireVente } from "./FormulaireVente";
 
-function Abonnement({ titre, fournisseur, numero, validite, seuil, vendu }: { titre: string; fournisseur: string | null; numero: string | null; validite: string | null; seuil: number | undefined; vendu: boolean }) {
-  useModeDiscret();
-  const e = seuil === undefined ? null : etiquetteEcheance(validite, seuil, vendu);
+function Abonnement(props: { titre: string; fournisseur: string | null; numero: string | null; vide: string; validite: string | null; prefixeValidite: string; seuil: number | undefined; vendu: boolean }) {
+  const e = props.seuil === undefined ? null : etiquetteEcheance(props.validite, props.seuil, props.vendu);
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="w-32 text-muted-foreground">{titre}</span>
-      <strong>{fournisseur || "—"}</strong>
-      <span className="text-xs text-muted-foreground">
-        {numero || "Non renseigné"}
-        {validite && ` · valide jusqu'au ${formatDateFr(validite)}`}
+    <div className="vehicule-abonnement-row">
+      <span>{props.titre}</span>
+      <strong>{props.fournisseur || "—"}</strong>
+      <span className="card-sub">
+        {props.numero || props.vide}
+        {props.validite && `${props.prefixeValidite}${formatDateFr(props.validite)}`}
       </span>
-      {e && <Badge variant={e.niveau === "danger" ? "danger" : "alerte"}>{e.texte}</Badge>}
+      {e && <span className="vehicule-ct-tag">{e.texte}</span>}
     </div>
   );
 }
 
 /**
- * Télépéage, carte carburant, et la vente (VEH-01, VEH-04). Vendre exige de
- * pouvoir modifier le véhicule ET créer une facture : le conducteur, qui a le
- * premier droit sans le second, ne voit pas le bouton.
+ * « 🛣️ Télépéage & ⛽ Carte carburant » et la vente (VEH-01, VEH-04), au HTML
+ * de l'ancien écran (app.js l. 15022). Vendre exige de pouvoir modifier le
+ * véhicule ET créer une facture : le conducteur, qui a le premier droit sans
+ * le second, ne voit pas le bouton. Les échéances proches portent l'étiquette
+ * de la liste (D-VEH-04).
  */
 export function BlocAbonnements({ vehicule }: { vehicule: Vehicule }) {
   useModeDiscret();
@@ -42,33 +40,32 @@ export function BlocAbonnements({ vehicule }: { vehicule: Vehicule }) {
   const reglages = useReglagesSociete();
   const seuil = reglages.data?.seuils.vehiculeCarte;
   const [vente, setVente] = useState(false);
+  const v = vehicule;
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Télépéage et carte carburant</CardTitle>
-        {!vehicule.vendu && peutVendre && !vente && (
-          <Button size="sm" variant="destructive" onClick={() => setVente(true)}>
-            Vendre ce véhicule
-          </Button>
+    <div className="chantier-section">
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>🛣️ Télépéage &amp; ⛽ Carte carburant</span>
+        {!v.vendu && peutVendre && (
+          <button type="button" className="btn small danger" onClick={() => setVente(true)}>
+            💰 Vendre ce véhicule
+          </button>
         )}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <Abonnement titre="Télépéage" fournisseur={vehicule.telepeage_fournisseur} numero={vehicule.telepeage_numero} validite={vehicule.telepeage_validite} seuil={seuil} vendu={vehicule.vendu} />
-        <Abonnement titre="Carte carburant" fournisseur={vehicule.carte_carburant_fournisseur} numero={vehicule.carte_carburant_numero} validite={vehicule.carte_carburant_validite} seuil={seuil} vendu={vehicule.vendu} />
-        {vente && <FormulaireVente vehicule={vehicule} onFermer={() => setVente(false)} />}
-        {vehicule.vendu && (
-          <div role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm">
-            <strong>Véhicule vendu</strong> le {formatDateFr(vehicule.date_vente)}
-            {voitLesPrix && vehicule.prix_vente != null && ` pour ${formatEurosEcran(montant(vehicule.prix_vente))} HT`}
-            {vehicule.facture_vente_id && (
-              <Button asChild size="sm" variant="outline">
-                <Link to={`/factures/${vehicule.facture_vente_id}`}>Voir la facture</Link>
-              </Button>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      <Abonnement titre="🛣️ Télépéage" fournisseur={v.telepeage_fournisseur} numero={v.telepeage_numero} vide="Non renseigné" validite={v.telepeage_validite} prefixeValidite=" · valide jusqu'au " seuil={seuil} vendu={v.vendu} />
+      <Abonnement titre="⛽ Carte carburant" fournisseur={v.carte_carburant_fournisseur} numero={v.carte_carburant_numero} vide="Non renseignée" validite={v.carte_carburant_validite} prefixeValidite=" · " seuil={seuil} vendu={v.vendu} />
+      {v.vendu && (
+        <div className="vehicule-vendu-info">
+          <strong>🚗 Véhicule vendu</strong> le {formatDateFr(v.date_vente)}
+          {voitLesPrix && v.prix_vente ? ` pour ${formatEurosEcran(montant(v.prix_vente))}` : ""}{" "}
+          {v.facture_vente_id && (
+            <Link className="btn small" to={`/factures/${v.facture_vente_id}`}>
+              Voir la facture
+            </Link>
+          )}
+        </div>
+      )}
+      {vente && <FormulaireVente vehicule={v} onFermer={() => setVente(false)} />}
+    </div>
   );
 }

@@ -73,10 +73,10 @@ describe("liste des véhicules (VEH-01)", () => {
     ["secretaire", true],
     ["conducteur", false],
     ["lecture", false],
-  ] as const)("bouton « Nouveau véhicule » pour %s : %s", async (role, visible) => {
+  ] as const)("bouton « + Nouveau véhicule » pour %s : %s", async (role, visible) => {
     rendreAvecSession(<PageVehicules />, { role });
     await screen.findByText("AB-123-CD · Renault Trafic");
-    expect(!!screen.queryByRole("link", { name: "Nouveau véhicule" })).toBe(visible);
+    expect(!!screen.queryByRole("link", { name: "+ Nouveau véhicule" })).toBe(visible);
   });
 });
 
@@ -97,7 +97,7 @@ describe("fiche véhicule", () => {
     await userEvent.selectOptions(within(form).getByLabelText(/Prêté à/), "s1");
     await userEvent.click(within(form).getByRole("button", { name: "Marquer cette zone" }));
     await userEvent.type(within(form).getByLabelText("Durée (jours)"), "3");
-    await userEvent.click(within(form).getByRole("button", { name: "Prêter" }));
+    await userEvent.click(within(form).getByRole("button", { name: "+ Prêter" }));
     expect(api.prets.preterVehicule).toHaveBeenCalledWith("v1", expect.objectContaining({ salarie_id: "s1", duree_jours: 3 }), [{ x: 110, y: 35 }]);
   });
 
@@ -111,14 +111,14 @@ describe("fiche véhicule", () => {
 
   it("la vente : proposée à la secrétaire (factures / créer), pas au conducteur", async () => {
     fiche("secretaire");
-    expect(await screen.findByRole("button", { name: "Vendre ce véhicule" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "💰 Vendre ce véhicule" })).toBeInTheDocument();
   });
 
   it("le conducteur modifie le véhicule mais ne le vend pas", async () => {
     fiche("conducteur");
     expect(await screen.findByRole("link", { name: "Modifier" })).toBeInTheDocument();
     expect(await screen.findByText("Vidange")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Vendre ce véhicule" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "💰 Vendre ce véhicule" })).not.toBeInTheDocument();
   });
 
   it("un véhicule vendu n'est plus prêtable et renvoie à sa facture", async () => {

@@ -1877,3 +1877,35 @@ relit pas `intervention_controles`) ni `typePanne` (la colonne est `metier`),
 et « Contrôles réalisés » disparaît du PDF. web/ imprime ce qui est enregistré,
 comme l'ancien l'imprimait à la saisie : c'est le seul écart mesuré sur le
 rapport (1 % des pixels, la section en plus) — `tests/visuel/pdf/`.
+
+## D-ECR-PAR-01 — Un jeu d'essai pour le parc et la RH (`tests/visuel/jeux/parc-rh.sql`)
+La base locale n'avait ni salarié, ni véhicule, ni matériel : les listes ne se comparaient que
+vides. Le jeu (idempotent, identifiants fixes `e5…`, libellés « PAR », société ALPHA) pose deux
+salariés, deux véhicules (dont un vendu) et deux matériels. Il ne pose volontairement ni date de
+contrôle technique ni prêt : l'ancien écran lit un `prochainCT` sans colonne et ne relit pas les
+prêts (D-VEH-01, D-VEH-04) — ces écarts sont décidés, les montrer n'aurait fait que les compter.
+
+## D-ECR-PAR-02 — Parc : le HTML de l'ancien, les ajouts décidés dans son style
+Listes, fiches et formulaires de véhicules et de matériel reprennent `renderVehicules`,
+`renderVehiculeDetail`, `vehiculeForm`, `renderMateriel`, `renderMaterielDetail`, `materielForm`
+(en-tête du module AU-DESSUS de la fiche, `.vehicule-hero`, `.chantier-sections`,
+`.entretien-add-row`, `.achats-list`, `.vehicule-abonnement-row`, fenêtre `#vendreVehiculeModal`).
+Les refus se disent comme avant : `alert()` pour une fiche sans nom / sans plaque, bulle
+(`afficherToast`) pour un prêt sans emprunteur, un entretien sans désignation, une vente
+incomplète. Après création, retour à la liste (l'ancien refermait le formulaire). Restent, décidés :
+« Supprimer » sur la fiche véhicule et la confirmation avant de retirer un prêt, un entretien ou
+un document (D-VEH-07), « Autre document… » à côté de « + Ajouter » (D-VEH-03), la validité de la
+carte carburant en date (D-VEH-05), l'acheteur choisi dans le répertoire et le taux dans la vente
+(D-VEH-06). La phrase sous la vente dit que la facture est émise aussitôt : l'ancienne la disait
+« modifiable ensuite dans l'onglet Factures » alors qu'il l'émettait déjà.
+
+## D-ECR-PAR-03 — Le relevé du schéma au clavier, réservé au clavier et aux lecteurs d'écran
+D-VEH-02 permet de poser une marque par zone nommée. Visible, ce sélecteur ajoutait trois
+contrôles que l'ancien écran n'a pas : il passe en `.sr-only` (joignable au clavier, annoncé),
+seul « Effacer les marques » reste à l'écran, comme avant.
+
+## D-ECR-PAR-04 — `BarreRecherche`, composant partagé
+`barreRecherche()` de l'ancien (`.barre-recherche`, compteur « n sur m ») sert à une dizaine de
+listes : il devient `components/ui/barre-recherche.tsx`, libellé caché en plus. La liste du matériel
+garde son champ nu (`renderMateriel` n'utilisait pas la barre commune), et son message vide
+« Aucun matériel pour l'instant. » même quand la recherche écarte tout — c'est celui de l'ancien.
