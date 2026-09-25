@@ -8,10 +8,10 @@ export function dateDuJourEnLettres(maintenant: Date = new Date()): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-/** Le NOM du profil, jamais un morceau d'adresse refabriqué (ancien `salutation`). */
+/** Le NOM du profil, jamais un morceau d'adresse refabriqué (ancien `salutation`, sa main levée comprise). */
 export function salutation(nom: string | null | undefined): string {
   const n = (nom ?? "").trim();
-  return n ? `Bonjour ${n}` : "Bonjour";
+  return n ? `Bonjour 👋 ${n}` : "Bonjour 👋";
 }
 
 /** « 12,5 » : une mesure en jours ou en pourcentage, au dixième. */
