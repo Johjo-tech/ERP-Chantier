@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { copieDeFacture, refusDuplication } from "./duplication";
 import type { Facture } from "./facture";
-import { pieceDeFacture } from "./impression";
+import { renderPrintDoc } from "@/modules/documents/impression/gabarit";
+import { contexteFacture } from "./impression";
 import { verrouFacture } from "./verrou";
 
 const f = {
@@ -42,18 +43,27 @@ describe("une seule définition de l'avoir (FAC-94)", () => {
 });
 
 describe("la facture imprimée (FAC-10)", () => {
+  const emetteur = { s: { raisonSocialeLegale: "ALPHA SAS", iban: "FR00-DU-JOUR", reglages: { documents: {} } }, nomSociete: "ALPHA", variables: {} };
+  const meta = (html: string) => [...html.matchAll(/<dt>(.*?)<\/dt><dd>(.*?)<\/dd>/g)].map((m) => [m[1], m[2]]);
+
   it("échéance, devis d'origine, marché ; l'identité figée l'emporte", () => {
-    const p = pieceDeFacture(f, { devisNumero: "DEV-2026-000003", rectifiee: null });
-    expect(p.meta).toEqual([["Date d'échéance", "14/02/2026"], ["Devis", "DEV-2026-000003"], ["Marché", "M-1"]]);
-    expect(p.emetteurFige?.iban).toBe("FR76");
-    expect(p.client).toMatchObject({ siret: "999", tva: "FR9" });
+    const c = contexteFacture(f, { devisNumero: "DEV-2026-000003", rectifiee: null }, emetteur, []);
+    const html = renderPrintDoc(c);
+    expect(meta(html)).toContainEqual(["Date d'échéance", "14/02/2026"]);
+    expect(meta(html)).toContainEqual(["Devis", "DEV-2026-000003"]);
+    expect(meta(html)).toContainEqual(["Marché", "M-1"]);
+    expect(html).toContain("IBAN : <span>FR76</span>");
+    expect(html).toContain("SIRET 999");
+    expect(html).toContain("TVA FR9");
   });
 
-  it("un avoir cite la facture qu'il rectifie et son motif, sans échéance", () => {
-    const p = pieceDeFacture({ ...f, type_document: "avoir", motif_rectification: "Double facturation" }, { devisNumero: null, rectifiee: { numero: "FAC-2026-000009", date: "2026-01-02" } });
-    expect(p.titre).toBe("AVOIR");
-    expect(p.meta).toEqual([["Marché", "M-1"], ["Rectifie la facture", "FAC-2026-000009 du 02/01/2026"], ["Motif", "Double facturation"]]);
-    expect(p.reglement).toBeUndefined();
-    expect(p.signe).toBe(-1);
+  it("un avoir cite la facture qu'il rectifie et son motif, sous le titre AVOIR, montants positifs comme l'ancien (D-PDF-03)", () => {
+    const c = contexteFacture({ ...f, type_document: "avoir", motif_rectification: "Double facturation" }, { devisNumero: null, rectifiee: { numero: "FAC-2026-000009", date: "2026-01-02" } }, emetteur, []);
+    const html = renderPrintDoc(c);
+    expect(c.titre).toBe("AVOIR");
+    expect(meta(html)).toContainEqual(["Rectifie la facture", "FAC-2026-000009 du 02/01/2026"]);
+    expect(meta(html)).toContainEqual(["Motif", "Double facturation"]);
+    // Aucun montant négatif : ni dans les lignes, ni dans les totaux (seules les déductions portent un « - »).
+    expect(html).toContain('<div class="p-kv p-ttc"><span>Total TTC</span><em>114,00\u00a0€</em></div>');
   });
 });

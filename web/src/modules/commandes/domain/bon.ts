@@ -24,6 +24,8 @@ export const schemaBon = z.object({
   client_nom: z.string(),
   interlocuteur: z.string().nullable(),
   adresse: z.string().nullable(),
+  /** Lue pour la pièce imprimée : la carte « Adresse du chantier » de l'ancien gabarit (D-PDF-01). */
+  adresse_locataire: z.string().nullish(),
   code_postal: z.string().nullable(),
   ville: z.string().nullable(),
   logement_statut: statutLogement,

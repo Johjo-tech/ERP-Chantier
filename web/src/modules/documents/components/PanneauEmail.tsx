@@ -4,14 +4,14 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
 import { lienMailto, texteACopier, type BrouillonEmail } from "../domain/email";
-import type { ModeleDocument } from "../domain/modele";
+import type { PieceImprimee } from "../impression/zone";
 import { BoutonPdf } from "./BoutonPdf";
 
 interface Props {
   brouillon: BrouillonEmail;
-  modele: ModeleDocument | null;
+  piece: PieceImprimee | null;
   /** Passe avant l'ouverture de la messagerie et avant le PDF (cadenas d'une facture, FAC-12). */
-  avant?: () => Promise<void>;
+  avant?: (() => Promise<void>) | undefined;
   fermer: () => void;
 }
 
@@ -20,7 +20,7 @@ interface Props {
  * l'utilisateur (`mailto:`), ou copie pour un webmail — le parcours de
  * l'ancienne fenêtre (app.js l. 11816-11850), sans service d'envoi.
  */
-export function PanneauEmail({ brouillon, modele, avant, fermer }: Props) {
+export function PanneauEmail({ brouillon, piece, avant, fermer }: Props) {
   const [b, setB] = useState(brouillon);
   const [avis, setAvis] = useState<{ ok: boolean; texte: string } | null>(null);
 
@@ -52,7 +52,7 @@ export function PanneauEmail({ brouillon, modele, avant, fermer }: Props) {
       <p className="text-sm text-muted-foreground">Téléchargez le PDF, puis joignez-le au message ouvert dans votre messagerie.</p>
       {avis && <Alert variant={avis.ok ? "succes" : "erreur"}>{avis.texte}</Alert>}
       <div className="flex flex-wrap gap-2">
-        <BoutonPdf modele={modele} avant={avant} />
+        <BoutonPdf piece={piece} avant={avant} />
         <Button onClick={() => void ouvrirMessagerie()}>Ouvrir la messagerie</Button>
         <Button variant="outline" onClick={() => void copier()}>Copier le texte</Button>
         <Button variant="ghost" onClick={fermer}>Fermer</Button>

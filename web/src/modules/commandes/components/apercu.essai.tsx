@@ -29,18 +29,35 @@ function ouvrir() {
   );
 }
 
-describe("aperçu imprimable du bon", () => {
-  it("porte le logo de la société, comme le devis et la facture", async () => {
-    documents.lireIdentiteDocument.mockResolvedValue({ identite: { logo: LOGO }, reglages: {} });
-    ouvrir();
-    expect(await screen.findByRole("img", { name: "Logo de ALPHA Rénovation SAS" })).toHaveAttribute("src", LOGO);
-    expect(screen.getByRole("heading", { name: "BON DE COMMANDE" })).toBeInTheDocument();
+const emetteur = (logo: string | null) => ({
+  identite: {},
+  reglages: {},
+  imprimable: { s: { raisonSocialeLegale: "ALPHA Rénovation SAS", logo, reglages: { documents: {} } }, nomSociete: "ALPHA", variables: { "--accent": "#1E8FD5" } },
+});
+
+describe("aperçu imprimable du bon (le gabarit de l'ancien, D-PDF-01)", () => {
+  it("porte le logo de la société en tête, comme le devis et la facture", async () => {
+    documents.lireIdentiteDocument.mockResolvedValue(emetteur(LOGO));
+    const { container } = ouvrir();
+    expect(await screen.findByText("BON DE COMMANDE")).toBeInTheDocument();
+    expect(container.ownerDocument.querySelector(".p-logo-case .p-logo")).toHaveAttribute("src", LOGO);
+    // La référence du client est toujours imprimée (BC-80).
+    expect(screen.getByText("Réf. client")).toBeInTheDocument();
+    expect(screen.getByText("Validation de la pré-facture :")).toBeInTheDocument();
   });
 
-  it("un logo illisible n'empêche pas d'imprimer le bon", async () => {
-    documents.lireIdentiteDocument.mockRejectedValue(new Error("seau indisponible"));
-    ouvrir();
-    expect(await screen.findByRole("heading", { name: "BON DE COMMANDE" })).toBeInTheDocument();
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  it("sans logo, l'en-tête glisse (p-sans-logo) au lieu de s'ouvrir sur un vide", async () => {
+    documents.lireIdentiteDocument.mockResolvedValue(emetteur(null));
+    const { container } = ouvrir();
+    expect(await screen.findByText("BON DE COMMANDE")).toBeInTheDocument();
+    expect(container.ownerDocument.querySelector(".p-entete-grille.p-sans-logo")).not.toBeNull();
+    expect(container.ownerDocument.querySelector("img")).toBeNull();
+  });
+
+  it("la couleur de la société est posée sur la fenêtre, que le gabarit lit par ses variables", async () => {
+    documents.lireIdentiteDocument.mockResolvedValue(emetteur(null));
+    const { container } = ouvrir();
+    await screen.findByText("BON DE COMMANDE");
+    expect((container.ownerDocument.querySelector(".view-modal") as HTMLElement).style.getPropertyValue("--accent")).toBe("#1E8FD5");
   });
 });

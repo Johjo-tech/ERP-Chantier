@@ -3,6 +3,8 @@ import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { BUCKET } from "@/modules/societes/api/societe";
 import { paletteSociete } from "@/modules/societes/theme/palette";
+import { variablesPalette } from "../impression/palette";
+import { societeImprimable, type EmetteurImprimable } from "../impression/pieces";
 import { cheminLogoDuSeau, lireReglagesImpression, logoDesReglages, type CouleursDocument, type IdentiteEmettrice, type ReglagesImpression } from "../domain/identite";
 
 const schemaSociete = z.object({
@@ -29,6 +31,8 @@ const schemaSociete = z.object({
 export interface IdentiteDocument {
   identite: IdentiteEmettrice;
   reglages: ReglagesImpression;
+  /** L'émetteur tel que l'ancien gabarit le lit (`state.settings`, nom d'usage, couleurs). */
+  imprimable: EmetteurImprimable;
 }
 
 /**
@@ -48,7 +52,14 @@ export async function lireIdentiteDocument(societeId: string): Promise<IdentiteD
   const infos = reglages.data?.infos_entreprise ?? null;
   const impression = lireReglagesImpression(infos);
   const chemin = cheminLogoDuSeau(infos, s.logo_url, societeId);
+  const logo = chemin ? await logoDuSeau(chemin) : logoDesReglages(infos, s.logo_url);
+  const { afficherIban, conditionsDevis, mentionsComplementaires, piedDePage, siteWeb } = impression;
   return {
+    imprimable: {
+      s: societeImprimable(s, infos, logo, { documents: { afficherIban, conditionsDevis, mentionsComplementaires, piedDePage, siteWeb } }),
+      nomSociete: s.nom,
+      variables: variablesPalette(paletteSociete(impression.couleurAccent, impression.couleurSecondaire)),
+    },
     identite: {
       // La raison sociale AVANT le nom d'usage : c'est elle que le client doit lire.
       nom: s.raison_sociale_legale || s.nom,
@@ -67,7 +78,7 @@ export async function lireIdentiteDocument(societeId: string): Promise<IdentiteD
       codeNaf: s.code_naf,
       iban: s.iban,
       bic: s.bic,
-      logo: chemin ? await logoDuSeau(chemin) : logoDesReglages(infos, s.logo_url),
+      logo,
       couleurs: couleursDocument(impression),
     },
     reglages: impression,

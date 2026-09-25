@@ -3,12 +3,13 @@ import { clesBons } from "@/modules/commandes/hooks/useBons";
 import { todayISO } from "@/lib/dates";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { depuisBase, lignesPourEnregistrement } from "@/modules/documents/domain/lignes";
-import { construireModele, type ModeleDocument } from "@/modules/documents/domain/modele";
+import { pieceImprimee } from "@/modules/documents/impression/pieces";
+import type { PieceImprimee } from "@/modules/documents/impression/zone";
 import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { enregistrerDevis, listerDevis, lireDevis, supprimerDevis, totauxDesDevis } from "../api/devis";
 import { bonDepuisDevis } from "../api/operations";
 import type { Devis } from "../domain/devis";
-import { pieceDeDevis } from "../domain/impression";
+import { contexteDevis } from "../domain/impression";
 import type { EnteteAEnregistrer } from "../domain/devis";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 
@@ -85,9 +86,10 @@ export function useBonDepuisDevis() {
   });
 }
 
-/** Le modèle imprimable du devis : un seul pour l'aperçu, le PDF et l'e-mail. Pas de mentions de facture. */
-export function useModeleDevis(devis: Devis | null, validiteJours: number): ModeleDocument | null {
+/** La pièce imprimée du devis — le HTML de l'ancien gabarit : un seul pour l'aperçu, le PDF et l'e-mail. */
+export function useModeleDevis(devis: Devis | null, validiteJours: number): PieceImprimee | null {
   const doc = useIdentiteDocument();
   if (!devis || !doc.data) return null;
-  return construireModele(pieceDeDevis(devis, validiteJours), doc.data.identite, doc.data.reglages, []);
+  const e = doc.data.imprimable;
+  return pieceImprimee(contexteDevis(devis, e, validiteJours), e.variables);
 }
