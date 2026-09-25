@@ -49,7 +49,8 @@ interface Props {
   reglages: ReglagesDocuments;
   /** Remonté au parent : après enregistrement, la pré-facture relue remonte (les lignes prennent leur uuid). */
   message: string | null;
-  onEnregistre: (message: string) => void;
+  /** Rendu après la relecture de la fiche : le formulaire ne remonte que sur l'état enregistré. */
+  onEnregistre: (message: string) => Promise<void>;
 }
 
 /**
@@ -125,7 +126,7 @@ function Prefacture({ bon, taches, travaux, reglages, message, onEnregistre }: P
           <DocumentPrefacture document={document} connus={connus} saisies={saisies} erreurs={saisis.erreurs} onSaisie={(id, s) => setSaisies((avant) => ({ ...avant, [id]: s }))} chiffrageTravaux={chiffrageTravaux} />
           {!fige && droits.peutModifierPrefacture && (
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" disabled={enCours || !saisieValide} onClick={() => { setErreur(null); enregistrer.mutate({ bonId: bon.id, lignes: l.lignes, montant: montantAEnregistrer(l.lignes, 0), prix }, { onSuccess: () => onEnregistre("Prix enregistrés."), onError: echec }); }}>
+              <Button variant="outline" disabled={enCours || !saisieValide} onClick={() => { setErreur(null); enregistrer.mutate({ bonId: bon.id, lignes: l.lignes, montant: montantAEnregistrer(l.lignes, 0), prix }, { onSuccess: () => void onEnregistre("Prix enregistrés."), onError: echec }); }}>
                 Enregistrer les prix
               </Button>
               {droits.peutValiderPrefacture && (
@@ -161,6 +162,7 @@ export function PagePrefacture() {
   const travaux = useTravaux(id);
   const reglages = useReglages();
   // Remonté après « Enregistrer les prix » seulement (les lignes y prennent leur uuid) : une erreur, elle, reste affichée.
+  // Et remonté sur la fiche RELUE : sinon « Valider » enverrait les anciennes lignes et un montant calculé sur elles (relecture 4, B1).
   const [enregistrement, setEnregistrement] = useState<{ n: number; message: string | null }>({ n: 0, message: null });
   const { roleEffectif } = useSession();
   const prix = useVoitLesPrix();
@@ -171,7 +173,10 @@ export function PagePrefacture() {
   return (
     <div className="flex flex-col gap-4">
       <EnTetePage titre={`Pré-facture — BC ${bon.data.numero_interne ?? bon.data.numero_bc ?? "sans numéro"}`} sousTitre={bon.data.client_nom} actions={<Button variant="ghost" asChild><Link to={`/commandes/${bon.data.id}`}>Retour au bon</Link></Button>} />
-      <Prefacture key={`${bon.data.id}-${enregistrement.n}`} bon={bon.data} taches={taches.data} travaux={travaux.data} reglages={reglages.data ?? REGLAGES_DEFAUT} message={enregistrement.message} onEnregistre={(m) => setEnregistrement((e) => ({ n: e.n + 1, message: m }))} />
+      <Prefacture key={`${bon.data.id}-${enregistrement.n}`} bon={bon.data} taches={taches.data} travaux={travaux.data} reglages={reglages.data ?? REGLAGES_DEFAUT} message={enregistrement.message} onEnregistre={async (m) => {
+        await Promise.all([bon.refetch(), travaux.refetch()]);
+        setEnregistrement((e) => ({ n: e.n + 1, message: m }));
+      }} />
     </div>
   );
 }

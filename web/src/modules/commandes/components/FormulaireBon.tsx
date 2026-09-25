@@ -45,7 +45,8 @@ interface Props {
   ChampReference?: ChampReferenceLigne | undefined;
   messageInitial: { texte: string; alerte: boolean } | null;
   /** Après un enregistrement réussi d'un bon existant : la fiche relue remonte le formulaire (relecture 3, M12). */
-  onEnregistre: (message: string) => void;
+  /** Rendu après la relecture de la fiche : le formulaire ne remonte que sur l'état enregistré. */
+  onEnregistre: (message: string) => Promise<void>;
 }
 
 function lignesInitiales(bon: Bon | null, prefill: PreRemplissageBon | null, tva: number): LigneEdition[] {
@@ -125,7 +126,7 @@ export function FormulaireBon({ bon, prefill, fichierLu, reglages, ChampReferenc
       { entete: p.entete, lignes: p.lignes, pieceJointe, pieceJointeActuelle: bon?.piece_jointe_chemin ?? null },
       {
         onSuccess: (id) => {
-          if (bon) onEnregistre(reussite);
+          if (bon) void onEnregistre(reussite);
           else void navigate(`/commandes/${id}`, { replace: true, state: { message: reussite } });
         },
         onError: (err) => {
