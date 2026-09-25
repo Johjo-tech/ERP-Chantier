@@ -40,6 +40,9 @@ Mot de passe de tous : `motdepasse-local`.
 | `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
 | `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
 | | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
+| `comptes.essai.ts` | Compte jetable (inscription) : l'admin change un rôle, un non-admin non (zéro ligne) ; l'admin ne se retire pas son propre rôle (42501) ; accès désactivé = société invisible, réactivé = rendue ; invitation appliquée à l'inscription (membre, rôle, « acceptée ») ; une invitation par adresse et société (casse comprise) ; seul l'admin invite ; chacun renomme son profil, pas celui d'un autre | non |
+| | Un compte ne modifie ni son `actif` ni son adresse | **oui** (20260926010000) |
+| `reglages.essai.ts` | `societes` : admin seul (secrétaire et conducteur : zéro ligne), pas BETA ; `societe_settings` et `compteurs` suivent `reglages/modifier` ; documents légaux : pièce déposée sous `<societe>/…`, illisible et invisible pour BETA, refusée au rôle lecture ; listes et fournisseurs : admin oui, secrétaire non | non |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

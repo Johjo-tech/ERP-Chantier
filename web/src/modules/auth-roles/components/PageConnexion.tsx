@@ -7,8 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { messageErreur } from "@/lib/erreurs";
+import { demanderReinitialisation } from "../api/compte";
 import { seConnecter } from "../api/session";
 import { schemaConnexion } from "../domain/connexion";
+import { messageLienEnvoye, schemaDemandeReinitialisation } from "../domain/motdepasse";
 import { useSession } from "../hooks/useSession";
 
 export function PageConnexion() {
@@ -18,6 +20,7 @@ export function PageConnexion() {
   const [motDePasse, setMotDePasse] = useState("");
   const [erreurs, setErreurs] = useState<{ email?: string; motDePasse?: string; general?: string }>({});
   const [envoi, setEnvoi] = useState(false);
+  const [lienEnvoye, setLienEnvoye] = useState<string | null>(null);
 
   if (etat.statut === "connecte") return <Navigate to="/" replace />;
 
@@ -41,16 +44,40 @@ export function PageConnexion() {
     }
   }
 
+  /** AUTH-03 : comme l'ancienne page, l'adresse saisie sert à la demande ; la réponse reste neutre. */
+  async function motDePasseOublie() {
+    setLienEnvoye(null);
+    const r = schemaDemandeReinitialisation.safeParse({ email });
+    if (!r.success) {
+      setErreurs({ email: r.error.issues[0]?.message ?? "Adresse e-mail invalide." });
+      return;
+    }
+    setErreurs({});
+    setEnvoi(true);
+    try {
+      await demanderReinitialisation(r.data.email);
+      setLienEnvoye(messageLienEnvoye(r.data.email));
+    } catch (err) {
+      console.error("Demande de réinitialisation refusée", err);
+      setErreurs({ general: "Envoi impossible. Réessayez dans un instant." });
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
   return (
     <main className="flex min-h-full items-center justify-center bg-muted p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>ERP Chantier</CardTitle>
           <p className="text-sm text-muted-foreground">Connectez-vous pour continuer.</p>
+          {/* AUTH-05 : la date du jour, et aucune société — on ne sait pas encore chez qui l'on entre. */}
+          <p className="text-xs text-muted-foreground">{dateDuJour()}</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
             {erreurs.general && <Alert variant="erreur">{erreurs.general}</Alert>}
+            {lienEnvoye && <Alert variant="succes">{lienEnvoye}</Alert>}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">Adresse e-mail</Label>
               <Input
@@ -88,9 +115,19 @@ export function PageConnexion() {
             <Button type="submit" disabled={envoi}>
               {envoi ? "Connexion…" : "Se connecter"}
             </Button>
+            <Button type="button" variant="ghost" size="sm" disabled={envoi} onClick={() => void motDePasseOublie()}>
+              Mot de passe oublié ?
+            </Button>
           </form>
         </CardContent>
       </Card>
     </main>
   );
+}
+
+const formatJour = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+function dateDuJour(): string {
+  const d = formatJour.format(new Date());
+  return d.charAt(0).toUpperCase() + d.slice(1);
 }

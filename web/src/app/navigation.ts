@@ -20,4 +20,5 @@ export const NAVIGATION: readonly EntreeNavigation[] = [
   { chemin: "/commandes", libelle: "Bons de commande", module: "bons_commande", fonctionnalite: "commandes" },
   { chemin: "/pieces", libelle: "Pièces", module: "bons_commande", fonctionnalite: "commandes" },
   { chemin: "/factures", libelle: "Factures", module: "factures", fonctionnalite: "factures" },
+  { chemin: "/reglages", libelle: "Réglages", module: "reglages" },
 ];

@@ -11,5 +11,9 @@
 - **Règles** : « voir en tant que » réservé à l'admin de la société active, bandeau
   permanent (DECISIONS D-010) ; technicien et sous-traitant ne voient aucun prix ;
   la déconnexion vide tout le cache.
+- **Compte** : « Mot de passe oublié ? » sur la connexion (réponse neutre),
+  `/nouveau-mot-de-passe` ouvert par la session « recovery » du lien, `/mon-compte`
+  (nom affiché, mot de passe) ouvert à tous les rôles. Seul `profiles.nom` est
+  modifiable par l'utilisateur (proposition `20260926010000`).
 - **Tests** : `domain/*.essai.ts`, `app/Layout.essai.tsx` (menu par rôle),
   `tests/rls/isolement.essai.ts` (la vraie barrière).

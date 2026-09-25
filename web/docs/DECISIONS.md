@@ -302,3 +302,96 @@ remonter le formulaire (et perdre ce qui est en cours de saisie), le numéro
 reçu et le mode « normal » y sont reportés : le prochain « Enregistrer »
 n'écrase plus le numéro par la sentinelle d'attente (relecture 3, B1). Les
 actions de l'en-tête vivent hors du `<form>` du bon (I1).
+
+## D-SOC-01 — Réglages : lecture ouverte, écriture au seul administrateur
+La matrice donne `reglages/voir` à la secrétaire, au conducteur et au rôle lecture,
+`reglages/modifier` au seul administrateur. L'écran s'ouvre donc à eux en lecture
+seule, champs grisés. Pour les listes, métiers, conducteurs, fournisseurs et
+documents légaux, la base est plus large (`peut_ecrire` : admin, conducteur,
+technicien) : l'écran reste au plus étroit, celui de la matrice. Aucune migration.
+
+## D-SOC-02 — Documents légaux dans leur table et le bucket, plus dans le JSON
+L'ancien écran rangeait les documents légaux en data-URL dans
+`infos_entreprise.documentsLegaux` (SOC-51) alors que la table `documents_legaux`
+existe. `web/` écrit dans la table et dépose le fichier dans le bucket `terrain` sous
+`<societe>/documents-legaux/`. Les pièces héritées du JSON sont listées en lecture
+seule (« à redéposer ») : rien ne disparaît, rien n'est migré en silence.
+
+## D-SOC-03 — La palette hors de `domain/`
+`regles-theme.ts` arrondit des canaux de couleur (0-255) par `Math.round`. Le
+garde-fou « pas de Math.round dans le domaine » vise l'argent : le portage vit dans
+`societes/theme/palette.ts`, à l'identique (parité : `tests/parite/reglages.essai.ts`).
+
+## D-SOC-04 — Couleur : le ton foncé sert de primaire ; aperçu par pastilles
+La couleur primaire de l'interface est `accentFonce` (lisible à 4,5:1 sous son
+encre, et sur le blanc), pas l'accent brut. Sans réglage, c'est l'orange historique
+(`#C24E00`) : l'écran de `web/` quitte son bleu neutre pour la couleur de la
+société, comme l'ancien. L'ancien réglage repeignait tout l'écran pendant qu'on
+choisissait ; `web/` montre la palette en pastilles et l'applique à l'enregistrement
+— un aperçu global non enregistré se défaisait mal au changement de rubrique.
+Les variables `--color-accent-societe*` / `--color-secondaire-societe*` sont posées
+pour que les documents imprimés s'y branchent (module documents).
+
+## D-SOC-05 — Logo dans le bucket, chemin dans `societes.logo_url`
+La colonne `logo_url` existe ; le logo va dans `terrain` sous `<societe>/societe/`,
+lu par lien signé (bucket privé). Tant qu'aucun logo n'est déposé, la data-URL de
+l'ancienne app (`infos_entreprise.logo`) est montrée. Image PNG/JPEG/SVG/WebP,
+2 Mo au plus.
+
+## D-SOC-06 — « Mon compte » hors des Réglages, ouvert à tous
+Le technicien et le sous-traitant n'ont pas `reglages/voir` : l'ancien onglet
+« Mon nom » leur était donc inaccessible. `/mon-compte` (lien dans le menu
+utilisateur) porte le nom affiché et le changement de mot de passe, pour tous.
+
+## D-SOC-07 — Comptes et invitations regroupés dans Réglages › Comptes
+L'ancienne app invitait depuis la fiche RH du salarié et ne changeait un rôle qu'en
+cochant « Conducteur ». `web/` réunit, pour l'administrateur (`utilisateurs`) :
+membres (rôle, accès actif/désactivé), salariés sans compte (inviter, renvoyer,
+annuler — même fonction de bord, mêmes règles), historique des invitations. Donner
+le rôle administrateur se confirme, à l'invitation comme au changement de rôle.
+Le bloc de la fiche RH pourra réutiliser `comptes/api` et `BlocInvitations`.
+
+## D-SOC-08 — Sous-traitant : pas d'invitation (reproduit)
+AUTH-79 : la fonction de bord refuse `sous_traitant` et exige un salarié. On
+reproduit (rôle absent des rôles invitables) ; ouvrir un compte à un sous-traitant
+demande une décision produit et une évolution de la fonction de bord
+(`invitations.sous_traitant_id` existe déjà).
+
+## D-SOC-09 — Profil : seul le nom se modifie (proposition 20260926010000)
+`profiles_update_self` n'avait pas de restriction de colonne : un compte coupé de
+toutes ses sociétés (`profiles.actif = false`) se réactivait lui-même, et chacun
+pouvait s'attribuer l'adresse d'un autre dans l'annuaire. Proposition : droit
+UPDATE de `authenticated` restreint à `nom` ; suppression de la politique SELECT
+en double (AUTH-74). Constaté puis corrigé en local (`tests/rls/comptes.essai.ts`).
+
+## D-SOC-10 — Numérotation : préfixe « lettres, chiffres, _ », une confirmation groupée
+L'ancien écran acceptait tout préfixe de 8 caractères ; un tiret y rendrait le
+numéro ambigu avec le séparateur d'année (`DEV-2026-000001`). `web/` le refuse. Les
+baisses de compteur se confirment en une fois (la liste des séries concernées)
+au lieu d'un `confirm` par série.
+
+## D-SOC-11 — Taux de TVA séparés par « ; »
+L'ancien champ séparait les taux par des virgules (« 0, 5.5, 10 ») ; `web/` affiche
+« 0 ; 5,5 ; 10 » (virgule décimale française) et accepte les deux écritures.
+Délai compté (net / fin de mois) et mode de règlement par défaut, présents dans le
+document mais absents de l'ancien écran, y sont exposés.
+
+## D-SOC-12 — Ce qui reste tenu par la base, sans écran
+Création d'une société (SOC-25 : service seulement, métiers et référentiels posés
+par déclencheur), premier administrateur (AUTH-41 : `amorcer_premier_admin`), liste
+des sociétés de production (SOC-31 : une donnée, aucune liste en dur dans `web/`).
+`web/` n'a rien à reprendre ; `amorcer_premier_admin` n'est pas testable sur une
+base locale partagée (il n'agit que si `membres_societe` est vide).
+
+## D-SOC-13 — Fonction de bord `inviter-salarie` inchangée
+Elle vit hors de `web/` (lecture seule). Son défaut AUTH-77 (`listUsers()` sur une
+seule page de 50 comptes) est à corriger côté fonction (pagination ou recherche par
+adresse) ; `web/` l'appelle telle quelle, valide sa réponse (Zod) et relaie ses
+motifs de refus. Elle n'est pas servie par la base locale (edge-runtime exclu) :
+le contrat est testé en unitaire, pas de bout en bout.
+
+## D-SOC-14 — Aucun champ sans colonne
+PAR-20 : l'ancien écran perdait `sousTraitant.documents` et `document.notes`, faute
+de colonne. `web/` n'offre que des champs qui ont leur colonne (Zod aux frontières,
+colonnes explicites) : un document légal n'a pas de notes. Les documents des
+sous-traitants relèvent de l'écran RH.
