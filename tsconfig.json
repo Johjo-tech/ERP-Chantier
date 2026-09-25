@@ -10,6 +10,10 @@
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    /* `react-jsx` et non `react` : la transformation moderne n'exige plus que
+       chaque fichier importe React pour compiler du JSX. Un import manquant ne
+       fait donc pas tomber la construction. */
+    "jsx": "react-jsx",
     "skipLibCheck": true,
     "strict": true,
     "esModuleInterop": true,

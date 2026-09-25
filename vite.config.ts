@@ -1,4 +1,5 @@
 import { defineConfig, parseAst } from "vite";
+import react from "@vitejs/plugin-react";
 import { transform } from "esbuild";
 import path from "path";
 import { readFileSync, globSync } from "node:fs";
@@ -364,7 +365,18 @@ function scriptInlineMinifie() {
 const pages = path.resolve(__dirname, "src/pages");
 
 export default defineConfig({
-  plugins: [marqueurVersion, nomsPartagesResolus(), gestionnairesPublies(), scriptInlineMinifie()],
+  /* `react()` passe EN TÊTE : il transforme le JSX en JavaScript, et les trois
+     greffons maison qui suivent inspectent du JavaScript. Placé après eux, le
+     JSX leur arriverait brut — `parseAst` échouerait sur une balise, et
+     `gestionnairesPublies()` cesserait de voir les noms posés sur `window`.
+     Ce garde-fou avait coûté une journée le 21/09 ; il reste en aval. */
+  plugins: [
+    react(),
+    marqueurVersion,
+    nomsPartagesResolus(),
+    gestionnairesPublies(),
+    scriptInlineMinifie(),
+  ],
   // Les pages servent de racine pour obtenir des URLs propres (/ et /login.html)
   root: pages,
   // `envDir` suit `root` par défaut : sans ça, Vite chercherait .env.local dans
