@@ -1,5 +1,3 @@
-import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
-
 /**
  * Machine à états d'une tâche de planning, et créneau d'une journée.
  *
@@ -9,15 +7,12 @@ import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
  * sert à ne pas proposer un geste qui serait refusé, et à dire pourquoi avant
  * l'aller-retour.
  */
-export type StatutTache = "planifiee" | "realisee" | "validee" | "refusee";
-export type GesteTache = "realiser" | "arbitrer";
+import { statutDe, TRANSITIONS, type AppartenanceTache, type GesteTache, type StatutTache } from "@/modules/auth-roles/domain/actions";
 
-export const STATUT_INITIAL: StatutTache = "planifiee";
-
-export const TRANSITIONS: Record<GesteTache, readonly StatutTache[]> = {
-  realiser: ["planifiee", "refusee"],
-  arbitrer: ["realisee"],
-};
+// États, transitions et gestes par rôle vivent dans auth-roles, partagés avec
+// le circuit des bons (AUTH-37) : une seule règle, une seule parité.
+export { actionsTache, motifLectureSeule, STATUT_INITIAL, statutDe, transitionPermise, TRANSITIONS } from "@/modules/auth-roles/domain/actions";
+export type { ActionsTache, AppartenanceTache, GesteTache, StatutTache } from "@/modules/auth-roles/domain/actions";
 
 export const LIBELLES_STATUT: Record<StatutTache, string> = {
   planifiee: "Planifiée",
@@ -26,30 +21,9 @@ export const LIBELLES_STATUT: Record<StatutTache, string> = {
   refusee: "Refusée",
 };
 
-/** Statut d'une tâche, avec le défaut que la base applique elle-même. */
-export function statutDe(statut: string | null | undefined): StatutTache {
-  return (statut ?? STATUT_INITIAL) as StatutTache;
-}
-
-export function transitionPermise(geste: GesteTache, statut: string | null): boolean {
-  return TRANSITIONS[geste].includes(statutDe(statut));
-}
-
 /** Le message nomme l'état de départ et ceux qui auraient convenu : « impossible » seul n'apprend rien. */
 export function motifTransitionRefusee(geste: GesteTache, statut: string | null, libelle: string): string {
   return `${libelle} : impossible depuis l'état « ${statutDe(statut)} » (attendu : ${TRANSITIONS[geste].join(" ou ")}).`;
-}
-
-export interface ActionsTache {
-  peutPlanifier: boolean;
-  peutSaisir: boolean;
-  peutCloturer: boolean;
-  peutArbitrer: boolean;
-}
-
-export interface AppartenanceTache {
-  aUneEquipe: boolean;
-  enFaitPartie: boolean;
 }
 
 /**
@@ -65,39 +39,6 @@ export function appartenanceDe(
   const parEquipe = !!t.technicien_id && t.technicien_id === monEquipeId;
   const parSousTraitant = !!t.sous_traitant_id && t.sous_traitant_id === monSousTraitantId;
   return { aUneEquipe: !!t.technicien_id || !!t.sous_traitant_id, enFaitPartie: parEquipe || parSousTraitant };
-}
-
-const estTerrain = (role: RoleMembre | null) => role === "technicien" || role === "sous_traitant";
-const estEncadrement = (role: RoleMembre | null) => role === "admin" || role === "conducteur";
-
-/**
- * Le terrain n'agit que sur les tâches de son équipe ; sans information
- * d'équipe, on ne restreint rien et la base garde le dernier mot.
- */
-function terrainPeutAgir(role: RoleMembre | null, appartenance?: AppartenanceTache): boolean {
-  if (!estTerrain(role)) return estEncadrement(role);
-  if (!appartenance) return true;
-  return appartenance.enFaitPartie;
-}
-
-export function actionsTache(statut: string | null, role: RoleMembre | null, appartenance?: AppartenanceTache): ActionsTache {
-  const etat = statutDe(statut);
-  const peutAgir = terrainPeutAgir(role, appartenance);
-  return {
-    peutPlanifier: estEncadrement(role),
-    // Une tâche validée est close : plus personne n'y touche.
-    peutSaisir: peutAgir && etat !== "validee",
-    peutCloturer: peutAgir && transitionPermise("realiser", etat),
-    peutArbitrer: estEncadrement(role) && transitionPermise("arbitrer", etat),
-  };
-}
-
-/** Les formulations reprennent celles que la base oppose : l'écran et le refus disent la même chose. */
-export function motifLectureSeule(role: RoleMembre | null, appartenance?: AppartenanceTache): string | null {
-  if (!estTerrain(role) || !appartenance || appartenance.enFaitPartie) return null;
-  return appartenance.aUneEquipe
-    ? "Cette tâche est confiée à une autre équipe."
-    : "Aucune équipe n'est affectée à cette tâche : son arbitrage revient au conducteur.";
 }
 
 export function prochainActeur(statut: string | null): string {
