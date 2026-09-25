@@ -1,109 +1,147 @@
-import { type FormEvent } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
-import { useFormulaire } from "@/lib/useFormulaire";
-import { avancementChantier, montantLigneDpgf } from "../domain/dpgf";
-import { schemaNouvelleLigneDpgf } from "../domain/saisie-dpgf";
-import { useAjouterLigneDpgf, useDpgf, useSupprimerLigneDpgf } from "../hooks/useChantiers";
+import { formatEuros } from "@/lib/money";
+import type { LigneDpgfBase } from "../api/dpgf";
+import type { Chantier } from "../domain/chantier";
+import { avancementChantier, estFactureeEntierement, lignesFigees } from "../domain/dpgf";
+import { validerLignesDpgf, type BrouillonLigneDpgf } from "../domain/saisie-dpgf";
+import { useDpgf, useEnregistrerLignesDpgf, useSupprimerLigneDpgf, useTachesPlanifiees } from "../hooks/useChantiers";
+import { useDevisAvecLignes, useMetiers } from "../hooks/useFiche";
+import { BoutonDepot } from "./Fichiers";
+import { DialoguePlanifier } from "./DialoguePlanifier";
+import { FormulaireAjoutDpgf } from "./FormulaireAjoutDpgf";
+import { ImportDpgf } from "./ImportDpgf";
+import { RepriseDevis } from "./RepriseDevis";
+import { TableDpgf } from "./TableDpgf";
 
-const VIDE = { type: "ligne", designation: "", quantite: "1", prix_unitaire: "", unite: "u" };
+interface Props {
+  chantier: Chantier;
+  /** Actions apportées par d'autres modules (situation de travaux), composées dans app/. */
+  actions?: ReactNode;
+  actionsSelection?: (ids: string[]) => ReactNode;
+  fichierAImporter: File | null;
+  importer: (f: File | null) => void;
+}
 
-/** Le DPGF d'un chantier : ses lignes, son total, ce qui en est déjà facturé. */
-export function BlocDpgf({ chantierId, actions }: { chantierId: string; actions?: React.ReactNode }) {
-  const dpgf = useDpgf(chantierId);
-  const ajouter = useAjouterLigneDpgf(chantierId);
-  const supprimer = useSupprimerLigneDpgf(chantierId);
-  const { valeurs, erreurs, changer, valider, reinitialiser } = useFormulaire(VIDE);
+const depuisServeur = (l: LigneDpgfBase, figee: boolean): BrouillonLigneDpgf => ({
+  id: l.id,
+  type: l.type,
+  designation: l.designation,
+  quantite: String(l.quantite).replace(".", ","),
+  prix_unitaire: String(l.prix_unitaire).replace(".", ","),
+  metier: l.metier ?? "",
+  figee,
+});
+
+/** « DPGF chiffré — suivi d'avancement » (CHA-06 à CHA-09, CHA-15), repliable. */
+export function BlocDpgf({ chantier, actions, actionsSelection, fichierAImporter, importer }: Props) {
+  const dpgf = useDpgf(chantier.id);
+  const taches = useTachesPlanifiees(chantier.id);
+  const metiers = useMetiers();
+  const devis = useDevisAvecLignes(chantier.id);
+  const enregistrer = useEnregistrerLignesDpgf(chantier.id);
+  const supprimer = useSupprimerLigneDpgf(chantier.id);
+  const [replie, setReplie] = useState(false);
+  const [modifiees, setModifiees] = useState<Record<string, BrouillonLigneDpgf>>({});
+  const [erreurs, setErreurs] = useState<Record<string, string>>({});
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [aPlanifier, setAPlanifier] = useState<LigneDpgfBase | null>(null);
+  const figees = useMemo(() => lignesFigees(dpgf.data ?? [], taches.data ?? []), [dpgf.data, taches.data]);
+  const devisSource = useMemo(() => new Map((devis.data ?? []).map((d) => [d.id, d.numero ?? "brouillon"])), [devis.data]);
 
   if (dpgf.isPending) return <Chargement libelle="Chargement du DPGF…" />;
   if (dpgf.isError) return <Erreur erreur={dpgf.error} reessayer={() => void dpgf.refetch()} />;
   const lignes = dpgf.data;
   const a = avancementChantier(lignes);
+  const positionSuivante = lignes.reduce((max, x) => Math.max(max, x.position), -1) + 1;
+  const brouillon = (l: LigneDpgfBase) => modifiees[l.id] ?? depuisServeur(l, figees.has(l.id));
+  const nbModifiees = Object.keys(modifiees).length;
+  const selectionnees = lignes.filter((l) => selection.has(l.id) && !estFactureeEntierement(l)).map((l) => l.id);
 
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
-    const l = valider(schemaNouvelleLigneDpgf);
-    const position = lignes.reduce((max, x) => Math.max(max, x.position), -1) + 1;
-    if (l) ajouter.mutate({ position, ligne: l }, { onSuccess: () => reinitialiser(VIDE) });
+  function changer(l: LigneDpgfBase, champ: "designation" | "quantite" | "prix_unitaire" | "metier", valeur: string) {
+    setModifiees((m) => ({ ...m, [l.id]: { ...brouillon(l), [champ]: valeur } }));
+  }
+  function basculer(id: string) {
+    setSelection((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function toutEnregistrer() {
+    const v = validerLignesDpgf(Object.values(modifiees));
+    if (!v.ok) return setErreurs(v.erreurs);
+    setErreurs({});
+    enregistrer.mutate(v.lignes, { onSuccess: () => setModifiees({}) });
   }
 
   return (
     <Card>
-      <CardHeader className="flex-row flex-wrap items-center justify-between">
-        <CardTitle>DPGF</CardTitle>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="outline" aria-expanded={!replie} aria-controls={`dpgf-${chantier.id}`} onClick={() => setReplie(!replie)} title={replie ? "Déplier" : "Replier"}>
+            {replie ? "+" : "−"}
+          </Button>
+          <CardTitle>DPGF chiffré — suivi d'avancement</CardTitle>
+        </div>
         <p className="text-sm text-muted-foreground">
-          Total {formatEuros(a.total)} HT · facturé {formatEuros(a.facture)} ({a.pourcentage} %) · reste {formatEuros(a.reste)}
+          {replie ? `${lignes.filter((l) => l.type === "ligne").length} ligne(s) — ${formatEuros(a.total)} HT` : "Cochez les lignes à facturer, puis validez ci-dessous"}
         </p>
         {actions}
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {(ajouter.isError || supprimer.isError) && <Alert variant="erreur">{messageErreur(ajouter.error ?? supprimer.error)}</Alert>}
-        {lignes.length === 0 ? (
-          <Vide message="Aucune ligne au DPGF." />
-        ) : (
-          <Table>
-            <THead>
-              <Tr>
-                <Th>Désignation</Th>
-                <Th className="text-right">Qté</Th>
-                <Th className="text-right">PU HT</Th>
-                <Th className="text-right">Total HT</Th>
-                <Th className="text-right">Avancement</Th>
-                <Th><span className="sr-only">Actions</span></Th>
-              </Tr>
-            </THead>
-            <TBody>
-              {lignes.map((l) =>
-                l.type !== "ligne" ? (
-                  <Tr key={l.id} className={l.type === "chapitre" ? "bg-muted/60" : ""}>
-                    <Td colSpan={6} className={l.type === "chapitre" ? "font-semibold" : "italic text-muted-foreground"}>{l.designation}</Td>
-                  </Tr>
-                ) : (
-                  <Tr key={l.id}>
-                    <Td>{l.designation}</Td>
-                    <Td className="text-right tabular-nums">{String(l.quantite).replace(".", ",")} {l.unite}</Td>
-                    <Td className="text-right tabular-nums">{formatEuros(montant(l.prix_unitaire))}</Td>
-                    <Td className="text-right tabular-nums">{formatEuros(montantLigneDpgf(l))}</Td>
-                    <Td className="text-right tabular-nums">{String(l.avancement_cumule).replace(".", ",")} %</Td>
-                    <Td className="text-right">
-                      {/* Une ligne déjà facturée ne se supprime pas : elle porte l'historique des situations. */}
-                      {l.avancement_cumule === 0 && (
-                        <BoutonConfirme libelle="Retirer" question="Retirer cette ligne ?" onConfirmer={() => supprimer.mutate(l.id)} />
-                      )}
-                    </Td>
-                  </Tr>
-                )
-              )}
-            </TBody>
-          </Table>
-        )}
-        <form onSubmit={soumettre} noValidate className="grid gap-2 border-t border-border pt-3 sm:grid-cols-7">
-          <ChampChoix
-            libelle="Type"
-            valeur={valeurs.type}
-            onChange={(v) => changer("type", v)}
-            options={[{ valeur: "ligne", libelle: "Ligne" }, { valeur: "chapitre", libelle: "Chapitre" }]}
-          />
-          <div className="sm:col-span-2">
-            <ChampTexte libelle="Désignation" valeur={valeurs.designation} onChange={(v) => changer("designation", v)} erreur={erreurs.designation} />
+      {!replie && (
+        <CardContent id={`dpgf-${chantier.id}`} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border p-2">
+            <span className="text-sm">
+              <strong>Importer un DPGF existant</strong> — fichier Excel (.xlsx) ou CSV, lignes extraites automatiquement
+            </span>
+            <BoutonDepot libelle="Analyser un fichier" accepte=".xlsx,.xls,.csv" onFichier={importer} />
           </div>
-          <ChampTexte libelle="Quantité" inputMode="decimal" valeur={valeurs.quantite} onChange={(v) => changer("quantite", v)} erreur={erreurs.quantite} desactive={valeurs.type === "chapitre"} />
-          <ChampTexte libelle="Unité" valeur={valeurs.unite} onChange={(v) => changer("unite", v)} desactive={valeurs.type === "chapitre"} />
-          <ChampTexte libelle="PU HT" inputMode="decimal" valeur={valeurs.prix_unitaire} onChange={(v) => changer("prix_unitaire", v)} erreur={erreurs.prix_unitaire} desactive={valeurs.type === "chapitre"} />
-          <div className="flex items-end">
-            <Button type="submit" variant="secondary" disabled={ajouter.isPending}>
-              Ajouter
+          {fichierAImporter && <ImportDpgf key={`${fichierAImporter.name}-${fichierAImporter.lastModified}`} chantierId={chantier.id} fichier={fichierAImporter} lignes={lignes} figees={figees} fermer={() => importer(null)} />}
+          <RepriseDevis chantierId={chantier.id} devis={devis.data ?? []} lignes={lignes} figees={figees} />
+          {(enregistrer.isError || supprimer.isError) && <Alert variant="erreur">{messageErreur(enregistrer.error ?? supprimer.error)}</Alert>}
+          {taches.isError && <Erreur erreur={taches.error} reessayer={() => void taches.refetch()} />}
+          {lignes.length === 0 ? (
+            <Vide message="Aucune ligne pour l'instant." />
+          ) : (
+            <TableDpgf
+              lignes={lignes}
+              brouillon={brouillon}
+              changer={changer}
+              erreurs={erreurs}
+              selection={selection}
+              basculer={basculer}
+              taches={taches.data ?? []}
+              metiers={metiers.data ?? []}
+              devisSource={devisSource}
+              // Le bon reprend le métier ENREGISTRÉ : une saisie en attente doit d'abord partir.
+              onPlanifier={(l) => (modifiees[l.id] ? setErreurs({ [`${l.id}.designation`]: "Enregistrez d'abord les modifications de cette ligne." }) : setAPlanifier(l))}
+              onSupprimer={(id) => supprimer.mutate(id)}
+            />
+          )}
+          {aPlanifier && (
+            <DialoguePlanifier key={aPlanifier.id} chantier={chantier} ligne={aPlanifier} taches={taches.data ?? []} fermer={() => setAPlanifier(null)} planifiee={() => setAPlanifier(null)} />
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={toutEnregistrer} disabled={!nbModifiees || enregistrer.isPending}>
+              {enregistrer.isPending ? "Enregistrement…" : `Enregistrer les lignes${nbModifiees ? ` (${nbModifiees})` : ""}`}
             </Button>
+            {nbModifiees > 0 && <Button size="sm" variant="ghost" onClick={() => setModifiees({})}>Annuler les modifications</Button>}
+            <span className="ml-auto">{actionsSelection?.(selectionnees)}</span>
           </div>
-        </form>
-      </CardContent>
+          <dl className="grid gap-1 text-sm sm:grid-cols-3">
+            <div><dt className="inline text-muted-foreground">Total DPGF (HT) : </dt><dd className="inline font-semibold tabular-nums">{formatEuros(a.total)}</dd></div>
+            <div><dt className="inline text-muted-foreground">Déjà facturé : </dt><dd className="inline font-semibold tabular-nums">{formatEuros(a.facture)} ({a.pourcentage} %)</dd></div>
+            <div><dt className="inline text-muted-foreground">Reste à facturer : </dt><dd className="inline font-semibold tabular-nums">{formatEuros(a.reste)}</dd></div>
+          </dl>
+          <FormulaireAjoutDpgf chantierId={chantier.id} positionSuivante={positionSuivante} />
+        </CardContent>
+      )}
     </Card>
   );
 }

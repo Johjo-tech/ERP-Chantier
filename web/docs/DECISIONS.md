@@ -395,3 +395,98 @@ PAR-20 : l'ancien écran perdait `sousTraitant.documents` et `document.notes`, f
 de colonne. `web/` n'offre que des champs qui ont leur colonne (Zod aux frontières,
 colonnes explicites) : un document légal n'a pas de notes. Les documents des
 sous-traitants relèvent de l'écran RH.
+
+## D-CHA-01 — Liste des chantiers en tableau, pas en cartes A4
+L'ancienne liste affichait des cartes (type, dates, statut, anneau d'avancement,
+compteurs). `web/` garde le tableau déjà en place et y porte les mêmes
+informations : type et statut en badges, DPGF HT et % facturé (qui voit les
+prix), nombres de comptes-rendus, devis et factures (colonnes masquées à qui ne
+lit pas la table). Même contenu, lisible au clavier et sur téléphone.
+
+## D-CHA-02 — Fiche chantier en onglets, chiffres en tête
+L'ancienne fiche empilait une dizaine de sections. `web/` les range en onglets
+accessibles (Synthèse, Documents, DPGF, To-do, Achats, Devis et factures ;
+l'onglet actif dans l'URL `?onglet=`) sous un bandeau de chiffres (avancement
+facturé, total DPGF, devis, comptes-rendus, achats, factures, facturé − achats,
+to-do). DPGF et Achats n'apparaissent qu'à qui gère le chantier (RLS).
+
+## D-CHA-03 — « Planifier une quantité » lit la virgule française
+L'ancien écran lisait la saisie par `parseFloat` : « 2,5 » devenait 2. `web/`
+lit 2,5 (`montant()`). Seul écart avec `confirmPlanifierQte`, exclu des tirages
+de `tests/parite/chantiers.essai.ts`.
+
+## D-CHA-04 — Le lien DPGF → bon de commande vit dans `planning_taches`
+L'ancien écran posait `chantierId`, `dpgfLigneId`, `qtePlanifiee` sur le bon —
+sans colonne, donc perdus — et un conducteur vide (CHA-51). `web/` crée le bon
+(libellé, métier, montant au centime, lieu, `conducteur_id` du chantier,
+`reference_chantier`), puis une tâche « planifiee » SANS date qui porte
+`chantier_id`, `dpgf_ligne_id`, `quantite_planifiee` : la seule table qui a ces
+colonnes. Si la tâche échoue, le bon est retiré. Comme l'ancien, le bon n'a pas
+de ligne. **Risque noté** : l'ancien planning, en datant ce bon, cherche une
+tâche du même jour et du même métier ; il n'adopte pas la tâche sans date et en
+crée une seconde. Le module planning de `web/` devra dater la tâche existante.
+
+## D-CHA-05 — Une ligne de DPGF facturée ou planifiée est figée
+Une ligne dont l'avancement est > 0 ou dont une part est planifiée ne se retire
+pas, n'est pas remplacée par un import ni par la reprise d'un devis, et garde sa
+quantité et son prix (désignation et métier restent modifiables). L'ancien écran
+permettait de changer la quantité d'une ligne déjà facturée à 50 %, ce qui
+réécrivait après coup le montant d'une situation émise.
+
+## D-CHA-06 — Reprise d'un devis dans le DPGF : un geste, depuis le DPGF
+L'ancien écran recopiait les lignes du devis dans le DPGF à chaque
+enregistrement du devis, en retirant d'abord celles déjà venues du même devis —
+facturées comprises. `web/` ne touche pas à l'enregistrement du devis :
+« Reprendre un devis » dans le DPGF fait la même copie (hors commentaires et
+lignes sans désignation, avancement 0, `devis_source_id`), et refuse tout si une
+ligne venue de ce devis est déjà facturée ou planifiée.
+
+## D-CHA-07 — L'import d'un DPGF remplace les lignes non figées
+Comme l'ancien écran, l'import remplace le DPGF ; les lignes figées (D-CHA-05)
+restent, en tête. L'écran annonce combien de lignes seront remplacées et
+combien sont conservées.
+
+## D-CHA-08 — Excel et Word sans bibliothèque externe
+L'ancien écran chargeait SheetJS et docx depuis un CDN (rien hors connexion).
+`web/` lit l'.xlsx et écrit le .docx lui-même (`chantiers/fichiers/` : archive
+ZIP, `DecompressionStream`, XML). Écarts : les cellules numériques sont lues
+brutes (« 1234.5 » et non « 1 234,50 € » — la lecture des montants accepte les
+deux) ; le vieux format binaire .xls est refusé avec la consigne de
+l'enregistrer en .xlsx ou CSV ; le PPSPS n'embarque pas le logo de la société.
+
+## D-CHA-09 — Statut du chantier : les valeurs de l'ancien écran
+Colonne proposée (`20260926020000`) avec les valeurs que l'ancien écran écrit
+déjà, accents compris : `en préparation` (défaut), `en cours`, `terminé`. Les
+champs PPSPS et `notes` suivent le nommage `toSnake` de l'ancien pont, sauf
+`ppsps_coordinateur_sps` (il faudra une entrée `SNAKE_OVERRIDES` côté historique).
+
+## D-CHA-10 — Fichiers du chantier dans le bucket `terrain`
+Chemin `<société>/chantiers/<chantier>/<horodatage>_<nom assaini>` (le premier
+segment est lu par les politiques Storage), nom d'origine gardé en base, URL
+signée à l'ouverture, plafond de 8 Mo et types acceptés par famille repris de
+l'ancien écran. Un fichier dont la ligne n'a pas pu s'écrire est retiré ; un
+retrait de fichier raté après suppression de la ligne est tracé (orphelin sans
+effet visible).
+
+## D-CHA-11 — Qui écrit quoi sur la fiche
+Miroirs d'affichage de la base (proposition `20260926021000`) : to-do, documents,
+inspections = `peut_ecrire()` (admin, conducteur, technicien — le terrain note et
+dépose) ; DPGF, achats, devis reçus en fichier, affectations = « chantiers /
+modifier » ; comptes-rendus = matrice « rapports » ; informations diverses =
+« chantiers / modifier ». La suppression suit désormais l'écriture, plus
+l'appartenance.
+
+## D-CHA-12 — « Ouvrir la tâche dans le planning » ouvre le bon de commande
+Le planning n'existe pas encore dans `web/`. Chaque part planifiée d'une ligne
+(« ✓ q ») ouvre son bon (`/commandes/:id`), d'où il se place au planning. À
+rebrancher sur le planning de `web/` quand il existera.
+
+## D-CHA-13 — Factures du chantier : aperçu imprimable, pas d'envoi ici
+La fiche liste les factures (numéro, date, TTC de `v_facture_totaux`, statut)
+avec « Imprimer / PDF » (aperçu). L'envoi par e-mail appartient au module
+facturation, qui ne l'offre pas encore : pas de bouton factice.
+
+## D-CHA-14 — Coût horaire illisible : on le dit, on saisit à la main
+Pour un conducteur, `v_salaries_annuaire` masque `cout_horaire_charge` (CHA-55).
+Plutôt que d'élargir la vue (données de paie), l'écran affiche « Coût horaire non
+disponible pour votre rôle : saisissez le montant ».
