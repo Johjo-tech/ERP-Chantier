@@ -1,4 +1,5 @@
 import type { CartePlanning, Equipe, SousTraitant, TachePlanning } from "./cartes";
+import { dureeDesCases } from "./grille";
 import { memeMetier, tachesAcreer } from "./metiers";
 import { colonnesDuCreneau, creneauDeclare, creneauDeLaTache, creneauModifiable, DUREE_DEFAUT_H, DUREE_MAX_H, DUREE_MIN_H, HEURE_DEFAUT, type Creneau } from "./taches";
 
@@ -287,6 +288,43 @@ export function planCreneauJournee(carte: CartePlanning, date: string, reglage: 
   const heure = reglage.heure ?? actuel?.heure ?? HEURE_DEFAUT;
   const duree = reglage.duree !== undefined ? bornerDuree(reglage.duree) : (actuel?.duree ?? DUREE_DEFAUT_H);
   return { bon: null, taches: majCreneauDesJournees(carte.taches, date, creneauDeclare(heure, duree)) };
+}
+
+/**
+ * La poignée (PLN-05) : les cases visées deviennent une durée — la case de
+ * midi comptée une seule fois, puisque la grille l'ajoute d'elle-même —, et la
+ * colonne visée devient la date de fin. Un seul plan, pour que le réglage du
+ * métier ne soit pas réécrit deux fois depuis la même lecture.
+ */
+export function planEtirer(carte: CartePlanning, geste: { cases: number; indiceDebut: number; fin: string | null; dernierJour: boolean }): Plan {
+  const debut = carte.rdv.datePlanifiee;
+  if (!debut) throw new RefusPlanning("Cette carte n'est pas planifiée.");
+  const duree = bornerDuree(dureeDesCases(geste.indiceDebut, geste.cases));
+  const fin = geste.fin && geste.fin >= debut ? geste.fin : (carte.rdv.datePlanifieeFin ?? debut);
+  const champs: ChampsRdv = geste.dernierJour ? { dureeDernierJour: duree } : { dureeHeures: duree };
+  if (!geste.dernierJour) champs.datePlanifieeFin = fin;
+  const heure = carte.rdv.heurePlanifiee ?? HEURE_DEFAUT;
+  const taches = geste.dernierJour ? [] : majCreneauDesJournees(carte.taches, debut, creneauDeclare(heure, duree));
+  return { bon: rdvAEcrire(carte, champs), taches };
+}
+
+/**
+ * Une carte posée par l'écran historique n'a pas toujours sa tâche : il la
+ * créait à l'ouverture de la fiche. On la crée ici, à la demande, avec
+ * l'équipe de la carte — sans elle le terrain se verrait refuser sa propre tâche.
+ */
+export function planMaterialiser(carte: CartePlanning, metier: string | null, jour: string): Plan {
+  if (carte.taches.some((t) => memeMetier(t.metier, metier) && t.date_tache === jour)) return { bon: null, taches: [] };
+  const creneau = jour === carte.rdv.datePlanifiee ? creneauDeclare(carte.rdv.heurePlanifiee, carte.rdv.dureeHeures) : null;
+  return {
+    bon: null,
+    taches: [
+      {
+        type: "creer",
+        tache: { bon_commande_id: carte.bcId, libelle: libelleTache(carte, metier), metier, date_tache: jour, technicien_id: carte.equipeId, sous_traitant_id: carte.sousTraitantId, ...(creneau ? colonnesDuCreneau(creneau) : {}) },
+      },
+    ],
+  };
 }
 
 /** L'affectation déjà connue de la carte, pour ne pas redemander l'équipe à chaque déplacement. */

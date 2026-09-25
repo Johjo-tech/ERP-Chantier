@@ -24,6 +24,11 @@ import { ANNUAIRES, bonEssai, EQUIPE_A, EQUIPE_B, ST_A, tacheEssai } from "./fab
 
 const AUCUN_TRAVAIL = new Set<string>();
 
+function une<T>(x: T | undefined): T {
+  if (x === undefined) throw new Error("Élément attendu absent.");
+  return x;
+}
+
 describe("calendrier", () => {
   it("fériés d'Alsace-Moselle seulement sur demande (PLN-53)", () => {
     expect(joursFeries(2026)).not.toContain("2026-04-03");
@@ -75,7 +80,7 @@ describe("cartes (PLN-03, PLN-30)", () => {
     const b = bonEssai({ metiers: ["Peinture", "Sol"] });
     const orpheline = tacheEssai({ metier: "Plomberie" });
     const cartes = construireCartes([b], [tacheEssai({ metier: "Sol" }), orpheline], ANNUAIRES);
-    expect(tachesHorsMetier(cartes[0]!).map((t) => t.id)).toEqual([orpheline.id]);
+    expect(tachesHorsMetier(une(cartes[0])).map((t) => t.id)).toEqual([orpheline.id]);
     expect(cartes[1]?.taches.map((t) => t.metier)).toEqual(["Sol"]);
   });
 
@@ -99,8 +104,8 @@ describe("cartes (PLN-03, PLN-30)", () => {
     const t1 = tacheEssai({ date_tache: "2026-09-21" });
     const t2 = tacheEssai({ date_tache: "2026-09-24" });
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [t1, t2], ANNUAIRES);
-    expect(tacheDuJour(c!, "Plomberie", "2026-09-24")?.id).toBe(t2.id);
-    expect(tacheDuJour(c!, "Plomberie", "2026-10-01")?.id).toBe(t1.id);
+    expect(tacheDuJour(une(c), "Plomberie", "2026-09-24")?.id).toBe(t2.id);
+    expect(tacheDuJour(une(c), "Plomberie", "2026-10-01")?.id).toBe(t1.id);
   });
 
   it("tentatives illisibles écartées", () => {
@@ -152,7 +157,7 @@ describe("planification (PLN-04 à PLN-06, PLN-32, PLN-33)", () => {
 
   it("poser une carte mono-métier : rendez-vous sur les colonnes, tâche créée avec son équipe et son créneau (D-PLN-02)", () => {
     const [c] = construireCartes([bonEssai()], [], annuaires);
-    const plan = planPoser(c!, "2026-09-23", "10:00", { type: "equipe", equipe: EQUIPE_A });
+    const plan = planPoser(une(c), "2026-09-23", "10:00", { type: "equipe", equipe: EQUIPE_A });
     expect(plan.bon).toEqual({ date_planifiee: "2026-09-23", date_planifiee_fin: "2026-09-23", heure_planifiee: "10:00", duree_heures: 1, technicien: "Équipe Thomas" });
     expect(plan.taches).toEqual([
       { type: "creer", tache: expect.objectContaining({ bon_commande_id: "bc1", metier: "Plomberie", date_tache: "2026-09-23", technicien_id: "eqA", heure_debut: "10:00", heure_fin: "11:00", libelle: "CMD-1 — Plomberie" }) },
@@ -162,7 +167,7 @@ describe("planification (PLN-04 à PLN-06, PLN-32, PLN-33)", () => {
   it("poser une carte d'un bon multi-métiers écrit le réglage du métier sans effacer les autres clés", () => {
     const b = bonEssai({ metiers: ["Peinture", "Sol"], schedule_par_metier: { Sol: { datePlanifiee: "2026-09-25" }, Peinture: { note: "garder" } } });
     const cartes = construireCartes([b], [], annuaires);
-    const plan = planPoser(cartes[0]!, "2026-09-23", "08:00", { type: "sous_traitant", sousTraitant: ST_A });
+    const plan = planPoser(une(cartes[0]), "2026-09-23", "08:00", { type: "sous_traitant", sousTraitant: ST_A });
     expect(plan.bon).toEqual({
       schedule_par_metier: { Sol: { datePlanifiee: "2026-09-25" }, Peinture: { note: "garder", datePlanifiee: "2026-09-23", datePlanifieeFin: "2026-09-23", heurePlanifiee: "08:00", dureeHeures: 1, sousTraitant: "Serge SARL" } },
     });
@@ -172,14 +177,14 @@ describe("planification (PLN-04 à PLN-06, PLN-32, PLN-33)", () => {
   it("déplacer une carte déplace sa journée au lieu d'en laisser une fantôme (D-PLN-08)", () => {
     const t = tacheEssai({ date_tache: "2026-09-21" });
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21", technicien: "eqA" })], [t], annuaires);
-    const plan = planPoser(c!, "2026-09-24", "09:00", null);
+    const plan = planPoser(une(c), "2026-09-24", "09:00", null);
     expect(plan.taches).toEqual([{ type: "maj", id: t.id, champs: { technicien_id: "eqA", sous_traitant_id: null, date_tache: "2026-09-24", heure_debut: "09:00", heure_fin: "10:00" } }]);
   });
 
   it("une tâche dé-datée (pièce reçue) reprend le rendez-vous au lieu d'une jumelle", () => {
     const t = tacheEssai({ date_tache: null, commentaire: "fuite sous évier" });
     const [c] = construireCartes([bonEssai()], [t], annuaires);
-    expect(planPoser(c!, "2026-09-24", "08:00", { type: "equipe", equipe: EQUIPE_A }).taches).toEqual([
+    expect(planPoser(une(c), "2026-09-24", "08:00", { type: "equipe", equipe: EQUIPE_A }).taches).toEqual([
       { type: "maj", id: t.id, champs: { technicien_id: "eqA", date_tache: "2026-09-24", heure_debut: "08:00", heure_fin: "09:00" } },
     ]);
   });
@@ -187,65 +192,65 @@ describe("planification (PLN-04 à PLN-06, PLN-32, PLN-33)", () => {
   it("une carte faite et datée ne se déplace pas ; sans date elle se pose (PLN-33)", () => {
     const faite = tacheEssai({ statut: "realisee" });
     const [datee] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [faite], annuaires);
-    expect(() => planPoser(datee!, "2026-09-24", "08:00", null)).toThrow(MSG_INTERVENTION_FAITE);
+    expect(() => planPoser(une(datee), "2026-09-24", "08:00", null)).toThrow(MSG_INTERVENTION_FAITE);
     const [sansDate] = construireCartes([bonEssai()], [tacheEssai({ statut: "realisee", date_tache: null })], annuaires);
     // Faite (le métier est pointé) mais hors calendrier : la reposer n'est pas la déplacer.
     expect(sansDate?.faite).toBe(true);
-    expect(() => planPoser(sansDate!, "2026-09-24", "08:00", null)).not.toThrow();
+    expect(() => planPoser(une(sansDate), "2026-09-24", "08:00", null)).not.toThrow();
   });
 
   it("déplanifier : refus si faite (PLN-50) ou journée supplémentaire pointée ; sinon supprime les autres journées et dé-date l'origine", () => {
     const origine = tacheEssai({ date_tache: "2026-09-21" });
     const suppl = tacheEssai({ date_tache: "2026-09-23" });
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [origine, suppl], annuaires);
-    expect(questionDeplanifier(c!)).toMatch(/1 autre\(s\) date/);
-    expect(planDeplanifier(c!, AUCUN_TRAVAIL)).toEqual({
+    expect(questionDeplanifier(une(c))).toMatch(/1 autre\(s\) date/);
+    expect(planDeplanifier(une(c), AUCUN_TRAVAIL)).toEqual({
       bon: { date_planifiee: null, date_planifiee_fin: null },
       taches: [{ type: "supprimer", id: suppl.id }, { type: "maj", id: origine.id, champs: { date_tache: null } }],
     });
-    expect(() => planDeplanifier(c!, new Set([suppl.id]))).toThrow(/déjà été pointées/);
+    expect(() => planDeplanifier(une(c), new Set([suppl.id]))).toThrow(/déjà été pointées/);
     const [faite] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [tacheEssai({ statut: "validee" })], annuaires);
-    expect(() => planDeplanifier(faite!, AUCUN_TRAVAIL)).toThrow(MSG_INTERVENTION_FAITE);
-    expect(() => planAvancer(faite!, AUCUN_TRAVAIL)).toThrow(MSG_INTERVENTION_FAITE);
+    expect(() => planDeplanifier(une(faite), AUCUN_TRAVAIL)).toThrow(MSG_INTERVENTION_FAITE);
+    expect(() => planAvancer(une(faite), AUCUN_TRAVAIL)).toThrow(MSG_INTERVENTION_FAITE);
   });
 
   it("« ← » défait d'abord l'étirement", () => {
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21", date_planifiee_fin: "2026-09-23", heure_dernier_jour: "13:00" })], [], annuaires);
-    expect(planAvancer(c!, AUCUN_TRAVAIL)).toEqual({ bon: { date_planifiee_fin: "2026-09-21", duree_dernier_jour: null, heure_dernier_jour: null }, taches: [] });
-    expect(planDateFin(c!, "2026-09-10").bon).toEqual({ date_planifiee_fin: "2026-09-21" });
+    expect(planAvancer(une(c), AUCUN_TRAVAIL)).toEqual({ bon: { date_planifiee_fin: "2026-09-21", duree_dernier_jour: null, heure_dernier_jour: null }, taches: [] });
+    expect(planDateFin(une(c), "2026-09-10").bon).toEqual({ date_planifiee_fin: "2026-09-21" });
   });
 
   it("heure et durée (1 à 8 h) : la journée d'origine suit, sauf si elle est pointée (PLN-32)", () => {
     const t = tacheEssai({ date_tache: "2026-09-21" });
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21", heure_planifiee: "08:00", duree_heures: 1 })], [t], annuaires);
-    expect(planCreneau(c!, { duree: 12 })).toEqual({ bon: { duree_heures: 8 }, taches: [{ type: "maj", id: t.id, champs: { heure_debut: "08:00", heure_fin: "16:00" } }] });
+    expect(planCreneau(une(c), { duree: 12 })).toEqual({ bon: { duree_heures: 8 }, taches: [{ type: "maj", id: t.id, champs: { heure_debut: "08:00", heure_fin: "16:00" } }] });
     const [pointee] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [tacheEssai({ statut: "realisee" })], annuaires);
-    expect(planCreneau(pointee!, { heure: "10:00" }).taches).toEqual([]);
+    expect(planCreneau(une(pointee), { heure: "10:00" }).taches).toEqual([]);
   });
 
   it("changer d'équipe : sur le bon et sur toutes les tâches ; refusé si faite", () => {
     const t = tacheEssai({ technicien_id: "eqA" });
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [t], annuaires);
-    expect(planAffectation(c!, { type: "equipe", equipe: EQUIPE_B })).toEqual({ bon: { technicien: "Équipe Karim" }, taches: [{ type: "maj", id: t.id, champs: { technicien_id: "eqB" } }] });
-    expect(planAffectation(c!, { type: "equipe", equipe: null }).bon).toEqual({ technicien: null });
-    expect(affectationConnue(c!, "equipe", annuaires)).toEqual({ type: "equipe", equipe: EQUIPE_A });
+    expect(planAffectation(une(c), { type: "equipe", equipe: EQUIPE_B })).toEqual({ bon: { technicien: "Équipe Karim" }, taches: [{ type: "maj", id: t.id, champs: { technicien_id: "eqB" } }] });
+    expect(planAffectation(une(c), { type: "equipe", equipe: null }).bon).toEqual({ technicien: null });
+    expect(affectationConnue(une(c), "equipe", annuaires)).toEqual({ type: "equipe", equipe: EQUIPE_A });
   });
 
   it("journées supplémentaires : doublon refusé, création par métier, retrait refusé si pointée (PLN-06)", () => {
     const t = tacheEssai({ date_tache: "2026-09-21", technicien_id: "eqA" });
     const [c] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [t], annuaires);
-    expect(() => planAjouterDate(c!, "2026-09-21", "08:00", 1)).toThrow(MSG_DATE_EN_DOUBLE);
-    const plan = planAjouterDate(c!, "2026-09-25", "13:00", 3);
+    expect(() => planAjouterDate(une(c), "2026-09-21", "08:00", 1)).toThrow(MSG_DATE_EN_DOUBLE);
+    const plan = planAjouterDate(une(c), "2026-09-25", "13:00", 3);
     expect(plan.taches).toEqual([{ type: "creer", tache: expect.objectContaining({ date_tache: "2026-09-25", technicien_id: "eqA", heure_debut: "13:00", heure_fin: "16:00" }) }]);
 
     const commentee = tacheEssai({ date_tache: "2026-09-25", commentaire: "vu" });
     const [d] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [t, commentee], annuaires);
-    expect(() => planRetirerDate(d!, "2026-09-25", AUCUN_TRAVAIL)).toThrow(MSG_JOURNEE_POINTEE);
+    expect(() => planRetirerDate(une(d), "2026-09-25", AUCUN_TRAVAIL)).toThrow(MSG_JOURNEE_POINTEE);
     const vierge = tacheEssai({ date_tache: "2026-09-26" });
     const [e] = construireCartes([bonEssai({ date_planifiee: "2026-09-21" })], [t, vierge], annuaires);
-    expect(planRetirerDate(e!, "2026-09-26", AUCUN_TRAVAIL).taches).toEqual([{ type: "supprimer", id: vierge.id }]);
-    expect(() => planRetirerDate(e!, "2026-09-26", new Set([vierge.id]))).toThrow(MSG_JOURNEE_POINTEE);
-    expect(planCreneauJournee(e!, "2026-09-26", { duree: 2 }).taches).toEqual([{ type: "maj", id: vierge.id, champs: { heure_debut: "08:00", heure_fin: "10:00" } }]);
+    expect(planRetirerDate(une(e), "2026-09-26", AUCUN_TRAVAIL).taches).toEqual([{ type: "supprimer", id: vierge.id }]);
+    expect(() => planRetirerDate(une(e), "2026-09-26", new Set([vierge.id]))).toThrow(MSG_JOURNEE_POINTEE);
+    expect(planCreneauJournee(une(e), "2026-09-26", { duree: 2 }).taches).toEqual([{ type: "maj", id: vierge.id, champs: { heure_debut: "08:00", heure_fin: "10:00" } }]);
   });
 
   it("rdvAEcrire ignore le sous-traitant d'un bon mono-métier (il vit sur les tâches)", () => {

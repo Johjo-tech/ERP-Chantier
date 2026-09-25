@@ -52,6 +52,21 @@ export interface AppartenanceTache {
   enFaitPartie: boolean;
 }
 
+/**
+ * À qui la tâche est confiée, vu du compte : son équipe (compte → salarié →
+ * équipe) ou son entreprise sous-traitante (contact du sous-traitant) — les
+ * deux chaînes que suit `est_de_l_equipe` (proposition 20260926050000).
+ */
+export function appartenanceDe(
+  t: { technicien_id: string | null; sous_traitant_id: string | null },
+  monEquipeId: string | null,
+  monSousTraitantId: string | null
+): AppartenanceTache {
+  const parEquipe = !!t.technicien_id && t.technicien_id === monEquipeId;
+  const parSousTraitant = !!t.sous_traitant_id && t.sous_traitant_id === monSousTraitantId;
+  return { aUneEquipe: !!t.technicien_id || !!t.sous_traitant_id, enFaitPartie: parEquipe || parSousTraitant };
+}
+
 const estTerrain = (role: RoleMembre | null) => role === "technicien" || role === "sous_traitant";
 const estEncadrement = (role: RoleMembre | null) => role === "admin" || role === "conducteur";
 

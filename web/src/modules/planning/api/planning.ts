@@ -1,6 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import type { DatabasePlanning } from "@/lib/database.propositions";
+import type { Database } from "@/lib/database.types";
 import { arrondiCentimes, enCentimes, montant } from "@/lib/money";
 import { supabase, type Client } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
@@ -20,8 +19,13 @@ const PAGE = 1000;
 const COLONNES_BON = Object.keys(schemaBonPlanning.shape).join(", ");
 export const COLONNES_TACHE = Object.keys(schemaTachePlanning.shape).join(", ");
 
-type ClientPlanning = SupabaseClient<DatabasePlanning>;
-const enPlanning = (c: Client): ClientPlanning => c as unknown as ClientPlanning;
+/**
+ * Les fonctions PROPOSÉES n'existent pas dans les types de production : on les
+ * appelle par leur nom, et leur réponse est validée par Zod comme toute autre.
+ */
+type AppelRpc = (fonction: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
+const rpcProposee = (c: Client): AppelRpc => c.rpc.bind(c) as unknown as AppelRpc;
+type MajBon = Database["public"]["Tables"]["bons_commande"]["Update"];
 
 async function parPages<T>(lire: (debut: number, fin: number) => PromiseLike<{ data: unknown; error: unknown }>, schema: z.ZodType<T>, contexte: string): Promise<T[]> {
   const tout: T[] = [];
@@ -66,7 +70,7 @@ export interface DonneesPlanning {
   tachesAvecTravaux: string[];
 }
 
-async function rpcFacultative<T>(appel: PromiseLike<{ data: T | null; error: unknown }>, defaut: T, contexte: string): Promise<T> {
+async function rpcFacultative<T>(appel: PromiseLike<{ data: unknown; error: unknown }>, schema: z.ZodType<T>, defaut: T, contexte: string): Promise<T> {
   const { data, error } = await appel;
   if (error) {
     if (estFonctionAbsente(error)) {
@@ -75,11 +79,11 @@ async function rpcFacultative<T>(appel: PromiseLike<{ data: T | null; error: unk
     }
     throw error;
   }
-  return data ?? defaut;
+  return data === null ? defaut : analyser(schema, data, contexte);
 }
 
 export async function lirePlanning(societeId: string, utilisateurId: string, client: Client = supabase()): Promise<DonneesPlanning> {
-  const c = enPlanning(client);
+  const rpc = rpcProposee(client);
   const [bons, taches, equipes, sousTraitants, metiers, annuaire, travaux] = await Promise.all([
     parPages((d, f) => client.from("v_bons_commande_terrain").select(COLONNES_BON).eq("societe_id", societeId).order("date", { ascending: false }).order("id").range(d, f), schemaBonPlanning, "bons du planning"),
     parPages((d, f) => client.from("planning_taches").select(COLONNES_TACHE).eq("societe_id", societeId).not("bon_commande_id", "is", null).order("cree_le").order("id").range(d, f), schemaTachePlanning, "tâches du planning"),
@@ -92,9 +96,9 @@ export async function lirePlanning(societeId: string, utilisateurId: string, cli
   for (const r of [equipes, sousTraitants, metiers, annuaire, travaux]) if (r.error) throw r.error;
 
   const [monSousTraitantId, montants, telephones] = await Promise.all([
-    rpcFacultative(c.rpc("mon_sous_traitant", { p_societe: societeId }), null, "Sous-traitant du compte"),
-    rpcFacultative(c.rpc("mes_montants_sous_traitant", { p_societe: societeId }), [], "Montants du sous-traitant"),
-    rpcFacultative(c.rpc("telephones_locataires", { p_societe: societeId }), [], "Téléphones des occupants"),
+    rpcFacultative(rpc("mon_sous_traitant", { p_societe: societeId }), z.string().nullable(), null, "Sous-traitant du compte"),
+    rpcFacultative(rpc("mes_montants_sous_traitant", { p_societe: societeId }), z.array(z.object({ bon_commande_id: z.string(), montant: z.union([z.number(), z.string()]).nullable() })), [], "Montants du sous-traitant"),
+    rpcFacultative(rpc("telephones_locataires", { p_societe: societeId }), z.array(z.object({ bon_commande_id: z.string(), telephone: z.string() })), [], "Téléphones des occupants"),
   ]);
 
   const equipesLues = analyser(z.array(schemaEquipe), equipes.data, "équipes");
@@ -107,7 +111,7 @@ export async function lirePlanning(societeId: string, utilisateurId: string, cli
     sousTraitants: stLus.map((s) => ({ ...s, metiers: s.metiers ?? [] })),
     metiers: analyser(z.array(schemaMetier), metiers.data, "métiers"),
     monEquipeId: annuaireLu.find((a) => a.technicien_id)?.technicien_id ?? null,
-    monSousTraitantId: typeof monSousTraitantId === "string" ? monSousTraitantId : null,
+    monSousTraitantId,
     montantsSousTraitant: Object.fromEntries(montants.map((m) => [m.bon_commande_id, m.montant === null ? null : Number(m.montant)])),
     telephones: Object.fromEntries(telephones.map((t) => [t.bon_commande_id, t.telephone])),
     tachesAvecTravaux: [...new Set(analyser(z.array(z.object({ planning_tache_id: z.string().nullable() })), travaux.data, "travaux supplémentaires").map((t) => t.planning_tache_id).filter((id): id is string => !!id))],
@@ -157,7 +161,7 @@ export async function appliquerPlan(societeId: string, bcId: string, plan: Plan,
   if (plan.bon) {
     const { data, error } = await client
       .from("bons_commande")
-      .update(plan.bon as DatabasePlanning["public"]["Tables"]["bons_commande"]["Update"])
+      .update(plan.bon as MajBon)
       .eq("id", bcId)
       .select("id");
     if (error) throw error;
@@ -260,7 +264,7 @@ export async function ajouterTravailSupplementaire(societeId: string, utilisateu
 
 // ============ CONTACTS ET MONTANT SOUS-TRAITANT (sur le bon) ============
 
-async function majBon(bcId: string, champs: DatabasePlanning["public"]["Tables"]["bons_commande"]["Update"], client: Client): Promise<void> {
+async function majBon(bcId: string, champs: MajBon, client: Client): Promise<void> {
   const { data, error } = await client.from("bons_commande").update(champs).eq("id", bcId).select("id");
   if (error) throw error;
   if (!data.length) throw refus("Modification du bon refusée.");

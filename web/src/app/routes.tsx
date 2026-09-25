@@ -31,6 +31,10 @@ import { LayoutEspaceClient } from "@/modules/espace-client/components/LayoutEsp
 import { PageDocumentClient } from "@/modules/espace-client/components/PageDocumentClient";
 import { PageEspaceClient } from "@/modules/espace-client/components/PageEspaceClient";
 import { PageLectureBon } from "@/modules/ocr/components/PageLectureBon";
+import { PagePlanning } from "@/modules/planning/components/PagePlanning";
+import { PageApercuRapport } from "@/modules/interventions/components/PageApercuRapport";
+import { PageRapport } from "@/modules/interventions/components/PageRapport";
+import { PageRapports } from "@/modules/interventions/components/PageRapports";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -95,6 +99,12 @@ export const routes: RouteObject[] = [
       { path: "articles/:id/modifier", element: <RouteModule module="articles" action="modifier"><PageFormulaireArticle /></RouteModule> },
       { path: "articles/import", element: <RouteModule module="articles" action="modifier"><PageImportArticles /></RouteModule> },
       { path: "commandes/lecture", element: <RouteModule module="bons_commande" action="creer"><PageLectureBon /></RouteModule> },
+      { path: "planning", element: <RouteModule module="planning"><PagePlanning /></RouteModule> },
+      { path: "planning/ma-journee", element: <RouteModule module="planning"><PagePlanning vue="ma_journee" /></RouteModule> },
+      { path: "rapports", element: <RouteModule module="rapports"><PageRapports /></RouteModule> },
+      { path: "rapports/nouveau", element: <RouteModule module="rapports" action="creer"><PageRapport /></RouteModule> },
+      { path: "rapports/:id", element: <RouteModule module="rapports" action="modifier"><PageRapport /></RouteModule> },
+      { path: "rapports/:id/apercu", element: <RouteModule module="rapports"><PageApercuRapport /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

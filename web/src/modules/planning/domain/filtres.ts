@@ -120,6 +120,29 @@ export function semaineDuResultat(cartes: readonly CartePlanning[], recherche: s
   return lundiDe(date);
 }
 
+/**
+ * « Ma journée » : les cartes du jour confiées à MON équipe (ou à mon
+ * entreprise sous-traitante) — sur le bon ou sur l'une de ses tâches —,
+ * triées par heure de début.
+ */
+export function mesCartesDuJour(cartes: readonly CartePlanning[], jour: string, monEquipeId: string | null, monSousTraitantId: string | null): CartePlanning[] {
+  if (!monEquipeId && !monSousTraitantId) return [];
+  const miennes = (c: CartePlanning) =>
+    (!!monEquipeId && (c.equipeId === monEquipeId || c.taches.some((t) => t.technicien_id === monEquipeId))) ||
+    (!!monSousTraitantId && (c.sousTraitantId === monSousTraitantId || c.taches.some((t) => t.sous_traitant_id === monSousTraitantId)));
+  const heure = (c: CartePlanning) => (c.rdv.datePlanifiee === jour ? (c.rdv.heurePlanifiee ?? "") : (c.suppl.find((d) => d.date === jour)?.creneau?.heure ?? ""));
+  return cartesDuJour(cartes.filter(miennes), jour).sort((a, b) => heure(a).localeCompare(heure(b)));
+}
+
+/** Les tâches de mon équipe renvoyées par le conducteur : à reprendre, quel que soit le jour. */
+export function tachesAReprendre(cartes: readonly CartePlanning[], monEquipeId: string | null, monSousTraitantId: string | null) {
+  const vues = new Map<string, { carte: CartePlanning; tache: CartePlanning["taches"][number] }>();
+  for (const c of cartes)
+    for (const t of c.taches)
+      if (t.statut === "refusee" && !vues.has(t.id) && ((!!monEquipeId && t.technicien_id === monEquipeId) || (!!monSousTraitantId && t.sous_traitant_id === monSousTraitantId))) vues.set(t.id, { carte: c, tache: t });
+  return [...vues.values()];
+}
+
 /** Les valeurs proposées par un filtre : celles que portent les bons, triées, sans doublon. */
 export function valeursDe(cartes: readonly CartePlanning[], lire: (c: CartePlanning) => string | null | undefined): string[] {
   return [...new Set(cartes.map(lire).filter((v): v is string => !!v && v.trim() !== ""))].sort((a, b) => a.localeCompare(b, "fr"));
