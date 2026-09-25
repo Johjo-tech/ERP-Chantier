@@ -1,125 +1,131 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
-import { Vide } from "@/components/etats/Etats";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
+import { useLocation, useNavigate } from "react-router";
+import { Chargement, Erreur } from "@/components/etats/Etats";
 import { formatDateFr } from "@/lib/dates";
+import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import { usePermission } from "@/modules/auth-roles/hooks/useSession";
-import { useChantiers } from "@/modules/chantiers/hooks/useChantiers";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
-import type { Reglement } from "../api/factures";
+import { showToast } from "@/modules/documents/impression/zone";
+import { DUREE_AVIS } from "../domain/avis";
 import { criteresActifs, criteresDepuisRequete, criteresVersRequete, estRapproche, filtrerReglements, totalReglements, type CriteresReglements } from "../domain/filtresReglements";
-import { estMoitieImputation, libelleModeReglement } from "../domain/reglements";
-import type { Solde } from "../domain/solde";
+import { libelleModeReglement } from "../domain/reglements";
+import { useCartesFactures } from "../hooks/useCartesFactures";
+import { useNomsChantiers, useReglementsEcran } from "../hooks/useEcranFactures";
 import { useSupprimerReglement } from "../hooks/useFactures";
-import { SaisieReglement } from "./SaisieReglement";
+import { FormulaireReglement } from "./FormulaireReglement";
+
+/** Le tri par défaut de `Array.prototype.sort`, celui des listes de l'ancien. */
+const ordreBrut = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * « Tous les règlements » (FAC-32) : « combien encaissé par chèque en août sur
- * ce chantier ? » sans ouvrir chaque dossier. Les critères vivent dans
- * l'adresse (`#factures/reglements?…` de l'ancien) et sont relus au chargement ;
- * le total est celui de la liste affichée.
+ * « Tous les règlements » (`renderTousLesReglements`, app.js l. 10987) : la
+ * barre de filtres, le total de la liste affichée, un règlement par carte. Les
+ * critères vivent dans l'adresse : un filtre se transmet en copiant le lien.
  */
-export function VueTousReglements({ soldes, reglements }: { soldes: readonly Solde[]; reglements: readonly Reglement[] }) {
+export function VueTousReglements() {
   useModeDiscret();
   const location = useLocation();
   const navigate = useNavigate();
-  const chantiers = useChantiers();
+  const { cartes, soldes, chargement, erreur, reessayer } = useCartesFactures();
+  const reglements = useReglementsEcran();
+  const chantiers = useNomsChantiers();
   const retirer = useSupprimerReglement();
-  const peutModifier = usePermission("reglements", "modifier");
-  const peutSupprimer = usePermission("reglements", "supprimer");
   const [enCours, setEnCours] = useState<string | null>(null);
   const c = criteresDepuisRequete(location.search);
   const poser = (cle: keyof CriteresReglements, v: string) => void navigate({ search: criteresVersRequete({ ...c, [cle]: v }) }, { replace: true });
 
-  const parFacture = new Map(soldes.map((s) => [s.facture_id, s]));
-  const tries = [...reglements].sort((a, b) => b.date.localeCompare(a.date));
-  const liste = filtrerReglements(tries, (id) => (id ? parFacture.get(id) : null), c);
-  const clients = [...new Set(soldes.map((s) => s.client_nom))].sort((a, b) => a.localeCompare(b, "fr"));
-  const idsChantiers = new Set(soldes.map((s) => s.chantier_id).filter(Boolean));
-  const optionsChantiers = (chantiers.data ?? []).filter((ch) => idsChantiers.has(ch.id));
+  if (chargement || reglements.isPending) return <Chargement />;
+  if (erreur || reglements.isError) return <Erreur erreur={erreur ?? reglements.error} reessayer={() => { reessayer(); void reglements.refetch(); }} />;
+
+  const parFacture = new Map(cartes.map((x) => [x.f.id, x.f]));
+  const tous = reglements.data.filter((r) => parFacture.has(r.facture_id));
+  const liste = filtrerReglements(tous, (id) => (id ? parFacture.get(id) : null), c);
+  const clients = [...new Set(cartes.map((x) => x.f.client_nom).filter(Boolean))].sort(ordreBrut);
+  const idsChantiers = new Set(cartes.map((x) => x.f.chantier_id).filter(Boolean));
+  const nomChantier = new Map((chantiers.data ?? []).map((ch) => [ch.id, ch.nom]));
+  const optionsChantiers = (chantiers.data ?? []).filter((ch) => idsChantiers.has(ch.id)).sort((a, b) => a.nom.localeCompare(b.nom));
+  const corrige = enCours ? reglements.data.find((r) => r.id === enCours) ?? null : null;
+
+  function supprimer(r: { id: string; mode: string | null }) {
+    if (!window.confirm("Supprimer définitivement cet élément ?")) return;
+    retirer.mutate(r, { onError: (err) => showToast(messageErreur(err) || "La suppression a été refusée. Rien n'a été supprimé.", "danger", DUREE_AVIS.suppression) });
+  }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex items-center gap-1 text-sm">Du <Input type="date" className="w-auto" value={c.du} onChange={(e) => poser("du", e.target.value)} /></label>
-        <label className="flex items-center gap-1 text-sm">au <Input type="date" className="w-auto" value={c.au} onChange={(e) => poser("au", e.target.value)} /></label>
-        <Select aria-label="Filtrer par client" className="max-w-56" value={c.client} onChange={(e) => poser("client", e.target.value)}>
+    <>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap", alignItems: "center" }}>
+        <label className="card-sub" style={{ margin: 0 }}>
+          Du <input type="date" style={{ width: "auto" }} value={c.du} onChange={(e) => poser("du", e.target.value)} />
+        </label>
+        <label className="card-sub" style={{ margin: 0 }}>
+          au <input type="date" style={{ width: "auto" }} value={c.au} onChange={(e) => poser("au", e.target.value)} />
+        </label>
+        <select aria-label="Client" style={{ width: "auto", minWidth: "180px" }} value={c.client} onChange={(e) => poser("client", e.target.value)}>
           <option value="">Tous les clients</option>
           {clients.map((n) => <option key={n} value={n}>{n}</option>)}
-        </Select>
-        <Select aria-label="Filtrer par mode" className="max-w-48" value={c.mode} onChange={(e) => poser("mode", e.target.value)}>
+        </select>
+        <select aria-label="Mode" style={{ width: "auto", minWidth: "160px" }} value={c.mode} onChange={(e) => poser("mode", e.target.value)}>
           <option value="">Tous les modes</option>
-          {/* « Avoir » n'est pas un mode de saisie, mais une façon dont une facture s'éteint : on doit la retrouver. */}
           {[...MODES_REGLEMENT, { code: "avoir", libelle: "Avoir" }].map((m) => <option key={m.code} value={m.code}>{m.libelle}</option>)}
-        </Select>
-        <Select aria-label="Filtrer par chantier" className="max-w-56" value={c.chantier} onChange={(e) => poser("chantier", e.target.value)}>
+        </select>
+        <select aria-label="Chantier" style={{ width: "auto", minWidth: "200px" }} value={c.chantier} onChange={(e) => poser("chantier", e.target.value)}>
           <option value="">Tous les chantiers</option>
           {optionsChantiers.map((ch) => <option key={ch.id} value={ch.id}>{ch.nom}</option>)}
-        </Select>
-        <Select aria-label="Rapprochement" className="max-w-64" title="Le rapprochement se lit sur la référence saisie : n° de chèque, référence de virement…" value={c.rapprochement} onChange={(e) => poser("rapprochement", e.target.value)}>
+        </select>
+        {/* Le schéma ne porte aucun pointage bancaire : ce filtre lit la présence d'une référence, et le dit. */}
+        <select aria-label="Rapprochement" style={{ width: "auto", minWidth: "230px" }} value={c.rapprochement} onChange={(e) => poser("rapprochement", e.target.value)} title="Le rapprochement se lit sur la référence saisie : numéro de chèque, référence de virement…">
           <option value="">Rapproché ou non</option>
           <option value="rapproche">Rapproché (référence saisie)</option>
           <option value="non_rapproche">Non rapproché (sans référence)</option>
-        </Select>
-        {criteresActifs(c) && <Button variant="ghost" size="sm" onClick={() => void navigate({ search: "" }, { replace: true })}>Effacer</Button>}
+        </select>
+        {criteresActifs(c) && <button type="button" className="btn small ghost" onClick={() => void navigate({ search: "" }, { replace: true })} title="Tout réafficher">✕ Effacer</button>}
       </div>
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-4">
-          <div>
-            <p className="font-semibold">{liste.length} règlement{liste.length > 1 ? "s" : ""}{liste.length < reglements.length && <span className="font-normal text-muted-foreground"> sur {reglements.length}</span>}</p>
-            <p className="text-sm text-muted-foreground">Total des règlements affichés</p>
+      {/* L'ancien ouvrait la correction sans lui donner de place sur cette vue : elle se pose ici (D-ECR-FAC-05). */}
+      {corrige && <div id="formZoneReglement"><FormulaireReglement key={corrige.id} factures={soldes.map((s) => ({ ...s, mode_paiement: parFacture.get(s.facture_id)?.mode_paiement ?? null }))} reglements={reglements.data} factureId={corrige.facture_id} enCours={corrige} fermer={() => setEnCours(null)} /></div>}
+      <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+        <div>
+          <div className="card-title">
+            {liste.length} règlement{liste.length > 1 ? "s" : ""}
+            {liste.length < tous.length && <> <span className="card-sub" style={{ fontWeight: 400 }}>sur {tous.length}</span></>}
           </div>
-          <p className="text-xl font-semibold tabular-nums">{formatEurosEcran(totalReglements(liste))}</p>
-        </CardContent>
-      </Card>
-      {liste.length === 0 ? (
-        <Vide message="Aucun règlement ne répond à ces filtres." />
+          <div className="card-sub">Total des règlements affichés</div>
+        </div>
+        <div className="amount">{formatEurosEcran(totalReglements(liste))}</div>
+      </div>
+      {liste.length ? (
+        liste.map((r) => {
+          const f = parFacture.get(r.facture_id);
+          const chantier = f?.chantier_id ? nomChantier.get(f.chantier_id) : undefined;
+          return (
+            <div key={r.id} className="card">
+              <div className="card-row">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="card-title">{f ? f.client_nom : "— client inconnu —"}</div>
+                  <div className="card-sub">
+                    <span className="numref-lg">{f ? f.numero || "Brouillon" : "—"}</span> · {formatDateFr(r.date)} · {libelleModeReglement(r.mode)}
+                    {r.reference ? ` · réf. ${r.reference}` : ""}
+                  </div>
+                  {chantier && <div className="card-sub">🏗️ {chantier}</div>}
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div className="amount">{formatEurosEcran(montant(r.montant))}</div>
+                  <div style={{ marginTop: "5px" }}>
+                    {estRapproche(r) ? <span className="badge success" title="Une référence est saisie">Rapproché</span> : <span className="badge warn" title="Aucune référence saisie">Non rapproché</span>}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {f && <button type="button" className="btn small" onClick={() => void navigate(`/factures/reglements/dossier?client=${encodeURIComponent(f.client_nom)}`)}>Ouvrir le dossier</button>}
+                <button type="button" className="btn small ghost" onClick={() => setEnCours(r.id)}>✎ Modifier</button>
+                <button type="button" className="btn small danger" onClick={() => supprimer(r)}>Supprimer</button>
+              </div>
+            </div>
+          );
+        })
       ) : (
-        <ul aria-label="Règlements" className="divide-y divide-border rounded-md border border-border">
-          {liste.map((r) => {
-            const f = parFacture.get(r.facture_id);
-            const chantier = f?.chantier_id ? chantiers.data?.find((ch) => ch.id === f.chantier_id) : null;
-            return (
-              <li key={r.id} className="p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span>
-                    <span className="font-medium">{f?.client_nom ?? "— client inconnu —"}</span>
-                    <span className="block text-sm text-muted-foreground">
-                      {f?.numero ?? "Brouillon"} · {formatDateFr(r.date)} · {libelleModeReglement(r.mode)}{r.reference ? ` · réf. ${r.reference}` : ""}
-                    </span>
-                    {chantier && <span className="block text-sm text-muted-foreground">Chantier : {chantier.nom}</span>}
-                  </span>
-                  <span className="flex flex-col items-end gap-1">
-                    <span className="tabular-nums font-semibold">{formatEurosEcran(montant(r.montant))}</span>
-                    {estRapproche(r) ? <Badge variant="succes">Rapproché</Badge> : <Badge variant="alerte">Non rapproché</Badge>}
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                  {f && <Link className="text-primary hover:underline" to={`/factures/reglements/dossier?client=${encodeURIComponent(f.client_nom)}`}>Ouvrir le dossier</Link>}
-                  {peutModifier && f && f.sens > 0 && r.mode !== "avoir" && <Button size="sm" variant="ghost" onClick={() => setEnCours(enCours === r.id ? null : r.id)}>✎ Modifier</Button>}
-                  {peutSupprimer && <BoutonConfirme libelle="Supprimer" question={estMoitieImputation(r.mode) ? "Annuler cette imputation d'avoir ? Ses deux écritures (facture et avoir) partent ensemble." : "Supprimer ce règlement ?"} enCours={retirer.isPending} onConfirmer={() => retirer.mutate(r)} />}
-                </div>
-                {enCours === r.id && f && (
-                  <SaisieReglement
-                    factureId={f.facture_id}
-                    totalDu={Number(montant(f.ttc).minus(montant(f.acomptes)).toString())}
-                    reglements={reglements.filter((x) => x.facture_id === f.facture_id)}
-                    modeParDefaut={r.mode}
-                    enCours={r}
-                    fini={() => setEnCours(null)}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="empty">Aucun règlement ne répond à ces filtres.</div>
       )}
-    </div>
+    </>
   );
 }

@@ -100,3 +100,23 @@ export async function interlocuteursDeLaSociete(societeId: string): Promise<Inte
   );
   return lignes.map(({ nom, client_id }) => ({ nom, client_id }));
 }
+
+const schemaReglementEcran = z.object({ id: z.string(), facture_id: z.string(), date: z.string(), montant: z.number(), mode: z.string().nullable(), reference: z.string().nullable(), cree_le: z.string() });
+export type ReglementEcran = z.infer<typeof schemaReglementEcran>;
+
+/** Les règlements dans l'ordre de l'ancien (`trierParDate`) : date décroissante, puis création décroissante. */
+export async function reglementsEcran(societeId: string): Promise<ReglementEcran[]> {
+  return lireTout(
+    (d, f) => supabase().from("reglements").select("id, facture_id, date, montant, mode, reference, cree_le", { count: "exact" }).eq("societe_id", societeId).order("date", { ascending: false }).order("cree_le", { ascending: false }).order("id").range(d, f),
+    schemaReglementEcran,
+    "liste des règlements"
+  );
+}
+
+const schemaChantierNom = z.object({ id: z.string(), nom: z.string() });
+export type ChantierNom = z.infer<typeof schemaChantierNom>;
+
+/** Le nom des chantiers : « 🏗️ Réfection toiture » sous un règlement. */
+export async function nomsDesChantiers(societeId: string): Promise<ChantierNom[]> {
+  return lireTout((d, f) => supabase().from("chantiers").select("id, nom", { count: "exact" }).eq("societe_id", societeId).order("id").range(d, f), schemaChantierNom, "liste des chantiers");
+}

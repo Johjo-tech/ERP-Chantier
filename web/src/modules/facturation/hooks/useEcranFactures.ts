@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useSyncExternalStore } from "react";
 import { usePermission, useSession, useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { peut } from "@/modules/auth-roles/domain/permissions";
-import { interlocuteursDeLaSociete, listerFacturesEcran, referencesDevis, referencesRapports, totauxDesFactures } from "../api/ecran";
+import { interlocuteursDeLaSociete, listerFacturesEcran, nomsDesChantiers, referencesDevis, referencesRapports, reglementsEcran, totauxDesFactures } from "../api/ecran";
 import { droitsFacture, type DroitsFacture } from "../domain/actions";
 import { FILTRES_VIDES, type EtatFiltres } from "../domain/filtresEcran";
 import { clesFactures } from "./useFactures";
@@ -34,6 +34,15 @@ export function useReferencesRapports() {
   const voit = usePermission("rapports");
   return useQuery({ queryKey: clesEcran.rapports(s.id), queryFn: () => referencesRapports(s.id), enabled: voit });
 }
+export function useReglementsEcran() {
+  const s = useSocieteActive();
+  return useQuery({ queryKey: [...clesFactures.racine(s.id), "reglements-ecran"], queryFn: () => reglementsEcran(s.id) });
+}
+export function useNomsChantiers() {
+  const s = useSocieteActive();
+  const voit = usePermission("chantiers");
+  return useQuery({ queryKey: ["chantiers-noms", s.id], queryFn: () => nomsDesChantiers(s.id), enabled: voit });
+}
 export function useInterlocuteursSociete() {
   const s = useSocieteActive();
   return useQuery({ queryKey: clesEcran.interlocuteurs(s.id), queryFn: () => interlocuteursDeLaSociete(s.id) });
@@ -63,6 +72,45 @@ function abonner(f: () => void) {
 export function oublierFiltresFacturation(): void {
   filtres = FILTRES_VIDES;
   abonnes.forEach((f) => f());
+  magasins.forEach((m) => m.oublier());
+}
+
+/**
+ * Un état d'écran qui survit au changement d'onglet le temps de la session,
+ * comme `state.reglementEtatFiltre` ou `state.recherches` de l'ancien :
+ * revenir sur « Par client » retrouve le filtre qu'on y avait posé.
+ */
+export interface Magasin<T> {
+  abonner: (f: () => void) => () => void;
+  lire: () => T;
+  ecrire: (v: T) => void;
+  oublier: () => void;
+}
+const magasins = new Set<Magasin<unknown>>();
+export function creerMagasin<T>(initial: T): Magasin<T> {
+  let valeur = initial;
+  const ecoute = new Set<() => void>();
+  const prevenir = () => ecoute.forEach((f) => f());
+  const m: Magasin<T> = {
+    abonner: (f) => {
+      ecoute.add(f);
+      return () => ecoute.delete(f);
+    },
+    lire: () => valeur,
+    ecrire: (v) => {
+      valeur = v;
+      prevenir();
+    },
+    oublier: () => {
+      valeur = initial;
+      prevenir();
+    },
+  };
+  magasins.add(m as Magasin<unknown>);
+  return m;
+}
+export function useMagasin<T>(m: Magasin<T>): [T, (v: T) => void] {
+  return [useSyncExternalStore(m.abonner, m.lire), m.ecrire];
 }
 
 export function useFiltresFacturation(): [EtatFiltres, (maj: Partial<EtatFiltres> | null) => void] {
