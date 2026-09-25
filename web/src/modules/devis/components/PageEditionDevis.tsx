@@ -20,6 +20,8 @@ import type { ChampReferenceLigne } from "@/modules/documents/components/referen
 import { depuisBase, ligneVide, lignesPourEnregistrement, type ErreurLigne, type LigneEdition } from "@/modules/documents/domain/lignes";
 import { REGLAGES_DEFAUT, type ReglagesDocuments } from "@/modules/societes/domain/reglages";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
+import { useConducteurs } from "@/modules/societes/hooks/useConducteurs";
+import { conducteurIdDe } from "../domain/liste";
 import { EnregistrementPartiel } from "../api/devis";
 import { enteteAEnregistrer, LIBELLES_STATUT, schemaSaisieDevis, STATUTS_DEVIS, valeursDepuis, type Devis } from "../domain/devis";
 import { useDevis, useEnregistrerDevis } from "../hooks/useDevis";
@@ -29,10 +31,14 @@ export function PageEditionDevis({ actions, ChampReference }: { actions?: (d: De
   const { id } = useParams();
   const devis = useDevis(id);
   const reglages = useReglages();
-  if ((id && devis.isPending) || reglages.isPending) return <Chargement />;
+  // L'annuaire des conducteurs d'abord : un ancien devis n'a que le NOM du sien (DEV-26).
+  const conducteurs = useConducteurs();
+  if ((id && devis.isPending) || reglages.isPending || conducteurs.isPending) return <Chargement />;
   if (id && devis.isError) return <Erreur erreur={devis.error} reessayer={() => void devis.refetch()} />;
   // Des réglages illisibles ne bloquent pas la saisie : on travaille avec les défauts.
-  return <FormulaireDevis key={id ?? "nouveau"} devis={devis.data ?? null} reglages={reglages.data ?? REGLAGES_DEFAUT} actions={actions} ChampReference={ChampReference} />;
+  const d = devis.data ?? null;
+  const avecConducteur = d && !d.conducteur_id ? { ...d, conducteur_id: conducteurIdDe(d, conducteurs.data ?? []) || null } : d;
+  return <FormulaireDevis key={id ?? "nouveau"} devis={avecConducteur} reglages={reglages.data ?? REGLAGES_DEFAUT} actions={actions} ChampReference={ChampReference} />;
 }
 
 interface PropsFormulaire {

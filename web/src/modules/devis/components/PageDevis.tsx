@@ -5,29 +5,45 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatDateFr } from "@/lib/dates";
+import { formatDateFr, todayISO } from "@/lib/dates";
 import { formatEuros, montant } from "@/lib/money";
-import { correspond } from "@/lib/recherche";
 import { Can } from "@/modules/auth-roles/components/Can";
+import { STATUTS_LOGEMENT } from "@/modules/documents/domain/logement";
+import { useConducteurs } from "@/modules/societes/hooks/useConducteurs";
 import { LIBELLES_STATUT, STATUTS_DEVIS } from "../domain/devis";
+import { CRITERES_DEVIS_VIDES, filtrerDevis, tauxConversion, type CriteresDevis } from "../domain/liste";
 import { useListeDevis, useTotauxDevis } from "../hooks/useDevis";
 import { BadgeStatutDevis } from "./BadgeStatutDevis";
+
+function Filtre({ id, libelle, valeur, onChange, options }: { id: string; libelle: string; valeur: string; onChange: (v: string) => void; options: { valeur: string; libelle: string }[] }) {
+  return (
+    <>
+      <label htmlFor={id} className="sr-only">{libelle}</label>
+      <Select id={id} className="max-w-48" value={valeur} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => <option key={o.valeur} value={o.valeur}>{o.libelle}</option>)}
+      </Select>
+    </>
+  );
+}
+
+const unique = (valeurs: (string | null)[]) => [...new Set(valeurs.filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "fr"));
 
 export function PageDevis() {
   const devis = useListeDevis();
   const totaux = useTotauxDevis();
-  const [recherche, setRecherche] = useState("");
-  const [statut, setStatut] = useState("");
+  const conducteurs = useConducteurs();
+  const [c, setC] = useState<CriteresDevis>(CRITERES_DEVIS_VIDES);
   const parDevis = useMemo(() => new Map((totaux.data ?? []).map((t) => [t.devis_id, t])), [totaux.data]);
-
-  const filtres = (devis.data ?? []).filter(
-    (d) => correspond(recherche, d.numero, d.client_nom, d.interlocuteur, d.conducteur, d.adresse_locataire, d.ville) && (!statut || d.statut === statut)
-  );
+  const liste = devis.data ?? [];
+  const filtres = filtrerDevis(liste, c);
+  const filtre = (cle: keyof CriteresDevis) => (v: string) => setC({ ...c, [cle]: v });
+  const clients = new Map(liste.filter((d) => d.client_id).map((d) => [d.client_id as string, d.client_nom]));
 
   return (
     <>
       <EnTetePage
         titre="Devis"
+        sousTitre={`Taux de conversion du mois : ${tauxConversion(liste, todayISO().slice(0, 7))} %`}
         actions={
           <Can module="devis" action="creer">
             <Button asChild>
@@ -38,16 +54,22 @@ export function PageDevis() {
       />
       <div className="mb-3 flex flex-wrap gap-2">
         <label htmlFor="recherche-devis" className="sr-only">Rechercher un devis</label>
-        <Input id="recherche-devis" type="search" className="max-w-sm" placeholder="N°, client, conducteur, lieu…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
-        <label htmlFor="filtre-statut" className="sr-only">Filtrer par statut</label>
-        <Select id="filtre-statut" className="max-w-48" value={statut} onChange={(e) => setStatut(e.target.value)}>
-          <option value="">Tous les statuts</option>
-          {STATUTS_DEVIS.map((s) => <option key={s} value={s}>{LIBELLES_STATUT[s]}</option>)}
-        </Select>
+        <Input id="recherche-devis" type="search" className="max-w-sm" placeholder="N°, client, conducteur, lieu…" value={c.recherche} onChange={(e) => filtre("recherche")(e.target.value)} />
+        <Filtre id="filtre-statut" libelle="Filtrer par statut" valeur={c.statut} onChange={filtre("statut")} options={[{ valeur: "", libelle: "Tous les statuts" }, ...STATUTS_DEVIS.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))]} />
+        <Filtre id="filtre-conducteur" libelle="Filtrer par conducteur" valeur={c.conducteur} onChange={filtre("conducteur")} options={[{ valeur: "", libelle: "Tous les conducteurs" }, ...(conducteurs.data ?? []).map((k) => ({ valeur: k.id, libelle: k.actif ? k.nom : `${k.nom} (retiré)` }))]} />
+        <Filtre id="filtre-logement" libelle="Filtrer par logement" valeur={c.logement} onChange={filtre("logement")} options={[{ valeur: "", libelle: "Tous les logements" }, ...STATUTS_LOGEMENT.map((s) => ({ valeur: s.code, libelle: s.libelle }))]} />
+        <Filtre id="filtre-client" libelle="Filtrer par client" valeur={c.client} onChange={(v) => setC({ ...c, client: v, interlocuteur: "" })} options={[{ valeur: "", libelle: "Tous les clients" }, ...[...clients].sort((a, b) => a[1].localeCompare(b[1], "fr")).map(([id, nom]) => ({ valeur: id, libelle: nom }))]} />
+        <Filtre
+          id="filtre-interlocuteur"
+          libelle="Filtrer par interlocuteur"
+          valeur={c.interlocuteur}
+          onChange={filtre("interlocuteur")}
+          options={[{ valeur: "", libelle: "Tous les interlocuteurs" }, ...unique(liste.filter((d) => !c.client || d.client_id === c.client).map((d) => d.interlocuteur)).map((i) => ({ valeur: i, libelle: i }))]}
+        />
       </div>
       {devis.isPending && <Chargement />}
       {devis.isError && <Erreur erreur={devis.error} reessayer={() => void devis.refetch()} />}
-      {devis.isSuccess && filtres.length === 0 && <Vide message={recherche || statut ? "Aucun devis ne correspond." : "Aucun devis pour l'instant."} />}
+      {devis.isSuccess && filtres.length === 0 && <Vide message={liste.length ? "Aucun devis ne correspond." : "Aucun devis pour l'instant."} />}
       {filtres.length > 0 && (
         <Table>
           <THead>
