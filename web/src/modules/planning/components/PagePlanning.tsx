@@ -4,12 +4,13 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
+import { useFiltresAdresse } from "@/lib/useFiltresAdresse";
 import { messageErreur } from "@/lib/erreurs";
 import { usePermission, useSession, useSocieteActive, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import type { DonneesPlanning } from "../api/planning";
 import { lundiDe } from "../domain/calendrier";
 import { metiersDuBon, type CartePlanning } from "../domain/cartes";
-import { cartesDuCalendrier, enAttente, FILTRES_VIDES, nonPlanifiees, semaineDuResultat, type Affectation, type FiltresPlanning, type VuePlanning } from "../domain/filtres";
+import { cartesDuCalendrier, enAttente, FILTRES_VIDES, nonPlanifiees, semaineDuResultat, type Affectation, type VuePlanning } from "../domain/filtres";
 import { referentielMetiers } from "../domain/metiers";
 import { affectationConnue, planAjouterDate, planPoser, type AffectationChoisie, type Plan } from "../domain/planification";
 import { useAppliquerPlan, usePlanning } from "../hooks/usePlanning";
@@ -43,7 +44,8 @@ function Contenu({ donnees, cartes, initial }: { donnees: DonneesPlanning; carte
   const voitPrix = useVoitLesPrix();
   const [onglet, setOnglet] = useState<Onglet>(initial);
   const [premierLundi, setPremierLundi] = useState(lundiDe(todayISO()));
-  const [filtres, setFiltres] = useState<FiltresPlanning>(FILTRES_VIDES);
+  // Les filtres vivent dans l'adresse : une tuile ouvre `/planning?conducteur=…` déjà filtré (D-CLI-10).
+  const { filtres, changer: setFiltres } = useFiltresAdresse(FILTRES_VIDES);
   const [glissee, setGlissee] = useState<CartePlanning | null>(null);
   const [fiche, setFiche] = useState<{ id: string; jour: string | null } | null>(null);
   const [pose, setPose] = useState<{ carte: CartePlanning; jour: string; heure: string } | null>(null);

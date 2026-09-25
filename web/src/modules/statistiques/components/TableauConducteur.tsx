@@ -6,7 +6,7 @@ import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { SEUILS_DEFAUT } from "@/modules/societes/domain/reglages-societe";
 import { useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
 import { CONDUCTEUR, REPERES, statsConducteur, totalATraiter, type StatsConducteur } from "../domain/conducteur";
-import { DESTINATIONS } from "../domain/pilotage";
+import { DESTINATIONS, pourLeConducteur } from "../domain/pilotage";
 import { useTableauConducteur } from "../hooks/useStatistiques";
 import { EnTeteTableau, LigneATraiter, Tuile } from "./Tuile";
 import { dateDuJourEnLettres, formatDixieme, formatEntier, pluriel, salutation } from "./format";
@@ -35,8 +35,8 @@ export function TableauConducteur({ nom }: { nom: string }) {
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Tuile libelle="Hors délai" valeur={s.horsDelai.length} sous="fin de travaux dépassée" ton={s.horsDelai.length ? "danger" : "neutre"} vers={DESTINATIONS.planning} titre="Ouvrir le planning" />
-        <Tuile libelle="SAV ouverts" valeur={s.sav.length} sous="réclamations en cours" ton={s.sav.length ? "danger" : "neutre"} vers={DESTINATIONS.sav} titre="Voir les bons de commande" />
-        <Tuile libelle="En attente de ma validation" valeur={s.aValider.length} ton={s.aValider.length ? "alerte" : "neutre"} vers={DESTINATIONS.aValiderConducteur} titre="Ouvrir le planning" />
+        <Tuile libelle="SAV ouverts" valeur={s.sav.length} sous="réclamations en cours" ton={s.sav.length ? "danger" : "neutre"} vers={pourLeConducteur(DESTINATIONS.sav, fiche.data?.id, "conducteurId")} titre="Voir les bons de commande" />
+        <Tuile libelle="En attente de ma validation" valeur={s.aValider.length} ton={s.aValider.length ? "alerte" : "neutre"} vers={pourLeConducteur(DESTINATIONS.aValiderConducteur, fiche.data?.nom, "conducteur")} titre="Ouvrir le planning" />
         <Tuile libelle="Sans rendez-vous" valeur={s.sansRdv.length} sous={`reçus depuis plus de ${s.seuilRdv} j`} vers={DESTINATIONS.planning} titre="Ouvrir le planning" />
       </div>
       <ATraiterConducteur s={s} />

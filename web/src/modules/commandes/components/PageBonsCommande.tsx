@@ -1,4 +1,9 @@
 import { useState } from "react";
+import { useFiltresAdresse } from "@/lib/useFiltresAdresse";
+import { CLASSE_EN_EVIDENCE, useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
+import { cn } from "@/lib/utils";
+import { useCroisement } from "@/modules/facturation/hooks/useCroisement";
+import { OrigineRecherche } from "@/modules/facturation/components/OrigineRecherche";
 import { Link } from "react-router";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
@@ -14,7 +19,8 @@ import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSes
 import { Alert } from "@/components/ui/alert";
 import { messageErreur } from "@/lib/erreurs";
 import type { BonDeLaListe } from "../api/bons";
-import { conducteursDesBons, filtrerBons, FILTRES_VIDES, valeursDeFiltre, type FiltresBons } from "../domain/filtres";
+import { champsCherchesDuBon, conducteursDesBons, filtrerBons, FILTRES_VIDES, valeursDeFiltre } from "../domain/filtres";
+import type { Apport } from "@/modules/facturation/domain/croisement";
 import { LIBELLES_MODE, modeDuBon } from "../domain/regles";
 import { useBons } from "../hooks/useBons";
 import { BadgeEtape } from "./BadgeEtape";
@@ -28,9 +34,16 @@ function NumeroClient({ bon }: { bon: BonDeLaListe }) {
   return <span className="whitespace-pre-line">{bon.numero_bc ?? "—"}</span>;
 }
 
-function LigneBon({ bon, prix, contacts, onResultat }: { bon: BonDeLaListe; prix: boolean; contacts: boolean; onResultat: (m: string, e?: unknown) => void }) {
+interface Recherche {
+  requete: string;
+  apports: readonly Apport[];
+  idDom: string;
+  enEvidence: boolean;
+}
+
+function LigneBon({ bon, prix, contacts, onResultat, recherche }: { bon: BonDeLaListe; prix: boolean; contacts: boolean; onResultat: (m: string, e?: unknown) => void; recherche: Recherche }) {
   return (
-    <Tr>
+    <Tr id={recherche.idDom} className={cn(recherche.enEvidence && CLASSE_EN_EVIDENCE)}>
       <Td>
         <Link to={`/commandes/${bon.id}`} className="font-medium text-primary hover:underline">{bon.numero_interne ?? "Sans numéro"}</Link>
         {bon.bon_commande_parent_id && <span className="ml-1 text-xs text-muted-foreground">SAV</span>}
@@ -39,6 +52,7 @@ function LigneBon({ bon, prix, contacts, onResultat }: { bon: BonDeLaListe; prix
       <Td>
         {bon.client_nom}
         {bon.interlocuteur && <span className="block text-xs text-muted-foreground">{bon.interlocuteur}</span>}
+        <OrigineRecherche requete={recherche.requete} propres={champsCherchesDuBon(bon)} apports={recherche.apports} />
       </Td>
       <Td>{[bon.adresse, [bon.code_postal, bon.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "—"}</Td>
       <Td>
@@ -56,8 +70,13 @@ export function PageBonsCommande() {
   const bons = useBons();
   // Le montant ne s'affiche qu'à qui voit les prix ; la vue le rend NULL aux autres de toute façon.
   const prix = useVoitLesPrix();
-  const [filtres, setFiltres] = useState<FiltresBons>(FILTRES_VIDES);
-  const liste = filtrerBons(bons.data ?? [], filtres);
+  // Les filtres vivent dans l'adresse : la tuile « SAV » ouvre `/commandes?type=sav` (D-CLI-10).
+  const { filtres, changer: setFiltres, changerUn } = useFiltresAdresse(FILTRES_VIDES);
+  const saisie = useRechercheDifferee(filtres.recherche, (q) => changerUn("recherche", q));
+  const croisement = useCroisement();
+  const apportsDe = (b: BonDeLaListe) => croisement.apportsBon(b);
+  const liste = filtrerBons(bons.data ?? [], filtres, (b) => apportsDe(b).map((a) => a.valeur));
+  const defile = useEntreeDefile("bon", liste.map((b) => b.id), filtres.recherche, saisie);
   const filtre = JSON.stringify(filtres) !== JSON.stringify(FILTRES_VIDES);
   const ocr = useFonctionnalite("ocr");
   const contacts = usePermission("bons_commande", "modifier");
@@ -75,7 +94,13 @@ export function PageBonsCommande() {
           </Can>
         }
       />
-      <BarreFiltresBons filtres={filtres} onChange={setFiltres} conducteurs={conducteursDesBons(bons.data ?? [])} valeurs={valeursDeFiltre(bons.data ?? [])} />
+      <BarreFiltresBons
+        filtres={filtres}
+        onChange={setFiltres}
+        conducteurs={conducteursDesBons(bons.data ?? [])}
+        valeurs={valeursDeFiltre(bons.data ?? [])}
+        saisie={{ valeur: saisie.saisie, onChange: saisie.setSaisie, onKeyDown: defile.surTouche }}
+      />
       {resultat && <Alert variant={resultat.erreur ? "erreur" : "succes"}>{resultat.erreur ? messageErreur(resultat.erreur) : resultat.message}</Alert>}
       {bons.isPending && <Chargement />}
       {bons.isError && <Erreur erreur={bons.error} reessayer={() => void bons.refetch()} />}
@@ -94,7 +119,11 @@ export function PageBonsCommande() {
               {contacts && <Th>Contact</Th>}
             </Tr>
           </THead>
-          <TBody>{liste.map((b) => <LigneBon key={b.id} bon={b} prix={prix} contacts={contacts} onResultat={onResultat} />)}</TBody>
+          <TBody>
+            {liste.map((b) => (
+              <LigneBon key={b.id} bon={b} prix={prix} contacts={contacts} onResultat={onResultat} recherche={{ requete: filtres.recherche, apports: apportsDe(b), idDom: defile.idDomDe(b.id), enEvidence: defile.enEvidence === b.id }} />
+            ))}
+          </TBody>
         </Table>
       )}
     </>

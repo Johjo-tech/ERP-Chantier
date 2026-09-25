@@ -32,10 +32,11 @@ export interface CriteresDevis {
 
 export const CRITERES_DEVIS_VIDES: CriteresDevis = { recherche: "", statut: "", conducteur: "", logement: "", client: "", interlocuteur: "" };
 
-export function filtrerDevis<D extends DevisFiltrable>(liste: readonly D[], c: CriteresDevis): D[] {
+/** `extras` : ce que la ligne ne porte pas mais qu'on tape pour la retrouver — ses montants (TRV-06). */
+export function filtrerDevis<D extends DevisFiltrable>(liste: readonly D[], c: CriteresDevis, extras: (d: D) => readonly string[] = () => []): D[] {
   return liste.filter(
     (d) =>
-      correspond(c.recherche, d.numero, d.client_nom, d.interlocuteur, d.conducteur, d.adresse_locataire, d.ville) &&
+      correspond(c.recherche, d.numero, d.client_nom, d.interlocuteur, d.conducteur, d.adresse_locataire, d.ville, ...extras(d)) &&
       (!c.statut || d.statut === c.statut) &&
       // Par la RÉFÉRENCE du conducteur : trois graphies d'un prénom ne font plus trois conducteurs.
       (!c.conducteur || d.conducteur_id === c.conducteur) &&

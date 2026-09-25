@@ -17,11 +17,19 @@ export interface FiltresBons {
 
 export const FILTRES_VIDES: FiltresBons = { recherche: "", type: "", mode: "", conducteurId: "", logement: "", metier: "", client: "", interlocuteur: "" };
 
-/** Les huit filtres de la liste (BC-01, bonCommandeItemRetenu) : un SAV est un bon qui a un bon d'origine. */
-export function filtrerBons<B extends EnteteBon>(bons: readonly B[], f: FiltresBons): B[] {
+/** Ce que la ligne d'un bon porte elle-même, pour la recherche et pour dire d'où vient une correspondance. */
+export function champsCherchesDuBon(b: EnteteBon): (string | null)[] {
+  return [b.numero_interne, b.numero_bc, b.client_nom, b.interlocuteur, b.adresse, b.ville, b.nature_travaux, b.reference_chantier, b.conducteur, b.occupant, b.numero_logement, ...metiersDuBon(b)];
+}
+
+/**
+ * Les huit filtres de la liste (BC-01, bonCommandeItemRetenu) : un SAV est un bon qui a un bon d'origine.
+ * `apports` : ce que le bon ne porte pas mais qu'on tape pour le retrouver — son montant, ses factures (TRV-06, TRV-07).
+ */
+export function filtrerBons<B extends EnteteBon>(bons: readonly B[], f: FiltresBons, apports: (b: B) => readonly string[] = () => []): B[] {
   return bons.filter(
     (b) =>
-      correspond(f.recherche, b.numero_interne, b.numero_bc, b.client_nom, b.interlocuteur, b.adresse, b.ville, b.nature_travaux, b.reference_chantier, b.conducteur, b.occupant, b.numero_logement, ...metiersDuBon(b)) &&
+      correspond(f.recherche, ...champsCherchesDuBon(b), ...apports(b)) &&
       (!f.type || (f.type === "sav") === (b.bon_commande_parent_id !== null)) &&
       (!f.mode || modeDuBon(b) === f.mode) &&
       (!f.conducteurId || b.conducteur_id === f.conducteurId) &&

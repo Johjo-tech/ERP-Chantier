@@ -1,3 +1,4 @@
+import type { KeyboardEventHandler } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { STATUTS_LOGEMENT } from "@/modules/documents/domain/logement";
 import type { FiltresBons } from "../domain/filtres";
@@ -8,6 +9,8 @@ interface Props {
   onChange: (f: FiltresBons) => void;
   conducteurs: readonly { id: string; nom: string }[];
   valeurs: { metiers: readonly string[]; clients: readonly string[]; interlocuteurs: readonly string[] };
+  /** Recherche différée (TRV-06) : la saisie s'affiche tout de suite, le filtre suit après une pause. */
+  saisie?: { valeur: string; onChange: (v: string) => void; onKeyDown: KeyboardEventHandler<HTMLInputElement> };
 }
 
 const MODES = Object.keys(LIBELLES_MODE) as ModeBon[];
@@ -27,12 +30,12 @@ function Liste({ id, libelle, valeur, tous, options, onChange }: { id: string; l
 const enOptions = (valeurs: readonly string[]) => valeurs.map((v) => ({ valeur: v, libelle: v }));
 
 /** Les huit filtres de l'ancienne liste (BC-01) : recherche, conducteur, type, mode, logement, métier, client, interlocuteur. */
-export function BarreFiltresBons({ filtres, onChange, conducteurs, valeurs }: Props) {
+export function BarreFiltresBons({ filtres, onChange, conducteurs, valeurs, saisie }: Props) {
   const changer = <K extends keyof FiltresBons>(cle: K, v: FiltresBons[K]) => onChange({ ...filtres, [cle]: v });
   return (
     <div className="mb-3 flex flex-wrap gap-2">
       <label htmlFor="recherche-bons" className="sr-only">Rechercher un bon de commande</label>
-      <Input id="recherche-bons" type="search" className="max-w-sm" placeholder="N°, client, locataire, lieu, nature, métier…" value={filtres.recherche} onChange={(e) => changer("recherche", e.target.value)} />
+      <Input id="recherche-bons" type="search" className="max-w-sm" placeholder="N°, client, locataire, lieu, nature, métier…" value={saisie ? saisie.valeur : filtres.recherche} onChange={(e) => (saisie ? saisie.onChange(e.target.value) : changer("recherche", e.target.value))} onKeyDown={saisie?.onKeyDown} />
       <Liste id="filtre-type-bon" libelle="Type de bon" valeur={filtres.type} tous="BC et SAV" options={[{ valeur: "bc", libelle: "BC" }, { valeur: "sav", libelle: "SAV" }]} onChange={(v) => changer("type", v as FiltresBons["type"])} />
       <Liste id="filtre-mode-bon" libelle="Mode du bon" valeur={filtres.mode} tous="Tous les modes" options={MODES.map((m) => ({ valeur: m, libelle: m === "normal" ? "Avec n° de BC" : LIBELLES_MODE[m] }))} onChange={(v) => changer("mode", v as FiltresBons["mode"])} />
       <Liste id="filtre-conducteur-bon" libelle="Conducteur" valeur={filtres.conducteurId} tous="Tous les conducteurs" options={conducteurs.map((c) => ({ valeur: c.id, libelle: c.nom }))} onChange={(v) => changer("conducteurId", v)} />

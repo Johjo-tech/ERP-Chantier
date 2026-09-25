@@ -12,7 +12,7 @@ import { soldesDesFactures } from "../api/soldes";
 import type { EnteteAEnregistrer } from "../domain/facture";
 import type { LigneSituation } from "../domain/situation";
 
-const cles = {
+export const clesFactures = {
   racine: (s: string) => ["factures", s] as const,
   liste: (s: string, f: object) => ["factures", s, "liste", f] as const,
   reglements: (s: string) => ["factures", s, "reglements"] as const,
@@ -20,6 +20,7 @@ const cles = {
   fiche: (id: string) => ["facture", id] as const,
 };
 
+const cles = clesFactures;
 export function useFactures(filtre: { chantierId?: string } = {}) {
   const s = useSocieteActive();
   return useQuery({ queryKey: cles.liste(s.id, filtre), queryFn: () => listerFactures(s.id, filtre) });

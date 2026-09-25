@@ -1,5 +1,5 @@
-import { correspond } from "@/lib/recherche";
-import { arrondiCentimes, formatEuros, montant, type Montant } from "@/lib/money";
+import { correspond, montantsCherchables } from "@/lib/recherche";
+import { montant, type Montant } from "@/lib/money";
 
 /**
  * La recherche globale du tableau de bord (`globalSearchResultsList`, app.js
@@ -57,11 +57,6 @@ export interface Resultat {
 }
 
 export const LIBELLES_NATURE: Record<NatureResultat, string> = { devis: "Devis", facture: "Facture", rapport: "Rapport" };
-
-function montantsCherchables(m: Montant): string[] {
-  const affiche = formatEuros(arrondiCentimes(m));
-  return [affiche, affiche.replace(/[^\d,-]/g, "").replace(",", ".")];
-}
 
 export interface SourcesRecherche {
   devis: readonly DevisCherchable[];

@@ -11,6 +11,7 @@ import { formatDateFr, todayISO } from "@/lib/dates";
 import { montant } from "@/lib/money";
 import { formatEurosEcran } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
+import { CLASSE_EN_EVIDENCE, useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
 import { cn } from "@/lib/utils";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { BoutonImport } from "@/modules/import-export/components/Recapitulatif";
@@ -18,9 +19,11 @@ import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { estAvoir } from "@/modules/documents/domain/totaux";
 import { libelleDelai } from "../domain/etat";
 import { etatDepuisSolde, totalDu } from "../domain/solde";
+import { useCroisement } from "../hooks/useCroisement";
 import { useFactures, useSoldes } from "../hooks/useFactures";
 import { BadgeEtat } from "./BadgeEtat";
 import { OngletsFacturation } from "./OngletsFacturation";
+import { OrigineRecherche } from "./OrigineRecherche";
 
 type Vue = "factures" | "avoirs";
 const FILTRES = [
@@ -41,6 +44,8 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
   const soldes = useSoldes();
   const voitReglements = usePermission("reglements", "voir");
   const [recherche, setRecherche] = useState("");
+  const saisie = useRechercheDifferee(recherche, setRecherche);
+  const croisement = useCroisement();
   const [filtre, setFiltre] = useState("");
   const aujourdhui = todayISO();
 
@@ -49,13 +54,15 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
     return (factures.data ?? []).map((f) => {
       const s = parId.get(f.id);
       const etat = s ? etatDepuisSolde(s) : ({ nature: "brouillon" } as const);
-      return { f, s, ttc: s?.ttc ?? 0, etat, delai: libelleDelai(etat, f.echeance || f.date, aujourdhui) };
+      // La facture se cherche aussi par son montant et par ce que disent ses bons (TRV-06, TRV-07).
+      const propres = [f.numero, f.client_nom, f.occupant, f.adresse_locataire, f.ref_bon_commande_client];
+      return { f, s, ttc: s?.ttc ?? 0, etat, delai: libelleDelai(etat, f.echeance || f.date, aujourdhui), propres, apports: croisement.apportsFacture(f) };
     });
-  }, [factures.data, soldes.data, aujourdhui]);
+  }, [factures.data, soldes.data, aujourdhui, croisement]);
 
-  const visibles = lignes.filter(({ f, etat }) => {
+  const visibles = lignes.filter(({ f, etat, propres, apports }) => {
     if (estAvoir(f.type_document) !== (vue === "avoirs")) return false;
-    if (!correspond(recherche, f.numero, f.client_nom)) return false;
+    if (!correspond(recherche, ...propres, ...apports.map((a) => a.valeur))) return false;
     if (!filtre) return true;
     if (filtre === "brouillon") return etat.nature === "brouillon";
     if (etat.nature !== "facture") return filtre === "payee" && etat.nature === "reprise";
@@ -63,6 +70,7 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
     return { impayee: "non_reglee", partiel: "partiellement_reglee", payee: "reglee" }[filtre] === etat.cle;
   });
   const enRetard = (soldes.data ?? []).filter((s) => s.en_retard);
+  const defile = useEntreeDefile("facture", visibles.map((v) => v.f.id), recherche, saisie);
 
   const chargement = factures.isPending || soldes.isPending;
   const erreur = factures.error ?? soldes.error;
@@ -93,7 +101,7 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
       {vue === "avoirs" && <p className="mb-3 text-sm text-muted-foreground">Les avoirs rectifient une facture émise. Ils portent leur propre série « AV » et comptent en négatif ; ils s'imputent, ils ne s'encaissent pas.</p>}
       <div className="mb-3 flex flex-wrap gap-2">
         <label htmlFor="recherche-factures" className="sr-only">Rechercher une facture</label>
-        <Input id="recherche-factures" type="search" className="max-w-sm" placeholder="N°, client…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
+        <Input id="recherche-factures" type="search" className="max-w-sm" placeholder="N°, client, n° de BC, montant…" value={saisie.saisie} onChange={(e) => saisie.setSaisie(e.target.value)} onKeyDown={defile.surTouche} />
         {vue === "factures" && (
           <>
             <label htmlFor="filtre-etat" className="sr-only">Filtrer par état</label>
@@ -119,13 +127,16 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
             </Tr>
           </THead>
           <TBody>
-            {visibles.map(({ f, ttc, etat, delai }) => (
-              <Tr key={f.id}>
+            {visibles.map(({ f, ttc, etat, delai, propres, apports }) => (
+              <Tr key={f.id} id={defile.idDomDe(f.id)} className={cn(defile.enEvidence === f.id && CLASSE_EN_EVIDENCE)}>
                 <Td>
                   <Link to={`/factures/${f.id}`} className="font-medium text-primary hover:underline">{f.numero || "Brouillon"}</Link>
                 </Td>
                 <Td>{formatDateFr(f.date)}</Td>
-                <Td>{f.client_nom}</Td>
+                <Td>
+                  {f.client_nom}
+                  <OrigineRecherche requete={recherche} propres={propres} apports={apports} />
+                </Td>
                 {/* Un avoir se lit en négatif ; ses montants sont stockés positifs. */}
                 <Td className="text-right tabular-nums">{formatEurosEcran(estAvoir(f.type_document) ? montant(ttc).neg() : montant(ttc))}</Td>
                 <Td className="text-right tabular-nums">{etat.nature === "facture" || etat.nature === "avoir" ? formatEurosEcran(etat.reste) : "—"}</Td>
