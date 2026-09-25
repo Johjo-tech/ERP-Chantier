@@ -614,7 +614,7 @@ contrôles et messages de `refusImputationAvoir`, dans le même ordre). L'écran
 montre la répartition AVANT de valider avec la règle portée (`imputer`, parité)
 mais c'est la base qui impute. L'écran n'écrit plus le statut.
 
-## D-FAC-03 — PDF en vrai texte, un seul modèle pour l'aperçu et le fichier
+## D-FAC-03 — PDF en vrai texte, un seul modèle pour l'aperçu et le fichier (remplacé par D-PDF-01)
 L'ancien photographiait l'écran (html2pdf / html2canvas) et ne gardait en texte
 que le pied. **Décision** : `documents/domain/modele.ts` (port pur de
 `renderPrintDoc`) décide du contenu ; jsPDF + jspdf-autotable (bibliothèques
@@ -1014,7 +1014,7 @@ l'ancien arrondissait des flottants. Seul un demi-centime exact peut différer
 (ex. 2,90 × 5 % : l'ancien donne 0,14, web/ 0,15) — cas nommé dans la parité ;
 sur 800 tirages quelconques, l'écart reste ≤ 0,01 €.
 
-## D-EFA-03 — Factur-X sans pdf-lib : mise à jour incrémentale du PDF jsPDF
+## D-EFA-03 — Factur-X sans pdf-lib : mise à jour incrémentale du PDF jsPDF (remplacé par D-PDF-05)
 L'ancien embarquait le XML avec pdf-lib. web/ n'ajoute pas de dépendance :
 `efacture/pdf/facturx.ts` appose une mise à jour incrémentale (pièce jointe
 `factur-x.xml` `/AFRelationship /Data`, `/AF`, `/EmbeddedFiles`, XMP Factur-X
@@ -1667,3 +1667,95 @@ expirée l'efface. Un rechargement du même compte la garde (comme avant).
 - **Course de `bc_generer_facture`** : corrigée par `FOR UPDATE`, mais la
   preuve automatisée ne porte que sur le cas déterministe (D-R4-06).
 
+## D-PDF-01 — Les pièces imprimées sont celles de l'ancien : même HTML, même html2pdf (remplace D-FAC-03)
+Le client a vu que « le PDF n'est pas bon » : web/ recomposait les pièces avec
+jsPDF + autotable. **Décision** : on reprend la chaîne de l'ancien telle quelle.
+`documents/impression/gabarit.ts` porte littéralement `renderPrintDoc` et ses
+auxiliaires (mêmes balises, classes, libellés), en TypeScript strict, données
+en paramètre (`ContexteImpression`) au lieu de `state`/`window` ; les gabarits
+propres à un domaine vivent dans leur module (`interventions/domain/gabarit-rapport.ts`,
+`planning/domain/impression.ts`, `rh/domain/impression.ts`). `impression.css`
+recopie la feuille `.p-*` de `src/pages/index.html` (régénérable :
+`tests/visuel/pdf/generer-css.mjs`). `impression/pdf.ts` porte
+`lancerGenerationPdf`, `decoupagePdf`, `resserrerSiPageDeTrop`,
+`dessinerPiedDePage` : html2pdf.js **0.14.0** (dépendance de web/, chargée au
+premier PDF), mêmes options (A4, marge basse 12 mm, html2canvas échelle 2,
+JPEG 0,98, découpe `css`+`legacy`), même nom de fichier (`numero`, sinon
+`devis`/`facture`/`bon-de-commande`/`rapport`), même geste (« Imprimer » ouvre
+un onglet, « Enregistrer » télécharge), mêmes avis (`#toastBox`). Les aperçus
+sont la fenêtre `.view-modal` de l'ancien. Le correctif 4f129c7 de l'ancien
+(un brouillon imprime « État : Brouillon — non émis » au lieu d'un « Numéro »
+vide) est intégré. Parité : `tests/parite/impression.essai.ts` évalue la
+source d'app.js sur les mêmes données (HTML identique) ; mesure :
+`tests/visuel/pdf/comparer-pdf.ts` (PDF des deux applications rastérisés).
+jsPDF et jspdf-autotable ne sont plus des dépendances directes.
+
+## D-PDF-02 — La feuille verbatim est isolée du preflight de Tailwind
+Le preflight (marges à 0, `img` en bloc, interligne 1,5 hérité de `<html>`)
+changeait la mise en page du gabarit. `impression.css` commence par un
+`all: revert` à spécificité nulle sur `#printArea`, `.view-modal`,
+`.print-preview`, `#toastBox`, puis rétablit ce que l'ancienne feuille pose sur
+tout le document (`box-sizing`, titres en Manrope), l'interligne `normal` et le
+`padding: 1px` implicite des cellules (attribut `cellpadding`, effacé lui aussi
+par `revert`). Les polices de l'ancien squelette (Google Fonts, Inter / Manrope
+/ JetBrains Mono) sont chargées par `web/index.html` et attendues avant toute
+capture (5 s au plus, puis repli comme l'ancien hors ligne).
+
+## D-PDF-03 — Rendu de l'ancien gardé là où une correction l'avait changé
+Là où web/ avait « corrigé » le rendu, c'est l'ancien qui fait foi : un avoir
+s'imprime avec ses montants POSITIFS sous le titre AVOIR (écart de D-FAC-03
+abandonné) ; la colonne TVA s'écrit « 5.5% » et la quantité « 2.5 » tels que
+stockés (DEV-52 écarté) ; « ☎ » devant le téléphone du locataire ; l'échéance
+d'un avoir s'imprime si elle existe ; un bon s'intitule toujours « BON DE
+COMMANDE » (SAV compris). **Restent**, parce que ce sont des règles et non de
+la mise en page : les montants CALCULÉS en décimal exact arrondis au bord
+(D-006 — un centime d'écart possible aux demi-centimes, mesuré par la parité) ;
+le texte des mentions de facture de web/ (« 40,00 € » et non « 40.00 € »,
+D-CLI-12) — seul écart de pixels restant sur les factures ; le cadenas d'un
+brouillon avant tout PDF (FAC-12) ; la raison sociale avant le nom d'usage,
+l'identité figée à l'émission, celle du client figée.
+
+## D-PDF-04 — Capture html2canvas dans une page Tailwind
+html2canvas lit le fond de `<html>`/`<body>`, et le calque de html2pdf hérite
+de `<body>` sa couleur : or ce sont des `oklch()` (jetons de web/), qu'il ne
+sait pas lire — toute la capture échouait. Il mesure aussi la ligne de base
+des polices avec une `<img>` que le preflight met en bloc : tout le texte du
+PDF glissait de 4 px. Le temps de la capture, `zone.ts` rend au corps de page
+les valeurs de l'ancien squelette (`--bg`, `--text`, `--police-texte`) et pose
+`body.capture-pdf` (l'image de mesure redevient en ligne). Rien de ce qui est
+photographié ne change.
+
+## D-PDF-05 — Factur-X : le même assemblage pdf-lib que l'ancien (remplace D-EFA-03)
+`efacture/pdf/facturx.ts` est le port littéral de `src/integrations/facturx.ts`
+(pdf-lib 1.17.1 : pièce jointe `factur-x.xml` en `AFRelationship Data`, XMP
+Factur-X EN 16931, intention de sortie sRGB, auteur = vendeur), appliqué au PDF
+de html2pdf. Comme l'ancien, pdf-lib réécrit le producteur à l'enregistrement,
+et le PDF n'est pas validement PDF/A-3 (page en image, polices du pied).
+
+## D-PDF-06 — Aperçus : la fenêtre de l'ancien, sans gestes ajoutés sauf au rapport
+`/devis/:id/apercu`, `/factures/:id/apercu`, `/commandes/:id/apercu` et
+l'espace client montrent la fenêtre `.view-modal` de l'ancien (« Imprimer »,
+« Enregistrer », ✕ ; clic sur le voile = fermer). L'e-mail et la plateforme
+d'une facture restent sur sa fiche (`VueFactureEmise`), comme sur les cartes de
+l'ancien. Le rapport d'intervention garde, devant « Imprimer », l'envoi et la
+transformation en devis/facture, que web/ ne porte qu'à cet endroit (PLN-20,
+D-CLI-09). Le bon n'a pas d'aperçu dans l'ancien (il ne se lit que dans le
+panneau de la pré-facture) : on lui donne la même fenêtre et son PDF
+(`printDocument('bonCommande')` existe dans l'ancien), montants « ••• » sans
+le droit de voir les prix (`renderPrintDoc(…, !avecPrix)`).
+
+## D-PDF-07 — Impressions par le navigateur : la zone et la feuille de l'ancien
+Le planning de la semaine et le registre du personnel s'impriment comme dans
+l'ancien : HTML de `printPlanning` / `imprimerRegistrePersonnel` porté
+(`planning/domain/impression.ts`, `rh/domain/impression.ts`), posé dans
+`#printArea` en paysage (`is-landscape`, `@page{size:landscape;margin:10mm}`),
+`window.print()`, zone vidée 500 ms après. L'écran de web/ vit dans `#root`
+(et non `#app`) : `body.impression-zone` l'efface de l'impression. Parité :
+`tests/parite/impression-zones.essai.ts`. Les rapports de rejets d'import
+restent des `.csv` : l'ancien les nommait `.pdf` (`telechargerBlob` ajoute
+l'extension à tout), un défaut qu'on ne recopie pas.
+
+## D-PDF-08 — Le PPSPS reste sur le générateur Word de web/
+L'ancien fabrique le PPSPS avec la bibliothèque `docx` 8.5.0 ; web/ l'écrit
+sans bibliothèque (D-CHA-08), contenu mot pour mot mais sans le logo. Le
+porter sur `docx` 8.5.0, pour un fichier comparable à l'ancien, reste à faire.
