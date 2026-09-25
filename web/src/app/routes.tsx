@@ -24,6 +24,7 @@ import { PageBonCommande } from "@/modules/commandes/components/PageBonCommande"
 import { PageBonsCommande } from "@/modules/commandes/components/PageBonsCommande";
 import { PagePieces } from "@/modules/commandes/components/PagePieces";
 import { PageCreerSav } from "@/modules/commandes/components/PageCreerSav";
+import { PageApercuBon } from "@/modules/commandes/components/PageApercuBon";
 import { PagePrefacture } from "@/modules/commandes/components/PagePrefacture";
 import { PageAFacturer, PageValidation } from "@/modules/commandes/components/PagesFacturationBons";
 import { PageArticles } from "@/modules/articles/components/PageArticles";
@@ -93,6 +94,7 @@ export const routes: RouteObject[] = [
       { path: "commandes/:id", element: <RouteModule module="bons_commande"><PageBonCommande ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "commandes/:id/prefacture", element: <RouteModule module="bons_commande"><PagePrefacture /></RouteModule> },
       { path: "commandes/:id/sav", element: <RouteModule module="bons_commande" action="creer"><PageCreerSav /></RouteModule> },
+      { path: "commandes/:id/apercu", element: <RouteModule module="bons_commande"><PageApercuBon /></RouteModule> },
       { path: "facturation/validation", element: <RouteModule module="bons_commande"><PageValidation /></RouteModule> },
       { path: "facturation/a-facturer", element: <RouteModule module="bons_commande"><PageAFacturer /></RouteModule> },
       { path: "pieces", element: <RouteModule module="bons_commande"><PagePieces /></RouteModule> },

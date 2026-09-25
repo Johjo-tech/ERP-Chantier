@@ -66,6 +66,9 @@ export function ActionsCircuit({ bon, tous, onResultat }: Props) {
           </Button>
         </Can>
       )}
+      <Button variant="ghost" asChild>
+        <Link to={`/commandes/${bon.id}/apercu`}>Imprimer le bon</Link>
+      </Button>
       {savLie && <Link className="text-sm text-primary hover:underline" to={`/commandes/${savLie.id}`}>Voir le SAV {savLie.numero_bc ?? savLie.numero_interne ?? ""}</Link>}
       {origine && <Link className="text-sm text-primary hover:underline" to={`/commandes/${origine.id}`}>Bon de commande d'origine : {origine.numero_bc ?? origine.numero_interne ?? ""}</Link>}
       {bon.gratuite && <span className="text-sm text-muted-foreground">Clôturé sans facturation{bon.gratuite_motif ? ` — ${bon.gratuite_motif}` : ""}.</span>}

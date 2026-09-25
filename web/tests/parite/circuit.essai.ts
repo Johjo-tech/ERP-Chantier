@@ -12,6 +12,7 @@ import * as ancienPj from "../../../src/api/regles-piece-jointe";
 import * as ancienTaches from "../../../src/api/regles-taches";
 import { ROLES, type RoleMembre } from "../../src/modules/auth-roles/domain/permissions";
 import * as circuit from "../../src/modules/commandes/domain/circuit";
+import { metaImpressionBon } from "../../src/modules/commandes/domain/impression";
 import * as pj from "../../src/modules/commandes/domain/pieceJointe";
 import { evaluer, fonctionTs, instructionDe, lireAncien, sansTypes, sourceDe } from "./source";
 import { generateur } from "./aleatoire";
@@ -93,6 +94,23 @@ describe("parité — code extrait (circuitTermine, actionsFacturation)", () => 
       for (const facture of [false, true]) {
         etat.factures = facture ? [{ bonCommandeId: "b" }] : [];
         expect(circuit.circuitTermine({ statut_workflow: statut }, facture), `${statut} ${facture}`).toBe(circuitTermine({ id: "b", statutWorkflow: statut }));
+      }
+    }
+  });
+
+  it("le bon imprimé porte toujours la référence du client, le conducteur et les métiers (BC-80)", () => {
+    const { bonCommandeDocMetaLignes } = evaluer<{ bonCommandeDocMetaLignes: (b: Record<string, unknown>) => [string, string][] }>(
+      [sourceDe(appJs, "function bonCommandeDocMetaLignes(")],
+      ["bonCommandeDocMetaLignes"],
+      // Les aides d'affichage de l'écran : échappement neutre, métiers lus comme l'ancien bcMetiersDuBC.
+      { esc: (s: string) => s, metierDisplayLabel: (m: string) => m, bcMetiersDuBC: (b: { metiers?: string[]; metier?: string }) => (b.metiers?.length ? b.metiers : [b.metier].filter(Boolean)) }
+    );
+    for (const numero_bc of [null, "CMD-1", "Sans BC"]) {
+      for (const conducteur of [null, "Christophe"]) {
+        for (const metiers of [[], ["Peinture", "Sol"]]) {
+          const vieux = bonCommandeDocMetaLignes({ numeroBC: numero_bc, conducteur, metiers, metier: "" }).map(([libelle, valeur]) => ({ libelle, valeur }));
+          expect(metaImpressionBon({ numero_bc, conducteur, metiers, metier: null })).toEqual(vieux);
+        }
       }
     }
   });
