@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { DatabaseAvecPropositions, DatabasePlanning, DatabaseStatistiques } from "./database.propositions";
+import type { DatabaseAvecPropositions, DatabaseParc, DatabasePlanning, DatabaseStatistiques } from "./database.propositions";
 import type { Database } from "./database.types";
 import { lireConfiguration } from "./env";
 
@@ -40,4 +40,9 @@ export function clientPlanning(c: Client = supabase()): SupabaseClient<DatabaseP
 /** Un client typé avec les fonctions d'agrégat proposées des statistiques (20260926080000). */
 export function clientStatistiques(c: Client = supabase()): SupabaseClient<DatabaseStatistiques> {
   return c as unknown as SupabaseClient<DatabaseStatistiques>;
+}
+
+/** Un client (celui de l'application, ou celui d'un test), typé avec la durée des prêts proposée pour le parc (20260926070000). */
+export function clientParc(c: Client = supabase()): SupabaseClient<DatabaseParc> {
+  return c as unknown as SupabaseClient<DatabaseParc>;
 }

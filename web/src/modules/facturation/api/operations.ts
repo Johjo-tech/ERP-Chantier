@@ -14,7 +14,7 @@ import { designationSituation, refusSituation, type LigneSituation } from "../do
 import { creerFacture, emettreFacture, lireFacture, listerFactures } from "./factures";
 
 /** Délai, libellé et échéance d'une nouvelle facture : client, sinon société, sinon 30 j net. */
-async function conditions(societeId: string, clientId: string | null, date: string) {
+export async function conditions(societeId: string, clientId: string | null, date: string) {
   const [client, reglages] = await Promise.all([clientId ? lireClient(clientId) : null, chargerReglages(societeId)]);
   const delai = delaiPaiementRetenu(client, { delai_paiement_jours: reglages.delaiPaiementJours, delai_paiement_mode: reglages.modeDelaiPaiement });
   return {

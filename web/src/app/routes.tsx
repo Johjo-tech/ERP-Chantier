@@ -48,6 +48,12 @@ import { PageApercuRapport } from "@/modules/interventions/components/PageApercu
 import { PageRapport } from "@/modules/interventions/components/PageRapport";
 import { PageRapports } from "@/modules/interventions/components/PageRapports";
 import { PageStatistiques } from "@/modules/statistiques/components/PageStatistiques";
+import { PageFicheMateriel } from "@/modules/materiel/components/PageFicheMateriel";
+import { PageFormulaireMateriel } from "@/modules/materiel/components/PageFormulaireMateriel";
+import { PageMateriel } from "@/modules/materiel/components/PageMateriel";
+import { PageFicheVehicule } from "@/modules/vehicules/components/PageFicheVehicule";
+import { PageFormulaireVehicule } from "@/modules/vehicules/components/PageFormulaireVehicule";
+import { PageVehicules } from "@/modules/vehicules/components/PageVehicules";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -146,6 +152,14 @@ export const routes: RouteObject[] = [
       { path: "rapports/:id", element: <RouteModule module="rapports" action="modifier"><PageRapport /></RouteModule> },
       { path: "rapports/:id/apercu", element: <RouteModule module="rapports"><PageApercuRapport /></RouteModule> },
       { path: "statistiques", element: <RouteModule module="statistiques"><PageStatistiques /></RouteModule> },
+      { path: "vehicules", element: <RouteModule module="vehicules"><PageVehicules /></RouteModule> },
+      { path: "vehicules/nouveau", element: <RouteModule module="vehicules" action="creer"><PageFormulaireVehicule /></RouteModule> },
+      { path: "vehicules/:id", element: <RouteModule module="vehicules"><PageFicheVehicule /></RouteModule> },
+      { path: "vehicules/:id/modifier", element: <RouteModule module="vehicules" action="modifier"><PageFormulaireVehicule /></RouteModule> },
+      { path: "materiel", element: <RouteModule module="materiel"><PageMateriel /></RouteModule> },
+      { path: "materiel/nouveau", element: <RouteModule module="materiel" action="creer"><PageFormulaireMateriel /></RouteModule> },
+      { path: "materiel/:id", element: <RouteModule module="materiel"><PageFicheMateriel /></RouteModule> },
+      { path: "materiel/:id/modifier", element: <RouteModule module="materiel" action="modifier"><PageFormulaireMateriel /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
