@@ -839,15 +839,15 @@ partagent avec les modules ci-dessus (tâches, prix masqués, numérotation) son
 
 ## Décompte
 
-Relevé le 25/09/2026, après la vague 1 (sociétés et réglages, chantiers,
-commandes et OCR, facturation et devis, planning), d'après le code de
-`web/src` et les tests. Parité = ([x] + 0,5 × [~]) / (total − [-]).
+Relevé le 25/09/2026, après la vague 2 (RH, véhicules et matériel,
+statistiques, facture électronique et import/export, transversal), d'après le
+code de `web/src` et les tests. Parité = ([x] + 0,5 × [~]) / (total − [-]).
 
 | Section | Préfixe | [x] | [~] | [-] | [ ] | Total | Parité |
 |---|---|---|---|---|---|---|---|
-| 1. auth-roles | AUTH | 31 | 14 | 3 | 6 | 54 | 75 % |
-| 2. societes | SOC | 19 | 1 | 2 | 1 | 23 | 93 % |
-| 3. clients | CLI | 12 | 6 | 0 | 5 | 23 | 65 % |
+| 1. auth-roles | AUTH | 36 | 13 | 3 | 2 | 54 | 83 % |
+| 2. societes | SOC | 20 | 0 | 2 | 1 | 23 | 95 % |
+| 3. clients | CLI | 18 | 3 | 0 | 2 | 23 | 85 % |
 | 4. chantiers | CHA | 33 | 0 | 0 | 0 | 33 | 100 % |
 | 5. devis | DEV | 37 | 0 | 1 | 0 | 38 | 100 % |
 | 6. articles | ART | 12 | 0 | 1 | 0 | 13 | 100 % |
@@ -855,12 +855,12 @@ commandes et OCR, facturation et devis, planning), d'après le code de
 | 8. facturation | FAC | 65 | 0 | 7 | 0 | 72 | 100 % |
 | 9. ocr | OCR | 15 | 0 | 1 | 0 | 16 | 100 % |
 | 10. espace-client | ESP | 7 | 0 | 1 | 0 | 8 | 100 % |
-| 11. planning, interventions, rapports | PLN | 22 | 1 | 1 | 0 | 24 | 98 % |
-| 12. rh | RH | 0 | 0 | 0 | 13 | 13 | 0 % |
-| 13. vehicules et materiel | VEH | 0 | 0 | 0 | 7 | 7 | 0 % |
-| 14. statistiques et tableaux de bord | STA | 0 | 0 | 0 | 8 | 8 | 0 % |
-| 15. reglages | PAR | 7 | 1 | 1 | 0 | 9 | 94 % |
-| 16. facturation électronique | EFA | 0 | 0 | 0 | 10 | 10 | 0 % |
-| 17. import / export | IMP | 6 | 0 | 0 | 12 | 18 | 33 % |
+| 11. planning, interventions, rapports | PLN | 23 | 0 | 1 | 0 | 24 | 100 % |
+| 12. rh | RH | 12 | 0 | 1 | 0 | 13 | 100 % |
+| 13. vehicules et materiel | VEH | 7 | 0 | 0 | 0 | 7 | 100 % |
+| 14. statistiques et tableaux de bord | STA | 8 | 0 | 0 | 0 | 8 | 100 % |
+| 15. reglages | PAR | 8 | 0 | 1 | 0 | 9 | 100 % |
+| 16. facturation électronique | EFA | 6 | 0 | 4 | 0 | 10 | 100 % |
+| 17. import / export | IMP | 17 | 0 | 1 | 0 | 18 | 100 % |
 | 18. Transversal | TRV | 7 | 4 | 0 | 4 | 15 | 60 % |
-| **Total** | | **341** | **27** | **23** | **66** | **457** | **82 %** |
+| **Total** | | **399** | **20** | **29** | **9** | **457** | **96 %** |
