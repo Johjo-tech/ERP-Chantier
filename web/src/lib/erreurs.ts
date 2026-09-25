@@ -26,8 +26,45 @@ function estErreurPostgrest(e: unknown): e is ErreurPostgrest {
   return typeof e === "object" && e !== null && ("code" in e || "message" in e);
 }
 
+/**
+ * Un texte rédigé par NOS fonctions et déclencheurs, en français — par
+ * opposition aux messages natifs de Postgres ou PostgREST, en anglais et
+ * techniques (« new row violates row-level security policy… »).
+ *
+ * Le test porte sur la langue et non sur le code : la base lève ses refus
+ * rédigés sous 42501, 23514, P0001 ou P0002 selon la fonction, et un message
+ * natif anglais ne doit jamais atteindre l'écran.
+ */
+const MARQUES_DU_FRANCAIS = /[àâçéèêëîïôûùüœ]|\b(le|la|les|du|des|une?|est|pas|doit|seul|ce|cette|sur|aux?|introuvable|refus[ée]?e?|non|droits?)\b/i;
+
+function estRedigeEnFrancais(t: string | null | undefined): t is string {
+  return !!t && MARQUES_DU_FRANCAIS.test(t);
+}
+
+/**
+ * Le motif d'un refus de la base, quand elle en a rédigé un (AUTH-39).
+ *
+ * Même ordre que l'ancien écran (`dernierRefus = details || hint || message`) :
+ * le détail est le plus précis. Rend null pour un message natif.
+ */
+export function motifDeLaBase(e: unknown): string | null {
+  // Seule une réponse de la base (objet PostgREST, avec son code) est lue : une
+  // erreur de validation Zod porte aussi du français, mais en JSON illisible.
+  // Une réponse PostgREST porte toujours `details` et `hint` (fût-ce à null) ;
+  // les refus fabriqués par nos modules `api/` (« Suppression refusée ») n'en
+  // ont pas, et gardent leur traduction générique.
+  if (!estErreurPostgrest(e) || !e.code || !("details" in e || "hint" in e)) return null;
+  if (e instanceof Error && e.name !== "PostgrestError") return null;
+  const { details, hint, message } = e as ErreurPostgrest;
+  return [details, hint, message].find(estRedigeEnFrancais) ?? null;
+}
+
 export function messageErreur(e: unknown): string {
   if (estErreurPostgrest(e)) {
+    // Un refus que la base a motivé se montre avec son motif : « Vous n'avez
+    // pas le droit » sans dire lequel envoyait chercher un défaut ailleurs.
+    const motif = motifDeLaBase(e);
+    if (motif) return motif;
     if (e.code && PAR_CODE[e.code]) return PAR_CODE[e.code] as string;
     // Les déclencheurs métier lèvent des messages déjà rédigés en français
     // (« facture figée », etc.) : ils sont faits pour être lus tels quels.
@@ -37,7 +74,7 @@ export function messageErreur(e: unknown): string {
     }
     if (e.message === "Invalid login credentials") return "Adresse e-mail ou mot de passe incorrect.";
   }
-  if (e instanceof Error && (e.message.startsWith("Configuration invalide") || ["ErreurFormat", "EnregistrementPartiel", "LectureImpossible", "PreparationImpossible", "SavSansToutesSesPhotos"].includes(e.name))) {
+  if (e instanceof Error && (e.message.startsWith("Configuration invalide") || ["ErreurFormat", "EnregistrementPartiel", "LectureImpossible", "PreparationImpossible", "SavSansToutesSesPhotos", "DemarrageImpossible"].includes(e.name))) {
     return e.message;
   }
   return "Une erreur inattendue est survenue. Réessayez ; si elle persiste, signalez-la.";

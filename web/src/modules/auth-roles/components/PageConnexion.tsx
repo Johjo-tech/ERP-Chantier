@@ -10,6 +10,7 @@ import { messageErreur } from "@/lib/erreurs";
 import { demanderReinitialisation } from "../api/compte";
 import { seConnecter } from "../api/session";
 import { schemaConnexion } from "../domain/connexion";
+import { MESSAGES_DECONNEXION } from "../domain/expiration";
 import { messageLienEnvoye, schemaDemandeReinitialisation } from "../domain/motdepasse";
 import { useSession } from "../hooks/useSession";
 
@@ -76,6 +77,8 @@ export function PageConnexion() {
         </CardHeader>
         <CardContent>
           <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
+            {/* AUTH-10 : renvoyé ici par une session expirée, on dit pourquoi — sinon on croit à un bug. */}
+            {etat.statut === "anonyme" && etat.motif && !erreurs.general && <Alert>{MESSAGES_DECONNEXION[etat.motif]}</Alert>}
             {erreurs.general && <Alert variant="erreur">{erreurs.general}</Alert>}
             {lienEnvoye && <Alert variant="succes">{lienEnvoye}</Alert>}
             <div className="flex flex-col gap-1.5">

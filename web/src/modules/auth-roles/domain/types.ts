@@ -1,5 +1,9 @@
 import type { Matrice, RoleMembre } from "./permissions";
 
+/** Les niveaux d'abonnement vont de 1 à 5 (voir DECISIONS D-009). */
+export const NIVEAU_ABONNEMENT_MIN = 1;
+export const NIVEAU_ABONNEMENT_MAX = 5;
+
 /** Une société où le compte est membre actif, avec son rôle. */
 export interface SocieteAccessible {
   id: string;

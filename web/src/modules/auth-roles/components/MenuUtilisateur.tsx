@@ -6,6 +6,7 @@ import { messageErreur } from "@/lib/erreurs";
 import { Select } from "@/components/ui/input";
 import { ROLES, ROLES_LIBELLES, estRole, peutSimuler } from "../domain/permissions";
 import { useSession } from "../hooks/useSession";
+import { VersionConstruite } from "./VersionConstruite";
 
 /** Identité, rôle, « voir en tant que » (admin seulement) et déconnexion. */
 export function MenuUtilisateur() {
@@ -46,6 +47,7 @@ export function MenuUtilisateur() {
       <Button variant="outline" size="sm" onClick={() => deconnecter().catch(setErreur)}>
         Se déconnecter
       </Button>
+      <VersionConstruite />
     </div>
   );
 }

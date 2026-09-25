@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
-import { Navigate } from "react-router";
+import { useContext, type ReactNode } from "react";
+import { Navigate, useLocation } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import type { Action, ModuleId } from "../domain/permissions";
+import { RepliOngletContexte } from "../hooks/RepliOnglet";
 import { usePermission, useSession } from "../hooks/useSession";
 
 /** Exige une session ouverte ; sinon renvoie à la connexion. */
@@ -13,10 +14,17 @@ export function RouteConnectee({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Exige le droit de voir le module ; un accès direct par l'URL est refusé proprement. */
+/**
+ * Exige le droit sur le module. Un accès direct par l'URL est refusé
+ * proprement ; une page devenue interdite par un changement de rôle ou de
+ * société bascule sur le premier onglet autorisé (AUTH-16).
+ */
 export function RouteModule({ module, action = "voir", children }: { module: ModuleId; action?: Action; children: ReactNode }) {
   const autorise = usePermission(module, action);
+  const repli = useContext(RepliOngletContexte);
+  const { pathname } = useLocation();
   if (!autorise) {
+    if (repli?.apresChangement && repli.chemin && repli.chemin !== pathname) return <Navigate to={repli.chemin} replace />;
     return (
       <div className="p-6">
         <h1 className="text-lg font-semibold">Accès refusé</h1>
