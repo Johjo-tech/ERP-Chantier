@@ -83,10 +83,10 @@ export function AssistantRapport({ initiale, photosInitiales, signaturesExistant
       {message && <Alert variant="info">{message}</Alert>}
       {!!Object.keys(erreurs).length && <Alert variant="erreur">{Object.values(erreurs)[0]}</Alert>}
       {!!erreur && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
-      {etape === 0 && <EtapeInfos saisie={saisie} onChange={setSaisie} erreurs={erreurs} />}
-      {etape === 1 && <EtapeControles saisie={saisie} onChange={setSaisie} />}
-      {etape === 2 && <EtapePhotos photos={photos} onPhotos={setPhotos} signatures={signatures} signaturesExistantes={signaturesExistantes} onSignatures={setSignatures} logement={saisie.logement_statut} onMessage={setMessage} />}
-      {etape === 3 && <EtapeRapport saisie={saisie} onChange={setSaisie} />}
+      {etape === ETAPES.indexOf("Infos") && <EtapeInfos saisie={saisie} onChange={setSaisie} erreurs={erreurs} />}
+      {etape === ETAPES.indexOf("Contrôles") && <EtapeControles saisie={saisie} onChange={setSaisie} />}
+      {etape === ETAPES.indexOf("Photos") && <EtapePhotos photos={photos} onPhotos={setPhotos} signatures={signatures} signaturesExistantes={signaturesExistantes} onSignatures={setSignatures} logement={saisie.logement_statut} onMessage={setMessage} />}
+      {etape === ETAPES.indexOf("Rapport") && <EtapeRapport saisie={saisie} onChange={setSaisie} />}
       <div className="flex flex-wrap justify-between gap-2 border-t pt-3">
         <Button variant="ghost" onClick={() => (etape ? setEtape(etape - 1) : onAnnuler())}>{etape ? "← Précédent" : "Annuler"}</Button>
         {etape < ETAPES.length - 1 ? (

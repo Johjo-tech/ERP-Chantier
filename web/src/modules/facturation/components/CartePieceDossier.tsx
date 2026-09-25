@@ -11,6 +11,7 @@ import { etatDepuisSolde, type Solde } from "../domain/solde";
 import { BadgeEtat } from "./BadgeEtat";
 import { FormulaireImputation } from "./FormulaireImputation";
 import { ListeReglements } from "./ListeReglements";
+import { DU_A_RECLAMER_EUR } from "../domain/reglements";
 import { SaisieReglement } from "./SaisieReglement";
 
 interface Props {
@@ -30,8 +31,8 @@ export function CartePieceDossier({ piece, soldes, reglements, coche, basculer }
   const peutCreer = usePermission("reglements", "creer");
   const [saisie, setSaisie] = useState<"reglement" | "avoir" | null>(null);
   const avoir = piece.sens < 0;
-  const payable = !avoir && piece.du > 0.01;
-  const lettrable = avoir && piece.credit > 0.01;
+  const payable = !avoir && piece.du > DU_A_RECLAMER_EUR;
+  const lettrable = avoir && piece.credit > DU_A_RECLAMER_EUR;
   const etat = etatDepuisSolde(piece);
   const delai = libelleDelai(etat, piece.echeance || piece.date, todayISO());
   const totalDu = Number(montant(piece.ttc).minus(montant(piece.acomptes)).toString());

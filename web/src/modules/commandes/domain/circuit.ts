@@ -9,46 +9,12 @@ import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
  * (`tache_marquer_realisee`, `tache_valider`, `bc_*`). Ils servent à ne pas
  * proposer un geste qui serait refusé, et à dire pourquoi avant l'aller-retour.
  */
+import { statutDe, type StatutTache } from "@/modules/auth-roles/domain/actions";
 
-export type StatutTache = "planifiee" | "realisee" | "validee" | "refusee";
-export type GesteTache = "realiser" | "arbitrer";
-
-/** Depuis quels états chaque geste est possible (RM-54, BC-37) : une tâche validée ne se rouvre pas. */
-const TRANSITIONS: Record<GesteTache, readonly StatutTache[]> = {
-  realiser: ["planifiee", "refusee"],
-  arbitrer: ["realisee"],
-};
-
-export const statutDe = (statut: string | null | undefined): StatutTache => (statut ?? "planifiee") as StatutTache;
-
-export function transitionPermise(geste: GesteTache, statut: string | null | undefined): boolean {
-  return TRANSITIONS[geste].includes(statutDe(statut));
-}
-
-const estTerrain = (r: RoleMembre | null) => r === "technicien" || r === "sous_traitant";
-const estEncadrement = (r: RoleMembre | null) => r === "admin" || r === "conducteur";
-
-export interface ActionsTache {
-  peutPlanifier: boolean;
-  peutSaisir: boolean;
-  peutCloturer: boolean;
-  peutArbitrer: boolean;
-}
-
-/**
- * Qui fait quoi sur une tâche (actionsTache). Sans information d'équipe, on ne
- * restreint pas le terrain : la base a le dernier mot (« confiée à une autre équipe »).
- */
-export function actionsTache(statut: string | null | undefined, role: RoleMembre | null, appartenance?: { aUneEquipe: boolean; enFaitPartie: boolean }): ActionsTache {
-  const etat = statutDe(statut);
-  const peutAgir = estTerrain(role) ? (appartenance ? appartenance.enFaitPartie : true) : estEncadrement(role);
-  return {
-    peutPlanifier: estEncadrement(role),
-    peutSaisir: peutAgir && etat !== "validee",
-    peutCloturer: peutAgir && transitionPermise("realiser", etat),
-    peutArbitrer: estEncadrement(role) && transitionPermise("arbitrer", etat),
-  };
-}
+// Les gestes par rôle (tâche, pré-facture) vivent dans auth-roles : une seule
+// règle pour le planning et le circuit (AUTH-36, AUTH-37).
+export { actionsFacturation, actionsTache, statutDe, transitionPermise } from "@/modules/auth-roles/domain/actions";
+export type { ActionsFacturation, ActionsTache, GesteTache, StatutTache } from "@/modules/auth-roles/domain/actions";
 
 export const ETATS_TACHE: Record<StatutTache, { libelle: string; variante: "default" | "succes" | "alerte" | "danger" }> = {
   planifiee: { libelle: "à pointer par le technicien", variante: "default" },
@@ -193,28 +159,6 @@ export function attenteAvantChiffrage(etape: "pret" | "travaux_en_cours" | "hors
   return "Travaux déclarés faits — en attente d'arbitrage du conducteur";
 }
 
-// ---------- Droits sur la pré-facture ----------
-
-export interface ActionsFacturation {
-  peutValiderPrefacture: boolean;
-  peutModifierPrefacture: boolean;
-  peutFacturer: boolean;
-  peutFacturerHorsCircuit: boolean;
-}
-
-/**
- * Chiffrer et valider sont deux droits (session.ts#actionsFacturation) : la
- * secrétaire complète la pré-facture, seul l'administrateur arrête le montant
- * — et la base le redit (`bc_chiffrage_valide*` : admin seul).
- */
-export function actionsFacturation(role: RoleMembre | null): ActionsFacturation {
-  return {
-    peutValiderPrefacture: role === "admin",
-    peutModifierPrefacture: role === "admin" || role === "secretaire",
-    peutFacturer: role === "admin" || role === "secretaire",
-    peutFacturerHorsCircuit: role === "admin",
-  };
-}
 
 /**
  * Miroir de `peut_ecrire()` (admin, conducteur, technicien) : c'est lui que

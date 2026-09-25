@@ -1,3 +1,4 @@
+import { FRAICHEUR_REGLAGES_MS } from "@/lib/durees";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { chargerReglagesSociete, enregistrerReglagesSociete, lireInfosEntreprise } from "../api/reglages";
@@ -70,7 +71,7 @@ export function useLienLogo(chemin: string | null) {
     queryKey: clesSociete.logo(societe.id, chemin),
     queryFn: () => (chemin ? lienFichier(chemin) : Promise.resolve(null)),
     // Le lien signé vit une heure : on le renouvelle bien avant.
-    staleTime: 30 * 60_000,
+    staleTime: FRAICHEUR_REGLAGES_MS,
   });
 }
 
@@ -80,7 +81,7 @@ export function useLienFichier(chemin: string | null) {
     queryKey: ["lien-fichier", chemin],
     queryFn: () => lienFichier(chemin as string),
     enabled: chemin !== null,
-    staleTime: 30 * 60_000,
+    staleTime: FRAICHEUR_REGLAGES_MS,
   });
 }
 

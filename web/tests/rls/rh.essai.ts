@@ -150,7 +150,7 @@ describe("[proposition] le dossier RH du seau `terrain` suit `rh / modifier` (20
 });
 
 describe("équipes, sous-traitants, fiche conducteur : `peut_ecrire` (D-RH-05)", () => {
-  it("l'administrateur crée une équipe et y rattache le salarié ; la secrétaire ne crée pas d'équipe", async () => {
+  it("[proposition] l'administrateur crée une équipe et y rattache le salarié ; la secrétaire (rh / créer) en crée une aussi, le technicien ne l'efface pas", async () => {
     const admin = await connecte(COMPTES.adminAlpha);
     const e = await admin.from("techniciens").insert({ societe_id: ALPHA, nom: "Équipe RLS", metiers: ["Peinture"], metier: "Peinture", couleur: "#112233" }).select("id").single();
     expect(e.error).toBeNull();
@@ -158,8 +158,13 @@ describe("équipes, sous-traitants, fiche conducteur : `peut_ecrire` (D-RH-05)",
     const s = await connecte(COMPTES.secretaireAlpha);
     const rattache = await s.from("salaries").update({ technicien_id: e.data?.id ?? null }).eq("id", salarieId).select("id");
     expect(rattache.data?.length).toBe(1);
-    const intrus = await s.from("techniciens").insert({ societe_id: ALPHA, nom: "Intrus", metiers: [] });
-    expect(intrus.error?.code).toBe("42501");
+    // D-RH-05 tranché par la proposition 20260926110000 (D-AUTH-05) : la matrice donne « rh » à la secrétaire.
+    const sienne = await s.from("techniciens").insert({ societe_id: ALPHA, nom: "Équipe RLS secrétariat", metiers: [] }).select("id").single();
+    expect(sienne.error).toBeNull();
+    if (sienne.data) equipes.push(sienne.data.id);
+    const tech = await connecte(COMPTES.technicienAlpha);
+    const efface = await tech.from("techniciens").delete().eq("id", sienne.data?.id ?? "").select("id");
+    expect(efface.data ?? []).toEqual([]);
   });
 
   it("le sous-traitant se relie à un compte (AUTH-44) ; BETA n'y touche pas", async () => {
@@ -188,7 +193,7 @@ describe("équipes, sous-traitants, fiche conducteur : `peut_ecrire` (D-RH-05)",
     expect(retrait.data?.length).toBe(1);
   });
 
-  it("cocher « Conducteur » : l'administrateur crée la fiche liée, la retire (actif = false) ; la secrétaire ne peut pas", async () => {
+  it("[proposition] cocher « Conducteur » : l'administrateur crée la fiche liée, la retire (actif = false) ; la secrétaire (rh / modifier) aussi, le rôle lecture non", async () => {
     const admin = await connecte(COMPTES.adminAlpha);
     const f = await admin.from("conducteurs").insert({ societe_id: ALPHA, nom: "Jean Essai", salarie_id: salarieId, actif: true, profile_id: null, legacy_id: null }).select("id").single();
     expect(f.error).toBeNull();
@@ -196,7 +201,10 @@ describe("équipes, sous-traitants, fiche conducteur : `peut_ecrire` (D-RH-05)",
     const retire = await admin.from("conducteurs").update({ actif: false }).eq("id", f.data?.id ?? "").select("actif");
     expect(retire.data?.[0]?.actif).toBe(false);
     const s = await connecte(COMPTES.secretaireAlpha);
-    const intrus = await s.from("conducteurs").update({ actif: true }).eq("id", f.data?.id ?? "").select("id");
+    const parSecretaire = await s.from("conducteurs").update({ actif: true }).eq("id", f.data?.id ?? "").select("id");
+    expect(parSecretaire.data?.length).toBe(1);
+    const lecture = await connecte(COMPTES.lectureAlpha);
+    const intrus = await lecture.from("conducteurs").update({ actif: false }).eq("id", f.data?.id ?? "").select("id");
     expect(intrus.data ?? []).toEqual([]);
   });
 });

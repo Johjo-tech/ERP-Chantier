@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BoutonConfirme } from "@/components/ui/confirmation";
-import { formatDateFr } from "@/lib/dates";
+import { formatDateFr, jourIso } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useClients, useInterlocuteurs } from "@/modules/clients/hooks/useClients";
@@ -65,7 +65,7 @@ function LigneAcces({ acces: a, modifiable, gerer }: { acces: AccesClient; modif
         <span className="font-medium">{a.compte_nom || a.compte_email}</span>
         {a.compte_nom && a.compte_email && <span className="text-muted-foreground"> — {a.compte_email}</span>}
         <span className="block text-xs text-muted-foreground">
-          {a.interlocuteur ? `Ses documents à « ${a.interlocuteur} » seulement` : "Tout le client"} · depuis le {formatDateFr(a.cree_le.slice(0, 10))}
+          {a.interlocuteur ? `Ses documents à « ${a.interlocuteur} » seulement` : "Tout le client"} · depuis le {formatDateFr(jourIso(a.cree_le))}
         </span>
       </span>
       <Badge variant={a.actif ? "succes" : "neutre"}>{a.actif ? "Ouvert" : "Fermé"}</Badge>

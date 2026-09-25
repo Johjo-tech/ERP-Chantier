@@ -8,7 +8,7 @@
  *  - MANQUANT : jamais une erreur — un client sans SIRET reste enregistrable.
  */
 export const PAYS_DEFAUT = "FR";
-const LONGUEUR_SIREN = 9;
+export const LONGUEUR_SIREN = 9;
 const LONGUEUR_SIRET = 14;
 /** La Poste échappe à Luhn : la somme des 14 chiffres de ses SIRET est un multiple de 5. */
 const SIREN_LA_POSTE = "356000000";
@@ -22,6 +22,10 @@ export function chiffres(saisie: string | null | undefined): string {
   return (saisie ?? "").replace(/\D/g, "");
 }
 
+/** Clé de Luhn : un chiffre doublé qui dépasse 9 se ramène à la somme de ses chiffres (− 9) ; le total doit être un multiple de 10. */
+const LUHN_CHIFFRE_MAX = 9;
+const LUHN_MODULO = 10;
+
 export function luhnValide(numero: string): boolean {
   if (!/^\d+$/.test(numero)) return false;
   let somme = 0;
@@ -30,13 +34,16 @@ export function luhnValide(numero: string): boolean {
     let n = Number(numero[i]);
     if (doubler) {
       n *= 2;
-      if (n > 9) n -= 9;
+      if (n > LUHN_CHIFFRE_MAX) n -= LUHN_CHIFFRE_MAX;
     }
     somme += n;
     doubler = !doubler;
   }
-  return somme % 10 === 0;
+  return somme % LUHN_MODULO === 0;
 }
+
+/** « FR » et au moins un caractère : en deçà, ce n'est pas un n° de TVA à analyser. */
+const LONGUEUR_MIN_TVA = 3;
 
 export function sirenValide(siren: string | null | undefined): boolean {
   const n = chiffres(siren);
@@ -82,7 +89,7 @@ export interface TvaAnalysee {
 
 export function analyserTvaIntracom(tva: string | null | undefined): TvaAnalysee | null {
   const brut = (tva ?? "").replace(/\s/g, "").toUpperCase();
-  if (brut.length < 3) return null;
+  if (brut.length < LONGUEUR_MIN_TVA) return null;
   const pays = brut.slice(0, 2);
   const reste = brut.slice(2);
   if (pays !== PAYS_DEFAUT) return { pays, cle: "", siren: reste, cleNumerique: false, cleCoherente: true };

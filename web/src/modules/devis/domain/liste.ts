@@ -1,3 +1,4 @@
+import { moisIso } from "@/lib/dates";
 import Big from "big.js";
 import { correspond } from "@/lib/recherche";
 import type { StatutLogement } from "@/modules/documents/domain/logement";
@@ -52,7 +53,7 @@ const CENT = new Big(100);
  * app.js l. 1596) : 3 devis dont 1 accepté → 33. Aucun devis → 0.
  */
 export function tauxConversion(liste: readonly Pick<DevisFiltrable, "date" | "statut">[], mois: string): number {
-  const duMois = liste.filter((d) => d.date.slice(0, 7) === mois);
+  const duMois = liste.filter((d) => moisIso(d.date) === mois);
   if (!duMois.length) return 0;
   const acceptes = duMois.filter((d) => d.statut === "accepté").length;
   return Number(new Big(acceptes).times(CENT).div(duMois.length).round(0, Big.roundHalfUp).toString());

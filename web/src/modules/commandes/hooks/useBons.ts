@@ -1,3 +1,4 @@
+import { SECONDE_MS } from "@/lib/durees";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { todayISO } from "@/lib/dates";
 import { useSession, useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
@@ -79,7 +80,7 @@ export function useJournal(bonId: string | undefined) {
 /** L'URL signée, demandée UNE fois par chemin et gardée moins longtemps qu'elle ne vaut (BC-73). */
 export function useUrlPieceJointe(chemin: string | null) {
   const MARGE = 0.8;
-  return useQuery({ queryKey: clesBons.url(chemin ?? ""), queryFn: () => urlPieceJointe(chemin as string), enabled: !!chemin, staleTime: DUREE_URL_SIGNEE_S * 1000 * MARGE });
+  return useQuery({ queryKey: clesBons.url(chemin ?? ""), queryFn: () => urlPieceJointe(chemin as string), enabled: !!chemin, staleTime: DUREE_URL_SIGNEE_S * SECONDE_MS * MARGE });
 }
 
 /** Les métiers proposés : déclarés + employés sur les bons de la société (BC-54). */

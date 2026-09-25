@@ -14,6 +14,9 @@ import { natureDuFichier, type CategorieTva } from "../domain/factures";
 import { useApercuFactures, useEcrireFactures, useSupprimerBrouillons } from "../hooks/useImportExport";
 import { ApercuFactures } from "./ApercuFactures";
 
+/** Dix pièces à l'écran ; le rapport CSV les donne toutes. */
+const PIECES_CITEES = 10;
+
 interface Fichier {
   nom: string;
   octets: ArrayBuffer;
@@ -110,14 +113,14 @@ function ResultatReprise({ resultat: r, onRapport }: { resultat: ResultatImportF
         <Alert variant="erreur">
           <p className="font-semibold">{r.echecs.length} pièce(s) refusée(s)</p>
           <ul className="list-disc pl-5">
-            {r.echecs.slice(0, 10).map((e) => <li key={e.numero}>{e.numero} — {e.motif} (à l'étape « {e.etape} »)</li>)}
+            {r.echecs.slice(0, PIECES_CITEES).map((e) => <li key={e.numero}>{e.numero} — {e.motif} (à l'étape « {e.etape} »)</li>)}
           </ul>
         </Alert>
       )}
       {r.brouillonsOrphelins.length > 0 && !supprimer.isSuccess && (
         <Alert variant="erreur">
           <p>
-            {r.brouillonsOrphelins.length} brouillon(s) sans numéro — {r.brouillonsOrphelins.map((b) => b.numero).slice(0, 10).join(", ")}. Incomplets, ils
+            {r.brouillonsOrphelins.length} brouillon(s) sans numéro — {r.brouillonsOrphelins.map((b) => b.numero).slice(0, PIECES_CITEES).join(", ")}. Incomplets, ils
             n'apparaissent pas dans la liste ; sans numéro, ils peuvent encore être supprimés.
           </p>
           <Button size="sm" variant="destructive" disabled={supprimer.isPending} onClick={() => supprimer.mutate(r.brouillonsOrphelins.map((b) => b.id))}>

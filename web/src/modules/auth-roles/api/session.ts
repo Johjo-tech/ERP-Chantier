@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { supabase, supabasePropositions } from "@/lib/supabase";
-import { construireMatrice, estRole, type RoleMembre } from "../domain/permissions";
+import { verifierMatrice } from "../domain/demarrage";
+import { construireMatrice, estRole, type Matrice, type RoleMembre } from "../domain/permissions";
+import { NIVEAU_ABONNEMENT_MAX, NIVEAU_ABONNEMENT_MIN } from "../domain/types";
 import type { AccesClient, Session } from "../domain/types";
 
 export type { AccesClient, Session, SocieteAccessible, Utilisateur } from "../domain/types";
@@ -12,7 +14,7 @@ const ligneMembre = z.object({
       id: z.string(),
       code: z.string(),
       nom: z.string(),
-      niveau_abonnement: z.number().int().min(1).max(5).nullish(),
+      niveau_abonnement: z.number().int().min(NIVEAU_ABONNEMENT_MIN).max(NIVEAU_ABONNEMENT_MAX).nullish(),
     })
     .nullable(),
 });
@@ -35,6 +37,17 @@ export async function seDeconnecter(): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Ferme la session DANS CE NAVIGATEUR seulement, sans appel au serveur.
+ *
+ * Sert quand le jeton a expiré : un `signOut()` global serait présenté avec le
+ * même jeton refusé, et laisserait la session morte en place.
+ */
+export async function fermerSessionLocale(): Promise<void> {
+  const { error } = await supabase().auth.signOut({ scope: "local" });
+  if (error) throw error;
+}
+
 /** L'identifiant du compte connecté, ou null. Ne fait aucun appel réseau. */
 export async function compteConnecte(): Promise<string | null> {
   const { data } = await supabase().auth.getSession();
@@ -47,25 +60,32 @@ export function surChangementDeSession(rappel: () => void): () => void {
 }
 
 /**
- * Charge tout ce que la session doit savoir avant le premier rendu : profil,
- * sociétés où le compte est membre ACTIF, et la matrice des droits.
+ * Charge tout ce que la session doit savoir avant le premier rendu, DANS
+ * L'ORDRE de l'ancien démarrage (`integrations/session.ts#chargerSession`) :
+ *
+ *   1. la matrice des droits — tout l'affichage s'y réfère ; vide ou tronquée,
+ *      l'application refuse de démarrer (`verifierMatrice`) ;
+ *   2. le profil, puis les sociétés où le compte est membre ACTIF, avec son
+ *      rôle dans chacune (une ligne de `membres_societe` par société) ;
+ *   3. les accès « espace client ».
+ *
+ * Séquentiel à dessein : une matrice illisible arrête tout avant qu'on
+ * interroge le reste. L'annuaire des comptes n'est plus un préalable : chaque
+ * écran qui nomme un compte le lit par sa requête, indexée par société (D-AUTH-01).
  */
 export async function chargerSession(userId: string): Promise<Session> {
+  const matrice = await chargerMatrice();
   const client = supabase();
+  const profilR = await client.from("profiles").select("id, nom, email").eq("id", userId).single();
+  if (profilR.error) throw profilR.error;
   // `*` sur la société : une colonne ajoutée plus tard (niveau d'abonnement)
   // apparaît sans que ce code ait à changer, et son absence ne casse rien.
-  const [profilR, membresR, droitsR] = await Promise.all([
-    client.from("profiles").select("id, nom, email").eq("id", userId).single(),
-    client
-      .from("membres_societe")
-      .select("role, societe:societes(*)")
-      .eq("profile_id", userId)
-      .eq("actif", true),
-    client.from("role_permissions").select("role, module, action"),
-  ]);
-  if (profilR.error) throw profilR.error;
+  const membresR = await client
+    .from("membres_societe")
+    .select("role, societe:societes(*)")
+    .eq("profile_id", userId)
+    .eq("actif", true);
   if (membresR.error) throw membresR.error;
-  if (droitsR.error) throw droitsR.error;
 
   const p = profil.parse(profilR.data);
   const societes = z
@@ -86,14 +106,24 @@ export async function chargerSession(userId: string): Promise<Session> {
     )
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
-  const droits = z.array(ligneDroit).parse(droitsR.data);
   const accesClients = await chargerAccesClients();
   return {
     utilisateur: { id: p.id, email: p.email ?? "", nom: p.nom || p.email || "" },
     societes,
-    matrice: construireMatrice(droits.map((d) => ({ ...d, role: d.role as RoleMembre }))),
+    matrice,
     accesClients,
   };
+}
+
+/** La matrice entière, ou un refus de démarrer (AUTH-33). */
+async function chargerMatrice(): Promise<Matrice> {
+  const { data, error, count } = await supabase().from("role_permissions").select("role, module, action", { count: "exact" });
+  if (error) throw error;
+  const droits = z
+    .array(ligneDroit)
+    .parse(data ?? [])
+    .map((d) => ({ ...d, role: d.role as RoleMembre }));
+  return construireMatrice(verifierMatrice(droits, count));
 }
 
 const ligneAcces = z.object({

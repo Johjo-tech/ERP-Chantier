@@ -14,7 +14,7 @@
  */
 import Big from "big.js";
 import { arrondiCentimes, enDecimal2, somme, ZERO, type Montant } from "@/lib/money";
-import { PAYS_DEFAUT } from "@/modules/clients/domain/identifiants";
+import { LONGUEUR_SIREN, PAYS_DEFAUT } from "@/modules/clients/domain/identifiants";
 import { INDEMNITE_RECOUVREMENT_EUR } from "@/modules/facturation/domain/mentions";
 import {
   relveDeLaFactureElectronique,
@@ -218,7 +218,7 @@ function adresseElectronique(e: EntiteEN16931): IdentifiantSchema | undefined {
 }
 
 function partie(e: EntiteEN16931): PartieEN16931 {
-  const siren = e.siren || (e.siret ? e.siret.slice(0, 9) : null);
+  const siren = e.siren || (e.siret ? e.siret.slice(0, LONGUEUR_SIREN) : null);
   return {
     name: e.nom ?? undefined,
     vat_identifier: e.tvaIntracom ?? undefined,
@@ -341,6 +341,9 @@ export interface NoteEN16931 {
  * l'indemnité, PMD les pénalités, AAB l'escompte — obligatoire même pour dire
  * qu'il n'y en a pas (relevé par le validateur Mustangproject).
  */
+/** Le taux annuel de pénalités qu'écrivait l'ancien export quand la société n'en donnait aucun. */
+const TAUX_PENALITES_DEFAUT = 10;
+
 function notesLegales(f: FactureEN16931): NoteEN16931[] {
   const indemnite = f.indemniteRecouvrement ?? INDEMNITE_RECOUVREMENT_EUR;
   const brut = f.penalitesRetard;
@@ -348,7 +351,7 @@ function notesLegales(f: FactureEN16931): NoteEN16931[] {
   const penalites =
     typeof brut === "string" && brut.trim()
       ? brut.trim()
-      : `En cas de retard de paiement, pénalités au taux annuel de ${brut ?? 10} %, exigibles sans rappel.`;
+      : `En cas de retard de paiement, pénalités au taux annuel de ${brut ?? TAUX_PENALITES_DEFAUT} %, exigibles sans rappel.`;
   const escompte =
     f.mentionEscompte?.trim() ||
     (f.escomptePourcentage ? `Escompte pour paiement anticipé : ${f.escomptePourcentage} %.` : "Pas d'escompte pour paiement anticipé.");

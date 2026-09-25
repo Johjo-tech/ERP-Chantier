@@ -38,6 +38,7 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 27 | `20260926104000_fonctions_de_declencheur_sans_execute_public.sql` | Hygiène | EXECUTE retiré à PUBLIC/anon/authenticated sur toutes les fonctions de déclencheur ; `security_barrier` remis sur `v_salaries_annuaire`. **À rejouer après toute proposition qui crée un déclencheur ou refait cette vue.** Contrôles : la requête de l'en-tête rend 0 ligne ; `reloptions` = `{security_barrier=true}`. AUTH-75, AUTH-76, D-TRV-06. | contrôle SQL (non observable par l'API) + `npm run test:rls` entier |
 | 28 | `20260926105000_jours_feries_d_alsace_moselle.sql` | Fonction | `societes.feries_alsace_moselle` (faux par défaut) : Vendredi saint et 26/12 au planning (PLN-53, D-TRV-07). | `tests/rls/transversal.essai.ts` (« [proposition] Alsace-Moselle ») |
 | 29 | `20260926106000_acces_clients_geres_par_l_admin.sql` | Fonction | Réglages › Accès clients : `acces_clients_de_la_societe()` et `ouvrir_acces_client()`, réservées à `est_admin`. Après les n° 4 et 14 (D-TRV-08). | `tests/rls/transversal.essai.ts` (« [proposition] accès clients ») |
+| 30 | `20260926110000_la_matrice_ouvre_les_referentiels_a_qui_elle_les_donne.sql` | Droits + **défaut** | (1) AUTH-70 : l'écriture des tables à `peut_ecrire()` devient « `peut_ecrire()` OU la matrice du module » — la secrétaire tient équipes, sous-traitants et leurs documents, fiches conducteur (`rh`), contrôles et factures fournisseurs (`controle_fournisseurs`), cycle de vie des factures (`factures`) ; rien n'est retiré à personne. Filles de véhicule sans écran (cartes, consommations, contrôles) : « véhicules / modifier » comme leurs sœurs. (2) AUTH-71 : leur suppression suit « module / supprimer » (un technicien effaçait une fiche conducteur, un fournisseur, un métier). (3) AUTH-72 : `est_affecte_au_chantier()` écrit en toutes lettres dans la lecture des quatre filles du chantier. (4) **Défaut** : `chantiers_select` refusait à l'admin le chantier qu'il venait de créer par `insert … select` (la fonction relisait une ligne encore invisible) — la politique lit le rôle sur `societe_id` de la ligne. Remplace la suppression posée par le n° 24 sur trois tables. Essai à blanc : `select c.relname, p.polcmd from pg_policy p join pg_class c on c.oid = p.polrelid where p.polcmd = 'd' and pg_get_expr(p.polqual, p.polrelid) ~ 'peut_ecrire' order by 1;` → seuls restent les gestes du terrain (`planning_taches`, `tache_travaux_supplementaires`, `bon_commande_photos`, `chantier_documents|inspections|todos`, seau `terrain`) ; puis, sous un compte admin, un `insert into chantiers … returning id`. D-AUTH-05 à D-AUTH-07. | `tests/rls/auth-roles.essai.ts` (« [proposition] … »), `tests/rls/rh.essai.ts` — **l'insert … select d'un chantier échoue contre la base actuelle (vérifié)** |
 
 ## Comment les appliquer (par un humain)
 
@@ -64,18 +65,17 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 
 ## Migrations à écrire ensuite (non rédigées)
 
-- **Équipes et sous-traitants par la secrétaire** (D-RH-05) : si le métier le veut, `techniciens`, `sous_traitants`, `sous_traitant_documents` et `conducteurs` devraient suivre `a_permission(…, 'rh', …)` plutôt que `peut_ecrire`.
+- *(Équipes et sous-traitants par la secrétaire, D-RH-05 : rédigée, n° 30.)*
+- **Écriture des référentiels au terrain** : le n° 30 AJOUTE la matrice sans retirer `peut_ecrire()` ; un technicien peut donc toujours CRÉER une fiche conducteur ou un fournisseur par l'API (plus les supprimer). Retirer `peut_ecrire()` de ces insertions demande de vérifier qu'aucun geste de l'écran historique n'en dépend (D-AUTH-06).
 - **Habilitations** (D-RH-03) : migrer les `salarie_documents` de type `habilitation` vers `salarie_habilitations` (ou supprimer cette table inutilisée).
 
 - **Planning restreint au terrain** : `planning_taches` se lit sous `est_membre` — un sous-traitant lit toutes les tâches de la société, celles de ses confrères comprises (AUTH-72). L'écran filtre ; la base devrait le faire.
 - **Réglage Alsace-Moselle** : une colonne de société pour activer Vendredi saint et 26 décembre (D-PLN-09).
 - *(Planning restreint au terrain : rédigée, n° 22. Réglage Alsace-Moselle : rédigée, n° 25.)*
 
-- **Suppression dans les autres tables filles** : restent 8 tables sous
-  `est_membre()` — véhicules (cartes carburant, consommations, contrôles
-  périodiques, documents, entretiens, prêts), `materiel_prets`,
-  `sous_traitant_documents` — laissées aux modules véhicules/matériel et RH
-  (les trois autres : n° 21).
+- *(Suppression dans les autres tables filles : plus aucune politique DELETE
+  sous `est_membre()` — relevé automatisé par `tests/rls/auth-roles.essai.ts`
+  ; les dernières, trop larges sous `peut_ecrire()`, alignées par le n° 30.)*
 - *(Lecture du seau `terrain` par chantier : rédigée, n° 20.)*
 - **Niveau d'abonnement** : `alter table societes add column niveau_abonnement smallint check (niveau_abonnement between 1 and 5)` — lu par `select *`, pris en compte sans changer le code (D-009). Opposable seulement quand une RLS ou une fonction le vérifie.
 - **Situation de travaux atomique** : une RPC `facturer_situation(chantier, lignes jsonb)` qui crée la facture, la trace et le cumul dans une seule transaction (aujourd'hui trois écritures successives, dans l'ordre le moins risqué — FAC-97).

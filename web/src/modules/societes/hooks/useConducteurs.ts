@@ -1,10 +1,11 @@
+import { FRAICHEUR_REFERENCE_MS } from "@/lib/durees";
 import { useQuery } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { listerConducteurs, type Conducteur } from "../api/conducteurs";
 
 export function useConducteurs() {
   const societe = useSocieteActive();
-  return useQuery({ queryKey: ["conducteurs", societe.id], queryFn: () => listerConducteurs(societe.id), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ["conducteurs", societe.id], queryFn: () => listerConducteurs(societe.id), staleTime: FRAICHEUR_REFERENCE_MS });
 }
 
 /**

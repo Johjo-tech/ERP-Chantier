@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { videEnNull } from "@/lib/validation";
+import { entierLePlusProche } from "@/lib/nombres";
 
 /**
  * La to-do d'un chantier (CHA-14) : un kanban À faire / En cours / Fait.
@@ -26,7 +27,7 @@ export function progressionTodo(points: readonly { statut: string | null }[]): {
   const total = points.length;
   const faits = points.filter((p) => statutTodo(p) === "fait").length;
   // Entiers de 0 à 100 : l'arrondi porte sur un ratio de comptes, jamais sur de l'argent.
-  const pourcentage = total ? Math.floor((faits * 100) / total + 0.5) : 0;
+  const pourcentage = total ? entierLePlusProche((faits * 100) / total) : 0;
   return { faits, total, pourcentage };
 }
 

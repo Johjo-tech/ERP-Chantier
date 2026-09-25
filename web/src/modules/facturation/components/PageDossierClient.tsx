@@ -12,7 +12,7 @@ import { formatEuros, montant } from "@/lib/money";
 import { correspond } from "@/lib/recherche";
 import { grouperPar } from "@/lib/utils";
 import { lettrageDeLaSelection } from "../domain/lettrage";
-import { libelleModeReglement } from "../domain/reglements";
+import { DU_A_RECLAMER_EUR, libelleModeReglement } from "../domain/reglements";
 import { totalDu } from "../domain/solde";
 import { useImputerAvoir, useReglements, useSoldes } from "../hooks/useFactures";
 import { CartePieceDossier } from "./CartePieceDossier";
@@ -45,7 +45,7 @@ export function PageDossierClient() {
   );
   const choisies = pieces.filter((p) => selection.includes(p.facture_id));
   const lettrage = lettrageDeLaSelection(pieces, selection);
-  const aEncaisser = choisies.filter((p) => p.sens > 0 && p.du > 0.01);
+  const aEncaisser = choisies.filter((p) => p.sens > 0 && p.du > DU_A_RECLAMER_EUR);
   const basculer = (id: string) => setSelection((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   return (

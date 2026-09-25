@@ -14,7 +14,7 @@ import { FormulaireSousTraitant } from "./FormulaireSousTraitant";
 
 /**
  * Les sous-traitants (PAR-06) : entreprises, métiers, compte relié (AUTH-44) et
- * documents à échéance (décennale, vigilance URSSAF…). La liste s'ouvre à qui
+ * voit l'onglet RH ; l'écriture suit « rh / modifier » (D-RH-05, tranché par D-AUTH-05).
  * voit l'onglet RH ; l'écriture suit `peut_ecrire()` ET la matrice (D-RH-05).
  */
 export function OngletSousTraitants() {

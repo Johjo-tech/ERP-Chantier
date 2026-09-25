@@ -190,11 +190,12 @@ describe("équipes, sous-traitants, fiche conducteur", () => {
 });
 
 describe("droits, visites, rangement", () => {
-  it("dossiers et coûts : `rh / modifier` ; équipes et sous-traitants : en plus `peut_ecrire` (D-RH-05)", () => {
+  it("dossiers, coûts, équipes, sous-traitants, fiche conducteur : `rh / modifier` (D-RH-05 tranché par D-AUTH-05)", () => {
     const tout = () => true;
     const voirSeul = (a: string) => a === "voir";
     expect(droitsRh(tout, "admin")).toMatchObject({ sensible: true, intervenants: true, conducteur: true });
-    expect(droitsRh(tout, "secretaire")).toMatchObject({ sensible: true, intervenants: false, conducteur: false });
+    // La proposition 20260926110000 ouvre équipes, sous-traitants et fiche conducteur à « rh » : la secrétaire les tient.
+    expect(droitsRh(tout, "secretaire")).toMatchObject({ sensible: true, intervenants: true, conducteur: true });
     expect(droitsRh(voirSeul, "conducteur")).toMatchObject({ voir: true, sensible: false, intervenants: false });
   });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { videEnNull } from "@/lib/validation";
+import { MOIS_PAR_AN } from "@/lib/durees";
 import { joursEntre } from "./documents";
 
 /**
@@ -109,9 +110,9 @@ export interface VisiteMedicale {
 export function ajouterMois(dateISO: string, mois: number): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateISO ?? "").trim());
   if (!m) return null;
-  const total = Number(m[1]) * 12 + Number(m[2]) - 1 + mois;
-  const anneeCible = Math.floor(total / 12);
-  const moisCible = total - anneeCible * 12;
+  const total = Number(m[1]) * MOIS_PAR_AN + Number(m[2]) - 1 + mois;
+  const anneeCible = Math.floor(total / MOIS_PAR_AN);
+  const moisCible = total - anneeCible * MOIS_PAR_AN;
   const dernierJour = new Date(Date.UTC(anneeCible, moisCible + 1, 0)).getUTCDate();
   const jourCible = Math.min(Number(m[3]), dernierJour);
   const pad = (n: number) => String(n).padStart(2, "0");

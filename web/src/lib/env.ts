@@ -9,9 +9,12 @@ import { z } from "zod";
  * ce code — mais on refuse une configuration incomplète au lieu de démarrer à
  * moitié.
  */
+/** Une clé publique réelle (JWT ou `sb_publishable_…`) dépasse largement cette longueur : en deçà, elle a été tronquée au copier-coller. */
+const LONGUEUR_MIN_CLE = 20;
+
 const schema = z.object({
   VITE_SUPABASE_URL: z.url({ message: "VITE_SUPABASE_URL doit être une URL." }),
-  VITE_SUPABASE_ANON_KEY: z.string().min(20, "VITE_SUPABASE_ANON_KEY est vide ou tronquée."),
+  VITE_SUPABASE_ANON_KEY: z.string().min(LONGUEUR_MIN_CLE, "VITE_SUPABASE_ANON_KEY est vide ou tronquée."),
 });
 
 export type Configuration = { supabaseUrl: string; supabaseAnonKey: string };

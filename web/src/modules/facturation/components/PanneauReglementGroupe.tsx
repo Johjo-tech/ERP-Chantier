@@ -7,7 +7,7 @@ import { messageErreur } from "@/lib/erreurs";
 import { formatEuros, montant } from "@/lib/money";
 import { schemaNombreFr } from "@/lib/nombres";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
-import { imputer, refusImputation } from "../domain/reglements";
+import { imputer, refusImputation, RESTE_SOLDE_EUR } from "../domain/reglements";
 import { totalDu, type Solde } from "../domain/solde";
 import { useReglementGroupe } from "../hooks/useFactures";
 
@@ -33,7 +33,7 @@ export function PanneauReglementGroupe({ factures, fermer }: { factures: readonl
       { factures: factures.map((f) => f.facture_id), montant: lu.data, date: saisie.date, mode: saisie.mode, reference: saisie.reference.trim() || null },
       {
         onSuccess: (servies) => {
-          const soldees = servies.filter((p) => p.reste_apres <= 0.004).length;
+          const soldees = servies.filter((p) => p.reste_apres <= RESTE_SOLDE_EUR).length;
           fermer(`${formatEuros(montant(lu.data))} enregistré${servies.length > 1 ? ` sur ${servies.length} factures` : ""} — ${soldees} soldée${soldees > 1 ? "s" : ""}.`);
         },
       }

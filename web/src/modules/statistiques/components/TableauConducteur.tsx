@@ -45,9 +45,12 @@ export function TableauConducteur({ nom }: { nom: string }) {
   );
 }
 
+/** Trois problèmes suffisent à dire la nature des SAV ; la liste entière est au tableau. */
+const PROBLEMES_CITES = 3;
+
 function ATraiterConducteur({ s }: { s: StatsConducteur }) {
   const total = totalATraiter(s);
-  const problemes = s.sav.map((b) => b.probleme_description).filter(Boolean).slice(0, 3).join(" · ");
+  const problemes = s.sav.map((b) => b.probleme_description).filter(Boolean).slice(0, PROBLEMES_CITES).join(" · ");
   const contact = s.injoignables.length ? `${pluriel(s.injoignables.length, "injoignable")} après ${CONDUCTEUR.tentativesInjoignable} tentatives` : "Rappel prévu aujourd'hui ou dépassé";
   return (
     <section aria-labelledby="titre-traiter-conducteur" className="flex flex-col gap-2">

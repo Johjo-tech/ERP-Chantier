@@ -1,3 +1,5 @@
+import { partiesIso } from "@/lib/dates";
+import { JOUR_MS } from "@/lib/durees";
 import { montant, type Montant } from "@/lib/money";
 import { statutImputation } from "./avoir";
 import { statutReglement, type ReglementMontant } from "./reglements";
@@ -18,8 +20,11 @@ const SEUIL_RETARD = montant("0.01");
 
 /** Jours écoulés depuis l'échéance (ou la date), dates « AAAA-MM-JJ » comparées en UTC. */
 export function joursDepuis(reference: string, aujourdhui: string): number {
-  const j = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
-  return (j(aujourdhui) - j(reference)) / 86_400_000;
+  const j = (d: string) => {
+    const { annee, mois, jour } = partiesIso(d);
+    return Date.UTC(annee, mois - 1, jour);
+  };
+  return (j(aujourdhui) - j(reference)) / JOUR_MS;
 }
 
 export function etatPiece(

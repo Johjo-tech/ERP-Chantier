@@ -2,11 +2,14 @@ import { supabase } from "@/lib/supabase";
 import { analyserReponse, type ExtractionBC } from "../domain/contrat";
 import { DELAI_BASCULE_ANALYSE_MS, DELAI_LECTURE_MS, essentielsManquants, type EtapeLecture } from "../domain/lecture";
 
+/** 32 Kio par appel : bien en deçà de la limite d'arguments des moteurs JavaScript. */
+const TRANCHE_OCTETS = 0x8000;
+
 function enBase64(octets: ArrayBuffer): string {
   const vue = new Uint8Array(octets);
   let binaire = "";
   // Par tranches : String.fromCharCode(...vue) déborde la pile sur un PDF de quelques Mo.
-  for (let i = 0; i < vue.length; i += 0x8000) binaire += String.fromCharCode(...vue.subarray(i, i + 0x8000));
+  for (let i = 0; i < vue.length; i += TRANCHE_OCTETS) binaire += String.fromCharCode(...vue.subarray(i, i + TRANCHE_OCTETS));
   return btoa(binaire);
 }
 

@@ -249,7 +249,11 @@ function echec(motif: string, encodage: Encodage, contenu = ""): RapportImportFa
   return { factures: [], rejets: [{ ligne: 1, motif, contenu }], signalements: [], totaux: TOTAUX_VIDES, encodage, incoherent: true };
 }
 
-const extrait = (champs: readonly string[]) => champs.join(";").slice(0, 200);
+/** Les premiers numéros orphelins suffisent à montrer le décalage des deux fichiers. */
+const NUMEROS_CITES = 8;
+/** L'extrait d'une ligne rejetée, pour que le rapport la fasse reconnaître sans la recopier entière. */
+const LONGUEUR_EXTRAIT = 200;
+const extrait = (champs: readonly string[]) => champs.join(";").slice(0, LONGUEUR_EXTRAIT);
 
 // ── Les lignes ─────────────────────────────────────────────────────────────
 
@@ -559,7 +563,7 @@ export function analyserExportFactures(
       ligne: 1,
       motif:
         `${orphelins.length} numéro(s) présents dans le fichier de lignes mais absents des en-têtes : ` +
-        `${orphelins.slice(0, 8).join(", ")}${orphelins.length > 8 ? "…" : ""}. ` +
+        `${orphelins.slice(0, NUMEROS_CITES).join(", ")}${orphelins.length > NUMEROS_CITES ? "…" : ""}. ` +
         `Les deux fichiers ne couvrent pas la même période.`,
     });
   }

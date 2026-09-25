@@ -107,9 +107,14 @@ export function devinerRoles(entete: Rangee, exemples: readonly Rangee[], nbColo
   return roles;
 }
 
+/** Au-delà, un fichier sans en-tête reconnaissable n'en a pas : on ne fouille pas tout le DPGF. */
+const RANGEES_D_EN_TETE_MAX = 30;
+/** Les rangées lues après l'en-tête pour deviner le rôle des colonnes : assez pour voir des nombres. */
+const RANGEES_ECHANTILLON = 15;
+
 /** Le nombre de lignes d'en-tête : jusqu'à la première qui parle de désignation, quantité ou prix (30 premières). */
 export function devinerLignesAIgnorer(rangees: readonly Rangee[]): number {
-  for (let i = 0; i < Math.min(rangees.length, 30); i++) {
+  for (let i = 0; i < Math.min(rangees.length, RANGEES_D_EN_TETE_MAX); i++) {
     const texte = (rangees[i] ?? []).join(" ").toLowerCase();
     if (["désignation", "designation", "quantité", "quantite", "prix"].some((k) => texte.includes(k))) return i + 1;
   }
@@ -140,7 +145,7 @@ export function nombreDeColonnes(rangees: readonly Rangee[]): number {
 /** Rôles devinés pour un nombre de lignes d'en-tête donné (`recomputeDpgfColRoles`). */
 export function rolesPour(rangees: readonly Rangee[], aIgnorer: number): RoleColonne[] {
   const entete = rangees[Math.max(0, aIgnorer - 1)] ?? [];
-  return devinerRoles(entete, rangees.slice(aIgnorer, aIgnorer + 15), nombreDeColonnes(rangees));
+  return devinerRoles(entete, rangees.slice(aIgnorer, aIgnorer + RANGEES_ECHANTILLON), nombreDeColonnes(rangees));
 }
 
 export interface LigneImportee {

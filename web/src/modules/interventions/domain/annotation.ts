@@ -34,10 +34,13 @@ export function couleurAnnotation(categorie: CategoriePhoto | null | undefined):
   return categorie === "preconisation" ? COULEUR_PRECONISATION : COULEUR_CONSTATATION;
 }
 
+/** ±30° : l'ouverture d'une pointe de flèche dessinée à la main. */
+const DEMI_ANGLE_POINTE = Math.PI / 6;
+
 /** La pointe d'une flèche : deux segments à ±30° du trait, proportionnés à l'image. */
 export function pointeDeFleche(de: Point, a: Point, longueur: number): [Point, Point] {
   const angle = Math.atan2(a.y - de.y, a.x - de.x);
-  const ecart = Math.PI / 6;
+  const ecart = DEMI_ANGLE_POINTE;
   return [
     { x: a.x - longueur * Math.cos(angle - ecart), y: a.y - longueur * Math.sin(angle - ecart) },
     { x: a.x - longueur * Math.cos(angle + ecart), y: a.y - longueur * Math.sin(angle + ecart) },

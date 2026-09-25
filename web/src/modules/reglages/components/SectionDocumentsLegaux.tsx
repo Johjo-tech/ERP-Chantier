@@ -11,6 +11,7 @@ import { messageErreur } from "@/lib/erreurs";
 import { erreursParChamp } from "@/lib/validation";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useInfosEntreprise, useLienFichier, useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
+import { SEUILS_DEFAUT } from "@/modules/societes/domain/reglages-societe";
 import type { DocumentLegal } from "../api/documentsLegaux";
 import {
   TAILLE_MAX_PIECE,
@@ -29,7 +30,7 @@ export function SectionDocumentsLegaux() {
   const reglages = useReglagesSociete();
   const infos = useInfosEntreprise();
   const modifiable = usePermission("reglages", "modifier");
-  const seuil = reglages.data?.seuils.documentLegal ?? 30;
+  const seuil = reglages.data?.seuils.documentLegal ?? SEUILS_DEFAUT.documentLegal;
   const herites = documentsHerites(infos.data);
 
   return (

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { todayISO } from "@/lib/dates";
+import { anneeIso, todayISO } from "@/lib/dates";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { ajouterDocumentLegal, listerDocumentsLegaux, supprimerDocumentLegal, type DocumentLegal } from "../api/documentsLegaux";
 import {
@@ -41,7 +41,7 @@ export const clesReglages = {
 
 /** L'année civile à Paris : les compteurs repartent de zéro au 1er janvier. */
 export function anneeCourante(): number {
-  return Number(todayISO().slice(0, 4));
+  return anneeIso(todayISO());
 }
 
 /** Une requête et ses mutations qui la relisent — le patron commun des listes de l'écran. */

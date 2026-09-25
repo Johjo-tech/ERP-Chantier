@@ -11,6 +11,9 @@ import { lignesRapportClients } from "../domain/apercu-clients";
 import { useApercuClients, useEcrireClients } from "../hooks/useImportExport";
 import { ApercuClients } from "./ApercuClients";
 
+/** Les premiers noms d'un échec suffisent à le retrouver ; le rapport CSV les donne tous. */
+const NOMS_CITES = 4;
+
 /**
  * Import de clients (CLI-08, IMP-10 à IMP-14) : choisir un fichier, VOIR ce
  * qui sera écrit, puis accepter. Rien n'atteint la base avant le clic final.
@@ -63,8 +66,8 @@ export function PageImportClients() {
               <ul className="list-disc pl-5">
                 {ecrire.data.echecs.map((e, i) => (
                   <li key={i}>
-                    {e.noms.slice(0, 4).join(", ")}
-                    {e.noms.length > 4 ? "…" : ""} — {e.motif}
+                    {e.noms.slice(0, NOMS_CITES).join(", ")}
+                    {e.noms.length > NOMS_CITES ? "…" : ""} — {e.motif}
                   </li>
                 ))}
               </ul>

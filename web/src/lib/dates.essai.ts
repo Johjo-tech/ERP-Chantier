@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateISO, formatDateFr } from "./dates";
+import { anneeIso, dateISO, formatDateFr, jourIso, moisIso, partiesIso } from "./dates";
 
 describe("dateISO", () => {
   it("donne la date de Paris, pas celle d'UTC", () => {
@@ -16,5 +16,15 @@ describe("formatDateFr", () => {
     expect(formatDateFr("2026-09-24T10:00:00Z")).toBe("24/09/2026");
     expect(formatDateFr("")).toBe("—");
     expect(formatDateFr(null)).toBe("—");
+  });
+});
+
+describe("découpes d'une date ISO (TRV-14 : plus de slice(0, 10) anonyme)", () => {
+  it("jour, mois, année et parties, d'une date ou d'un horodatage", () => {
+    expect(jourIso("2026-09-25T13:49:00+02:00")).toBe("2026-09-25");
+    expect(moisIso("2026-09-25")).toBe("2026-09");
+    expect(anneeIso("2026-09-25")).toBe(2026);
+    expect(partiesIso("2026-09-25T00:00:00Z")).toEqual({ annee: 2026, mois: 9, jour: 25 });
+    expect(partiesIso("2026-09")).toMatchObject({ annee: 2026, mois: 9 });
   });
 });

@@ -15,6 +15,9 @@ export const CADRES_FACTURATION: readonly { code: CadreFacturation; libelle: str
 ];
 export const CADRE_DEFAUT: CadreFacturation = "B2B_national";
 
+/** Un délai de paiement au-delà d'un an est une faute de frappe, pas un accord commercial. */
+const DELAI_PAIEMENT_MAX_JOURS = 365;
+
 const texte = z.preprocess(videEnNull, z.string().trim().nullable());
 
 /** Une fiche client telle que la base la rend. */
@@ -82,7 +85,7 @@ export const schemaSaisieClient = z
         .number({ message: "Nombre de jours invalide." })
         .int("Nombre de jours entier.")
         .min(0, "Le délai ne peut pas être négatif.")
-        .max(365, "365 jours au plus.")
+        .max(DELAI_PAIEMENT_MAX_JOURS, `${DELAI_PAIEMENT_MAX_JOURS} jours au plus.`)
         .nullable()
     ),
     delai_paiement_mode: z.enum(["net", "fin_de_mois"]),

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Database } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
+import { LONGUEUR_SIREN } from "@/modules/clients/domain/identifiants";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import { identiteEmetteur } from "../domain/emetteur";
@@ -158,7 +159,7 @@ export async function verrouillerBrouillon(societeId: string, f: { id: string; c
   const identiteClient = c
     ? {
         client_siret: c.siret,
-        client_siren: c.siren ?? (c.siret ? c.siret.slice(0, 9) : null),
+        client_siren: c.siren ?? (c.siret ? c.siret.slice(0, LONGUEUR_SIREN) : null),
         client_tva_intracom: c.tva_intracom,
         client_pays_code: c.pays_code ?? "FR",
         client_code_routage: c.code_routage,

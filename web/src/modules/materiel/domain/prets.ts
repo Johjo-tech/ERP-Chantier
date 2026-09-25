@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { todayISO } from "@/lib/dates";
+import { jourIso, todayISO } from "@/lib/dates";
 import { videEnNull } from "@/lib/validation";
 
 /**
@@ -35,7 +35,7 @@ export function ajouterJours(dateIso: string, jours: number): string {
   const m = DATE_ISO.exec(dateIso);
   if (!m) return dateIso;
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + jours));
-  return d.toISOString().slice(0, 10);
+  return jourIso(d.toISOString());
 }
 
 export function retourPrevu(p: Pick<PretBase, "date_debut" | "duree_jours">): string | null {

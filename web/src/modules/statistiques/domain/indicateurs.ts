@@ -1,3 +1,4 @@
+import { moisIso } from "@/lib/dates";
 import Big from "big.js";
 import { z } from "zod";
 import { ARRONDI_COMMERCIAL, ZERO, montant, somme, type Montant } from "@/lib/money";
@@ -69,7 +70,7 @@ export interface SerieCA {
 
 /** Chaque mois face au même mois de l'année précédente (`computeRevenuePeriod`). */
 export function serieComparee(lignes: readonly CaMois[], mois: readonly MoisCalendaire[]): SerieCA {
-  const parMois = new Map(lignes.map((l) => [l.mois.slice(0, 7), l.ht]));
+  const parMois = new Map(lignes.map((l) => [moisIso(l.mois), l.ht]));
   const points = mois.map((m) => {
     const precedent = moisCalendaire(m.annee - 1, m.mois);
     return { ...m, courant: parMois.get(m.cle) ?? ZERO, precedent: parMois.get(precedent.cle) ?? ZERO };

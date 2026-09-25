@@ -238,7 +238,11 @@ function notesDuFichier(paires: [string, string][]): string | null {
   return lignes.length ? lignes.join("\n") : null;
 }
 
-const extrait = (champs: readonly string[]) => champs.join(";").slice(0, 200);
+/** L'avertissement cité en tête d'alerte : assez pour être compris, le reste est dans les notes. */
+const LONGUEUR_AVERTISSEMENT = 160;
+/** L'extrait d'une ligne rejetée, pour que le rapport la fasse reconnaître sans la recopier entière. */
+const LONGUEUR_EXTRAIT = 200;
+const extrait = (champs: readonly string[]) => champs.join(";").slice(0, LONGUEUR_EXTRAIT);
 
 function signalementsDuFichier(entete: EnteteClients, encodage: Encodage): SignalementImport[] {
   const s: SignalementImport[] = [{ ligne: 1, motif: `Fichier lu en ${libelleEncodage(encodage)}.` }];
@@ -261,7 +265,7 @@ function lireClient(champ: (nom: string) => string, signaler: (motif: string) =>
 
   // L'avertissement écrit par quelqu'un qui connaissait le dossier : enterré dans les notes, personne ne le verrait à temps.
   const commentaire = champ("Commentaire").trim();
-  if (commentaire && MOTS_ALERTE.some((m) => commentaire.toUpperCase().includes(m))) signaler(`Le fichier porte un avertissement : « ${commentaire.slice(0, 160)} »`);
+  if (commentaire && MOTS_ALERTE.some((m) => commentaire.toUpperCase().includes(m))) signaler(`Le fichier porte un avertissement : « ${commentaire.slice(0, LONGUEUR_AVERTISSEMENT)} »`);
 
   const adresse = adresseRecomposee(champ("Numéro"), champ("Rue"));
   if (adresse && !champ("Rue").trim()) signaler("Adresse réduite au numéro de voie : la rue est absente du fichier.");

@@ -245,6 +245,9 @@ export interface NouveauTravail {
   origine: "technicien" | "conducteur";
 }
 
+/** Le taux que posait l'ancien écran à un travail constaté (rénovation : taux intermédiaire) ; la pré-facture le reprend. */
+const TVA_TRAVAIL_CONSTATE = 10;
+
 /** Constaté sur le terrain, en attente de chiffrage : sans prix (le chiffrage est l'affaire de la validation). */
 export async function ajouterTravailSupplementaire(societeId: string, utilisateurId: string, t: NouveauTravail, client: Client = supabase()): Promise<void> {
   const { error } = await client.from("tache_travaux_supplementaires").insert({
@@ -255,7 +258,7 @@ export async function ajouterTravailSupplementaire(societeId: string, utilisateu
     quantite: 1,
     unite: "u",
     prix_vente_ht: null,
-    tva: 10,
+    tva: TVA_TRAVAIL_CONSTATE,
     origine: t.origine,
     statut: "a_chiffrer",
     cree_par: utilisateurId,
