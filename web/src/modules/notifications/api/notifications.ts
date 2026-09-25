@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { clientNotifications, supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import type { BonAlertable } from "../domain/notifications";
@@ -22,18 +23,29 @@ const schemaBons = z.array(
 );
 
 /**
- * Les seuls bons qui peuvent sonner : fin des travaux passée, ou rappel dû.
- * Filtrés par la base — la société compte des centaines de bons, la cloche
- * n'en veut que quelques-uns.
+ * Les seuls bons qui peuvent sonner : travaux EN COURS dont la fin est passée
+ * (la règle de `domain/notifications.ts#notificationsBonsEnRetard`), ou rappel
+ * dû. Filtrés par la base : « fin passée » seule ramenait presque tout
+ * l'historique, clos et facturés compris, que le serveur coupait ensuite au
+ * hasard de son plafond (relecture 4, I4). Et lus en entier, ou refusés.
  */
+export function filtreBonsASurveiller(aujourdhui: string): string {
+  return `and(date_fin_travaux.lt.${aujourdhui},or(statut_workflow.is.null,statut_workflow.eq.en_cours)),rappel_date.lte.${aujourdhui}`;
+}
+
 export async function bonsASurveiller(societeId: string, aujourdhui: string): Promise<BonAlertable[]> {
-  const { data, error } = await supabase()
-    .from("bons_commande")
-    .select("id, numero_bc, client_nom, date_fin_travaux, rappel_date, statut_workflow")
-    .eq("societe_id", societeId)
-    .or(`date_fin_travaux.lt.${aujourdhui},rappel_date.lte.${aujourdhui}`);
-  if (error) throw error;
-  return analyser(schemaBons, data, "bons à surveiller");
+  return lireTout(
+    (debut, fin) =>
+      supabase()
+        .from("bons_commande")
+        .select("id, numero_bc, client_nom, date_fin_travaux, rappel_date, statut_workflow", { count: "exact" })
+        .eq("societe_id", societeId)
+        .or(filtreBonsASurveiller(aujourdhui))
+        .order("id")
+        .range(debut, fin),
+    schemaBons.element,
+    "liste des bons à surveiller"
+  );
 }
 
 const schemaTraitees = z.array(z.object({ cle: z.string() }));
