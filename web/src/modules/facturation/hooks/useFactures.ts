@@ -126,13 +126,13 @@ export function useEtablirAvoir() {
 /** Lettrage / « Régler par un avoir » : la base contrôle et écrit les deux règlements liés. */
 export function useImputerAvoir() {
   const invalider = useInvalider();
-  return useMutation({ mutationFn: imputerAvoir, onSettled: () => invalider() });
+  return useMutation({ mutationFn: (r: Parameters<typeof imputerAvoir>[0]) => imputerAvoir(r), onSettled: () => invalider() });
 }
 
 /** Un virement réparti sur plusieurs factures, imputé par la base (tout ou rien). */
 export function useReglementGroupe() {
   const invalider = useInvalider();
-  return useMutation({ mutationFn: enregistrerReglementGroupe, onSettled: () => invalider() });
+  return useMutation({ mutationFn: (r: Parameters<typeof enregistrerReglementGroupe>[0]) => enregistrerReglementGroupe(r), onSettled: () => invalider() });
 }
 
 export function useModifierReglement() {
