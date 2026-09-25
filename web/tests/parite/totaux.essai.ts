@@ -23,7 +23,7 @@ const TYPES = ["ligne", "ligne", "ligne", "ligne", "chapitre", "commentaire"] as
 
 // L'ancien affichage, recopié d'app.js (money) : Intl sur le flottant.
 const moneyAncien = (n: number) =>
-  new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0).replace(/\u202f|\u00a0/g, " ");
+  new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
 
 function decimal(entierMax: number, decimales: number): string {
   const e = g.entier(0, entierMax);
@@ -130,7 +130,7 @@ describe("parité des totaux de document", () => {
     const t = nouveau.totauxDocument(C1, 10);
     expect(t.ht.toString()).toBe("227.6991");
     expect(t.tva.toString()).toBe("25.3214505");
-    expect(formatEuros(t.ttc)).toBe("253,02 €");
+    expect(formatEuros(t.ttc)).toBe("253,02\u00a0€");
     expect(nouveau.sousTotauxChapitres(C1).map(String)).toEqual(["216", "36.999"]);
     // Autoliquidation : une base à 0 % apparaît, une ligne à 0 € non.
     const auto = nouveau.ventilationTva([
@@ -145,6 +145,6 @@ describe("parité des totaux de document", () => {
     expect(nouveau.remiseDepuisCible(lignes, 900, "ht")?.toString()).toBe("10");
     const pct = nouveau.remiseDepuisCible(lignes, 1000, "ttc");
     expect(pct?.toString()).toBe("16.67");
-    expect(formatEuros(nouveau.totauxDocument(lignes, pct).ttc)).toBe("999,96 €");
+    expect(formatEuros(nouveau.totauxDocument(lignes, pct).ttc)).toBe("999,96\u00a0€");
   });
 });

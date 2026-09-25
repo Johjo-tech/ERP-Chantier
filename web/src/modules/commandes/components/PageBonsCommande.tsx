@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useFonctionnalite } from "@/modules/societes/hooks/useFonctionnalite";
 import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
@@ -45,7 +46,7 @@ function LigneBon({ bon, prix, contacts, onResultat }: { bon: BonDeLaListe; prix
         {bon.date_fin_travaux && <span className="block text-xs text-muted-foreground">fin {formatDateFr(bon.date_fin_travaux)}</span>}
       </Td>
       <Td><BadgeEtape bon={bon} /></Td>
-      {prix && <Td className="text-right tabular-nums">{bon.montant === null ? "—" : formatEuros(montant(bon.montant))}</Td>}
+      {prix && <Td className="text-right tabular-nums">{bon.montant === null ? "—" : formatEurosEcran(montant(bon.montant))}</Td>}
       {contacts && <Td><ContactsBon bon={bon} onResultat={onResultat} /></Td>}
     </Tr>
   );

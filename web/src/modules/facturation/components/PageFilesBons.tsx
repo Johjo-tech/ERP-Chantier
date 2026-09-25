@@ -5,7 +5,8 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { BadgeEtape } from "@/modules/commandes/components/BadgeEtape";
 import { etapeValidation } from "@/modules/commandes/domain/workflow";
@@ -64,7 +65,7 @@ export function PageFilesBons({ file }: { file: FileBons }) {
                         <span className="block text-muted-foreground">{[b.adresse, b.ville].filter(Boolean).join(", ")} · reçu le {formatDateFr(b.date_reception ?? b.date)}</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        {b.montant != null && <span className="tabular-nums">{formatEuros(montant(b.montant))} HT</span>}
+                        {b.montant != null && <span className="tabular-nums">{formatEurosEcran(montant(b.montant))} HT</span>}
                         <BadgeEtape bon={b} />
                       </span>
                     </li>

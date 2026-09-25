@@ -69,13 +69,17 @@ const formatEuro = new Intl.NumberFormat("fr-FR", {
 });
 
 /**
- * « 1 234,56 € ». L'arrondi est fait ici en décimal exact AVANT le formatage :
- * `Intl` arrondirait le flottant, et 1,005 € s'y affiche 1,00 €.
+ * « 1 234,56 € », exactement comme l'ancien `money()` (TRV-01, RM-80) :
+ * milliers séparés par l'espace fine insécable U+202F, « € » précédé de
+ * l'espace insécable U+00A0 — un montant ne se coupe jamais en fin de ligne.
+ * Le PDF, dont la police ne connaît pas U+202F, les convertit lui-même
+ * (`pdf/texte.ts`). L'arrondi est fait ici en décimal exact AVANT le
+ * formatage : `Intl` arrondirait le flottant, et 1,005 € s'y affiche 1,00 €.
  */
 export function formatEuros(m: Montant): string {
   const texte = arrondiCentimes(m).toFixed(DECIMALES_EURO);
   // Intl accepte une chaîne décimale et la formate sans repasser par un flottant.
-  return formatEuro.format(texte as unknown as number).replace(/\u202f|\u00a0/g, " ");
+  return formatEuro.format(texte as unknown as number);
 }
 
 /** Pourcentage « 20 % », « 5,5 % ». */

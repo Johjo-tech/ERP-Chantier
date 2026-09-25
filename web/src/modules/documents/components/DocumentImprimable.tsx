@@ -84,7 +84,7 @@ export function DocumentImprimable({ titre, numero, date, emetteur, destinataire
           )}
         </tbody>
       </table>
-      <BlocTotaux lignes={lignes} remise={remise} deductions={deductions} signe={signe} />
+      <BlocTotaux lignes={lignes} remise={remise} deductions={deductions} signe={signe} imprime />
       {pied}
     </article>
   );

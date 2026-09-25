@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Td, Tr } from "@/components/ui/table";
-import { formatEuros, formatTaux, montant } from "@/lib/money";
+import { formatTaux, montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { ErreurLigne, LigneEdition } from "../domain/lignes";
 import type { ChampReferenceLigne } from "./reference";
 import { montantLigneHt, montantLigneTtc } from "../domain/totaux";
@@ -85,8 +86,8 @@ export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lec
           {tauxProposes.map((t) => <option key={t} value={String(t)}>{formatTaux(montant(t))}</option>)}
         </Select>
       </Td>
-      <Td className="text-right tabular-nums">{formatEuros(montantLigneHt(versLigne(ligne)))}</Td>
-      <Td className="text-right tabular-nums text-muted-foreground">{formatEuros(montantLigneTtc(versLigne(ligne)))}</Td>
+      <Td className="text-right tabular-nums">{formatEurosEcran(montantLigneHt(versLigne(ligne)))}</Td>
+      <Td className="text-right tabular-nums text-muted-foreground">{formatEurosEcran(montantLigneTtc(versLigne(ligne)))}</Td>
       {actions}
     </Tr>
   );

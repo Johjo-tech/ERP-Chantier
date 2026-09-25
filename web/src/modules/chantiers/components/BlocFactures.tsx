@@ -4,7 +4,8 @@ import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useFacturesDuChantier } from "../hooks/useFiche";
 
@@ -39,7 +40,7 @@ export function BlocFactures({ chantierId }: { chantierId: string }) {
                 {f.numero ?? "Brouillon"}
               </Link>
               <span className="text-muted-foreground">{formatDateFr(f.date)}</span>
-              <span className="tabular-nums">{f.ttc == null ? "—" : `${formatEuros(montant(f.ttc))} TTC`}</span>
+              <span className="tabular-nums">{f.ttc == null ? "—" : `${formatEurosEcran(montant(f.ttc))} TTC`}</span>
               <Badge variant={variante(f.statut)}>{f.statut ?? "brouillon"}</Badge>
               <Button asChild size="sm" variant="outline" className="ml-auto">
                 <Link to={`/factures/${f.id}/apercu`}>Imprimer / PDF</Link>

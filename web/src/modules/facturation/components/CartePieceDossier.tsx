@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { formatDateFr, todayISO } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Reglement } from "../api/factures";
 import { libelleDelai } from "../domain/etat";
@@ -57,12 +58,12 @@ export function CartePieceDossier({ piece, soldes, reglements, coche, basculer }
           </span>
         </span>
         <span className="flex flex-col items-end gap-1">
-          <span className="tabular-nums">{formatEuros(montant(piece.ttc).times(piece.sens))}</span>
+          <span className="tabular-nums">{formatEurosEcran(montant(piece.ttc).times(piece.sens))}</span>
           <BadgeEtat etat={etat} />
         </span>
       </div>
       <p className="text-sm text-muted-foreground">
-        {avoir ? `Imputé : ${formatEuros(montant(piece.paye))} · Disponible : ${formatEuros(montant(piece.credit))}` : `Réglé : ${formatEuros(montant(piece.paye))} · Reste : ${formatEuros(montant(piece.reste))}`}
+        {avoir ? `Imputé : ${formatEurosEcran(montant(piece.paye))} · Disponible : ${formatEurosEcran(montant(piece.credit))}` : `Réglé : ${formatEurosEcran(montant(piece.paye))} · Reste : ${formatEurosEcran(montant(piece.reste))}`}
         {delai && ` · ${delai}`}
       </p>
       {peutCreer && payable && (

@@ -4,7 +4,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { arrondiCentimes, formatEuros, montant } from "@/lib/money";
+import { arrondiCentimes, montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { CATEGORIE_SALARIE, montantSalarie, schemaSaisieAchat, type CategorieAchat } from "../domain/achats";
 import { useAjouterAchat, useSalaries } from "../hooks/useFiche";
@@ -72,7 +73,7 @@ export function FormulaireAchat({ chantierId, categories }: { chantierId: string
           />
           <p className="self-end text-xs text-muted-foreground sm:col-span-2" aria-live="polite">
             {salarie && salarie.cout_horaire_charge
-              ? `${formatEuros(montant(salarie.cout_horaire_charge))}/h × ${valeurs.heures || 0} h = ${formatEuros(calcul ?? montant(0))}`
+              ? `${formatEurosEcran(montant(salarie.cout_horaire_charge))}/h × ${valeurs.heures || 0} h = ${formatEurosEcran(calcul ?? montant(0))}`
               : salarie
                 ? "Coût horaire non disponible pour votre rôle : saisissez le montant."
                 : ""}

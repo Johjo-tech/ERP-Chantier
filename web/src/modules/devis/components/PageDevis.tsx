@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { STATUTS_LOGEMENT } from "@/modules/documents/domain/logement";
 import { useConducteurs } from "@/modules/societes/hooks/useConducteurs";
@@ -96,8 +97,8 @@ export function PageDevis() {
                     {d.interlocuteur && <span className="block text-xs text-muted-foreground">{d.interlocuteur}</span>}
                   </Td>
                   <Td><BadgeStatutDevis statut={d.statut} /></Td>
-                  <Td className="text-right tabular-nums">{t ? formatEuros(montant(t.ht)) : "—"}</Td>
-                  <Td className="text-right tabular-nums">{t ? formatEuros(montant(t.ttc)) : "—"}</Td>
+                  <Td className="text-right tabular-nums">{t ? formatEurosEcran(montant(t.ht)) : "—"}</Td>
+                  <Td className="text-right tabular-nums">{t ? formatEurosEcran(montant(t.ttc)) : "—"}</Td>
                 </Tr>
               );
             })}

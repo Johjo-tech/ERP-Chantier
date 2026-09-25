@@ -1,12 +1,13 @@
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { ApercuImportFactures } from "../domain/apercu-factures";
 import { CATEGORIES_TAUX_ZERO, DESIGNATION_SANS_LIGNES, type CategorieTva } from "../domain/factures";
 import { Chiffre, ListeMotifs } from "./Recapitulatif";
 
 const MAX = { rejets: 8, signalements: 6, collisions: 20 } as const;
-const euros = (n: number) => formatEuros(montant(n));
+const euros = (n: number) => formatEurosEcran(montant(n));
 
 interface Props {
   apercu: ApercuImportFactures;

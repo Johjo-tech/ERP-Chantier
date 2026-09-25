@@ -1,7 +1,8 @@
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEuros, formatTaux, montant } from "@/lib/money";
+import { formatTaux, montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { libelleType } from "../domain/article";
 import { libelleEncodage, type LectureFichier } from "../domain/import";
 import { useCodesExistants } from "../hooks/useArticles";
@@ -80,7 +81,7 @@ export function ApercuImport({ nom, lecture, enCours, onImporter, onRapport }: P
                 <Td>{a.designation}{!a.actif && <span className="ml-2 text-xs text-muted-foreground">(retiré)</span>}</Td>
                 <Td>{libelleType(a.type_article)}</Td>
                 <Td>{a.unite ?? "—"}</Td>
-                <Td className="text-right tabular-nums">{formatEuros(montant(a.prix_unitaire))}</Td>
+                <Td className="text-right tabular-nums">{formatEurosEcran(montant(a.prix_unitaire))}</Td>
                 <Td className="text-right tabular-nums">{formatTaux(montant(a.tva))}</Td>
               </Tr>
             ))}

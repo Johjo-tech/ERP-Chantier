@@ -4,7 +4,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { Chantier } from "../domain/chantier";
 import { avancementChantier, estFactureeEntierement, lignesFigees } from "../domain/dpgf";
@@ -90,7 +90,7 @@ export function BlocDpgf({ chantier, actions, actionsSelection, fichierAImporter
           <CardTitle>DPGF chiffré — suivi d'avancement</CardTitle>
         </div>
         <p className="text-sm text-muted-foreground">
-          {replie ? `${lignes.filter((l) => l.type === "ligne").length} ligne(s) — ${formatEuros(a.total)} HT` : "Cochez les lignes à facturer, puis validez ci-dessous"}
+          {replie ? `${lignes.filter((l) => l.type === "ligne").length} ligne(s) — ${formatEurosEcran(a.total)} HT` : "Cochez les lignes à facturer, puis validez ci-dessous"}
         </p>
         {actions}
       </CardHeader>
@@ -135,9 +135,9 @@ export function BlocDpgf({ chantier, actions, actionsSelection, fichierAImporter
             <span className="ml-auto">{actionsSelection?.(selectionnees)}</span>
           </div>
           <dl className="grid gap-1 text-sm sm:grid-cols-3">
-            <div><dt className="inline text-muted-foreground">Total DPGF (HT) : </dt><dd className="inline font-semibold tabular-nums">{formatEuros(a.total)}</dd></div>
-            <div><dt className="inline text-muted-foreground">Déjà facturé : </dt><dd className="inline font-semibold tabular-nums">{formatEuros(a.facture)} ({a.pourcentage} %)</dd></div>
-            <div><dt className="inline text-muted-foreground">Reste à facturer : </dt><dd className="inline font-semibold tabular-nums">{formatEuros(a.reste)}</dd></div>
+            <div><dt className="inline text-muted-foreground">Total DPGF (HT) : </dt><dd className="inline font-semibold tabular-nums">{formatEurosEcran(a.total)}</dd></div>
+            <div><dt className="inline text-muted-foreground">Déjà facturé : </dt><dd className="inline font-semibold tabular-nums">{formatEurosEcran(a.facture)} ({a.pourcentage} %)</dd></div>
+            <div><dt className="inline text-muted-foreground">Reste à facturer : </dt><dd className="inline font-semibold tabular-nums">{formatEurosEcran(a.reste)}</dd></div>
           </dl>
           <FormulaireAjoutDpgf chantierId={chantier.id} positionSuivante={positionSuivante} />
         </CardContent>

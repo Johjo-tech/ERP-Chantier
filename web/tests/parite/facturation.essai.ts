@@ -179,7 +179,7 @@ describe("parité des mentions légales de facture", () => {
         assuranceDecennaleNom: c.assurance_decennale_nom,
         assuranceDecennalePolice: c.assurance_decennale_police,
       });
-      expect(mentionsLegales(c).map((l) => l.replace(/(\d+),(\d\d) €/, "$1.$2 €"))).toEqual(a);
+      expect(mentionsLegales(c).map((l) => l.replace(/(\d+),(\d\d)\s€/, "$1.$2 €"))).toEqual(a);
     }
   });
 });

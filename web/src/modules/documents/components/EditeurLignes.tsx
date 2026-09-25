@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { deplacer, dupliquer, ligneVide, modifier, retirer, type ErreurLigne, type LigneEdition } from "../domain/lignes";
 import type { ChampReferenceLigne } from "./reference";
 import { sousTotauxChapitres } from "../domain/totaux";
@@ -84,7 +84,7 @@ export function EditeurLignes({ lignes, onChange, tvaDefaut, unites: imposees, t
                 {st && (
                   <Tr className="border-b-2">
                     <Td colSpan={5} className="text-right text-sm text-muted-foreground">Sous-total du chapitre</Td>
-                    <Td className="text-right font-medium tabular-nums">{formatEuros(st)}</Td>
+                    <Td className="text-right font-medium tabular-nums">{formatEurosEcran(st)}</Td>
                     <Td colSpan={lectureSeule ? 1 : 2} />
                   </Tr>
                 )}

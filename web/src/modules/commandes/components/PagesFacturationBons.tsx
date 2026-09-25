@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import type { BonDeLaListe } from "../api/bons";
@@ -42,7 +43,7 @@ function TableBons({ bons, prix, action, detail }: { bons: readonly BonDeLaListe
               <BadgeEtape bon={b} />
               {detail?.(b)}
             </Td>
-            {prix && <Td className="text-right tabular-nums">{b.montant === null ? "—" : formatEuros(montant(b.montant))}</Td>}
+            {prix && <Td className="text-right tabular-nums">{b.montant === null ? "—" : formatEurosEcran(montant(b.montant))}</Td>}
             <Td className="text-right">{action(b)}</Td>
           </Tr>
         ))}

@@ -3,7 +3,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { TachePlanifiee } from "../api/planification";
@@ -59,7 +60,7 @@ export function DialoguePlanifier({ chantier, ligne, taches, fermer, planifiee }
         <Input autoFocus aria-label="Quantité à planifier" inputMode="decimal" className="w-24" value={saisie} onChange={(e) => setSaisie(e.target.value)} />
         <span className="text-muted-foreground">sur {restante.toString().replace(".", ",")} restant(s)</span>
       </label>
-      <p className="text-sm text-muted-foreground">Montant correspondant : {formatEuros(apercu)}</p>
+      <p className="text-sm text-muted-foreground">Montant correspondant : {formatEurosEcran(apercu)}</p>
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={creer.isPending}>{creer.isPending ? "Création…" : "Créer le bon"}</Button>
         <Button type="button" size="sm" variant="ghost" onClick={fermer}>Annuler</Button>

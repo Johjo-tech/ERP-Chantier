@@ -2,7 +2,8 @@ import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEuros, formatTaux, montant } from "@/lib/money";
+import { formatTaux, montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { libelleType, type Article } from "../domain/article";
 import { BoutonActifArticle } from "./BoutonActifArticle";
@@ -45,7 +46,7 @@ export function TableArticles({ articles }: { articles: readonly Article[] }) {
             <Td>{a.famille ?? "—"}</Td>
             <Td>{libelleType(a.type_article)}</Td>
             <Td>{a.unite ?? "—"}</Td>
-            <Td className="text-right tabular-nums">{formatEuros(montant(a.prix_unitaire))}</Td>
+            <Td className="text-right tabular-nums">{formatEurosEcran(montant(a.prix_unitaire))}</Td>
             <Td className="text-right tabular-nums">{formatTaux(montant(a.tva))}</Td>
             <Can module="articles" action="modifier">
               <Td className="whitespace-nowrap text-right">

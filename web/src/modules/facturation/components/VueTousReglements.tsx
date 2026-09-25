@@ -7,7 +7,8 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useChantiers } from "@/modules/chantiers/hooks/useChantiers";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
@@ -73,7 +74,7 @@ export function VueTousReglements({ soldes, reglements }: { soldes: readonly Sol
             <p className="font-semibold">{liste.length} règlement{liste.length > 1 ? "s" : ""}{liste.length < reglements.length && <span className="font-normal text-muted-foreground"> sur {reglements.length}</span>}</p>
             <p className="text-sm text-muted-foreground">Total des règlements affichés</p>
           </div>
-          <p className="text-xl font-semibold tabular-nums">{formatEuros(totalReglements(liste))}</p>
+          <p className="text-xl font-semibold tabular-nums">{formatEurosEcran(totalReglements(liste))}</p>
         </CardContent>
       </Card>
       {liste.length === 0 ? (
@@ -94,7 +95,7 @@ export function VueTousReglements({ soldes, reglements }: { soldes: readonly Sol
                     {chantier && <span className="block text-sm text-muted-foreground">Chantier : {chantier.nom}</span>}
                   </span>
                   <span className="flex flex-col items-end gap-1">
-                    <span className="tabular-nums font-semibold">{formatEuros(montant(r.montant))}</span>
+                    <span className="tabular-nums font-semibold">{formatEurosEcran(montant(r.montant))}</span>
                     {estRapproche(r) ? <Badge variant="succes">Rapproché</Badge> : <Badge variant="alerte">Non rapproché</Badge>}
                   </span>
                 </div>

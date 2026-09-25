@@ -4,7 +4,7 @@ import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useListeDevis, useTotauxDevis } from "@/modules/devis/hooks/useDevis";
 import { useSoldes } from "@/modules/facturation/hooks/useFactures";
 import { useRapports } from "@/modules/interventions/hooks/useRapports";
@@ -74,7 +74,7 @@ function Resultats({ requete, courant, liste }: { requete: string; courant: numb
                 <span className="block font-medium">{r.client}</span>
                 <span className="text-muted-foreground">{LIBELLES_NATURE[r.nature]} · {r.numero || "sans numéro"} · {formatDateFr(r.date)}</span>
               </span>
-              {r.ttc ? <span className="font-semibold tabular-nums">{formatEuros(r.ttc)}</span> : r.statut ? <Badge variant="neutre">{r.statut}</Badge> : null}
+              {r.ttc ? <span className="font-semibold tabular-nums">{formatEurosEcran(r.ttc)}</span> : r.statut ? <Badge variant="neutre">{r.statut}</Badge> : null}
             </Link>
           </li>
         ))}

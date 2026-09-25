@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
 import { etiquetteEcheance } from "../domain/echeances";
@@ -57,7 +58,7 @@ export function BlocAbonnements({ vehicule }: { vehicule: Vehicule }) {
         {vehicule.vendu && (
           <div role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm">
             <strong>Véhicule vendu</strong> le {formatDateFr(vehicule.date_vente)}
-            {voitLesPrix && vehicule.prix_vente != null && ` pour ${formatEuros(montant(vehicule.prix_vente))} HT`}
+            {voitLesPrix && vehicule.prix_vente != null && ` pour ${formatEurosEcran(montant(vehicule.prix_vente))} HT`}
             {vehicule.facture_vente_id && (
               <Button asChild size="sm" variant="outline">
                 <Link to={`/factures/${vehicule.facture_vente_id}`}>Voir la facture</Link>

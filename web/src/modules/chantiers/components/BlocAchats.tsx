@@ -6,7 +6,8 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { categorieDe, categoriesAchat, totauxParCategorie, trierAchats } from "../domain/achats";
 import { useAchats, useCategoriesAchat, useSupprimerAchat } from "../hooks/useFiche";
 import { FormulaireAchat } from "./FormulaireAchat";
@@ -33,7 +34,7 @@ export function BlocAchats({ chantierId }: { chantierId: string }) {
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>Achats</CardTitle>
         <p className="font-semibold tabular-nums">
-          {formatEuros(total)} <span className="text-sm font-normal text-muted-foreground">au total</span>
+          {formatEurosEcran(total)} <span className="text-sm font-normal text-muted-foreground">au total</span>
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -48,7 +49,7 @@ export function BlocAchats({ chantierId }: { chantierId: string }) {
               className={`flex flex-col gap-1 rounded-md border p-2 text-left ${filtre === categorie.code ? "border-primary bg-primary/5" : "border-border"}`}
             >
               <span className="text-sm"><span aria-hidden="true">{categorie.icone}</span> {categorie.libelle}</span>
-              <span className="font-semibold tabular-nums">{formatEuros(m)}</span>
+              <span className="font-semibold tabular-nums">{formatEurosEcran(m)}</span>
               <span className="h-1.5 w-full rounded bg-muted" aria-label={`${pourcentage} % du total`} role="img">
                 <span className="block h-full rounded" style={{ width: `${pourcentage}%`, background: categorie.couleur }} />
               </span>
@@ -79,7 +80,7 @@ export function BlocAchats({ chantierId }: { chantierId: string }) {
                       {a.fournisseur ? ` · ${a.fournisseur}` : ""}
                     </span>
                   </span>
-                  <span className="font-semibold tabular-nums">{formatEuros(montant(a.montant))}</span>
+                  <span className="font-semibold tabular-nums">{formatEurosEcran(montant(a.montant))}</span>
                   <BoutonConfirme libelle="Retirer" question="Retirer cet achat ?" onConfirmer={() => supprimer.mutate(a.id)} />
                 </li>
               );

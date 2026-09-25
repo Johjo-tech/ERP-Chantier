@@ -4,7 +4,8 @@ import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { estAvoir } from "@/modules/documents/domain/totaux";
 import { useDocumentsClient } from "../hooks/useEspaceClient";
 
@@ -49,7 +50,7 @@ export function PageEspaceClient() {
               <Tr key={d.id}>
                 <Td><Link className="text-primary hover:underline" to={`/espace-client/devis/${d.id}`}>{d.numero}</Link></Td>
                 <Td>{formatDateFr(d.date)}</Td>
-                <Td className="text-right tabular-nums">{formatEuros(montant(d.ttc))}</Td>
+                <Td className="text-right tabular-nums">{formatEurosEcran(montant(d.ttc))}</Td>
               </Tr>
             ))}
           </TBody>
@@ -64,10 +65,10 @@ export function PageEspaceClient() {
                 <Td><Link className="text-primary hover:underline" to={`/espace-client/factures/${f.id}`}>{f.numero}</Link></Td>
                 <Td>{formatDateFr(f.date)}</Td>
                 <Td>{formatDateFr(f.echeance)}</Td>
-                <Td className="text-right tabular-nums">{formatEuros(estAvoir(f.type_document) ? montant(f.ttc).neg() : montant(f.ttc))}</Td>
+                <Td className="text-right tabular-nums">{formatEurosEcran(estAvoir(f.type_document) ? montant(f.ttc).neg() : montant(f.ttc))}</Td>
                 <Td className="text-right tabular-nums">
                   {/* Un avoir n'est pas une dette : son reste est un crédit, on ne le présente pas comme dû. */}
-                  {estAvoir(f.type_document) ? "—" : soldeDe.has(f.id) ? formatEuros(montant(soldeDe.get(f.id)?.reste ?? 0)) : "…"}
+                  {estAvoir(f.type_document) ? "—" : soldeDe.has(f.id) ? formatEurosEcran(montant(soldeDe.get(f.id)?.reste ?? 0)) : "…"}
                   {soldeDe.get(f.id)?.en_retard && <span className="block text-xs font-semibold text-destructive">En retard</span>}
                 </Td>
               </Tr>

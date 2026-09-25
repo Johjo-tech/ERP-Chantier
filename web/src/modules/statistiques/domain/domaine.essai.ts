@@ -55,7 +55,7 @@ describe("pilotage", () => {
       "2026-09-25"
     );
     expect(t).toMatchObject({ enAttenteConducteur: 2, aValiderDirecteur: 1, aFacturer: 1, rappels: 1 });
-    expect(formatEuros(t.aFacturerMontant)).toBe("471,50 €");
+    expect(formatEuros(t.aFacturerMontant)).toBe("471,50\u00a0€");
   });
 
   it("le tableau suit le rôle effectif", () => {
@@ -130,7 +130,7 @@ describe("statistiques", () => {
     ]);
     expect(t.mois).toEqual(["2026-08", "2026-09"]);
     expect(t.equipes.map((e) => e.nom)).toEqual(["Équipe Thomas", "Zoé", "Non attribué"]);
-    expect(formatEuros(t.equipes[0]?.total ?? montant(0))).toBe("10,00 €");
+    expect(formatEuros(t.equipes[0]?.total ?? montant(0))).toBe("10,00\u00a0€");
   });
   it("la répartition ignore les montants nuls ou négatifs", () => {
     const r = repartition([{ ht: montant(300) }, { ht: montant(-50) }, { ht: montant(100) }]);

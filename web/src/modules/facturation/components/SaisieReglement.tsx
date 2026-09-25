@@ -4,7 +4,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
 import type { Reglement } from "../api/factures";
@@ -63,7 +64,7 @@ export function SaisieReglement({ factureId, totalDu, reglements, modeParDefaut,
         placeholder={String(reste).replace(".", ",")}
         valeur={saisie.montant}
         erreur={refus ?? undefined}
-        aide={`Total ${formatEuros(montant(totalDu))} · déjà réglé ${formatEuros(totalRegle(reglements, sauf))} · reste ${formatEuros(reste)}`}
+        aide={`Total ${formatEurosEcran(montant(totalDu))} · déjà réglé ${formatEurosEcran(totalRegle(reglements, sauf))} · reste ${formatEurosEcran(reste)}`}
         onChange={(v) => setSaisie({ ...saisie, montant: v })}
       />
       <ChampChoix libelle="Mode" valeur={saisie.mode} onChange={(v) => setSaisie({ ...saisie, mode: v })} options={MODES_REGLEMENT.map((m) => ({ valeur: m.code, libelle: m.libelle }))} />

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatEuros, formatTaux, type Montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { LigneEdition } from "../domain/lignes";
 import { remiseDepuisCible, soldeAPayer, totauxDocument } from "../domain/totaux";
 
@@ -11,19 +12,22 @@ interface Props {
   /** Facture : acomptes et retenue de garantie. */
   deductions?: { acomptes: unknown; retenuePct: unknown };
   signe?: 1 | -1;
+  /** La pièce imprimée porte ses montants, même en mode discret (TRV-05). */
+  imprime?: boolean;
 }
 
-function Ligne({ libelle, valeur, fort = false }: { libelle: string; valeur: Montant; fort?: boolean }) {
+function Ligne({ libelle, valeur, fort = false, format }: { libelle: string; valeur: Montant; fort?: boolean; format: (m: Montant) => string }) {
   return (
     <div className={`flex justify-between gap-6 ${fort ? "text-base font-semibold" : "text-sm"}`}>
       <dt>{libelle}</dt>
-      <dd className="tabular-nums">{formatEuros(valeur)}</dd>
+      <dd className="tabular-nums">{format(valeur)}</dd>
     </div>
   );
 }
 
 /** Totaux du document ; le détail par taux ne s'affiche que s'il y a plus d'un taux. */
-export function BlocTotaux({ lignes, remise, onRemise, deductions, signe = 1 }: Props) {
+export function BlocTotaux({ lignes, remise, onRemise, deductions, signe = 1, imprime = false }: Props) {
+  const format = imprime ? formatEuros : formatEurosEcran;
   const [mode, setMode] = useState<"pct" | "ht" | "ttc">("pct");
   const [cible, setCible] = useState("");
   const lu = lignes.map((l) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva }));
@@ -58,29 +62,29 @@ export function BlocTotaux({ lignes, remise, onRemise, deductions, signe = 1 }: 
       <dl aria-label="Totaux du document" className="flex flex-col gap-1">
         {t.remisePct.gt(0) && (
           <>
-            <Ligne libelle="Total HT avant remise" valeur={s(t.htAvant)} />
-            <Ligne libelle={`Remise ${formatTaux(t.remisePct)}`} valeur={s(t.remiseMontantHT).neg()} />
+            <Ligne format={format} libelle="Total HT avant remise" valeur={s(t.htAvant)} />
+            <Ligne format={format} libelle={`Remise ${formatTaux(t.remisePct)}`} valeur={s(t.remiseMontantHT).neg()} />
           </>
         )}
-        <Ligne libelle="Total HT" valeur={s(t.ht)} />
+        <Ligne format={format} libelle="Total HT" valeur={s(t.ht)} />
         {unSeulTaux ? (
-          <Ligne libelle={`Total TVA ${formatTaux(unSeulTaux.taux)}`} valeur={s(t.tva)} />
+          <Ligne format={format} libelle={`Total TVA ${formatTaux(unSeulTaux.taux)}`} valeur={s(t.tva)} />
         ) : (
           <>
             {t.ventilation.map((v) => (
-              <Ligne key={v.taux.toString()} libelle={`TVA ${formatTaux(v.taux)} sur ${formatEuros(s(v.base))}`} valeur={s(v.montant)} />
+              <Ligne format={format} key={v.taux.toString()} libelle={`TVA ${formatTaux(v.taux)} sur ${format(s(v.base))}`} valeur={s(v.montant)} />
             ))}
-            <Ligne libelle="Total TVA" valeur={s(t.tva)} />
+            <Ligne format={format} libelle="Total TVA" valeur={s(t.tva)} />
           </>
         )}
-        <Ligne libelle="Total TTC" valeur={s(t.ttc)} fort />
+        <Ligne format={format} libelle="Total TTC" valeur={s(t.ttc)} fort />
         {solde?.aDesDeductions && (
           <>
-            {solde.acomptes.gt(0) && <Ligne libelle="Acompte déjà versé" valeur={solde.acomptes.neg()} />}
-            {solde.retenueMontant.gt(0) && <Ligne libelle={`Retenue de garantie (${formatTaux(solde.retenuePourcentage)})`} valeur={solde.retenueMontant.neg()} />}
+            {solde.acomptes.gt(0) && <Ligne format={format} libelle="Acompte déjà versé" valeur={solde.acomptes.neg()} />}
+            {solde.retenueMontant.gt(0) && <Ligne format={format} libelle={`Retenue de garantie (${formatTaux(solde.retenuePourcentage)})`} valeur={solde.retenueMontant.neg()} />}
           </>
         )}
-        {solde && <Ligne libelle="Net à payer" valeur={solde.netAPayer} fort />}
+        {solde && <Ligne format={format} libelle="Net à payer" valeur={solde.netAPayer} fort />}
       </dl>
     </div>
   );

@@ -5,7 +5,7 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
 import { depuisBase, lignesPourEnregistrement, type LigneEdition } from "@/modules/documents/domain/lignes";
@@ -143,7 +143,7 @@ function Prefacture({ bon, taches, travaux, reglages, message, onEnregistre }: P
           )}
           {confirmation === "hors_circuit" && (
             <Alert>
-              <p>Envoyer ce bon en facturation SANS passer par le planning ? {bon.client_nom} — {formatEuros(ttc)} TTC. Aucune tâche n'attestera des travaux ; ce contournement est enregistré au journal de la base, avec votre nom.</p>
+              <p>Envoyer ce bon en facturation SANS passer par le planning ? {bon.client_nom} — {formatEurosEcran(ttc)} TTC. Aucune tâche n'attestera des travaux ; ce contournement est enregistré au journal de la base, avec votre nom.</p>
               <div className="mt-2 flex gap-2"><Button size="sm" onClick={() => { setConfirmation(null); lancer(true); }}>Confirmer hors circuit</Button><Button size="sm" variant="ghost" onClick={() => setConfirmation(null)}>Annuler</Button></div>
             </Alert>
           )}

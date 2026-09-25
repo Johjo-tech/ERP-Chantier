@@ -8,7 +8,8 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { Input } from "@/components/ui/input";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { grouperPar } from "@/lib/utils";
 import { lettrageDeLaSelection } from "../domain/lettrage";
@@ -41,7 +42,7 @@ export function PageDossierClient() {
   const pieces = soldes.data.filter((s) => s.client_nom === client && s.cle !== "brouillon").sort((a, b) => b.date.localeCompare(a.date));
   const parFacture = grouperPar(reglements.data, (r) => r.facture_id);
   const visibles = pieces.filter((p) =>
-    correspond(recherche, p.numero, formatEuros(montant(p.ttc)), formatEuros(montant(p.reste)), ...(parFacture.get(p.facture_id) ?? []).map((r) => `${libelleModeReglement(r.mode)} ${r.reference ?? ""} ${formatEuros(montant(r.montant))}`))
+    correspond(recherche, p.numero, formatEurosEcran(montant(p.ttc)), formatEurosEcran(montant(p.reste)), ...(parFacture.get(p.facture_id) ?? []).map((r) => `${libelleModeReglement(r.mode)} ${r.reference ?? ""} ${formatEurosEcran(montant(r.montant))}`))
   );
   const choisies = pieces.filter((p) => selection.includes(p.facture_id));
   const lettrage = lettrageDeLaSelection(pieces, selection);
@@ -68,22 +69,22 @@ export function PageDossierClient() {
         <div role="region" aria-label="Sélection" className="sticky bottom-2 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary bg-card p-3 shadow">
           {lettrage ? (
             <>
-              <span>Avoir {lettrage.avoir.numero} en face de la facture {lettrage.facture.numero} — <b>{formatEuros(lettrage.montant)}</b> à lettrer</span>
+              <span>Avoir {lettrage.avoir.numero} en face de la facture {lettrage.facture.numero} — <b>{formatEurosEcran(lettrage.montant)}</b> à lettrer</span>
               <BoutonConfirme
                 libelle="Lettrer"
-                question={`Lettrer l'avoir ${lettrage.avoir.numero} avec la facture ${lettrage.facture.numero} pour ${formatEuros(lettrage.montant)} ?`}
+                question={`Lettrer l'avoir ${lettrage.avoir.numero} avec la facture ${lettrage.facture.numero} pour ${formatEurosEcran(lettrage.montant)} ?`}
                 enCours={lettrer.isPending}
                 onConfirmer={() =>
                   lettrer.mutate(
                     { avoirId: lettrage.avoir.facture_id, factureId: lettrage.facture.facture_id, montant: Number(lettrage.montant.toString()), date: todayISO() },
-                    { onSuccess: () => { setSelection([]); setMessage(`Avoir ${lettrage.avoir.numero} lettré pour ${formatEuros(lettrage.montant)}.`); } }
+                    { onSuccess: () => { setSelection([]); setMessage(`Avoir ${lettrage.avoir.numero} lettré pour ${formatEurosEcran(lettrage.montant)}.`); } }
                   )
                 }
               />
             </>
           ) : (
             <>
-              <span>{aEncaisser.length} facture{aEncaisser.length > 1 ? "s" : ""} sélectionnée{aEncaisser.length > 1 ? "s" : ""} — Total : <b>{formatEuros(totalDu(aEncaisser))}</b></span>
+              <span>{aEncaisser.length} facture{aEncaisser.length > 1 ? "s" : ""} sélectionnée{aEncaisser.length > 1 ? "s" : ""} — Total : <b>{formatEurosEcran(totalDu(aEncaisser))}</b></span>
               <Button disabled={!aEncaisser.length} onClick={() => setGroupeOuvert(true)}>Règlement</Button>
             </>
           )}

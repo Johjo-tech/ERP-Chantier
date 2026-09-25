@@ -5,7 +5,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { BlocTotaux } from "@/modules/documents/components/BlocTotaux";
@@ -72,7 +73,7 @@ export function VueFactureEmise({ facture, reglages }: { facture: Facture; regla
         signe={avoir ? -1 : 1}
         deductions={avoir ? undefined : { acomptes: facture.acomptes_deduits, retenuePct: facture.retenue_garantie_pourcentage }}
       />
-      {avoir && solde && <Alert>Crédit disponible : {formatEuros(montant(solde.credit))}. Il s'impute sur une facture du même client (Règlements › dossier client, ou « Régler par un avoir » sur la facture).</Alert>}
+      {avoir && solde && <Alert>Crédit disponible : {formatEurosEcran(montant(solde.credit))}. Il s'impute sur une facture du même client (Règlements › dossier client, ou « Régler par un avoir » sur la facture).</Alert>}
       {!avoir && voitReglements && solde && <BlocReglements solde={solde} soldes={soldes.data ?? []} modeParDefaut={facture.mode_paiement} />}
       <Button variant="ghost" className="self-start" asChild><Link to="/factures">Retour à la liste</Link></Button>
     </div>

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { cn } from "@/lib/utils";
 import { Can } from "@/modules/auth-roles/components/Can";
@@ -85,7 +86,7 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
       {vue === "factures" && enRetard.length > 0 && (
         // « Factures échues à relancer » (app.js l. 2097) : le compte, le montant, et le chemin vers la liste.
         <Alert>
-          {enRetard.length} facture{enRetard.length > 1 ? "s" : ""} échue{enRetard.length > 1 ? "s" : ""} à relancer — {formatEuros(totalDu(enRetard))} en retard.{" "}
+          {enRetard.length} facture{enRetard.length > 1 ? "s" : ""} échue{enRetard.length > 1 ? "s" : ""} à relancer — {formatEurosEcran(totalDu(enRetard))} en retard.{" "}
           {voitReglements && <Link className="font-medium text-primary hover:underline" to="/factures/reglements/par-facture?etat=en_retard">Voir les retards</Link>}
         </Alert>
       )}
@@ -126,8 +127,8 @@ export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
                 <Td>{formatDateFr(f.date)}</Td>
                 <Td>{f.client_nom}</Td>
                 {/* Un avoir se lit en négatif ; ses montants sont stockés positifs. */}
-                <Td className="text-right tabular-nums">{formatEuros(estAvoir(f.type_document) ? montant(ttc).neg() : montant(ttc))}</Td>
-                <Td className="text-right tabular-nums">{etat.nature === "facture" || etat.nature === "avoir" ? formatEuros(etat.reste) : "—"}</Td>
+                <Td className="text-right tabular-nums">{formatEurosEcran(estAvoir(f.type_document) ? montant(ttc).neg() : montant(ttc))}</Td>
+                <Td className="text-right tabular-nums">{etat.nature === "facture" || etat.nature === "avoir" ? formatEurosEcran(etat.reste) : "—"}</Td>
                 <Td className="flex flex-wrap gap-1">
                   <BadgeEtat etat={etat} />
                   {delai && <Badge variant={delai.startsWith("En retard") ? "danger" : "neutre"} className={cn(delai.startsWith("En retard") && "font-semibold")}>{delai}</Badge>}

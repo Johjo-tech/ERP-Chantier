@@ -2,7 +2,8 @@ import { Link } from "react-router";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { Card } from "@/components/ui/card";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEuros, somme, ZERO } from "@/lib/money";
+import { somme, ZERO } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { pourcentage } from "../domain/indicateurs";
 import type { Bornes } from "../domain/periodes";
 import { libelleMois } from "../domain/periodes";
@@ -25,7 +26,7 @@ export function StatsConducteurs({ bornes, jour }: { bornes: Bornes; jour: strin
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="p-4"><p className="text-sm text-muted-foreground">Devis émis</p><p className="text-2xl font-semibold">{lignes.reduce((n, l) => n + l.s.devis, 0)}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Bons de commande</p><p className="text-2xl font-semibold">{lignes.reduce((n, l) => n + l.s.bons, 0)}</p></Card>
-        <Card className="p-4"><p className="text-sm text-muted-foreground">Chiffre d'affaires HT</p><p className="text-2xl font-semibold tabular-nums">{formatEuros(somme(lignes.map((l) => l.s.ht)))}</p></Card>
+        <Card className="p-4"><p className="text-sm text-muted-foreground">Chiffre d'affaires HT</p><p className="text-2xl font-semibold tabular-nums">{formatEurosEcran(somme(lignes.map((l) => l.s.ht)))}</p></Card>
       </div>
       <Card className="grid gap-6 p-4 lg:grid-cols-2">
         <BarresRepartition titre="Répartition du chiffre d'affaires" lignes={repartition(q.data).map(({ ligne, part }) => ({ libelle: ligne.nom, ht: ligne.ht, part }))} />
@@ -45,7 +46,7 @@ export function StatsConducteurs({ bornes, jour }: { bornes: Bornes; jour: strin
           {lignes.map(({ s, t }) => (
             <Tr key={s.conducteur_id ?? "sans"}>
               <Td className="font-medium">{s.nom}</Td>
-              <Td className={num}>{formatEuros(s.ht)}</Td>
+              <Td className={num}>{formatEurosEcran(s.ht)}</Td>
               <Td className={num}>{s.bons}</Td>
               <Td className={num}>{t.tauxDansLesTemps} % ({t.dansLesTemps})</Td>
               <Td className={num}>{t.tauxRetard} % ({s.en_retard})</Td>
@@ -53,7 +54,7 @@ export function StatsConducteurs({ bornes, jour }: { bornes: Bornes; jour: strin
               <Td className={num}>{s.devis}</Td>
               <Td className={num}>{t.tauxDevisAcceptes} % ({s.devis_acceptes})</Td>
               <Td className={num}>{t.tauxDevisTransformes} % ({s.devis_transformes})</Td>
-              <Td className={num}>{t.tauxTravaux} % ({s.travaux})<br /><span className="text-xs text-muted-foreground">{formatEuros(s.travaux_ht)}</span></Td>
+              <Td className={num}>{t.tauxTravaux} % ({s.travaux})<br /><span className="text-xs text-muted-foreground">{formatEurosEcran(s.travaux_ht)}</span></Td>
             </Tr>
           ))}
         </TBody>
@@ -80,7 +81,7 @@ export function StatsMetiers({ bornes, jour }: { bornes: Bornes; jour: string })
           {q.data.map((m) => (
             <Tr key={m.metier}>
               <Td className="font-medium">{m.metier}</Td>
-              <Td className={num}>{formatEuros(m.ht)}</Td>
+              <Td className={num}>{formatEurosEcran(m.ht)}</Td>
               <Td className={num}>{m.bons}</Td>
               <Td className={num}>{pourcentage(m.sav, m.bons)} % ({m.sav})</Td>
               <Td className={num}>{pourcentage(m.en_retard, m.bons)} % ({m.en_retard})</Td>
@@ -106,9 +107,9 @@ export function StatsClients({ bornes }: { bornes: Bornes }) {
         {q.data.map((c, i) => (
           <Tr key={c.client_id ?? c.client_nom ?? i}>
             <Td className="font-medium"><Link className="underline-offset-4 hover:underline" to={lienClient(c)}>{c.client_nom ?? "Client sans nom"}</Link></Td>
-            <Td className={num}>{formatEuros(c.ht)}</Td>
+            <Td className={num}>{formatEurosEcran(c.ht)}</Td>
             <Td className={num}>{c.nb_factures}</Td>
-            <Td className={num}>{formatEuros(c.du)}</Td>
+            <Td className={num}>{formatEurosEcran(c.du)}</Td>
             <Td className={num}>{c.nb_devis}</Td>
             <Td className={num}>{pourcentage(c.devis_acceptes, c.nb_devis)} % ({c.devis_acceptes})</Td>
           </Tr>
@@ -133,8 +134,8 @@ export function StatsEquipes({ bornes }: { bornes: Bornes }) {
         {t.equipes.map((e) => (
           <Tr key={e.nom}>
             <Td className="font-medium">{e.nom}</Td>
-            {t.mois.map((m) => <Td key={m} className={num}>{e.parMois.has(m) ? formatEuros(e.parMois.get(m) ?? ZERO) : "—"}</Td>)}
-            <Td className={`${num} font-semibold`}>{formatEuros(e.total)}</Td>
+            {t.mois.map((m) => <Td key={m} className={num}>{e.parMois.has(m) ? formatEurosEcran(e.parMois.get(m) ?? ZERO) : "—"}</Td>)}
+            <Td className={`${num} font-semibold`}>{formatEurosEcran(e.total)}</Td>
           </Tr>
         ))}
       </TBody>

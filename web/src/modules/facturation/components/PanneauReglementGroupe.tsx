@@ -4,7 +4,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
 import { imputer, refusImputation } from "../domain/reglements";
@@ -34,7 +35,7 @@ export function PanneauReglementGroupe({ factures, fermer }: { factures: readonl
       {
         onSuccess: (servies) => {
           const soldees = servies.filter((p) => p.reste_apres <= 0.004).length;
-          fermer(`${formatEuros(montant(lu.data))} enregistré${servies.length > 1 ? ` sur ${servies.length} factures` : ""} — ${soldees} soldée${soldees > 1 ? "s" : ""}.`);
+          fermer(`${formatEurosEcran(montant(lu.data))} enregistré${servies.length > 1 ? ` sur ${servies.length} factures` : ""} — ${soldees} soldée${soldees > 1 ? "s" : ""}.`);
         },
       }
     );
@@ -43,7 +44,7 @@ export function PanneauReglementGroupe({ factures, fermer }: { factures: readonl
   return (
     <section role="dialog" aria-label="Règlement groupé" className="flex flex-col gap-3 rounded-md border border-primary p-4">
       <h2 className="font-semibold">Règlement groupé — {factures.length} facture{factures.length > 1 ? "s" : ""}</h2>
-      <p className="text-sm text-muted-foreground">Total dû : {formatEuros(du)}</p>
+      <p className="text-sm text-muted-foreground">Total dû : {formatEurosEcran(du)}</p>
       <div className="grid gap-2 sm:grid-cols-4">
         <ChampTexte libelle="Montant reçu" inputMode="decimal" valeur={saisie.montant} onChange={(v) => setSaisie({ ...saisie, montant: v })} />
         <ChampTexte libelle="Date" type="date" valeur={saisie.date} onChange={(v) => setSaisie({ ...saisie, date: v })} />
@@ -61,9 +62,9 @@ export function PanneauReglementGroupe({ factures, fermer }: { factures: readonl
               <li key={f.id} className={`flex justify-between gap-3 py-1 ${p ? "" : "opacity-50"}`}>
                 <span>
                   {f.numero}{" "}
-                  <small className="text-muted-foreground">{!p ? "— rien cette fois" : p.resteApres.lt("0.005") ? "soldée" : `reste ${formatEuros(p.resteApres)}`}</small>
+                  <small className="text-muted-foreground">{!p ? "— rien cette fois" : p.resteApres.lt("0.005") ? "soldée" : `reste ${formatEurosEcran(p.resteApres)}`}</small>
                 </span>
-                <b className="tabular-nums">{p ? formatEuros(p.montant) : "—"}</b>
+                <b className="tabular-nums">{p ? formatEurosEcran(p.montant) : "—"}</b>
               </li>
             );
           })}

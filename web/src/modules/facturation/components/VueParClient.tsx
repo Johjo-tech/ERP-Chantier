@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { Vide } from "@/components/etats/Etats";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { dossiersClients, ETATS_REGLEMENT, type EtatFiltre, type Solde } from "../domain/solde";
 
@@ -39,7 +39,7 @@ export function VueParClient({ soldes }: { soldes: readonly Solde[] }) {
                   <span className="block text-xs text-muted-foreground">{d.pieces.length} pièce{d.pieces.length > 1 ? "s" : ""}</span>
                 </span>
                 <span className="flex items-center gap-2 text-right">
-                  <span className="tabular-nums font-semibold">{formatEuros(d.du)}</span>
+                  <span className="tabular-nums font-semibold">{formatEurosEcran(d.du)}</span>
                   {d.du.gt("0.01") ? d.enRetard ? <Badge variant="danger">Retard</Badge> : <Badge variant="neutre">dû</Badge> : <Badge variant="succes">à jour</Badge>}
                 </span>
               </Link>

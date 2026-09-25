@@ -1,6 +1,7 @@
 import { useId, useState, type KeyboardEvent } from "react";
 import { Input } from "@/components/ui/input";
-import { formatEuros, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import type { Article } from "../domain/article";
 import { useSuggestionsArticles, useTrouverParCode } from "../hooks/useArticles";
 import { useDiffere } from "../hooks/useDiffere";
@@ -108,7 +109,7 @@ export function ChoixArticle({ libelle, valeur, onSaisie, onChoisir, onCreer, de
             }}
           >
             <span className="font-mono text-xs font-semibold">{a.code}</span>{" "}
-            <span className="text-muted-foreground">{a.designation} — {formatEuros(montant(a.prix_unitaire))}{a.unite ? ` / ${a.unite}` : ""}</span>
+            <span className="text-muted-foreground">{a.designation} — {formatEurosEcran(montant(a.prix_unitaire))}{a.unite ? ` / ${a.unite}` : ""}</span>
           </li>
         ))}
         {suggestions.isSuccess && liste.length === 0 && (

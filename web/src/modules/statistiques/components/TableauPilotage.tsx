@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Card } from "@/components/ui/card";
 import { todayISO } from "@/lib/dates";
-import { formatEuros } from "@/lib/money";
+import { formatEurosEcran } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useBons } from "@/modules/commandes/hooks/useBons";
 import { pourcentage, tauxEncaisse, type Indicateurs } from "../domain/indicateurs";
@@ -84,10 +84,10 @@ function Synthese({ jour }: { jour: string }) {
 function Tuiles({ i, t }: { i: Indicateurs; t: ATraiterPilotage }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Tuile libelle="Encaissé ce mois (TTC)" valeur={formatEuros(i.encaisse_mois)} sous="règlements reçus depuis le 1er" ton="succes" vers={DESTINATIONS.caEncaisse} titre="Voir les règlements" />
-      <Tuile libelle="Devis en attente" valeur={i.nb_devis_en_attente} sous={`${formatEuros(i.devis_en_attente_ht)} HT`} vers={DESTINATIONS.devisEnAttente} titre="Voir les devis en attente de réponse" />
-      <Tuile libelle="Factures impayées" valeur={i.nb_impayees} sous={`${formatEuros(i.impayes)} restant dû`} ton={i.nb_impayees ? "danger" : "neutre"} vers={DESTINATIONS.impayees} titre="Voir les factures impayées" />
-      <Tuile libelle="À facturer" valeur={t.aFacturer} sous={`${formatEuros(t.aFacturerMontant)} HT`} ton={t.aFacturer ? "alerte" : "neutre"} vers={DESTINATIONS.aFacturer} titre="Voir les bons de commande à facturer" />
+      <Tuile libelle="Encaissé ce mois (TTC)" valeur={formatEurosEcran(i.encaisse_mois)} sous="règlements reçus depuis le 1er" ton="succes" vers={DESTINATIONS.caEncaisse} titre="Voir les règlements" />
+      <Tuile libelle="Devis en attente" valeur={i.nb_devis_en_attente} sous={`${formatEurosEcran(i.devis_en_attente_ht)} HT`} vers={DESTINATIONS.devisEnAttente} titre="Voir les devis en attente de réponse" />
+      <Tuile libelle="Factures impayées" valeur={i.nb_impayees} sous={`${formatEurosEcran(i.impayes)} restant dû`} ton={i.nb_impayees ? "danger" : "neutre"} vers={DESTINATIONS.impayees} titre="Voir les factures impayées" />
+      <Tuile libelle="À facturer" valeur={t.aFacturer} sous={`${formatEurosEcran(t.aFacturerMontant)} HT`} ton={t.aFacturer ? "alerte" : "neutre"} vers={DESTINATIONS.aFacturer} titre="Voir les bons de commande à facturer" />
     </div>
   );
 }
