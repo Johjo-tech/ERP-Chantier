@@ -5157,6 +5157,9 @@ function renderFactures(){
      le défaut que ce fichier a déjà connu avec les factures de sous-traitants.
      L'onglet ne les isole pas, il les rend trouvables. */
   const avoirs = list.filter(f=>window.estAvoir(f.typeDocument));
+  /* Le rôle ne change pas d'une carte à l'autre : il se dit une fois, en tête,
+     plutôt que cinquante fois sous cinquante barres d'actions. */
+  const motifRole = window.motifRoleFacture();
   return `
     <div class="plus-subnav" style="justify-content:center;">
       <button class="plus-subnav-btn ${view==='liste'?'active':''}" onclick="setFacturesView('liste')">Factures</button>
@@ -5167,7 +5170,8 @@ function renderFactures(){
     </div>
     <div class="page-head"><h1>${view==='reglements'?'Règlements': view==='avoirs'?'Avoirs':'Factures'}</h1>${(state.formOpen.facture || view!=='liste')? '' : `<div style="display:flex; gap:8px;">
       ${peutImporterFactures()? '<button class="btn" onclick="ouvrirImportFactures()">📥 Reprendre un historique</button>':''}
-      <button class="btn primary" onclick="openForm('facture')">+ Nouvelle facture</button></div>`}</div>
+      ${(!window.autorise || window.autorise('factures','creer'))? `<button class="btn primary" onclick="openForm('facture')">+ Nouvelle facture</button>`:''}</div>`}</div>
+    ${motifRole? `<div class="card-sub" style="margin:0 0 12px;">${esc(motifRole)}</div>` : ''}
     ${(state.formOpen.facture || view==='reglements') ? '' : barreFiltresFactures(view)}
     ${view==='liste'? `<div id="formZoneFacture">${state.formOpen.facture? factureForm() : ''}</div>
     ${state.formOpen.facture ? '' : `<div id="factureListZone">${renderFacturesListHTML(list)}</div>`}` : ''}
@@ -5856,6 +5860,79 @@ function factureMatchesSearch(f, q){
 
    Supprimées, donc, au profit de `filterFactureCritere` + `rafraichirZoneFactures`.
    Rien ne signalait ce doublon : ce fichier échappe au contrôle de types. */
+/**
+ * La barre d'actions d'une facture : ce que l'état de la pièce et le rôle
+ * laissent faire, rien d'autre.
+ *
+ * Plus aucun bouton grisé. Un geste indisponible ne s'affiche pas — et ce que
+ * la barre ne dit plus, la ligne posée sous elle le dit une fois, avec la
+ * phrase que le refus opposerait. Un `title` sur un bouton désactivé ne se lit
+ * pas : c'est ce qui laissait cliquer « Supprimer » sur une facture émise pour
+ * ne rien obtenir.
+ *
+ * Même forme que `bandeauTacheHTML` : un tableau qu'on pousse, jamais une
+ * cascade de ternaires — c'est là que vivaient les quatre conditions absentes.
+ */
+function boutonsFactureHTML(f, actions, verrou){
+  const id = jsAttr(f.id);
+  const boutons = [];
+
+  /* Un bouton pour deux gestes. « Modifier » sur une facture émise était un
+     mensonge : le formulaire s'ouvrait en lecture seule et la base refusait
+     toute écriture. Le titre porte la phrase qu'elle opposerait. */
+  boutons.push(actions.peutModifier
+    ? `<button class="btn small" onclick="editItem('facture','${id}')">Modifier</button>`
+    : `<button class="btn small" onclick="editItem('facture','${id}')"${verrou? ` title="${esc(verrou.libelle)}"`:''}>👁 Consulter</button>`);
+
+  /* Sans numéro, la pièce ne sort pas : le document imprimé porterait un champ
+     « Numéro » vide sous un titre qui annonce une facture. */
+  if(actions.peutImprimer){
+    boutons.push(`<button class="btn small" onclick="printDocument('facture','${id}','save')">Imprimer / PDF</button>`);
+  }
+  if(actions.peutEnvoyer){
+    boutons.push(`<button class="btn small" onclick="envoyerDocumentEmail('facture','${id}')">Envoyer par email</button>`);
+  }
+
+  /* L'ÉMISSION. `emettreFacture` existait, exposée sur window — et rien ne
+     l'appelait : une facture née d'un devis, d'un rapport ou d'une situation de
+     travaux restait en brouillon SANS NUMÉRO, indéfiniment. Sans numéro elle ne
+     peut être ni remise au client, ni transmise à la plateforme. Le seul
+     déblocage qui restait était d'y saisir un règlement : le statut basculait,
+     et la base numérotait — le numéro légal attribué par un encaissement, hors
+     de tout ordre chronologique. C'est précisément ce que la migration de
+     numérotation interdit, au nom de l'article 242 nonies A de l'annexe II au
+     CGI. */
+  if(actions.peutEmettre){
+    boutons.push(`<button class="btn small primary" onclick="emettreLaFacture('${id}')" title="Attribuer son numéro définitif et la rendre transmissible">🧾 Émettre</button>`);
+  }
+
+  /* Pas de dépôt pour un particulier ni pour une entreprise étrangère : ces
+     opérations relèvent de l'e-reporting et n'ont rien à faire sur une
+     plateforme. Le cadre se lit sur la FICHE CLIENT, que la règle n'a pas —
+     cette condition-là reste donc ici. */
+  if(actions.peutTransmettre && passeParUnePlateforme(f)){
+    boutons.push(`<button class="btn small" onclick="transmettreALaPlateforme('${id}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>`);
+  }
+
+  if(actions.peutEtablirAvoir){
+    boutons.push(`<button class="btn small" onclick="etablirAvoirPour('${id}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`);
+  }
+
+  /* Le stock d'avoirs du client ne se lit pas non plus dans la règle : elle dit
+     que le geste est ouvert, l'écran vérifie qu'il a de quoi l'alimenter. */
+  if(actions.peutImputerAvoir && peutReglerParAvoir(f)){
+    boutons.push(`<button class="btn small" onclick="reglerParAvoir('${id}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>`);
+  }
+
+  if(actions.peutDupliquer){
+    boutons.push(`<button class="btn small" onclick="dupliquerFacture('${id}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`);
+  }
+  if(actions.peutSupprimer){
+    boutons.push(`<button class="btn small danger" onclick="deleteItem('facture','${id}')">Supprimer</button>`);
+  }
+
+  return boutons;
+}
 function renderFacturesListHTML(list, vue){
   const criteres = criteresFactures(vue || 'liste');
   const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
@@ -5876,6 +5953,7 @@ function renderFacturesListHTML(list, vue){
        moitié se lisait « impayée » sans qu'on sache qu'un acompte était tombé. */
     const reg = reglementStatutFacture(f);
     const verrou = window.verrouFacture(f);
+    const actions = window.actionsFacture(f);
     const numerosBC = numerosBCdeLaFacture(f);
     const estUnAvoir = window.estAvoir(f.typeDocument);
     const rectifiee = f.factureRectifieeId ? state.factures.find(x=>x.id===f.factureRectifieeId) : null;
@@ -5899,51 +5977,15 @@ function renderFacturesListHTML(list, vue){
         : `<span class="badge ${reg.cls}">${esc(reg.label)}</span>${delaiBadgeHTML(f, reg.reste)}`}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      ${/* « Modifier » sur une facture émise était un mensonge : le formulaire
-            s'ouvrait en lecture seule et la base refusait toute écriture. Le
-            bouton dit maintenant ce qu'il fait. */''}
-      ${verrou && verrou.code === 'emise'
-        ? `<button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')" title="${esc(verrou.libelle)}">👁 Consulter</button>`
-        : `<button class="btn small" onclick="editItem('facture','${jsAttr(f.id)}')">Modifier</button>`}
-      <button class="btn small" onclick="printDocument('facture','${jsAttr(f.id)}','save')">Imprimer / PDF</button>
-      <button class="btn small" onclick="envoyerDocumentEmail('facture','${jsAttr(f.id)}')">Envoyer par email</button>
-      ${/* L'ÉMISSION. `emettreFacture` existait, testée et exposée sur window —
-            et rien ne l'appelait : aucun bouton, aucun sélecteur de statut. Une
-            facture née d'un devis, d'un rapport ou d'une situation de travaux
-            restait donc en brouillon SANS NUMÉRO, indéfiniment. 46 en base, dont
-            13 hors jeu d'essai, la plus ancienne du 31 juillet.
-
-            Sans numéro elle ne peut être ni remise au client, ni transmise à la
-            plateforme. Le seul déblocage qui restait était d'y saisir un
-            règlement : le statut basculait, et la base numérotait — le numéro
-            légal attribué par un encaissement, hors de tout ordre chronologique.
-            C'est précisément ce que la migration de numérotation interdit, au nom
-            de l'article 242 nonies A de l'annexe II au CGI. */''}
-      ${!f.numero && !estUnAvoir && (!window.actionsFacturation || window.actionsFacturation().peutFacturer)
-        ? `<button class="btn small primary" onclick="emettreLaFacture('${jsAttr(f.id)}')" title="Attribuer son numéro définitif et la rendre transmissible">🧾 Émettre</button>`
-        : ''}
-      ${/* Pas de dépôt pour un particulier ni pour une entreprise étrangère :
-            ces opérations relèvent de l'e-reporting et n'ont rien à faire sur
-            une plateforme. Le bouton s'affichait dès que la facture avait un
-            numéro, ouvrait une confirmation alarmante sur l'irréversibilité,
-            puis refusait à tous les coups. */''}
-      ${(f.numero && passeParUnePlateforme(f))? `<button class="btn small" onclick="transmettreALaPlateforme('${jsAttr(f.id)}')" title="Déposer la facture électronique sur la plateforme">${f.pdpIdentifiant? '📤 Déposée' : '📤 Transmettre'}</button>` : ''}
-      ${/* Le bouton absent ne s'expliquait pas : sur un brouillon — et les
-            brouillons sont en TÊTE de liste, la plus récente d'abord — on
-            cherchait un avoir qui n'était nulle part. Il reste donc visible,
-            désactivé, et dit pourquoi. */''}
-      ${estUnAvoir? '' : (f.numero
-        ? `<button class="btn small" onclick="etablirAvoirPour('${jsAttr(f.id)}')" title="Rectifier cette facture émise par un avoir">↩ Établir un avoir</button>`
-        : `<button class="btn small" disabled title="Cette facture n'est pas émise : elle n'a pas de numéro, et se corrige directement par « Modifier ». Un avoir n'aurait rien à rectifier.">↩ Établir un avoir</button>`)}
-      ${peutReglerParAvoir(f)? `<button class="btn small" onclick="reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>` : ''}
-      ${estUnAvoir? '' : `<button class="btn small" onclick="dupliquerFacture('${jsAttr(f.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
-      ${/* Le refus venait de la base, en 23001, avec une phrase que personne ne
-            lisait : le bouton partait, la confirmation s'affichait, et rien ne
-            se passait. Il reste visible, désactivé, et dit pourquoi. */''}
-      ${verrou && verrou.code === 'emise'
-        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
-        : `<button class="btn small danger" onclick="deleteItem('facture','${jsAttr(f.id)}')">Supprimer</button>`}
-    </div></div>`;
+      ${boutonsFactureHTML(f, actions, verrou).join('')}
+    </div>
+    ${/* Les boutons masqués emportent leur explication avec eux : un brouillon
+          n'a plus ni « Imprimer », ni « Envoyer », ni « Établir un avoir », et
+          rien ne disait pourquoi. Elle se lit maintenant une fois, sous la
+          barre, plutôt que dans le `title` de trois boutons grisés que
+          personne n'ouvrait. Une pièce émise, elle, n'a rien à justifier. */''}
+    ${actions.peutImprimer? '' : `<div class="card-sub" style="margin-top:8px;">${esc(window.refusGesteFacture('imprimer', f))}</div>`}
+    </div>`;
   }).join('');
 }
 function factureForm(){
