@@ -62,6 +62,7 @@ function TableBons({ bons, prix, action, detail }: { bons: readonly BonDeLaListe
  * cacher un bon derrière un dossier replié (D-R4-02).
  */
 function RechercheFile({ valeur, onChange }: { valeur: string; onChange: (v: string) => void }) {
+  useModeDiscret();
   return (
     <>
       <label htmlFor="recherche-file" className="sr-only">Rechercher un bon</label>
