@@ -51,8 +51,9 @@ describe("une seule file Validation, une seule À facturer", () => {
   it("les sous-onglets de Factures ouvrent les files, que le menu principal ne porte plus", () => {
     rendreAvecSession(<OngletsFacturation />, { role: "admin", chemin: "/factures" });
     const onglets = within(screen.getByRole("navigation", { name: "Facturation" }));
-    expect(onglets.getByRole("link", { name: "Validation" })).toHaveAttribute("href", FILE_VALIDATION);
-    expect(onglets.getByRole("link", { name: "À facturer" })).toHaveAttribute("href", FILE_A_FACTURER);
+    // De vrais boutons, comme l'ancien écran (D-ECR-FAC-03) : ils mènent aux files.
+    expect(onglets.getByRole("button", { name: "Validation" })).toBeInTheDocument();
+    expect(onglets.getByRole("button", { name: "À facturer" })).toBeInTheDocument();
     expect(redirection("factures/validation")).toBe(FILE_VALIDATION);
     const menu = NAVIGATION.map((e) => e.chemin);
     expect(menu).not.toContain(FILE_VALIDATION);

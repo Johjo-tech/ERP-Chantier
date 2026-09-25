@@ -32,7 +32,7 @@ import { PagePieces } from "@/modules/commandes/components/PagePieces";
 import { PageCreerSav } from "@/modules/commandes/components/PageCreerSav";
 import { PageApercuBon } from "@/modules/commandes/components/PageApercuBon";
 import { PagePrefacture } from "@/modules/commandes/components/PagePrefacture";
-import { PageAFacturer, PageValidation } from "@/modules/commandes/components/PagesFacturationBons";
+import { PageAFacturer, PageValidation } from "@/modules/facturation/components/PagesFilesBons";
 import { PageArticles } from "@/modules/articles/components/PageArticles";
 import { PageFormulaireArticle } from "@/modules/articles/components/PageFormulaireArticle";
 import { PageImportArticles } from "@/modules/articles/components/PageImportArticles";

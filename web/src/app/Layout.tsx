@@ -141,7 +141,12 @@ function EntreeMenu({ entree, active }: { entree: EntreeNavigation; active: bool
 /** La barre du bas, sur téléphone : le premier mot du libellé seulement, comme l'ancien. */
 function BarreDuBas({ pathname }: { pathname: string }) {
   const actif = (chemin: string) =>
-    chemin === "/plus" ? pathname.startsWith("/plus") || pathname.startsWith("/reglages") : chemin === "/" ? pathname === "/" : pathname === chemin || pathname.startsWith(`${chemin}/`);
+    chemin === "/plus"
+      ? pathname.startsWith("/plus") || pathname.startsWith("/reglages")
+      : chemin === "/"
+        ? pathname === "/"
+        : // Validation et À facturer sont des sous-onglets de Factures (/facturation/…) : l'onglet du bas reste allumé.
+          pathname === chemin || pathname.startsWith(`${chemin}/`) || (chemin === "/factures" && pathname.startsWith("/facturation/"));
   return (
     <nav id="bottomnav" aria-label="Navigation mobile">
       {NAVIGATION_MOBILE.map((n) => (

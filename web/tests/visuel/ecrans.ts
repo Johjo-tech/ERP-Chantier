@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { ecransFacturation } from "./ecrans-facturation";
 
 /**
  * La table de correspondance « écran ancien ↔ route nouvelle ».
@@ -102,12 +103,6 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   catalogue: { bureau: { pixels: 0.11, texte: 21 } },
   chantiers: { bureau: { pixels: 0.16, texte: 33 } },
   clients: { bureau: { pixels: 0.3, texte: 29 } },
-  devis: { bureau: { pixels: 0.27, texte: 41 } },
-  factures: { bureau: { pixels: 0.44, texte: 76 } },
-  "factures-a-facturer": { bureau: { pixels: 0.09, texte: 40 } },
-  "factures-avoirs": { bureau: { pixels: 0.14, texte: 34 } },
-  "factures-reglements": { bureau: { pixels: 0.27, texte: 21 } },
-  "factures-validation": { bureau: { pixels: 0.05, texte: 36 } },
   materiel: { bureau: { pixels: 0.02, texte: 6 } },
   "pieces-en-commande": { bureau: { pixels: 0.17, texte: 31 } },
   planning: { bureau: { pixels: 0.55, texte: 46 } },
@@ -230,6 +225,8 @@ export const ECRANS: readonly Ecran[] = [
   },
   // ── Les écrans des modules (vague suivante) ─────────────────────────────
   ...ecransModules(),
+  // ── Facturation et devis, repris (D-ECR-FAC) ────────────────────────────
+  ...ecransFacturation(),
 ];
 
 interface Module {
@@ -244,12 +241,6 @@ interface Module {
 function ecransModules(): Ecran[] {
   const modules: Module[] = [
     { id: "bons-de-commande", titre: "Bons de commande", onglet: "bonsCommande", route: "/commandes" },
-    { id: "devis", titre: "Devis", onglet: "devis", route: "/devis" },
-    { id: "factures", titre: "Factures › liste", onglet: "factures", etat: { facturesView: "liste" }, route: "/factures" },
-    { id: "factures-avoirs", titre: "Factures › Avoirs", onglet: "factures", etat: { facturesView: "avoirs" }, route: "/factures/avoirs" },
-    { id: "factures-validation", titre: "Factures › Validation", onglet: "factures", etat: { facturesView: "validation" }, route: "/facturation/validation" },
-    { id: "factures-a-facturer", titre: "Factures › À facturer", onglet: "factures", etat: { facturesView: "afacturer" }, route: "/facturation/a-facturer" },
-    { id: "factures-reglements", titre: "Factures › Règlements", onglet: "factures", etat: { facturesView: "reglements" }, route: "/factures/reglements" },
     { id: "rapports", titre: "Rapports", onglet: "interventions", route: "/rapports" },
     { id: "planning", titre: "Planning", onglet: "planning", route: "/planning" },
     { id: "chantiers", titre: "Chantiers", onglet: "chantiers", route: "/chantiers" },
