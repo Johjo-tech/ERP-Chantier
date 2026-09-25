@@ -1,0 +1,43 @@
+/* CSS Module : Vite suffixe chaque classe au build (`.carte` devient
+   `_carte_1a2b3`). Aucune collision possible avec les 159 ko de CSS global que
+   porte `index.html`, et aucun besoin de préfixer à la main.
+
+   Un îlot ne pose AUCUN style global : rien sur `body`, rien sur `:root`,
+   aucun sélecteur d'élément nu. Tout est porté par une classe locale. */
+
+.carte {
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  background: #fafafa;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: #18181b;
+}
+
+.titre {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ligne {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.etiquette {
+  min-width: 140px;
+  color: #71717a;
+}
+
+.valeur {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.absent {
+  color: #a1a1aa;
+  font-style: italic;
+}

@@ -404,6 +404,12 @@ export default defineConfig({
       output: {
         manualChunks(id: string) {
           if (id.includes("src/pages/app.js")) return "ecran";
+          /* React dans SON morceau, pour la raison qui vaut au-dessus. Fondu
+             avec le reste, il ajoutait 72 ko gzip au paquet principal —
+             retéléchargés à chaque correctif, alors que sa version ne bouge
+             que deux ou trois fois l'an. Séparé, il se met en cache une fois. */
+          if (id.includes("node_modules/react") || id.includes("node_modules/scheduler"))
+            return "react";
         },
       },
       // Sans ça, Vite ne construit que index.html et login.html est perdu

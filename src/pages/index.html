@@ -1799,6 +1799,10 @@ img.pf-plein-fichier{ height:auto; max-height:100%; object-fit:contain; margin:0
       </div>
     </div>
     <div id="content"></div>
+    <!-- Îlot React de démonstration. Placé APRÈS #content et non dedans :
+         `app.js` réécrit #content à chaque changement d'écran et emporterait
+         la greffe. Il ne touche jamais #main (vérifié : 0 occurrence). -->
+    <div id="ilot-demo"></div>
   </div>
   <nav id="bottomnav"></nav>
 </div>
@@ -2235,5 +2239,9 @@ window.addEventListener('error', function(ev){
      chart.js a été retiré : aucun `new Chart` n'existe dans ce fichier. -->
 <script type="module" src="./app.js"></script>
 <script type="module" src="./entry.ts"></script>
+<!-- Les îlots React sont chargés à part d'`entry.ts`, qui porte le pont dont
+     l'écran DÉPEND pour démarrer. Fondus, une erreur dans un îlot empêcherait
+     l'application de se lancer. -->
+<script type="module" src="./entry-ilots.ts"></script>
 </body>
 </html>
