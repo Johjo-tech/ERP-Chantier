@@ -6023,7 +6023,15 @@ function factureForm(){
   const verrou = e.id ? window.verrouFacture(e) : null;
   const emise = !!(verrou && verrou.code === 'emise');
   const verrouillee = !!(verrou && verrou.code === 'telechargee');
-  const fige = !!verrou;
+  /* Trois raisons de ne pas écrire, un seul voile : la pièce est émise, elle
+     attend son déverrouillage, ou le rôle ne donne que la lecture — un compte
+     lecture saisissait jusqu'ici la facture entière avant que la RLS ne la
+     refuse. Une pièce qui n'existe pas encore n'a pas d'état : c'est
+     `factures/creer` qui décide. */
+  const peutEcrire = e.id
+    ? window.actionsFacture(e).peutModifier
+    : (!window.autorise || window.autorise('factures','creer'));
+  const fige = !peutEcrire;
   const unAvoir = window.estAvoir(e.typeDocument);
   const rectifieeEcran = e.factureRectifieeId ? state.factures.find(f=>f.id===e.factureRectifieeId) : null;
   return `
@@ -6035,7 +6043,7 @@ function factureForm(){
       ${unAvoir? '' : `<button type="button" class="btn small" onclick="etablirAvoirPour('${jsAttr(e.id)}')" title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>`}
     </div>` : verrouillee? `<div class="facture-verrou-banner">
       <span>🔒 ${esc(verrou.libelle)}</span>
-      <button type="button" class="btn small danger" onclick="deverrouillerFacture('${jsAttr(e.id)}')">🔓 Déverrouiller pour modifier</button>
+      ${(!window.autorise || window.autorise('factures','modifier'))? `<button type="button" class="btn small danger" onclick="deverrouillerFacture('${jsAttr(e.id)}')">🔓 Déverrouiller pour modifier</button>`:''}
     </div>` : ''}
     ${unAvoir && rectifieeEcran? `<div class="numref" style="margin-bottom:10px;">Rectifie la facture ${esc(rectifieeEcran.numero)} du ${fmtDate(rectifieeEcran.date)}${e.motifRectification? ' — '+esc(e.motifRectification):''}</div>`:''}
     <div style="${fige? 'pointer-events:none; opacity:.55;' : ''}">
@@ -6108,12 +6116,17 @@ function factureForm(){
             règlement — les deux derniers sont dans le bandeau ci-dessus et
             dans l'onglet Règlements. */''}
       ${emise
-        ? `${unAvoir? '' : `<button class="btn primary" onclick="dupliquerFacture('${jsAttr(e.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`}
+        ? `${(e.id && window.actionsFacture(e).peutDupliquer)? `<button class="btn primary" onclick="dupliquerFacture('${jsAttr(e.id)}')" title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>`:''}
            <button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`
-        : `<button class="btn primary" onclick="saveFacture()" ${verrouillee?'disabled':''}>Enregistrer la facture</button>
-           <button class="btn" onclick="saveFacture(true)" ${verrouillee?'disabled':''} title="Garder la saisie en cours sans refermer, et sans attribuer de numéro">💾 Enregistrer le brouillon</button>
+        : peutEcrire
+          ? `<button class="btn primary" onclick="saveFacture()">Enregistrer la facture</button>
+           <button class="btn" onclick="saveFacture(true)" title="Garder la saisie en cours sans refermer, et sans attribuer de numéro">💾 Enregistrer le brouillon</button>
            <button class="btn ghost" onclick="closeForm('facture')">Annuler</button>
-           ${horodatageBrouillonHTML()}`}
+           ${horodatageBrouillonHTML()}`
+          /* Verrouillée, ou rôle sans écriture : le bandeau au-dessus dit
+             laquelle des deux, et le seul geste qui reste est de refermer. Un
+             « Enregistrer » grisé n'apprenait rien à personne. */
+          : `<button class="btn ghost" onclick="closeForm('facture')">Fermer</button>`}
     </div>
   </div>`;
 }
