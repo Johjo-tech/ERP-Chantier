@@ -28,7 +28,12 @@ imprimable, PDF et e-mail.
   jamais dû ; retard = reste exigible > 0,01 et échéance passée.
 - **Pièce imprimée** : `domain/impression.ts` → `documents` (modèle, aperçu,
   PDF jsPDF, e-mail `mailto:` — D-FAC-03, D-FAC-04).
-- **À monter ailleurs** : `BoutonFactureDepuisRapport` (fiche d'un rapport).
+- **Rapport → facture** : par la voie unique du module interventions
+  (`api/transformations.ts`, D-CLI-09). **Croisement facture ↔ bon**
+  (`domain/croisement.ts`, `hooks/useCroisement.ts`, TRV-07) : la recherche
+  des deux listes suit la clé puis la référence client normalisée.
+- **Identité de l'acheteur** recopiée de la fiche à la création et à la
+  modification d'un brouillon (CLI-26, `clients/domain/rattachement.ts`).
 - **Non repris** : factures de sous-traitant FST (D-FAC-09), vente de
   véhicule (D-FAC-11, module véhicules), facture électronique (PDP, Factur-X),
   import historique.

@@ -136,23 +136,35 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
     rendreAvecSession(
       <Routes>
         <Route path="/rapports/:id/apercu" element={<PageApercuRapport />} />
+        <Route path="/devis/:id" element={<p>devis ouvert</p>} />
       </Routes>,
       { role: "admin", chemin: "/rapports/r1/apercu" }
     );
 
-  it("un rapport sans bon propose les deux pièces", async () => {
+  it("un rapport sans bon propose les deux pièces, par la même voie que la carte de la liste (D-CLI-09)", async () => {
     api.lireRapport.mockResolvedValue(complet({}));
     ouvrir();
-    expect(await screen.findByRole("button", { name: "Créer le devis" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Créer la facture" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Transformer en facture" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Transformer en devis" }));
+    // Relu par son id juste avant, puis confié à `transformations.ts` — plus de voie parallèle dans les modules devis et facturation.
+    await waitFor(() => expect(transfo.devisDepuisRapport).toHaveBeenCalledWith("alpha", expect.objectContaining({ id: "r1" })));
+    expect(await screen.findByText("devis ouvert")).toBeInTheDocument();
   });
 
   it("un rapport lié à un bon renvoie à la facturation du bon, sans facture à côté", async () => {
     api.lireRapport.mockResolvedValue(complet({ bon_commande_id: "b1" }));
     ouvrir();
-    expect(await screen.findByRole("button", { name: "Créer le devis" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Créer la facture" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Facturer par le bon lié" })).toHaveAttribute("href", "/commandes/b1");
+    expect(await screen.findByRole("button", { name: "Transformer en devis" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Facturer le bon lié" })).toHaveAttribute("href", "/commandes/b1");
+  });
+
+  it("un refus de la voie unique (déjà transformé) se dit sur l'aperçu", async () => {
+    api.lireRapport.mockResolvedValue(complet({}));
+    transfo.devisDepuisRapport.mockRejectedValueOnce({ code: "P0001", message: "Ce rapport a déjà été transformé en devis (DEV-2026-000004). Ouvrez-le directement pour le modifier." });
+    ouvrir();
+    await userEvent.click(await screen.findByRole("button", { name: "Transformer en devis" }));
+    expect(await screen.findByText(/déjà été transformé en devis \(DEV-2026-000004\)/)).toBeInTheDocument();
   });
 
   it("le rôle lecture ne voit aucun des deux gestes", async () => {
@@ -164,7 +176,7 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
       { role: "lecture", chemin: "/rapports/r1/apercu" }
     );
     expect(await screen.findByRole("button", { name: "Imprimer / PDF" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Créer le devis" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Créer la facture" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Transformer en devis" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
   });
 });

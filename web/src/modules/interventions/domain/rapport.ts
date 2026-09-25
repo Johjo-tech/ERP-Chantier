@@ -123,33 +123,6 @@ export const schemaSaisieRapport = z.object({
 });
 export type SaisieRapport = z.infer<typeof schemaSaisieRapport>;
 
-export interface LignePreconisee {
-  designation: string;
-  quantite: number;
-  unite: string;
-}
-
-/**
- * Une ligne de préconisation = une ligne de devis ; « x2 », « x25 m² » en fin
- * de ligne donnent quantité et unité (`parsePreconisationsEnLignes`).
- * La virgule décimale est lue ; une quantité illisible ou nulle vaut 1.
- */
-export function lignesDesPreconisations(texteBrut: string | null | undefined, repli = ""): LignePreconisee[] {
-  const lignes = (texteBrut ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
-  if (!lignes.length) return [{ designation: repli, quantite: 1, unite: "u" }];
-  return lignes.map((l) => {
-    const m = l.match(/^(.*?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Zµ²³%]*)\s*$/i);
-    if (!m) return { designation: l, quantite: 1, unite: "u" };
-    return { designation: (m[1] ?? "").trim(), quantite: Number.parseFloat((m[2] ?? "").replace(",", ".")) || 1, unite: m[3] || "u" };
-  });
-}
-
-/** Les lignes à reprendre sur un devis ou une facture : préconisations, sinon constatations, sinon le métier. */
-export function lignesAReprendre(r: { preconisations: string | null; constatations: string | null; metier: string | null }): LignePreconisee[] {
-  if (r.preconisations?.trim()) return lignesDesPreconisations(r.preconisations);
-  return [{ designation: r.constatations?.trim() || libelleMetier(r.metier) || r.metier || "", quantite: 1, unite: "u" }];
-}
-
 export interface RapportListe {
   id: string;
   numero: string | null;

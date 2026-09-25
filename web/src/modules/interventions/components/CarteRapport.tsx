@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BoutonConfirme } from "@/components/ui/confirmation";
@@ -8,28 +8,19 @@ import { Can } from "@/modules/auth-roles/components/Can";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { RapportDeLaListe } from "../api/rapports";
 import { libelleMetier } from "../domain/rapport";
-import { useLierBon, useSupprimerRapport, useTransformer } from "../hooks/useRapports";
+import { useLierBon, useSupprimerRapport } from "../hooks/useRapports";
+import { ActionsTransformation } from "./ActionsTransformation";
 import { LienBon } from "./LienBon";
 
 const LOGEMENT: Record<string, string> = { occupé: "Occupé", vacant: "Vacant", commune: "Partie commune" };
 
 /** Un rapport dans la liste, avec ses liens (devis, factures, bon) et ses gestes (PLN-20). */
 export function CarteRapport({ r, numeroBon, onResultat }: { r: RapportDeLaListe; numeroBon: string | null; onResultat: (m: string, e?: unknown) => void }) {
-  const navigate = useNavigate();
   const lier = useLierBon();
   const supprimer = useSupprimerRapport();
-  const transformer = useTransformer();
   const [lien, setLien] = useState(false);
   const modifiable = usePermission("rapports", "modifier");
   const suite = (m: string) => ({ onSuccess: () => onResultat(m), onError: (e: unknown) => onResultat("", e) });
-  const transformerEn = (type: "devis" | "facture") =>
-    transformer.mutate(
-      { type, rapport: r },
-      {
-        onSuccess: (id) => void navigate(type === "devis" ? `/devis/${id}` : `/factures/${id}`, { state: { message: `Rapport transformé en ${type} — vérifiez les lignes et saisissez les prix.` } }),
-        onError: (e) => onResultat("", e),
-      }
-    );
 
   return (
     <li className="flex flex-col gap-2 rounded-md border p-3">
@@ -53,16 +44,7 @@ export function CarteRapport({ r, numeroBon, onResultat }: { r: RapportDeLaListe
       {r.constatations && <p className="text-sm text-muted-foreground">{r.constatations}</p>}
       <div className="flex flex-wrap gap-2">
         <Can module="rapports" action="modifier"><Button asChild size="sm" variant="outline"><Link to={`/rapports/${r.id}`}>Modifier</Link></Button></Can>
-        {!r.devis.length && <Can module="devis" action="creer"><Button size="sm" variant="outline" disabled={transformer.isPending} onClick={() => transformerEn("devis")}>Transformer en devis</Button></Can>}
-        {!r.factures.length && (
-          <Can module="factures" action="creer">
-            {r.bon_commande_id ? (
-              <Button asChild size="sm" variant="outline"><Link to={`/commandes/${r.bon_commande_id}`}>Facturer le bon lié</Link></Button>
-            ) : (
-              <Button size="sm" variant="outline" disabled={transformer.isPending} onClick={() => transformerEn("facture")}>Transformer en facture</Button>
-            )}
-          </Can>
-        )}
+        <ActionsTransformation rapport={r} bonId={r.bon_commande_id} devisPossible={!r.devis.length} facturePossible={!r.factures.length} />
         <Button asChild size="sm" variant="outline"><Link to={`/rapports/${r.id}/apercu`}>Imprimer / PDF</Link></Button>
         <Can module="rapports" action="modifier">
           <Button size="sm" variant="ghost" onClick={() => setLien(!lien)}>🔗 {r.bon_commande_id ? "Modifier le lien BC" : "Lier un bon de commande"}</Button>

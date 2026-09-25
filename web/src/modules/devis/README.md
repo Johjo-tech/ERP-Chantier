@@ -18,6 +18,6 @@ facture depuis le devis, devis depuis un rapport d'intervention.
   logement, client, interlocuteur (`domain/liste.ts`) ; préconisations d'un
   rapport en lignes (`domain/preconisations.ts`, parité `tests/parite/devis.essai.ts`).
 - **Pièces nées du devis** : bon « en attente de BC » au HT de la base, refusé
-  si un bon porte déjà le devis ; devis brouillon depuis un rapport, refusé si
-  déjà transformé (D-FAC-08).
-- **À monter ailleurs** : `BoutonDevisDepuisRapport` (fiche d'un rapport).
+  si un bon porte déjà le devis. Le devis né d'un rapport passe par la voie
+  unique du module interventions (`api/transformations.ts`, D-CLI-09), qui
+  emprunte `domain/preconisations.ts` pour lire les préconisations.

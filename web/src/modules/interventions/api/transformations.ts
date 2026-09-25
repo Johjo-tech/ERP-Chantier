@@ -3,54 +3,43 @@ import { clientPlanning, supabase } from "@/lib/supabase";
 import { lireClient } from "@/modules/clients/api/clients";
 import { dateEcheance, delaiPaiementRetenu, libelleDelaiPaiement } from "@/modules/clients/domain/delais";
 import { enregistrerDevis } from "@/modules/devis/api/devis";
-import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
+import { lignesDevisDuRapport } from "@/modules/devis/domain/preconisations";
+import { nettoyerLogement } from "@/modules/documents/domain/logement";
 import { creerFacture } from "@/modules/facturation/api/factures";
 import { chargerReglages } from "@/modules/societes/api/reglages";
-import { lignesAReprendre } from "../domain/rapport";
 import type { Rapport } from "./rapports";
 
 /**
- * « Transformer en devis / en facture » (PLN-20) : un document BROUILLON,
- * rattaché au rapport (`intervention_id`), dont les lignes sont les
- * préconisations (« x2 m² » donne quantité et unité), sans prix — le prix se
- * saisit sur le document. Composé des API publiques des modules devis,
- * facturation, clients et sociétés : aucune règle de ces modules n'est
- * recopiée ici.
+ * « Transformer en devis / en facture » (PLN-20, DEV-17, FAC-15) — la SEULE
+ * voie du rapport vers une pièce (D-TRV-09 résorbé, D-CLI-09) : la carte de
+ * la liste et l'aperçu du rapport passent tous deux ici. Un document
+ * BROUILLON, rattaché au rapport (`intervention_id`) dès son INSERT, dont les
+ * lignes sont les préconisations (« x2 m² » donne quantité et unité — la
+ * règle du module devis, `lignesDevisDuRapport`, parité
+ * `parsePreconisationsEnLignes`), sans prix. Gardes : pas deux devis ni deux
+ * factures pour un rapport, un client du répertoire exigé, un rapport lié à
+ * un bon se facture par le bon.
  */
 const refus = (message: string) => ({ code: "P0001", message });
-
-function lignesDuRapport(r: Rapport, tva: number): LigneAEnregistrer[] {
-  return lignesAReprendre(r).map((l, position) => ({
-    id: null,
-    position,
-    type: "ligne",
-    designation: l.designation,
-    quantite: l.quantite,
-    prix_unitaire: 0,
-    unite: l.unite,
-    tva,
-    article_reference: null,
-    commentaire: null,
-    metier: null,
-    montant_ht: 0,
-  }));
-}
 
 function clientExige(r: Rapport): string {
   if (!r.client_id) throw refus("Ce rapport n'est rattaché à aucun client du répertoire : choisissez le client à l'étape Infos, puis réessayez.");
   return r.client_id;
 }
 
+/** Le lieu et le logement du rapport ; les champs qui ne valent pas pour son statut sont vidés (`nettoyerLogement`). */
 const lieu = (r: Rapport) => ({
   adresse_locataire: r.adresse_locataire,
   code_postal: r.code_postal,
   ville: r.ville,
-  logement_statut: r.logement_statut,
-  occupant: r.occupant,
-  etage: r.etage,
-  numero_logement: r.numero_logement,
-  precision_commune: r.precision_commune,
-  ancien_locataire: r.ancien_locataire,
+  ...nettoyerLogement({
+    logement_statut: r.logement_statut,
+    occupant: r.occupant,
+    etage: r.etage,
+    numero_logement: r.numero_logement,
+    precision_commune: r.precision_commune,
+    ancien_locataire: r.ancien_locataire,
+  }),
 });
 
 async function dejaTransforme(table: "devis" | "factures", rapportId: string): Promise<string | null> {
@@ -65,15 +54,13 @@ export async function devisDepuisRapport(societeId: string, r: Rapport): Promise
   if (deja) throw refus(`Ce rapport a déjà été transformé en devis (${deja}). Ouvrez-le directement pour le modifier.`);
   const clientId = clientExige(r);
   const [client, reglages] = await Promise.all([lireClient(clientId), chargerReglages(societeId)]);
-  const id = await enregistrerDevis(
+  // Le lien au rapport part avec l'INSERT : un devis sans lui échapperait à la garde « déjà transformé ».
+  return enregistrerDevis(
     societeId,
     null,
-    { client_id: clientId, client_nom: client.nom, adresse: client.adresse, interlocuteur: r.interlocuteur, chantier_id: null, date: todayISO(), conducteur_id: r.conducteur_id, statut: "brouillon", remise_pourcentage: 0, telephone_locataire: null, ...lieu(r) },
-    lignesDuRapport(r, reglages.tvaDefaut)
+    { client_id: clientId, client_nom: client.nom, adresse: client.adresse, interlocuteur: r.interlocuteur, chantier_id: null, date: todayISO(), conducteur_id: r.conducteur_id, statut: "brouillon", remise_pourcentage: 0, telephone_locataire: null, ...lieu(r), intervention_id: r.id },
+    lignesDevisDuRapport(r, reglages.tvaDefaut)
   );
-  const lien = await supabase().from("devis").update({ intervention_id: r.id }).eq("id", id);
-  if (lien.error) throw lien.error;
-  return id;
 }
 
 /**
@@ -107,7 +94,7 @@ export async function factureDepuisRapport(societeId: string, r: Rapport): Promi
       cadre_facturation: client.cadre_facturation ?? "B2B_national",
       ...lieu(r),
     },
-    lignesDuRapport(r, reglages.tvaDefaut)
+    lignesDevisDuRapport(r, reglages.tvaDefaut)
   );
 }
 

@@ -22,7 +22,9 @@ impression / PDF par le navigateur, envoi par courriel, annotation de photo.
   conducteur, technicien, sous-traitant ; supprimer = admin, conducteur.
   « Transformer en devis » sous `devis/creer`, « en facture » sous
   `factures/creer` ; un rapport lié à un bon ne se facture pas à côté : on
-  renvoie vers le bon (son circuit de chiffrage).
+  renvoie vers le bon (son circuit de chiffrage). Une seule voie,
+  `api/transformations.ts`, pour la carte ET l'aperçu (`ActionsTransformation`,
+  D-CLI-09) ; lignes lues par la règle du devis (`lignesDevisDuRapport`).
 - **Règles** (parité `tests/parite/rapports.essai.ts`) :
   `CONTROLES_PAR_METIER`, `parsePreconisationsEnLignes` (« x2 m² »),
   `cleanLogementFields`, signature du client absente si logement vacant ou

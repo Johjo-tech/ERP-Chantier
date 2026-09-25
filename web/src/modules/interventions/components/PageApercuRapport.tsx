@@ -4,12 +4,11 @@ import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { formatDateFr } from "@/lib/dates";
-import { BoutonDevisDepuisRapport } from "@/modules/devis/components/BoutonDevisDepuisRapport";
-import { BoutonFactureDepuisRapport } from "@/modules/facturation/components/BoutonFactureDepuisRapport";
 import { useIdentite } from "@/modules/societes/hooks/useIdentite";
 import type { RapportComplet } from "../api/rapports";
 import { CONTROLES_PAR_METIER, courrielDuRapport, libelleMetier, signatureClientDemandee } from "../domain/rapport";
 import { useCourrielClient, useRapport } from "../hooks/useRapports";
+import { ActionsTransformation } from "./ActionsTransformation";
 
 function Envoi({ complet }: { complet: RapportComplet }) {
   const r = complet.rapport;
@@ -56,13 +55,8 @@ export function PageApercuRapport() {
         <Button asChild variant="ghost"><Link to="/rapports">← Rapports</Link></Button>
         <Button onClick={() => window.print()}>Imprimer / PDF</Button>
         <Envoi complet={complet} />
-        <BoutonDevisDepuisRapport interventionId={r.id} />
-        {/* Un rapport lié à un bon se facture par le bon, après son chiffrage (PLN-20) : pas de facture à côté. */}
-        {r.bon_commande_id ? (
-          <Button asChild variant="ghost"><Link to={`/commandes/${r.bon_commande_id}`}>Facturer par le bon lié</Link></Button>
-        ) : (
-          <BoutonFactureDepuisRapport interventionId={r.id} />
-        )}
+        {/* La voie de la carte, relue par son id (D-CLI-09) ; lié à un bon, le rapport se facture par le bon (PLN-20). */}
+        <ActionsTransformation rapport={r.id} bonId={r.bon_commande_id} taille="default" />
       </div>
       <article className="mx-auto max-w-3xl rounded-md border bg-white p-6 text-sm text-black print:border-0 print:p-0">
         <header className="mb-4 flex justify-between gap-4">
