@@ -315,3 +315,21 @@ export type DatabaseTransversal = Omit<DatabaseAvecPropositions, "public"> & {
     };
   };
 };
+
+/* ---------- Propositions clients et transversal, vague 3 (2026092612xxxx) ----------
+ * `notifications_traitees` (20260926120000) : les alertes de la cloche marquées
+ * « fait », par société. Juxtaposé comme les blocs précédents. */
+type NotificationTraiteeLigne = { id: string; societe_id: string; cle: string; traitee_par: string | null; cree_le: string };
+
+export type DatabaseNotifications = Omit<DatabaseAvecPropositions, "public"> & {
+  public: Omit<PubP, "Tables"> & {
+    Tables: PubP["Tables"] & {
+      notifications_traitees: {
+        Row: NotificationTraiteeLigne;
+        Insert: Pick<NotificationTraiteeLigne, "societe_id" | "cle"> & Partial<NotificationTraiteeLigne>;
+        Update: Partial<NotificationTraiteeLigne>;
+        Relationships: [];
+      };
+    };
+  };
+};

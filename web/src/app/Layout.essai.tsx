@@ -1,8 +1,13 @@
 import { screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { Route, Routes } from "react-router";
+import { afterEach, describe, expect, it } from "vitest";
+import { definirModeDiscret, formatEurosEcran } from "@/lib/modeDiscret";
+import { montant } from "@/lib/money";
 import { rendreAvecSession } from "@/test/session-factice";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
 import { Layout } from "./Layout";
+import { CLE_MENU_EPINGLE, replieAutomatiquement } from "./menu";
 
 function menu(role: RoleMembre, options: { simule?: RoleMembre; niveau?: number } = {}) {
   rendreAvecSession(<Layout />, { role, ...options });
@@ -47,5 +52,59 @@ describe("menu principal par rôle", () => {
 
   it("l'abonnement ferme ce qui dépasse le niveau souscrit", () => {
     expect(menu("admin", { niveau: 1 })).toEqual(["Tableau de bord", "Clients", "Chantiers", "Devis", "Planning", "Rapports", "RH", "Véhicules", "Matériel", "Statistiques", "Import / export", "Réglages"]);
+  });
+});
+
+function Montant() {
+  return <p>Total : {formatEurosEcran(montant("1234.5"))}</p>;
+}
+
+function avecEcran(chemin: string) {
+  return rendreAvecSession(
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="*" element={<Montant />} />
+      </Route>
+    </Routes>,
+    { role: "admin", chemin }
+  );
+}
+
+describe("mode discret et menu épinglé (TRV-05, TRV-11)", () => {
+  afterEach(() => {
+    definirModeDiscret(false);
+    window.localStorage.clear();
+  });
+
+  it("le mode discret masque les montants de l'écran, et les rend quand on le quitte", async () => {
+    avecEcran("/devis");
+    expect(screen.getByText(/Total : 1 234,50 €/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Mode discret/ }));
+    expect(screen.getByText("Total : ••• €")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Mode discret/ }));
+    expect(screen.getByText(/Total : 1 234,50/)).toBeInTheDocument();
+  });
+
+  it("le planning replie le menu, sauf s'il est épinglé — et l'épinglage est mémorisé", async () => {
+    avecEcran("/planning");
+    expect(screen.getByRole("button", { name: "Afficher le menu" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Garder le menu ouvert" }));
+    expect(window.localStorage.getItem(CLE_MENU_EPINGLE)).toBe("1");
+    expect(screen.getByRole("button", { name: "Replier le menu" })).toBeInTheDocument();
+  });
+
+  it("la préférence de l'ancien écran (même clé) est reprise", () => {
+    window.localStorage.setItem(CLE_MENU_EPINGLE, "1");
+    avecEcran("/planning");
+    expect(screen.getByRole("checkbox", { name: "Garder le menu ouvert" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Replier le menu" })).toBeInTheDocument();
+  });
+
+  it("seuls les écrans larges replient d'office", () => {
+    expect(replieAutomatiquement("/planning", false)).toBe(true);
+    expect(replieAutomatiquement("/planning/semaine", false)).toBe(true);
+    expect(replieAutomatiquement("/planning", true)).toBe(false);
+    expect(replieAutomatiquement("/planningx", false)).toBe(false);
+    expect(replieAutomatiquement("/devis", false)).toBe(false);
   });
 });
