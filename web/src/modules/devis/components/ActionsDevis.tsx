@@ -31,7 +31,7 @@ export function ActionsDevis({ devis }: { devis: Devis }) {
   const erreur = dupliquer.error ?? supprimer.error ?? bon.error;
   return (
     <>
-      <BoutonPdf modele={modele} />
+      <BoutonPdf piece={modele} />
       <Button variant="outline" disabled={!modele} onClick={() => setEmail((x) => !x)}>Envoyer par e-mail</Button>
       <Can module="devis" action="creer">
         <Button
@@ -80,7 +80,7 @@ export function ActionsDevis({ devis }: { devis: Devis }) {
               destinataire: clients.data?.find((c) => c.id === devis.client_id)?.email ?? null,
               lieu: devis,
             })}
-            modele={modele}
+            piece={modele}
             fermer={() => setEmail(false)}
           />
         </div>

@@ -22,6 +22,10 @@ const clients = vi.hoisted(() => ({ listerClients: vi.fn(), lireClient: vi.fn() 
 vi.mock("../api/rapports", () => api);
 vi.mock("../api/transformations", () => transfo);
 vi.mock("@/modules/clients/api/clients", () => clients);
+// L'aperçu imprime l'émetteur comme l'ancien gabarit le lit (D-PDF-01).
+vi.mock("@/modules/documents/api/identite", () => ({
+  lireIdentiteDocument: vi.fn(async () => ({ identite: {}, reglages: {}, imprimable: { s: { siret: "12345678900011", reglages: { documents: {} } }, nomSociete: "ALPHA", variables: {} } })),
+}));
 vi.mock("@/modules/clients/api/interlocuteurs", () => ({ listerInterlocuteurs: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/modules/societes/api/conducteurs", () => ({ listerConducteurs: vi.fn().mockResolvedValue([{ id: "k1", nom: "Christophe Conducteur", actif: true }]) }));
 
@@ -175,7 +179,10 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
       </Routes>,
       { role: "lecture", chemin: "/rapports/r1/apercu" }
     );
-    expect(await screen.findByRole("button", { name: "Imprimer / PDF" })).toBeInTheDocument();
+    // La fenêtre d'aperçu de l'ancien : « Imprimer » ouvre le PDF, « Enregistrer » le télécharge.
+    expect(await screen.findByRole("button", { name: "Enregistrer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Imprimer" })).toBeInTheDocument();
+    expect(screen.getByText("RAPPORT D'INTERVENTION")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Transformer en devis" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
   });

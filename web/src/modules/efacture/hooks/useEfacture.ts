@@ -24,7 +24,7 @@ export async function enrichirFacturX(pdf: Blob, factureId: string): Promise<Res
     // Une facture incomplète n'est pas une facture électronique : on ne l'habille pas d'un XML qui serait rejeté.
     if (manques.length) return { fichier: pdf, structuree: false, manques: manques.map((m) => m.libelle) };
     const en = charge.en_invoice;
-    const fichier = await pdfFacturX(pdf, versCII(charge), { numero: String(en.number), date: String(en.issue_date) });
+    const fichier = await pdfFacturX(pdf, versCII(charge), { numero: String(en.number), date: String(en.issue_date), emetteur: en.seller.name ?? null });
     return { fichier, structuree: true, manques: [] };
   } catch (e) {
     console.error("Facture électronique non embarquée", e);

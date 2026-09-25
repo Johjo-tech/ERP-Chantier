@@ -1,89 +1,57 @@
-import { jsPDF } from "jspdf";
+// @vitest-environment node
+// pdf-lib vérifie ses entrées par `instanceof Uint8Array` : sous jsdom, le TextEncoder
+// rend un Uint8Array d'un autre royaume, que le navigateur, lui, ne produit jamais.
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream, decodePDFRawStream } from "pdf-lib";
 import { describe, expect, it } from "vitest";
-import { embarquerFacturX, PdfNonEnrichissable } from "./facturx";
+import { embarquerFacturX } from "./facturx";
 import { profilSRGB } from "./srgb";
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?>\n<rsm:CrossIndustryInvoice>Façade — 12,50 €</rsm:CrossIndustryInvoice>\n`;
 
-function pdfJs(): Uint8Array {
-  const d = new jsPDF();
-  d.text("Facture FAC-2026-000001", 10, 10);
-  return new Uint8Array(d.output("arraybuffer"));
+async function pdfRendu(): Promise<Uint8Array> {
+  const d = await PDFDocument.create();
+  d.addPage([595, 842]).drawText("Facture FAC-2026-000001");
+  return d.save();
 }
 
-const latin1 = (o: Uint8Array) => Array.from(o, (b) => String.fromCharCode(b)).join("");
-
-/** Lit la DERNIÈRE table xref d'un PDF : numéro d'objet → offset. */
-function derniereTable(texte: string): { entrees: Map<number, number>; trailer: string } {
-  const startxref = Number([...texte.matchAll(/startxref\s+(\d+)/g)].pop()?.[1]);
-  expect(texte.slice(startxref, startxref + 4)).toBe("xref");
-  const [table = "", trailer = ""] = texte.slice(startxref).split("trailer");
-  const lignes = table.split("\n").slice(1).filter(Boolean);
-  const entrees = new Map<number, number>();
-  for (let i = 0; i < lignes.length; ) {
-    const [debut, nombre] = (lignes[i] ?? "").split(" ").map(Number) as [number, number];
-    for (let k = 0; k < nombre; k++) entrees.set(debut + k, Number((lignes[i + 1 + k] ?? "").slice(0, 10)));
-    i += nombre + 1;
-  }
-  return { entrees, trailer };
+/** Un flux brut, ou l'échec du test : pdf-lib type ses objets au plus large. */
+function brut(o: unknown): PDFRawStream {
+  if (!(o instanceof PDFRawStream)) throw new Error("flux attendu");
+  return o;
 }
+const texteDe = (flux: PDFRawStream) => new TextDecoder().decode(decodePDFRawStream(flux).decode());
 
-function objet(texte: string, offset: number): string {
-  return texte.slice(offset, texte.indexOf("endobj", offset));
-}
+describe("PDF Factur-X : le même assemblage pdf-lib que l'ancien (EFA-04, D-PDF-05)", async () => {
+  const sortie = await embarquerFacturX(await pdfRendu(), XML, { numero: "FAC-2026-000001", date: "2026-09-15", emetteur: "ALPHA Rénovation" });
+  const doc = await PDFDocument.load(sortie);
+  const cat = doc.catalog;
 
-describe("PDF Factur-X par mise à jour incrémentale (EFA-04)", () => {
-  const avant = pdfJs();
-  const apres = embarquerFacturX(avant, XML, { numero: "FAC-2026-000001", date: "2026-09-15" });
-  const texte = latin1(apres);
-  const { entrees, trailer } = derniereTable(texte);
-
-  it("ne touche à aucun octet du PDF rendu", () => {
-    expect(apres.subarray(0, avant.length)).toEqual(avant);
+  it("la page lue par l'humain reste la même", () => {
+    expect(doc.getPageCount()).toBe(1);
+    expect(doc.getTitle()).toBe("Facture FAC-2026-000001");
+    expect(doc.getAuthor()).toBe("ALPHA Rénovation");
+    // Comme l'ancien : `save()` réécrit le producteur (pdf-lib) par-dessus « ERP-Chantier ».
+    expect(doc.getProducer()).toMatch(/^pdf-lib/);
   });
 
-  it("chaque entrée de la nouvelle table pointe sur son objet ; /Prev sur l'ancienne table", () => {
-    expect(entrees.size).toBe(6);
-    for (const [n, off] of entrees) expect(texte.slice(off, off + `${n} 0 obj`.length)).toBe(`${n} 0 obj`);
-    const ancienStart = /startxref\s+(\d+)/.exec(latin1(avant))?.[1];
-    expect(trailer).toContain(`/Prev ${ancienStart}`);
-    expect(trailer).toMatch(/\/ID \[/);
-    expect(trailer).toMatch(/\/Info \d+ 0 R/);
-    expect(texte.trimEnd().endsWith("%%EOF")).toBe(true);
+  it("la pièce jointe s'appelle factur-x.xml, relation Data, et porte le XML octet pour octet", () => {
+    const noms = cat.lookup(PDFName.of("Names"), PDFDict).lookup(PDFName.of("EmbeddedFiles"), PDFDict).lookup(PDFName.of("Names"), PDFArray);
+    expect(noms.lookup(0, PDFHexString).decodeText()).toBe("factur-x.xml");
+    const spec = noms.lookup(1, PDFDict);
+    expect(spec.get(PDFName.of("AFRelationship"))).toBe(PDFName.of("Data"));
+    const fichier = brut(spec.lookup(PDFName.of("EF"), PDFDict).lookup(PDFName.of("F")));
+    expect(texteDe(fichier)).toBe(XML);
+    expect(cat.lookup(PDFName.of("AF"), PDFArray).size()).toBe(1);
   });
 
-  it("le catalogue redéfini déclare la pièce jointe, sa relation, le XMP et l'intention de sortie", () => {
-    const racine = Number(/\/Root (\d+) 0 R/.exec(trailer)?.[1]);
-    const catalogue = objet(texte, entrees.get(racine) ?? -1);
-    expect(catalogue).toMatch(/\/Type \/Catalog/);
-    expect(catalogue).toMatch(/\/Pages \d+ 0 R/);
-    expect(catalogue).toMatch(/\/AF \[\d+ 0 R\]/);
-    expect(catalogue).toMatch(/\/EmbeddedFiles <<\/Names \[\(factur-x\.xml\) \d+ 0 R\]>>/);
-    expect(catalogue).toMatch(/\/Metadata \d+ 0 R/);
-    expect(catalogue).toMatch(/\/OutputIntents \[\d+ 0 R\]/);
-    expect(texte).toMatch(/\/AFRelationship \/Data/);
-    expect(texte).toMatch(/\/S \/GTS_PDFA1 \/OutputConditionIdentifier \(sRGB IEC61966-2\.1\)/);
-    expect(texte).toContain("<fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>");
-    expect(texte).toContain("<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>");
-  });
-
-  it("le fichier embarqué est le XML, octet pour octet (UTF-8), avec sa longueur exacte", () => {
-    const ef = [...entrees.entries()].map(([, off]) => objet(texte, off)).find((o) => o.includes("/Type /EmbeddedFile"));
-    expect(ef).toBeDefined();
-    const longueur = Number(/\/Length (\d+)/.exec(ef ?? "")?.[1]);
-    const debut = (ef ?? "").indexOf("stream\n") + "stream\n".length;
-    const octets = Uint8Array.from((ef ?? "").slice(debut, debut + longueur), (c) => c.charCodeAt(0));
-    expect(new TextDecoder().decode(octets)).toBe(XML);
-    expect((ef ?? "").slice(debut + longueur, debut + longueur + "\nendstream".length)).toBe("\nendstream");
-  });
-
-  it("le profil sRGB est embarqué entier, trois composantes", () => {
-    expect(profilSRGB().length).toBe(588);
-    expect(texte).toContain("/N 3 /Length 588>>");
-  });
-
-  it("refuse d'enrichir deux fois, ou ce qui n'est pas un PDF", () => {
-    expect(() => embarquerFacturX(apres, XML, { numero: "X", date: "2026-09-15" })).toThrow(PdfNonEnrichissable);
-    expect(() => embarquerFacturX(new TextEncoder().encode("bonjour"), XML, { numero: "X", date: "2026-09-15" })).toThrow(PdfNonEnrichissable);
+  it("le XMP déclare Factur-X EN 16931 et PDF/A-3 ; l'intention de sortie porte le profil sRGB", () => {
+    const xmp = new TextDecoder().decode(brut(cat.lookup(PDFName.of("Metadata"))).contents);
+    expect(xmp).toContain("<fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>");
+    expect(xmp).toContain("<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>");
+    expect(xmp).toContain("<pdfaid:part>3</pdfaid:part>");
+    const intention = cat.lookup(PDFName.of("OutputIntents"), PDFArray).lookup(0, PDFDict);
+    expect(intention.get(PDFName.of("S"))).toBe(PDFName.of("GTS_PDFA1"));
+    const icc = brut(intention.lookup(PDFName.of("DestOutputProfile")));
+    expect(decodePDFRawStream(icc).decode().length).toBe(profilSRGB().length);
   });
 });

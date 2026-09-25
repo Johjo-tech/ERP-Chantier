@@ -28,7 +28,7 @@ const RACINE = join(import.meta.dirname, "..");
 
 /** Fichiers où les nombres sont la norme d'un format, pas des choix métier. */
 const FORMATS = [
-  /^src\/modules\/documents\/pdf\//, // mise en page A4 en millimètres (jsPDF)
+  /^src\/modules\/documents\/impression\//, // port littéral du gabarit et du PDF de l'ancien : millimètres, encres du pied, JPEG (D-PDF-01)
   /^src\/modules\/efacture\/pdf\//, // structure d'un PDF/A-3 (objets, xref)
   /^src\/modules\/chantiers\/fichiers\//, // ZIP, DOCX, XLSX : octets, twips, colonnes
   /^src\/modules\/chantiers\/domain\/ppsps\.ts$/, // gabarit Word du PPSPS (tailles, twips)
