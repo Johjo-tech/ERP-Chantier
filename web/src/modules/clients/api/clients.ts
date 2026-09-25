@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { schemaClient, type Client, type SaisieClient } from "../domain/client";
@@ -6,19 +7,23 @@ import { schemaClient, type Client, type SaisieClient } from "../domain/client";
 const COLONNES =
   "id, societe_id, nom, cadre_facturation, siret, siren, tva_intracom, pays_code, adresse, code_postal, ville, email, telephone, contact_nom, facturation_adresse, facturation_code_postal, facturation_ville, delai_paiement_jours, delai_paiement_mode, mode_paiement, notes, code_service, code_routage, reference_engagement, numero_marche, reference_acheteur, adresse_electronique_schema, adresse_electronique_valeur, livraison_adresse, livraison_code_postal, livraison_ville, contact_telephone, contact_email";
 
-const schemaListe = z.array(
-  schemaClient.extend({ interlocuteurs: z.array(z.object({ nom: z.string() })) })
-);
-export type ClientListe = z.infer<typeof schemaListe>[number];
+const schemaClientListe = schemaClient.extend({ interlocuteurs: z.array(z.object({ nom: z.string() })) });
+export type ClientListe = z.infer<typeof schemaClientListe>;
 
+/** Toute la liste, ou un refus : jamais une liste coupée par le plafond du serveur (TRV-10). */
 export async function listerClients(societeId: string): Promise<ClientListe[]> {
-  const { data, error } = await supabase()
-    .from("clients")
-    .select(`${COLONNES}, interlocuteurs(nom)`)
-    .eq("societe_id", societeId)
-    .order("nom");
-  if (error) throw error;
-  return analyser(schemaListe, data, "liste des clients");
+  return lireTout(
+    (debut, fin) =>
+      supabase()
+        .from("clients")
+        .select(`${COLONNES}, interlocuteurs(nom)`, { count: "exact" })
+        .eq("societe_id", societeId)
+        .order("nom")
+        .order("id")
+        .range(debut, fin),
+    schemaClientListe,
+    "liste des clients"
+  );
 }
 
 export async function lireClient(id: string): Promise<Client> {

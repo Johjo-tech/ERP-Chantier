@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Database } from "@/lib/database.types";
+import { lireTout } from "@/lib/lecture";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
@@ -10,21 +11,28 @@ import { schemaEnteteFacture, schemaLigneFacture, type EnteteAEnregistrer, type 
 const ENTETE = Object.keys(schemaEnteteFacture.shape).join(", ");
 const LIGNES = "id, position, type, designation, quantite, prix_unitaire, unite, tva, article_reference, commentaire, metier";
 
-const schemaListe = z.array(
-  schemaEnteteFacture.pick({ id: true, numero: true, type_document: true, statut: true, client_id: true, client_nom: true, date: true, echeance: true, chantier_id: true, legacy_id: true, devis_id: true })
-);
-export type FactureListe = z.infer<typeof schemaListe>[number];
+/** Le bon et la référence de commande du client servent au croisement facture ↔ bon (TRV-07). */
+const schemaFactureListe = schemaEnteteFacture.pick({
+  id: true, numero: true, type_document: true, statut: true, client_id: true, client_nom: true, date: true, echeance: true, chantier_id: true, legacy_id: true, devis_id: true,
+  bon_commande_id: true, ref_bon_commande_client: true, occupant: true, adresse_locataire: true,
+});
+export type FactureListe = z.infer<typeof schemaFactureListe>;
 
+/** Toute la liste, ou un refus : jamais une liste coupée par le plafond du serveur (TRV-10). */
 export async function listerFactures(societeId: string, filtre: { chantierId?: string; devisId?: string } = {}) {
-  let q = supabase()
-    .from("factures")
-    .select("id, numero, type_document, statut, client_id, client_nom, date, echeance, chantier_id, legacy_id, devis_id")
-    .eq("societe_id", societeId);
-  if (filtre.chantierId) q = q.eq("chantier_id", filtre.chantierId);
-  if (filtre.devisId) q = q.eq("devis_id", filtre.devisId);
-  const { data, error } = await q.order("date", { ascending: false });
-  if (error) throw error;
-  return analyser(schemaListe, data, "liste des factures");
+  return lireTout(
+    (debut, fin) => {
+      let q = supabase()
+        .from("factures")
+        .select("id, numero, type_document, statut, client_id, client_nom, date, echeance, chantier_id, legacy_id, devis_id, bon_commande_id, ref_bon_commande_client, occupant, adresse_locataire", { count: "exact" })
+        .eq("societe_id", societeId);
+      if (filtre.chantierId) q = q.eq("chantier_id", filtre.chantierId);
+      if (filtre.devisId) q = q.eq("devis_id", filtre.devisId);
+      return q.order("date", { ascending: false }).order("id").range(debut, fin);
+    },
+    schemaFactureListe,
+    "liste des factures"
+  );
 }
 
 export const schemaReglement = z.object({

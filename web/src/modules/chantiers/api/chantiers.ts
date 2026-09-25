@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { supabase, supabasePropositions } from "@/lib/supabase";
+import { lireTout } from "@/lib/lecture";
 import { analyser } from "@/lib/validation";
 import { schemaChantier, type Chantier, type SaisieChantier } from "../domain/chantier";
 
@@ -10,14 +11,20 @@ import { schemaChantier, type Chantier, type SaisieChantier } from "../domain/ch
 const COLONNES =
   "id, societe_id, nom, client_id, client_nom, conducteur_id, conducteur, adresse, code_postal, ville, type, date_debut, date_fin, infos_diverses, statut, notes, ppsps_lot, ppsps_maitre_ouvrage, ppsps_maitre_oeuvre, ppsps_coordinateur_sps, ppsps_effectif_moyen";
 
+/** Toute la liste, ou un refus : jamais une liste coupée par le plafond du serveur (TRV-10). */
 export async function listerChantiers(societeId: string): Promise<Chantier[]> {
-  const { data, error } = await supabasePropositions()
-    .from("chantiers")
-    .select(COLONNES)
-    .eq("societe_id", societeId)
-    .order("date_debut", { ascending: false, nullsFirst: false });
-  if (error) throw error;
-  return analyser(z.array(schemaChantier), data, "chantiers");
+  return lireTout(
+    (debut, fin) =>
+      supabasePropositions()
+        .from("chantiers")
+        .select(COLONNES, { count: "exact" })
+        .eq("societe_id", societeId)
+        .order("date_debut", { ascending: false, nullsFirst: false })
+        .order("id")
+        .range(debut, fin),
+    schemaChantier,
+    "liste des chantiers"
+  );
 }
 
 export async function lireChantier(id: string): Promise<Chantier> {
