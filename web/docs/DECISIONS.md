@@ -851,3 +851,89 @@ sous-traitants. `web/` montre les internes par défaut et un filtre
 Devis et facture exigent `client_id` (délais, cadre, adresse). Un rapport
 rédigé sur un nom libre doit d'abord recevoir son client ; les lignes partent
 sans prix (préconisations « x2 m² » → quantité et unité).
+
+## D-STA-01 — Les agrégats des tableaux de bord sont calculés par la base (proposition 20260926080000)
+L'ancien écran chargeait toutes les collections et additionnait dans le
+navigateur des totaux recalculés pièce par pièce. `web/` appelle des fonctions
+d'agrégat (`stats_indicateurs`, `stats_ca_par_mois`, `stats_activite_recente`,
+`stats_par_client`, `stats_par_conducteur`, `stats_par_metier`,
+`stats_ca_par_equipe`) qui lisent `v_facture_totaux`, `v_facture_solde` et
+`v_devis_totaux`. SECURITY INVOKER (la RLS de chaque table s'applique) et une
+garde « statistiques / voir » (42501) : le module, qu'aucune politique
+n'invoquait, devient opposable. L'écran n'en tire que des taux et des parts.
+
+## D-STA-02 — Le chiffre d'affaires ne compte que des factures émises (STA-21, P-19)
+CA HT = pièces émises (ni brouillon sans numéro, même définition que
+`v_facture_solde`), avoirs en négatif quel que soit le signe de leurs lignes,
+**factures d'acompte exclues** : leur montant est repris en entier par la
+facture de solde (les acomptes n'y sont déduits que du net à payer), les
+compter aurait doublé ce chiffre d'affaires. Changement d'indicateur à annoncer.
+
+## D-STA-03 — Graphiques en SVG écrits à la main, sans bibliothèque
+Un graphique à barres groupées et des barres horizontales ne justifient pas une
+dépendance (poids, surface d'attaque, suivi des versions) — et `node_modules`
+est partagé entre les worktrees. Chaque graphique a sa légende, un survol
+parcourable au clavier et un tableau équivalent ; l'année en cours et les
+barres prennent `--color-accent-societe` s'il est posé (repli : couleur
+primaire), l'identité d'une série est toujours écrite, jamais portée par la
+seule couleur.
+
+## D-STA-04 — « Encaissé ce mois » = règlements datés du mois, en TTC (STA-21, P-19)
+L'ancien « CA encaissé (HT) » additionnait le HT des factures au statut stocké
+« payée » datées du mois de la FACTURE. La tuile dit désormais ce qui est entré
+en caisse : Σ des règlements datés du mois, hors lettrage d'avoir (modes
+`avoir` / `imputation`) et hors règlement porté par un avoir. C'est un montant
+TTC — la tuile l'écrit. Une pièce historique réglée par reprise, sans
+règlement, n'y apparaît pas.
+
+## D-STA-05 — Statistiques par la référence du conducteur ; retard sur un bon ouvert (STA-22)
+Groupement par `conducteur_id` (le nom de sa fiche, « Sans conducteur » à
+défaut), jamais par l'étiquette `conducteur`. « En retard » = fin de travaux
+dépassée sur un bon **ouvert** (ni chiffré, ni facturé, ni clos, aucune
+facture ne le désigne, et le terrain n'a pas tout pointé) — l'ancien comptait
+un bon facturé. Travaux supplémentaires lus dans `tache_travaux_supplementaires`
+(nombre hors refusés ; montant des chiffrés et intégrés) au lieu d'un tableau
+sans colonne. Dates à l'heure de Paris (plus de `new Date()` local).
+Par métier : un bon compte dans chacun de ses métiers, mais son chiffre
+d'affaires ne va qu'à un bon mono-métier (« Plusieurs métiers » sinon,
+« Hors bon de commande » pour une facture sans bon) : pas de double compte.
+Par client : groupé par la fiche, par le nom à défaut. Écran enrichi d'une
+plage de dates libre.
+
+## D-STA-06 — « Locataires à rappeler » : seulement sur un bon encore ouvert
+Le pilotage historique relançait aussi des affaires chiffrées ou closes ; le
+tableau du conducteur, lui, ne regardait que les bons ouverts. Les deux suivent
+désormais la même règle.
+
+## D-STA-07 — Tuiles vers les écrans, sans filtre dans l'adresse quand l'écran n'en lit pas
+Liste des devis, des bons et planning ne lisent aucun filtre dans l'URL :
+« Devis en attente », « SAV », « À valider » y ouvrent l'écran entier (le
+libellé de la tuile dit ce qu'on y cherche). Impayés → règlements par facture
+triés par reste dû ; échues → même vue filtrée « en retard » ; un client du
+classement → son dossier de règlements. À brancher quand ces écrans liront
+leurs filtres dans l'adresse.
+
+## D-STA-08 — Statistiques sans niveau d'abonnement
+Aucun niveau de `FONCTIONNALITES` ne les porte : l'entrée de menu suit la
+matrice seule (« statistiques / voir » : admin, secrétaire, conducteur,
+lecture), comme le planning (D-PLN-12).
+
+## D-STA-09 — Le sous-traitant reçoit le tableau du terrain
+Son ancien tableau comptait ses factures « KTA » prêtes, ses devis et ses
+factures impayées : factures et devis de sous-traitant ne sont pas repris
+(D-FAC-09, D-FAC-14). Il reçoit donc, comme le technicien, sa journée (par son
+entreprise, `monSousTraitantId`) et rien d'autre ; aucun montant.
+
+## D-STA-10 — Tableau du conducteur : sa fiche par son compte, aucun montant
+Les affaires se filtrent par `conducteurs.profile_id` = compte connecté ; sans
+fiche, toute la société, avec un bandeau qui le dit. L'API ne demande à la vue
+terrain aucune colonne de prix. Un administrateur qui « voit en tant que »
+conducteur n'a pas de fiche : il voit toute la société, bandeau compris.
+
+## D-STA-11 — Factures échues et taux d'encaissement lus sur le solde calculé par la base
+« Factures échues » = pièces qui doivent encore (`du` > 0, avoirs exclus) avec
+une échéance dépassée — plus le statut stocké, qu'une facture partiellement
+réglée pouvait contredire. Taux d'encaissement (RM-70, formule inchangée) :
+impayés = Σ `du`, dénominateur = Σ TTC des pièces émises (avoirs négatifs),
+brouillons exclus (P-19). Le résumé du mois ne répète plus « CA encaissé » :
+la tuile le porte déjà.
