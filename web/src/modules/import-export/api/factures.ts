@@ -13,10 +13,9 @@
  * écriture PIÈCE PAR PIÈCE, jamais par lot : un échec se nomme avec son étape,
  * et un brouillon sans numéro reste supprimable.
  */
-import { z } from "zod";
+import { listerClientsRapprochables } from "@/modules/clients/api/clients";
 import type { Database } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
-import { analyser } from "@/lib/validation";
 import type { PieceAEcrire } from "../domain/apercu-factures";
 import type { ClientConnu } from "../domain/factures";
 
@@ -26,14 +25,9 @@ type LigneInsert = Database["public"]["Tables"]["facture_lignes"]["Insert"];
 /** Assez grand pour que 768 pièces tiennent en quatre lectures. */
 const LOT_LECTURE = 200;
 
+/** Les clients connus, par la lecture de rapprochement du module clients (CLI-32). */
 export async function clientsConnus(societeId: string): Promise<ClientConnu[]> {
-  const { data, error } = await supabase().from("clients").select("id, nom, cadre_facturation").eq("societe_id", societeId);
-  if (error) throw error;
-  return analyser(z.array(z.object({ id: z.string(), nom: z.string(), cadre_facturation: z.string().nullable() })), data, "clients existants").map((c) => ({
-    id: c.id,
-    nom: c.nom,
-    cadre: c.cadre_facturation,
-  }));
+  return (await listerClientsRapprochables(societeId)).map((c) => ({ id: c.id, nom: c.nom, cadre: c.cadre_facturation }));
 }
 
 /**

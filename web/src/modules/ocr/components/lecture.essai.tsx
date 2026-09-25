@@ -18,12 +18,15 @@ const api = vi.hoisted(() => {
   return { extraireBonCommande: vi.fn(), LectureImpossible };
 });
 vi.mock("../api/extraire", () => api);
+const CLIENTS = [
+  { id: "c1", nom: "OPAC du Rhône", interlocuteurs: [] },
+  { id: "c2", nom: "Grand Lyon Habitat", interlocuteurs: [] },
+  { id: "c3", nom: "Grand Lyon Habitat", interlocuteurs: [] },
+];
 vi.mock("@/modules/clients/api/clients", () => ({
-  listerClients: vi.fn(async () => [
-    { id: "c1", nom: "OPAC du Rhône", interlocuteurs: [] },
-    { id: "c2", nom: "Grand Lyon Habitat", interlocuteurs: [] },
-    { id: "c3", nom: "Grand Lyon Habitat", interlocuteurs: [] },
-  ]),
+  listerClients: vi.fn(async () => CLIENTS),
+  // La lecture légère de rapprochement (CLI-32) : ce que l'écran de lecture compare.
+  listerClientsRapprochables: vi.fn(async () => CLIENTS.map(({ id, nom }) => ({ id, nom, siret: null, siren: null, cadre_facturation: null, delai_paiement_jours: null, delai_paiement_mode: null }))),
 }));
 
 function Prefill() {

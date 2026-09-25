@@ -3,6 +3,15 @@ import { lireTout } from "@/lib/lecture";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { schemaClient, type Client, type SaisieClient } from "../domain/client";
+import {
+  COLONNES_IDENTITE_FICHE,
+  COLONNES_RAPPROCHABLES,
+  identiteClientDocument,
+  schemaClientRapprochable,
+  schemaIdentiteFiche,
+  type ClientRapprochable,
+  type IdentiteClientDocument,
+} from "../domain/rattachement";
 
 const COLONNES =
   "id, societe_id, nom, cadre_facturation, siret, siren, tva_intracom, pays_code, adresse, code_postal, ville, email, telephone, contact_nom, facturation_adresse, facturation_code_postal, facturation_ville, delai_paiement_jours, delai_paiement_mode, mode_paiement, notes, code_service, code_routage, reference_engagement, numero_marche, reference_acheteur, adresse_electronique_schema, adresse_electronique_valeur, livraison_adresse, livraison_code_postal, livraison_ville, contact_telephone, contact_email";
@@ -24,6 +33,28 @@ export async function listerClients(societeId: string): Promise<ClientListe[]> {
     schemaClientListe,
     "liste des clients"
   );
+}
+
+/**
+ * Les clients à RAPPROCHER (CLI-32, `clientsRapprochables`) : pour l'OCR et
+ * les imports, ce qui se compare et se reprend, sans le reste de la fiche.
+ * Complète ou refusée, comme la liste (TRV-10) : un client manquant ferait
+ * créer un doublon à l'import.
+ */
+export async function listerClientsRapprochables(societeId: string): Promise<ClientRapprochable[]> {
+  return lireTout(
+    (debut, fin) => supabase().from("clients").select(COLONNES_RAPPROCHABLES, { count: "exact" }).eq("societe_id", societeId).order("nom").order("id").range(debut, fin),
+    schemaClientRapprochable,
+    "liste des clients à rapprocher"
+  );
+}
+
+/** L'identité que la fiche prête à une facture (CLI-26) ; rien si la fiche n'est pas lisible. */
+export async function identiteDuClient(clientId: string | null | undefined): Promise<IdentiteClientDocument | null> {
+  if (!clientId) return null;
+  const { data, error } = await supabase().from("clients").select(COLONNES_IDENTITE_FICHE).eq("id", clientId).maybeSingle();
+  if (error) throw error;
+  return data ? identiteClientDocument(analyser(schemaIdentiteFiche, data, "identité du client")) : null;
 }
 
 export async function lireClient(id: string): Promise<Client> {

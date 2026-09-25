@@ -1,7 +1,6 @@
-import { z } from "zod";
 import type { Database } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
-import { analyser } from "@/lib/validation";
+import { listerClientsRapprochables } from "@/modules/clients/api/clients";
 import type { ClientAEcrire, ExistantImport } from "../domain/apercu-clients";
 
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
@@ -9,18 +8,9 @@ type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 /** 200 par requête : assez pour que l'import tienne en quelques allers-retours, assez peu pour qu'un refus se localise. */
 export const LOT_IMPORT_CLIENTS = 200;
 
-const schemaExistant = z.object({
-  id: z.string(),
-  nom: z.string(),
-  siret: z.string().nullable(),
-  cadre_facturation: z.enum(["B2C", "B2B_national", "B2G", "B2B_international"]).nullable(),
-});
-
-/** Le minimum pour reconnaître un client existant (CLI-32). */
+/** Le minimum pour reconnaître un client existant (CLI-32) : la lecture du module clients, complète ou refusée. */
 export async function clientsRapprochables(societeId: string): Promise<ExistantImport[]> {
-  const { data, error } = await supabase().from("clients").select("id, nom, siret, cadre_facturation").eq("societe_id", societeId);
-  if (error) throw error;
-  return analyser(z.array(schemaExistant), data, "clients existants");
+  return (await listerClientsRapprochables(societeId)).map(({ id, nom, siret, cadre_facturation }) => ({ id, nom, siret, cadre_facturation }));
 }
 
 export interface ResultatImportClients {

@@ -9,5 +9,14 @@
   le MANQUANT jamais ; délai de paiement client > société > 30 j net, `0` =
   à réception ; B2C → « à réception » proposé au changement de type seulement ;
   dépassement L441-10 signalé, jamais bloqué. Parité : `tests/parite/identifiants.essai.ts`.
-- **Non repris cette nuit** : annuaire des entreprises, autocomplétion d'adresse
-  (BAN), import CSV de clients, complétude facture électronique.
+- **Annuaire des entreprises** (recherche-entreprises.api.gouv.fr, sans clé) :
+  suggestions sous le nom, « Rechercher » à côté du SIRET/SIREN ; l'identité
+  s'écrase, TVA et adresse électronique ne remplissent que le vide ; entreprise
+  radiée → avertissement ; « administration » seulement proposé ; rien pour un
+  particulier (CLI-40). File d'appels sous le quota (6/s, 3 en vol, 429 dit).
+  Parité : `tests/parite/annuaire.essai.ts`.
+- **Adresse** : Base Adresse Nationale sous le champ, code postal → communes.
+- **Rattachement** (`domain/rattachement.ts`) : `identiteClientDocument` —
+  l'identité de l'acheteur recopiée sur la facture à l'écriture (CLI-26) ;
+  `listerClientsRapprochables` — la lecture légère de l'OCR et des imports (CLI-32).
+- **Listes** complètes ou refusées (`lib/lecture.ts`, TRV-10).
