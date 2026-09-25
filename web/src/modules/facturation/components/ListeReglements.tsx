@@ -5,7 +5,7 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Reglement } from "../api/factures";
 import { libelleModeReglement } from "../domain/reglements";
@@ -19,6 +19,7 @@ import { SaisieReglement } from "./SaisieReglement";
  * corrigent : leurs deux moitiés doivent rester égales.
  */
 export function ListeReglements({ factureId, totalDu, reglements, modeParDefaut }: { factureId: string; totalDu: number; reglements: readonly Reglement[]; modeParDefaut: string | null }) {
+  useModeDiscret();
   const peutModifier = usePermission("reglements", "modifier");
   const peutSupprimer = usePermission("reglements", "supprimer");
   const retirer = useSupprimerReglement();

@@ -1,7 +1,7 @@
 import { useId, useState, type KeyboardEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { Article } from "../domain/article";
 import { useSuggestionsArticles, useTrouverParCode } from "../hooks/useArticles";
 import { useDiffere } from "../hooks/useDiffere";
@@ -29,6 +29,7 @@ interface Props {
  * devine rien à la place de l'utilisateur.
  */
 export function ChoixArticle({ libelle, valeur, onSaisie, onChoisir, onCreer, desactive = false }: Props) {
+  useModeDiscret();
   const id = useId();
   const [ouvert, setOuvert] = useState(false);
   const [actif, setActif] = useState(-1);

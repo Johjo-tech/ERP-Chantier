@@ -5,7 +5,7 @@ import { EnTetePage } from "@/components/page/EnTetePage";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
 import { depuisBase, lignesPourEnregistrement, type LigneEdition } from "@/modules/documents/domain/lignes";
@@ -26,6 +26,7 @@ import { DocumentPrefacture } from "./DocumentPrefacture";
 import { ReferencePrefacture } from "./ReferencePrefacture";
 
 function BandeauBlocages({ blocages, contournement, peutValider }: { blocages: readonly Blocage[]; contournement: boolean; peutValider: boolean }) {
+  useModeDiscret();
   if (blocages.length && blocages.every((b) => BLOCAGES_ACCOMPLIS.includes(b.code))) return <Alert variant="succes">{blocages.map((b) => <p key={b.code}>✓ {b.libelle}</p>)}</Alert>;
   if (blocages.length) {
     return (
@@ -60,6 +61,7 @@ interface Props {
  * transition par la base — hors circuit compris (BC-91).
  */
 function Prefacture({ bon, taches, travaux, reglages, message, onEnregistre }: Props) {
+  useModeDiscret();
   const navigate = useNavigate();
   const { roleEffectif } = useSession();
   const droits = actionsFacturation(roleEffectif);
@@ -156,6 +158,7 @@ function Prefacture({ bon, taches, travaux, reglages, message, onEnregistre }: P
 }
 
 export function PagePrefacture() {
+  useModeDiscret();
   const { id } = useParams();
   const bon = useBon(id);
   const taches = useTaches(id);

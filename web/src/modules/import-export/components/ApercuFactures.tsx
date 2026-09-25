@@ -1,7 +1,7 @@
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { ApercuImportFactures } from "../domain/apercu-factures";
 import { CATEGORIES_TAUX_ZERO, DESIGNATION_SANS_LIGNES, type CategorieTva } from "../domain/factures";
 import { Chiffre, ListeMotifs } from "./Recapitulatif";
@@ -26,6 +26,7 @@ function libelleClient(c: ApercuImportFactures["clients"][number]): string {
 
 /** Les totaux reconstitués passent AVANT tout : c'est le seul chiffre que le comptable saura vérifier. */
 export function ApercuFactures({ apercu: a, avecLignes, categorie, enCours, onCategorie, onEcrire, onRapport }: Props) {
+  useModeDiscret();
   const t = a.totauxAEcrire;
   const tauxZero = a.rejets.some((r) => /0 %/.test(r.motif)) || categorie !== undefined;
   return (

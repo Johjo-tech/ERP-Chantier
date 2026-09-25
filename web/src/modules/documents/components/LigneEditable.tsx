@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Td, Tr } from "@/components/ui/table";
 import { formatTaux, montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { ErreurLigne, LigneEdition } from "../domain/lignes";
 import type { ChampReferenceLigne } from "./reference";
 import { montantLigneHt, montantLigneTtc } from "../domain/totaux";
@@ -26,6 +26,7 @@ interface Props {
 const versLigne = (l: LigneEdition) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva });
 
 export function LigneEditable({ ligne, index, nombre, unites, taux, erreurs, lectureSeule, onChange, onRemplacer, ChampReference, ChampMetier, onAction }: Props) {
+  useModeDiscret();
   const n = index + 1;
   const erreur = (champ: ErreurLigne["champ"]) => erreurs.find((e) => e.index === index && e.champ === champ)?.message;
   const invalide = (champ: ErreurLigne["champ"]) => (erreur(champ) ? { "aria-invalid": true, title: erreur(champ) } : {});

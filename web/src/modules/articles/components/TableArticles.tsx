@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatTaux, montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { libelleType, type Article } from "../domain/article";
 import { BoutonActifArticle } from "./BoutonActifArticle";
@@ -16,6 +16,7 @@ function apercu(texte: string): string {
 }
 
 export function TableArticles({ articles }: { articles: readonly Article[] }) {
+  useModeDiscret();
   return (
     <Table>
       <THead>

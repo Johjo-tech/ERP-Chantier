@@ -9,7 +9,7 @@ import { Input, Select } from "@/components/ui/input";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useMetiers } from "@/modules/reglages/hooks/useReglagesEcran";
 import { absenceEnCours, type Absence } from "../domain/conges";
 import { aVerifier, conformiteRh, motifIncomplet, type SeuilsRh } from "../domain/conformite";
@@ -20,6 +20,7 @@ import { BadgeVisite } from "./BadgeVisite";
 
 /** La liste des salariés (RH-01) : recherche, filtre métier, badges, coûts pour qui tient les dossiers. */
 export function ListeSalaries() {
+  useModeDiscret();
   const salaries = useSalariesRh();
   const metiers = useMetiers();
   const [recherche, setRecherche] = useState("");
@@ -51,6 +52,7 @@ export function ListeSalaries() {
 }
 
 function Cartes({ liste, supprimer }: { liste: readonly Salarie[]; supprimer: (id: string) => void }) {
+  useModeDiscret();
   const droits = useDroitsRh();
   const documents = useDocumentsRh();
   const visites = useVisitesRh();
@@ -85,6 +87,7 @@ interface PropsCarte {
 }
 
 function CarteSalarie({ s, documents, absences, dossiersLus, seuils, supprimer }: PropsCarte) {
+  useModeDiscret();
   const droits = useDroitsRh();
   const aujourdHui = todayISO();
   const verifier = aVerifier(s.carteBtpValidite, documents, aujourdHui, seuils);

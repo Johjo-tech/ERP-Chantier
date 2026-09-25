@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
 import type { Reglement } from "../api/factures";
@@ -30,6 +30,7 @@ interface Props {
  * doit pas se heurter à un plafond qui compte encore les 500.
  */
 export function SaisieReglement({ factureId, totalDu, reglements, modeParDefaut, enCours = null, fini }: Props) {
+  useModeDiscret();
   const modifier = useModifierReglement();
   const ajouter = useAjouterReglement(factureId);
   const sauf = enCours?.id ?? null;

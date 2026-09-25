@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { BlocTotaux } from "@/modules/documents/components/BlocTotaux";
@@ -24,6 +24,7 @@ import { FormulaireAvoir } from "./FormulaireAvoir";
 
 /** Une facture émise : définitive (L441-9) — on la consulte, on l'envoie, on l'encaisse, on la corrige par un avoir. */
 export function VueFactureEmise({ facture, reglages }: { facture: Facture; reglages: ReglagesDocuments }) {
+  useModeDiscret();
   const location = useLocation();
   const navigate = useNavigate();
   const message = (location.state as { message?: string } | null)?.message;

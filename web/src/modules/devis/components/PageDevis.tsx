@@ -7,7 +7,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { montantsCherchables } from "@/lib/recherche";
 import { useFiltresAdresse } from "@/lib/useFiltresAdresse";
 import { CLASSE_EN_EVIDENCE, useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
@@ -21,6 +21,7 @@ import { useListeDevis, useTotauxDevis } from "../hooks/useDevis";
 import { BadgeStatutDevis } from "./BadgeStatutDevis";
 
 function Filtre({ id, libelle, valeur, onChange, options }: { id: string; libelle: string; valeur: string; onChange: (v: string) => void; options: { valeur: string; libelle: string }[] }) {
+  useModeDiscret();
   return (
     <>
       <label htmlFor={id} className="sr-only">{libelle}</label>
@@ -34,6 +35,7 @@ function Filtre({ id, libelle, valeur, onChange, options }: { id: string; libell
 const unique = (valeurs: (string | null)[]) => [...new Set(valeurs.filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "fr"));
 
 export function PageDevis() {
+  useModeDiscret();
   const devis = useListeDevis();
   const totaux = useTotauxDevis();
   const conducteurs = useConducteurs();

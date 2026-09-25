@@ -7,7 +7,7 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { trierEntretiens } from "../domain/entretien";
 import { formatKm, type Vehicule } from "../domain/vehicule";
@@ -17,6 +17,7 @@ import { LienFichier } from "./LienFichier";
 
 /** L'historique d'entretien (VEH-03) : le compteur du véhicule monte avec un kilométrage supérieur. */
 export function BlocEntretiens({ vehicule }: { vehicule: Vehicule }) {
+  useModeDiscret();
   const modifiable = usePermission("vehicules", "modifier");
   const voitLesPrix = useVoitLesPrix();
   const entretiens = useEntretiens(vehicule.id);

@@ -8,7 +8,7 @@ import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import type { BonDeLaListe } from "../api/bons";
@@ -18,6 +18,7 @@ import { useBons, useGenererFacture } from "../hooks/useBons";
 import { BadgeEtape } from "./BadgeEtape";
 
 function TableBons({ bons, prix, action, detail }: { bons: readonly BonDeLaListe[]; prix: boolean; action: (b: BonDeLaListe) => ReactNode; detail?: (b: BonDeLaListe) => ReactNode }) {
+  useModeDiscret();
   return (
     <Table>
       <THead>
@@ -64,6 +65,7 @@ const FILTRES: { cle: FiltreValidation; libelle: string }[] = [
  * chaque filtre est celui de la liste qu'il affiche.
  */
 export function PageValidation() {
+  useModeDiscret();
   const bons = useBons();
   const prix = useVoitLesPrix();
   const { roleEffectif } = useSession();
@@ -107,6 +109,7 @@ export function PageValidation() {
 }
 
 function CreerFacture({ bon, onErreur }: { bon: BonDeLaListe; onErreur: (e: unknown) => void }) {
+  useModeDiscret();
   const navigate = useNavigate();
   const generer = useGenererFacture();
   return (
@@ -118,6 +121,7 @@ function CreerFacture({ bon, onErreur }: { bon: BonDeLaListe; onErreur: (e: unkn
 
 /** Facturation › À facturer (BC-42) : chiffrés, sans facture. La facture naît par la base (`bc_generer_facture`). */
 export function PageAFacturer() {
+  useModeDiscret();
   const bons = useBons();
   const prix = useVoitLesPrix();
   const [erreur, setErreur] = useState<unknown>(null);

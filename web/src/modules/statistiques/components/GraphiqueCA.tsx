@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { ZERO, type Montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { partDuMax, type SerieCA } from "../domain/indicateurs";
 
 /**
@@ -37,6 +37,7 @@ interface Survol {
 }
 
 export function GraphiqueCA({ serie }: { serie: SerieCA }) {
+  useModeDiscret();
   const [survol, setSurvol] = useState<Survol | null>(null);
   const { points, anneeCourante, anneePrecedente } = serie;
   const max = points.reduce((m, p) => (p.courant.gt(m) ? p.courant : p.precedent.gt(m) ? p.precedent : m), ZERO);

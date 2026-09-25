@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useChantiers } from "@/modules/chantiers/hooks/useChantiers";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
@@ -26,6 +26,7 @@ import { SaisieReglement } from "./SaisieReglement";
  * le total est celui de la liste affichée.
  */
 export function VueTousReglements({ soldes, reglements }: { soldes: readonly Solde[]; reglements: readonly Reglement[] }) {
+  useModeDiscret();
   const location = useLocation();
   const navigate = useNavigate();
   const chantiers = useChantiers();

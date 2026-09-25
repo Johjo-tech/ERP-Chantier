@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useFonctionnalite } from "@/modules/societes/hooks/useFonctionnalite";
 import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
@@ -29,6 +29,7 @@ import { ContactsBon } from "./ContactsBon";
 
 /** Le n° du client, ou le mode quand il n'y en a pas : on ne montre jamais une sentinelle comme un numéro. */
 function NumeroClient({ bon }: { bon: BonDeLaListe }) {
+  useModeDiscret();
   const mode = modeDuBon(bon);
   if (mode !== "normal") return <Badge variant={mode === "attente_bc" ? "alerte" : "neutre"}>{LIBELLES_MODE[mode]}</Badge>;
   return <span className="whitespace-pre-line">{bon.numero_bc ?? "—"}</span>;
@@ -42,6 +43,7 @@ interface Recherche {
 }
 
 function LigneBon({ bon, prix, contacts, onResultat, recherche }: { bon: BonDeLaListe; prix: boolean; contacts: boolean; onResultat: (m: string, e?: unknown) => void; recherche: Recherche }) {
+  useModeDiscret();
   return (
     <Tr id={recherche.idDom} className={cn(recherche.enEvidence && CLASSE_EN_EVIDENCE)}>
       <Td>
@@ -67,6 +69,7 @@ function LigneBon({ bon, prix, contacts, onResultat, recherche }: { bon: BonDeLa
 }
 
 export function PageBonsCommande() {
+  useModeDiscret();
   const bons = useBons();
   // Le montant ne s'affiche qu'à qui voit les prix ; la vue le rend NULL aux autres de toute façon.
   const prix = useVoitLesPrix();

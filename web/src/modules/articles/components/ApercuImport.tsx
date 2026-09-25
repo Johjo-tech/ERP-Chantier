@@ -2,7 +2,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatTaux, montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { libelleType } from "../domain/article";
 import { libelleEncodage, type LectureFichier } from "../domain/import";
 import { useCodesExistants } from "../hooks/useArticles";
@@ -19,6 +19,7 @@ interface Props {
 }
 
 function Chiffre({ valeur, libelle }: { valeur: number | string; libelle: string }) {
+  useModeDiscret();
   return (
     <div>
       <div className="text-2xl font-semibold tabular-nums">{valeur}</div>
@@ -28,6 +29,7 @@ function Chiffre({ valeur, libelle }: { valeur: number | string; libelle: string
 }
 
 function Liste({ titre, lignes, reste }: { titre: string; lignes: string[]; reste: number }) {
+  useModeDiscret();
   return (
     <>
       <p className="font-semibold">{titre}</p>
@@ -38,6 +40,7 @@ function Liste({ titre, lignes, reste }: { titre: string; lignes: string[]; rest
 }
 
 export function ApercuImport({ nom, lecture, enCours, onImporter, onRapport }: Props) {
+  useModeDiscret();
   const existants = useCodesExistants(lecture.articles.map((a) => a.code));
   const aMettreAJour = existants.data ? lecture.articles.filter((a) => existants.data.has(a.code)).length : null;
   const n = lecture.articles.length;

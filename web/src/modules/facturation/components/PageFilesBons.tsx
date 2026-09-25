@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { BadgeEtape } from "@/modules/commandes/components/BadgeEtape";
 import { etapeValidation } from "@/modules/commandes/domain/workflow";
@@ -20,6 +20,7 @@ import { OngletsFacturation } from "./OngletsFacturation";
  * la fiche du bon.
  */
 export function PageFilesBons({ file }: { file: FileBons }) {
+  useModeDiscret();
   const bons = useBons();
   const [recherche, setRecherche] = useState("");
   const [ouvert, setOuvert] = useState<string | null>(null);

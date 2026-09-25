@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
 import { imputer, refusImputation, RESTE_SOLDE_EUR } from "../domain/reglements";
@@ -20,6 +20,7 @@ import { useReglementGroupe } from "../hooks/useFactures";
  * (`enregistrer_reglement_groupe`) : l'aperçu montre, la base décide.
  */
 export function PanneauReglementGroupe({ factures, fermer }: { factures: readonly Solde[]; fermer: (message?: string) => void }) {
+  useModeDiscret();
   const du = totalDu(factures);
   const [saisie, setSaisie] = useState({ montant: String(du).replace(".", ","), date: todayISO(), mode: "virement", reference: "" });
   const groupe = useReglementGroupe();

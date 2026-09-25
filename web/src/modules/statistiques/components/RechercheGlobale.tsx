@@ -4,7 +4,7 @@ import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useListeDevis, useTotauxDevis } from "@/modules/devis/hooks/useDevis";
 import { useSoldes } from "@/modules/facturation/hooks/useFactures";
 import { useRapports } from "@/modules/interventions/hooks/useRapports";
@@ -17,6 +17,7 @@ import { indexSuivant, LIBELLES_NATURE, resultatsRecherche } from "../domain/rec
  * lire toutes les pièces de la société pour rien.
  */
 export function RechercheGlobale({ requete, onChange }: { requete: string; onChange: (v: string) => void }) {
+  useModeDiscret();
   const [courant, setCourant] = useState<number | null>(null);
   const liste = useRef<HTMLOListElement>(null);
   const suivant = () => {
@@ -41,6 +42,7 @@ export function RechercheGlobale({ requete, onChange }: { requete: string; onCha
 }
 
 function Resultats({ requete, courant, liste }: { requete: string; courant: number | null; liste: React.RefObject<HTMLOListElement | null> }) {
+  useModeDiscret();
   const devis = useListeDevis();
   const totaux = useTotauxDevis();
   const soldes = useSoldes();

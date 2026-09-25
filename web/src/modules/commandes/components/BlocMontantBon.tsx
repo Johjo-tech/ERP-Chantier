@@ -1,5 +1,5 @@
 import { ChampTexte } from "@/components/formulaire/Champ";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { LigneEdition } from "@/modules/documents/domain/lignes";
 import { MIN_METIERS_VENTILES } from "../domain/enregistrement";
 import { lignesOntDuContenu, montantDuBon } from "../domain/regles";
@@ -18,6 +18,7 @@ interface Props {
 }
 
 function NoteLignes({ lignes, ventile }: { lignes: readonly LigneEdition[]; ventile: boolean }) {
+  useModeDiscret();
   return (
     <p className="text-sm" aria-live="polite">
       Montant du bon (HT, d'après les lignes) : <strong className="tabular-nums">{formatEurosEcran(montantDuBon(lignes, 0))}</strong>
@@ -33,6 +34,7 @@ function NoteLignes({ lignes, ventile }: { lignes: readonly LigneEdition[]; vent
  * qu'un affichage ; la ventilation, elle, reste saisissable.
  */
 export function BlocMontantBon({ lignes, montant, onMontant, metiers, montantsParMetier, onMontantMetier, sansChapitre, erreur, lectureSeule }: Props) {
+  useModeDiscret();
   const parLignes = lignesOntDuContenu(lignes);
   const ventile = metiers.length >= MIN_METIERS_VENTILES;
   if (!ventile) {

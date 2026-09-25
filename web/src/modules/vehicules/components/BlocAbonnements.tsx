@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
 import { etiquetteEcheance } from "../domain/echeances";
@@ -13,6 +13,7 @@ import type { Vehicule } from "../domain/vehicule";
 import { FormulaireVente } from "./FormulaireVente";
 
 function Abonnement({ titre, fournisseur, numero, validite, seuil, vendu }: { titre: string; fournisseur: string | null; numero: string | null; validite: string | null; seuil: number | undefined; vendu: boolean }) {
+  useModeDiscret();
   const e = seuil === undefined ? null : etiquetteEcheance(validite, seuil, vendu);
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -33,6 +34,7 @@ function Abonnement({ titre, fournisseur, numero, validite, seuil, vendu }: { ti
  * premier droit sans le second, ne voit pas le bouton.
  */
 export function BlocAbonnements({ vehicule }: { vehicule: Vehicule }) {
+  useModeDiscret();
   const modifieVehicules = usePermission("vehicules", "modifier");
   const creeFactures = usePermission("factures", "creer");
   const peutVendre = modifieVehicules && creeFactures;

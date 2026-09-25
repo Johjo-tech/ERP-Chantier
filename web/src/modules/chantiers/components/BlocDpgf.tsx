@@ -4,7 +4,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { Chantier } from "../domain/chantier";
 import { avancementChantier, estFactureeEntierement, lignesFigees } from "../domain/dpgf";
@@ -39,6 +39,7 @@ const depuisServeur = (l: LigneDpgfBase, figee: boolean): BrouillonLigneDpgf => 
 
 /** « DPGF chiffré — suivi d'avancement » (CHA-06 à CHA-09, CHA-15), repliable. */
 export function BlocDpgf({ chantier, actions, actionsSelection, fichierAImporter, importer }: Props) {
+  useModeDiscret();
   const dpgf = useDpgf(chantier.id);
   const taches = useTachesPlanifiees(chantier.id);
   const metiers = useMetiers();

@@ -31,7 +31,11 @@ function abonner(rappel: () => void): () => void {
   return () => abonnes.delete(rappel);
 }
 
-/** L'état du mode, pour la bascule et pour remonter l'écran quand il change. */
+/**
+ * L'état du mode. Tout composant qui appelle `formatEurosEcran` l'appelle aussi,
+ * même sans lire sa valeur : c'est son abonnement, qui le redessine à la bascule
+ * sans le remonter (sa saisie reste, relecture 4, B4).
+ */
 export function useModeDiscret(): boolean {
   return useSyncExternalStore(abonner, estModeDiscret, estModeDiscret);
 }

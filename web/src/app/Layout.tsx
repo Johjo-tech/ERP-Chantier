@@ -111,8 +111,10 @@ export function Layout() {
             </header>
             <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 print:overflow-visible print:p-0">
               {/* Changer de société remonte l'écran : aucun état local ne survit d'une société à l'autre.
-                  Le mode discret aussi : chaque montant affiché se reformate (D-CLI-04). */}
-              <Outlet key={`${societeActive.id}-${discret ? "discret" : "clair"}`} />
+                  Le mode discret, lui, NE remonte rien : on le bascule en pleine saisie quand un client
+                  arrive. Chaque composant qui affiche un montant s'y abonne (`useModeDiscret`) et se
+                  redessine seul (D-R4-01, garde-fou dans `modeDiscret.essai.ts`). */}
+              <Outlet key={societeActive.id} />
             </main>
           </div>
         </div>
