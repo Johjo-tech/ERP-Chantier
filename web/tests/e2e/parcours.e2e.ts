@@ -52,9 +52,12 @@ test("la secrétaire crée un devis multi-TVA ; totaux et numéro viennent de la
   await expect(page.getByText("Devis enregistré.")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Devis DEV-\d{4}-\d{6}/);
   await page.getByRole("link", { name: "Aperçu / imprimer" }).click();
-  await expect(page.getByRole("heading", { name: "DEVIS" })).toBeVisible();
-  await expect(page.getByText("Valable jusqu’au").or(page.getByText("Valable jusqu'au"))).toBeVisible();
-  await page.getByRole("link", { name: "Retour au devis" }).click();
+  // La fenêtre d'aperçu de l'ancien, avec la pièce même du PDF (D-PDF-06).
+  const apercu = page.getByRole("dialog");
+  await expect(apercu.locator(".p-doctitre-grand")).toHaveText("DEVIS");
+  await expect(apercu.getByText("Valable jusqu'au")).toBeVisible();
+  await expect(apercu.getByRole("button", { name: "Enregistrer", exact: true })).toBeVisible();
+  await apercu.getByRole("button", { name: "Fermer" }).click();
   await page.getByRole("link", { name: "Retour à la liste" }).click();
   await expect(page.getByRole("row", { name: /SCI Les Tilleuls/ }).first()).toContainText("216,00 €");
 });
@@ -82,8 +85,9 @@ test("espace client : ses documents seulement, en lecture seule", async ({ page 
   await expect(page.getByRole("link", { name: "DEV-2026-900001" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Menu principal" })).toHaveCount(0);
   await page.getByRole("link", { name: "DEV-2026-900001" }).click();
-  await expect(page.getByRole("heading", { name: "DEVIS" })).toBeVisible();
-  await expect(page.getByLabel("Totaux du document")).toContainText("281,13 €");
+  // La même pièce que le PDF, dans la fenêtre d'aperçu de l'ancien (D-PDF-06).
+  await expect(page.getByRole("dialog").locator(".p-doctitre-grand")).toHaveText("DEVIS");
+  await expect(page.getByRole("dialog").locator(".p-net")).toContainText("281,13 €");
   await page.goto("/clients");
   await expect(page).toHaveURL(/\/espace-client$/);
 });
