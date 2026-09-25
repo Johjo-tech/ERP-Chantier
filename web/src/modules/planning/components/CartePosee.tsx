@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { CartePlanning } from "../domain/cartes";
@@ -25,6 +25,8 @@ const arreter = (e: { stopPropagation: () => void }) => e.stopPropagation();
 export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
   const { peutPlanifier, ouvrirFiche, appliquer, couleurMetier, donnees } = usePlanningContexte();
   const [apercu, setApercu] = useState<number | null>(null);
+  // Le clic qui suit le lâcher de la poignée ne doit pas ouvrir la fiche.
+  const redimensionnee = useRef(false);
   const cases = apercu ?? placement.cases;
   const couleur = couleurMetier(carte.metier);
   const style: CSSProperties = { top: placement.indiceDebut * HAUTEUR_CASE + 2, height: cases * HAUTEUR_CASE - 4, ...(couleur ? { borderRightColor: couleur, borderRightWidth: 5 } : {}) };
@@ -44,7 +46,13 @@ export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
         e.dataTransfer.setData("text/plain", carte.id);
         onGlisser(carte);
       }}
-      onClick={() => ouvrirFiche(carte, jour)}
+      onClick={() => {
+        if (redimensionnee.current) {
+          redimensionnee.current = false;
+          return;
+        }
+        ouvrirFiche(carte, jour);
+      }}
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && ouvrirFiche(carte, jour)}
       style={style}
       className={cn(
@@ -89,6 +97,8 @@ export function CartePosee({ carte, jour, placement, onGlisser }: Props) {
           horizontal={placement.variante === "origine"}
           onApercu={setApercu}
           onFin={(n, fin) => {
+            redimensionnee.current = true;
+            window.setTimeout(() => (redimensionnee.current = false), 0);
             if (placement.variante === "suppl") appliquer(carte, () => planCreneauJournee(carte, jour, { duree: dureeDesCases(placement.indiceDebut, n) }));
             else appliquer(carte, () => planEtirer(carte, { cases: n, indiceDebut: placement.indiceDebut, fin, dernierJour: placement.variante === "dernier" }));
           }}
