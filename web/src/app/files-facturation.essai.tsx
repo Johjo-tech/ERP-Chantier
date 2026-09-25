@@ -4,7 +4,7 @@ import type { RouteObject } from "react-router";
 import { describe, expect, it } from "vitest";
 import { fileValidation } from "@/modules/commandes/domain/files";
 import type { CircuitDuBon } from "@/modules/commandes/domain/workflow";
-import { OngletsFacturation } from "@/modules/facturation/components/OngletsFacturation";
+import { FILE_A_FACTURER, FILE_VALIDATION, OngletsFacturation } from "@/modules/facturation/components/OngletsFacturation";
 import { rendreAvecSession } from "@/test/session-factice";
 import { NAVIGATION } from "./navigation";
 import { routes } from "./routes";
@@ -14,7 +14,9 @@ import { routes } from "./routes";
  * « À facturer »), l'une sous l'onglet Facturation, l'autre au menu, qui ne
  * montraient pas les mêmes bons — un bon clôturé sans facturation ou déjà
  * facturé restait dans la première. Il n'en reste qu'une : les anciennes
- * adresses y mènent, l'onglet et le menu pointent au même endroit.
+ * adresses y mènent. Depuis la vague « identique » (D-VIS-05), le menu
+ * principal ne les porte plus : comme dans l'ancien écran, on les ouvre par
+ * les sous-onglets de Factures.
  */
 function chercher(liste: readonly RouteObject[], chemin: string): RouteObject | undefined {
   for (const r of liste) {
@@ -46,13 +48,15 @@ describe("une seule file Validation, une seule À facturer", () => {
     expect(redirection("factures/a-facturer")).toBe("/facturation/a-facturer");
   });
 
-  it("l'onglet Facturation et le menu principal pointent aux mêmes adresses", () => {
+  it("les sous-onglets de Factures ouvrent les files, que le menu principal ne porte plus", () => {
     rendreAvecSession(<OngletsFacturation />, { role: "admin", chemin: "/factures" });
     const onglets = within(screen.getByRole("navigation", { name: "Facturation" }));
-    const menu = new Map(NAVIGATION.map((e) => [e.libelle, e.chemin]));
-    for (const libelle of ["Validation", "À facturer"]) {
-      expect(onglets.getByRole("link", { name: libelle })).toHaveAttribute("href", menu.get(libelle));
-    }
+    expect(onglets.getByRole("link", { name: "Validation" })).toHaveAttribute("href", FILE_VALIDATION);
+    expect(onglets.getByRole("link", { name: "À facturer" })).toHaveAttribute("href", FILE_A_FACTURER);
+    expect(redirection("factures/validation")).toBe(FILE_VALIDATION);
+    const menu = NAVIGATION.map((e) => e.chemin);
+    expect(menu).not.toContain(FILE_VALIDATION);
+    expect(menu).not.toContain(FILE_A_FACTURER);
   });
 
   it("un bon au circuit clos (clôturé sans facturation, ou déjà facturé) n'est pas dans la file", () => {

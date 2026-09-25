@@ -3,18 +3,20 @@ import { expect, test, type Page } from "@playwright/test";
 const MOT_DE_PASSE = "motdepasse-local";
 
 async function connexion(page: Page, email: string) {
+  // Le menu est replié d'office, comme dans l'ancien écran : on l'épingle (même clé que lui) pour le parcourir.
+  await page.addInitScript(() => window.localStorage.setItem("erp.menu.epingle", "1"));
   await page.goto("/connexion");
-  await page.getByLabel("Adresse e-mail").fill(email);
+  await page.getByLabel("Identifiant").fill(email);
   await page.getByLabel("Mot de passe").fill(MOT_DE_PASSE);
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("button", { name: "Entrer" }).click();
   await expect(page.getByRole("navigation", { name: "Menu principal" })).toBeVisible();
 }
 
 test("mauvais mot de passe : message en français", async ({ page }) => {
   await page.goto("/connexion");
-  await page.getByLabel("Adresse e-mail").fill("admin.alpha@erp.local");
+  await page.getByLabel("Identifiant").fill("admin.alpha@erp.local");
   await page.getByLabel("Mot de passe").fill("faux");
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("button", { name: "Entrer" }).click();
   await expect(page.getByText("Adresse e-mail ou mot de passe incorrect.")).toBeVisible();
 });
 
@@ -73,9 +75,9 @@ test("remplissage automatique d'une ligne depuis le catalogue : la quantité n'e
 
 test("espace client : ses documents seulement, en lecture seule", async ({ page }) => {
   await page.goto("/connexion");
-  await page.getByLabel("Adresse e-mail").fill("client.opac@erp.local");
+  await page.getByLabel("Identifiant").fill("client.opac@erp.local");
   await page.getByLabel("Mot de passe").fill("motdepasse-local");
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("button", { name: "Entrer" }).click();
   await expect(page).toHaveURL(/\/espace-client$/);
   await expect(page.getByText("Réhabilitation bât. C")).toBeVisible();
   await expect(page.getByText("Salle de bains Durand")).toHaveCount(0);

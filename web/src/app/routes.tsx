@@ -62,6 +62,7 @@ import { PageRh } from "@/modules/rh/components/PageRh";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
+import { PagePlus } from "./PagePlus";
 
 export const routes: RouteObject[] = [
   { path: "/connexion", element: <PageConnexion /> },
@@ -173,6 +174,9 @@ export const routes: RouteObject[] = [
       { path: "rh/registre", element: <RouteModule module="rh" action="modifier"><PageRegistre /></RouteModule> },
       { path: "rh/salaries/nouveau", element: <RouteModule module="rh" action="creer"><PageFicheSalarie /></RouteModule> },
       { path: "rh/salaries/:id", element: <RouteModule module="rh" action="modifier"><PageFicheSalarie /></RouteModule> },
+      // « Plus » de la barre du bas, sur téléphone (renderPlus) : ses sous-onglets gardent chacun leur droit.
+      { path: "plus", element: <PagePlus /> },
+      { path: "plus/:onglet", element: <PagePlus /> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },

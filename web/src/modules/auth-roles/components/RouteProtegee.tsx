@@ -43,11 +43,14 @@ export function RouteModule({ module, action = "voir", children }: { module: Mod
   const souscrit = !fonctionnalite || fonctionnaliteOuverte(fonctionnalite, societeActive?.niveauAbonnement);
   if (!permis || !souscrit) {
     if (repli?.apresChangement && repli.chemin && repli.chemin !== pathname) return <Navigate to={repli.chemin} replace />;
+    // L'ancien écran n'avait pas d'accès direct à refuser (pas d'adresse par écran) : l'en-tête et l'état vide des siens.
     return (
-      <div className="p-6">
-        <h1 className="text-lg font-semibold">Accès refusé</h1>
-        <p className="text-sm text-muted-foreground">{permis ? "L'abonnement de la société n'inclut pas ce module." : "Votre rôle ne donne pas accès à cette page."}</p>
-      </div>
+      <>
+        <div className="page-head">
+          <h1>Accès refusé</h1>
+        </div>
+        <div className="empty">{permis ? "L'abonnement de la société n'inclut pas ce module." : "Votre rôle ne donne pas accès à cette page."}</div>
+      </>
     );
   }
   return <>{children}</>;

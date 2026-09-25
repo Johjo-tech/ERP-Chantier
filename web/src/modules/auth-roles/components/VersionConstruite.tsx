@@ -1,43 +1,48 @@
-import { useState } from "react";
+import { afficherToast } from "@/lib/toast";
 import { versionConstruite } from "@/lib/version";
 
-type Etat = "repos" | "copiee" | "echec";
+/** L'ancien écran l'annonçait quatre secondes : le temps de la noter. */
+const DUREE_ANNONCE_MS = 4000;
 
 /**
- * La version construite, copiable d'un clic (AUTH-12) : une version qu'on
- * doit recopier à la main arrive toujours tronquée dans un signalement.
+ * La version construite, copiable d'un clic (AUTH-12, `copierVersion` de
+ * l'ancien écran) : une version qu'on doit recopier à la main arrive toujours
+ * tronquée dans un signalement.
  */
 export function VersionConstruite() {
-  const [etat, setEtat] = useState<Etat>("repos");
   const version = versionConstruite();
 
   function copier() {
     // Presse-papiers refusé (contexte non sécurisé, permission) : la version
     // reste affichée, on le dit au lieu de prétendre l'avoir copiée.
     if (!navigator.clipboard) {
-      setEtat("echec");
+      afficherToast("Copie impossible : relevez la version à la main.");
       return;
     }
     navigator.clipboard.writeText(version).then(
-      () => setEtat("copiee"),
+      () => afficherToast(`Version copiée : ${version}`, "success", DUREE_ANNONCE_MS),
       (e: unknown) => {
         console.error("Copie de la version refusée", e);
-        setEtat("echec");
+        afficherToast("Copie impossible : relevez la version à la main.");
       }
     );
   }
 
   return (
-    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-      <span>
-        Version <span className="font-mono">{version}</span>
-      </span>
-      <button type="button" onClick={copier} className="rounded px-1 text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        Copier
-      </button>
-      <span aria-live="polite">
-        {etat === "copiee" ? "Copiée" : etat === "echec" ? "Copie impossible : relevez-la à la main" : ""}
-      </span>
+    <div
+      className="user-menu-version"
+      role="button"
+      tabIndex={0}
+      title="Cliquer pour copier — à donner en cas d'anomalie"
+      onClick={copier}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          copier();
+        }
+      }}
+    >
+      version {version}
     </div>
   );
 }
