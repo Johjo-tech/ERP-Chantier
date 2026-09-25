@@ -50,12 +50,35 @@ export function IlotDemo() {
 
     void relire();
 
-    /* L'écran charge sa session APRÈS le montage des îlots : au premier rendu,
-       `societeActive()` rend souvent `null`. On relit donc au changement de
-       société, ce qui couvre aussi la bascule manuelle. */
+    /* L'écran charge sa session APRÈS le montage des îlots, et RIEN ne publie
+       aujourd'hui `erp:societe-changee` — `app.js` ne connaît pas le pont. Le
+       premier rendu voit donc `societeActive()` à `null`, et sans ce sondage
+       l'îlot afficherait « non chargée » pour toujours. C'est ce qui s'est
+       produit à la première mise à l'essai.
+
+       Le sondage est BORNÉ : il s'arrête dès que la société arrive, et au bout
+       de 20 tentatives (10 s) de toute façon. Il disparaîtra le jour où
+       `app.js` publiera l'événement au bout de son `chargerSession()` — c'est
+       le câblage minimal que la règle d'architecture autorise. */
+    let restant = 20;
+    const sondage = setInterval(() => {
+      if (!vivant) return clearInterval(sondage);
+      /* Relire AVANT d'arrêter : une première version arrêtait le sondage dès
+         que la société arrivait, puis sortait sans relire — elle s'interrompait
+         exactement au moment où elle devait agir, et l'écran restait sur
+         « non chargée ». */
+      if (societeActive()) {
+        clearInterval(sondage);
+        void relire();
+        return;
+      }
+      if (--restant <= 0) clearInterval(sondage);
+    }, 500);
+
     const arreter = ecouter("erp:societe-changee", () => void relire());
     return () => {
       vivant = false;
+      clearInterval(sondage);
       arreter();
     };
   }, []);
