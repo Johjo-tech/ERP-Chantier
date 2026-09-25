@@ -5,11 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { estAvoir } from "@/modules/documents/domain/totaux";
 import { useDocumentsClient } from "../hooks/useEspaceClient";
 
 function Section<T>({ titre, requete, vide, rendu }: { titre: string; requete: { isPending: boolean; isError: boolean; error: unknown; data?: T[]; refetch: () => unknown }; vide: string; rendu: (d: T[]) => ReactNode }) {
+  useModeDiscret();
   return (
     <Card>
       <CardHeader><CardTitle>{titre}</CardTitle></CardHeader>
@@ -24,6 +25,7 @@ function Section<T>({ titre, requete, vide, rendu }: { titre: string; requete: {
 
 /** Ce qu'un client consulte : ses chantiers, ses devis envoyés, ses factures émises et ce qu'il en doit. */
 export function PageEspaceClient() {
+  useModeDiscret();
   const { chantiers, devis, factures, soldes } = useDocumentsClient();
   const soldeDe = new Map((soldes.data ?? []).map((s) => [s.facture_id, s]));
   return (

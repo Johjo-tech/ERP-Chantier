@@ -5,7 +5,7 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { TachePlanifiee } from "../api/planification";
 import { estFactureeEntierement } from "../domain/dpgf";
@@ -30,6 +30,7 @@ const nombreFr = (n: number | string) => String(n).replace(".", ",");
 
 /** Le tableau du DPGF chiffré, modifiable en place (CHA-06, CHA-07). */
 export function TableDpgf(p: Props) {
+  useModeDiscret();
   return (
     <Table>
       <THead>
@@ -53,6 +54,7 @@ export function TableDpgf(p: Props) {
 }
 
 function Titre({ l, brouillon, changer, onSupprimer }: Props & { l: LigneDpgfBase }) {
+  useModeDiscret();
   const b = brouillon(l);
   return (
     <Tr className="bg-muted/60">
@@ -68,6 +70,7 @@ function Titre({ l, brouillon, changer, onSupprimer }: Props & { l: LigneDpgfBas
 }
 
 function Ligne({ l, brouillon, changer, erreurs, selection, basculer, taches, metiers, devisSource, onPlanifier, onSupprimer }: Props & { l: LigneDpgfBase }) {
+  useModeDiscret();
   const b = brouillon(l);
   const complete = estFactureeEntierement(l);
   const siennes = taches.filter((t) => t.dpgf_ligne_id === l.id);

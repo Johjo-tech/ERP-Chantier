@@ -2,7 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
-import { definirModeDiscret, formatEurosEcran } from "@/lib/modeDiscret";
+import { definirModeDiscret, formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { montant } from "@/lib/money";
 import { rendreAvecSession } from "@/test/session-factice";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
@@ -55,7 +55,9 @@ describe("menu principal par rôle", () => {
   });
 });
 
+/** Un composant d'écran tel que le veut le contrat : il s'abonne au mode (relecture 4, B4). */
 function Montant() {
+  useModeDiscret();
   return <p>Total : {formatEurosEcran(montant("1234.5"))}</p>;
 }
 

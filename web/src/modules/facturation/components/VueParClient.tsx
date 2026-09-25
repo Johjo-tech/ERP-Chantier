@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { Vide } from "@/components/etats/Etats";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { dossiersClients, ETATS_REGLEMENT, type EtatFiltre, type Solde } from "../domain/solde";
 
@@ -13,6 +13,7 @@ import { dossiersClients, ETATS_REGLEMENT, type EtatFiltre, type Solde } from ".
  * « Par facture ». La recherche trouve aussi un numéro de facture.
  */
 export function VueParClient({ soldes }: { soldes: readonly Solde[] }) {
+  useModeDiscret();
   const [params, setParams] = useSearchParams();
   const etat = (params.get("etat") ?? "") as EtatFiltre;
   const [recherche, setRecherche] = useState("");

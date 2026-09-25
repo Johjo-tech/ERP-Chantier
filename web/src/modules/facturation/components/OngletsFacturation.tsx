@@ -5,7 +5,9 @@ import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 /**
  * Les sous-onglets de Facturation (FAC-01, app.js l. 5155) : Factures,
  * Avoirs, Validation, À facturer, Règlements. Chacun n'apparaît que si le
- * rôle voit ce qu'il montre (bons de commande, règlements).
+ * rôle voit ce qu'il montre (bons de commande, règlements). Validation et
+ * À facturer sont LES files du menu principal : une seule règle, un seul
+ * compteur (relecture 4, B3).
  */
 export function OngletsFacturation() {
   const voitBons = usePermission("bons_commande", "voir");
@@ -13,7 +15,7 @@ export function OngletsFacturation() {
   const onglets = [
     { chemin: "/factures", libelle: "Factures", fin: true },
     { chemin: "/factures/avoirs", libelle: "Avoirs", fin: true },
-    ...(voitBons ? [{ chemin: "/factures/validation", libelle: "Validation", fin: true }, { chemin: "/factures/a-facturer", libelle: "À facturer", fin: true }] : []),
+    ...(voitBons ? [{ chemin: "/facturation/validation", libelle: "Validation", fin: true }, { chemin: "/facturation/a-facturer", libelle: "À facturer", fin: true }] : []),
     ...(voitReglements ? [{ chemin: "/factures/reglements", libelle: "Règlements", fin: false }] : []),
   ];
   return (

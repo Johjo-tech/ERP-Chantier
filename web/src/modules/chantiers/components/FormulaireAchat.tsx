@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { arrondiCentimes, montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { CATEGORIE_SALARIE, montantSalarie, schemaSaisieAchat, type CategorieAchat } from "../domain/achats";
 import { useAjouterAchat, useSalaries } from "../hooks/useFiche";
@@ -20,6 +20,7 @@ const vide = (categorie: string) => ({ categorie, designation: "", montant: "", 
  * se saisit à la main.
  */
 export function FormulaireAchat({ chantierId, categories }: { chantierId: string; categories: readonly CategorieAchat[] }) {
+  useModeDiscret();
   const ajouter = useAjouterAchat(chantierId);
   const salaries = useSalaries();
   const { valeurs, erreurs, changer, valider, reinitialiser } = useFormulaire(vide(categories[0]?.code ?? ""));

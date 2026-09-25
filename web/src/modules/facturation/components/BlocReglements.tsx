@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Solde } from "../domain/solde";
 import { useReglementsFacture } from "../hooks/useFactures";
@@ -19,6 +19,7 @@ import { SaisieReglement } from "./SaisieReglement";
  * se retire ✕, et un avoir du même client peut la solder (FAC-22).
  */
 export function BlocReglements({ solde, soldes, modeParDefaut }: { solde: Solde; soldes: readonly Solde[]; modeParDefaut: string | null }) {
+  useModeDiscret();
   const { reglements, chargement } = useReglementsFacture(solde.facture_id);
   const peutCreer = usePermission("reglements", "creer");
   const [parAvoir, setParAvoir] = useState(false);

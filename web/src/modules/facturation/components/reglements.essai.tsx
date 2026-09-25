@@ -63,6 +63,8 @@ describe("dossier client (FAC-33, FAC-35, FAC-23)", () => {
     await userEvent.click(screen.getByLabelText("Cocher la facture FAC-2026-000002 pour un règlement groupé"));
     expect(within(screen.getByRole("region", { name: "Sélection" })).getByText("400,00 €")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Règlement" }));
+    // Un panneau de la page qui prend le focus à l'ouverture (relecture 4, M8).
+    expect(screen.getByRole("region", { name: "Règlement groupé" })).toHaveFocus();
     const montant = screen.getByLabelText("Montant reçu");
     await userEvent.clear(montant);
     await userEvent.type(montant, "250");

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { grouperPar } from "@/lib/utils";
 import { lettrageDeLaSelection } from "../domain/lettrage";
@@ -26,6 +26,7 @@ import { PanneauReglementGroupe } from "./PanneauReglementGroupe";
  * sélection, même ce que la recherche cache.
  */
 export function PageDossierClient() {
+  useModeDiscret();
   const [params] = useSearchParams();
   const client = params.get("client") ?? "";
   const soldes = useSoldes();

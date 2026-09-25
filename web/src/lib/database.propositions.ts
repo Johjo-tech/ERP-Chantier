@@ -148,6 +148,10 @@ type FonctionsProposees = {
     Args: { p_avoir: string; p_facture: string; p_montant: number; p_date: string };
     Returns: undefined;
   };
+  // Relecture 4 : 20260926130000, 20260926131000, 20260926132000.
+  supprimer_brouillon_facture: { Args: { p_facture: string }; Returns: undefined };
+  etablir_avoir: { Args: { p_facture: string; p_motif: string }; Returns: string };
+  annuler_imputation: { Args: { p_reglement: string }; Returns: undefined };
 };
 
 export type DatabaseAvecPropositions = Omit<Database, "public"> & {

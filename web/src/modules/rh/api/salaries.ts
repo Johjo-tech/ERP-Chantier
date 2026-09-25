@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import type { Salarie, SaisieSalarie } from "../domain/salarie";
@@ -68,13 +69,18 @@ function versSalarie(l: z.infer<typeof schemaLigne>): Salarie {
   };
 }
 
+/** Toute la liste, ou un refus : jamais un salarié « absent » parce que le serveur a coupé la liste (TRV-10, relecture 4, I1). */
 export async function listerSalaries(societeId: string, sensible: boolean): Promise<Salarie[]> {
   const client = supabase();
-  const { data, error } = sensible
-    ? await client.from("salaries").select(COLONNES).eq("societe_id", societeId).order("nom")
-    : await client.from("v_salaries_annuaire").select(COLONNES).eq("societe_id", societeId).order("nom");
-  if (error) throw error;
-  return analyser(z.array(schemaLigne), data, "salariés").map(versSalarie);
+  const lignes = await lireTout(
+    (debut, fin) =>
+      sensible
+        ? client.from("salaries").select(COLONNES, { count: "exact" }).eq("societe_id", societeId).order("nom").order("id").range(debut, fin)
+        : client.from("v_salaries_annuaire").select(COLONNES, { count: "exact" }).eq("societe_id", societeId).order("nom").order("id").range(debut, fin),
+    schemaLigne,
+    "liste des salariés"
+  );
+  return lignes.map(versSalarie);
 }
 
 /**

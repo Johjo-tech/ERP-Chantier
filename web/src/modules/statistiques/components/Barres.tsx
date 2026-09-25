@@ -1,5 +1,5 @@
 import { type Montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { COULEUR_COURANTE } from "./GraphiqueCA";
 
 /**
@@ -9,6 +9,7 @@ import { COULEUR_COURANTE } from "./GraphiqueCA";
  * une couleur). Le tableau qui suit donne les mêmes chiffres.
  */
 export function BarresRepartition({ titre, lignes }: { titre: string; lignes: { libelle: string; ht: Montant; part: number }[] }) {
+  useModeDiscret();
   if (!lignes.length) return <p className="text-sm text-muted-foreground">Aucun chiffre d'affaires facturé sur la période.</p>;
   return (
     <figure className="flex flex-col gap-2">
@@ -30,6 +31,7 @@ export function BarresRepartition({ titre, lignes }: { titre: string; lignes: { 
 
 /** Dans les temps / en retard, en deux segments (`renderStatsRetardHTML`) ; les nombres sont écrits. */
 export function BarreRetard({ libelle, dansLesTemps, retard, part }: { libelle: string; dansLesTemps: number; retard: number; part: number }) {
+  useModeDiscret();
   return (
     <li className="grid grid-cols-[minmax(8rem,14rem)_1fr_auto] items-center gap-3 text-sm">
       <span className="truncate">{libelle}</span>

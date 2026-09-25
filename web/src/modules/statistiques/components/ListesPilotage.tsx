@@ -3,7 +3,7 @@ import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Card } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
 import { ZERO } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { partDuMax } from "../domain/indicateurs";
 import { ACTIVITE_VISIBLE, LIBELLES_ACTIVITE, lienActivite, lienClient, tempsRelatif, TOP_CLIENTS } from "../domain/pilotage";
 import { useActivite, useParClient } from "../hooks/useStatistiques";
@@ -13,6 +13,7 @@ const TOUT = { du: null, au: null };
 
 /** Les dernières pièces créées et les derniers paiements reçus (`buildActivityFeed`). */
 export function ActiviteRecente() {
+  useModeDiscret();
   const activite = useActivite(ACTIVITE_VISIBLE);
   return (
     <section aria-labelledby="titre-activite" className="flex flex-col gap-2">
@@ -45,6 +46,7 @@ export function ActiviteRecente() {
 
 /** Les cinq premiers clients par chiffre d'affaires HT, tout l'historique (`computeTopClients`). */
 export function TopClients() {
+  useModeDiscret();
   const clients = useParClient(TOUT, TOP_CLIENTS);
   const lignes = (clients.data ?? []).filter((c) => c.ht.gt(ZERO));
   const max = lignes[0]?.ht ?? ZERO;

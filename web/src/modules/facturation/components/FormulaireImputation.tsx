@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { avoirsImputables, montantImputable } from "../domain/lettrage";
 import type { Solde } from "../domain/solde";
@@ -17,6 +17,7 @@ import { useImputerAvoir } from "../hooks/useFactures";
  * base refait les contrôles et écrit les deux règlements liés (imputer_avoir).
  */
 export function FormulaireImputation({ facture, soldes, fermer }: { facture: Solde; soldes: readonly Solde[]; fermer: () => void }) {
+  useModeDiscret();
   const avoirs = avoirsImputables(facture, soldes);
   const imputer = useImputerAvoir();
   const [avoirId, setAvoirId] = useState(avoirs[0]?.facture_id ?? "");

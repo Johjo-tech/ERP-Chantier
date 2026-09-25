@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { circuitDuBon, etapeWorkflow, etatPieceDuBon } from "@/modules/commandes/domain/workflow";
 import type { CartePlanning } from "../domain/cartes";
 import { lienTelephone } from "../domain/contacts";
@@ -10,6 +10,7 @@ import { adresseDuLieu, LIBELLES_LOGEMENT, numeroDeLaCarte } from "./format";
 
 /** La pièce attendue en une ligne, lisible sans survol — un technicien sur un téléphone ne survole pas. */
 function LignePiece({ carte }: { carte: CartePlanning }) {
+  useModeDiscret();
   const { donnees } = usePlanningContexte();
   const piece = etatPieceDuBon(donnees.taches.filter((t) => t.bon_commande_id === carte.bcId));
   if (!piece.pieceACommander && !piece.description) return null;
@@ -19,6 +20,7 @@ function LignePiece({ carte }: { carte: CartePlanning }) {
 }
 
 export function EtapeCarte({ carte }: { carte: CartePlanning }) {
+  useModeDiscret();
   const { donnees } = usePlanningContexte();
   if (carte.isSav) return null;
   const circuit = circuitDuBon(donnees.taches.filter((t) => t.bon_commande_id === carte.bcId), carte.bon.statut_workflow);
@@ -31,6 +33,7 @@ export function EtapeCarte({ carte }: { carte: CartePlanning }) {
  * sous-traitant, le SIEN seulement, jamais celui du bon.
  */
 export function MontantCarte({ carte }: { carte: CartePlanning }) {
+  useModeDiscret();
   const { voitPrix, role, donnees } = usePlanningContexte();
   if (role === "sous_traitant") {
     const sien = donnees.montantsSousTraitant[carte.bcId];
@@ -41,6 +44,7 @@ export function MontantCarte({ carte }: { carte: CartePlanning }) {
 }
 
 export function InfosCarte({ carte, compacte = false }: { carte: CartePlanning; compacte?: boolean }) {
+  useModeDiscret();
   const { donnees } = usePlanningContexte();
   const b = carte.bon;
   const telephone = donnees.telephones[carte.bcId];

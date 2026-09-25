@@ -8,7 +8,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
@@ -22,6 +22,7 @@ import { useAvancements, useChantiers, useCompteursChantiers, usePeutVoirDpgf } 
  * (D-CHA-01) : mêmes informations, lisibles au clavier et triées.
  */
 export function PageChantiers() {
+  useModeDiscret();
   const chantiers = useChantiers();
   const avancements = useAvancements();
   const compteurs = useCompteursChantiers();

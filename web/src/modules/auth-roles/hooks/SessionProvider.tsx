@@ -10,6 +10,8 @@ import { SessionContexte, type EtatSession, type ValeurSession } from "./Session
 
 const CLE_SOCIETE = "erp.web.societe";
 const CLE_SIMULATION = "erp.web.simulation";
+/** Le compte qui a choisi la simulation : elle n'appartient qu'à lui (relecture 4, M5). */
+const CLE_SIMULATION_COMPTE = "erp.web.simulation.compte";
 const CLE_COMPTE = ["auth", "compte"] as const;
 
 /** La session se relit au plus toutes les cinq minutes : rôles et matrice changent rarement. */
@@ -59,7 +61,22 @@ function useExpirationDeSession(qc: QueryClient, surExpiration: (m: MotifDeconne
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [motif, setMotif] = useState<MotifDeconnexion | undefined>(undefined);
-  useExpirationDeSession(qc, setMotif);
+  const [simulation, setSimulation] = useState(() => ({ role: lirePreference(CLE_SIMULATION), compte: lirePreference(CLE_SIMULATION_COMPTE) }));
+  const oublierSimulation = useCallback(() => {
+    ecrirePreference(CLE_SIMULATION, null);
+    ecrirePreference(CLE_SIMULATION_COMPTE, null);
+    setSimulation({ role: null, compte: null });
+  }, []);
+  // Une session expirée emporte aussi la simulation : même revenu sur ce poste,
+  // on ne retrouve jamais par surprise un rôle qu'on n'a pas choisi.
+  const surExpiration = useCallback(
+    (m: MotifDeconnexion) => {
+      setMotif(m);
+      oublierSimulation();
+    },
+    [oublierSimulation]
+  );
+  useExpirationDeSession(qc, surExpiration);
 
   // Le délai de démarrage couvre aussi la lecture du jeton : un rafraîchissement
   // bloqué laisserait sinon l'écran sur « Ouverture de la session… » à jamais.
@@ -95,7 +112,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
 
   const [societeMemo, setSocieteMemo] = useState(() => lirePreference(CLE_SOCIETE));
-  const [simulationMemo, setSimulationMemo] = useState(() => lirePreference(CLE_SIMULATION));
+  // « Voir en tant que » n'appartient qu'au compte qui l'a choisi : seule la
+  // déconnexion voulue l'effaçait, et l'administrateur suivant sur le même poste
+  // démarrait dans le rôle simulé (relecture 4, M5).
+  const simulationMemo = uid !== null && simulation.compte === uid ? simulation.role : null;
+  useEffect(() => {
+    if (compte.isPending || simulation.role === null || simulationMemo !== null) return;
+    ecrirePreference(CLE_SIMULATION, null);
+    ecrirePreference(CLE_SIMULATION_COMPTE, null);
+  }, [compte.isPending, simulation.role, simulationMemo]);
 
   const societes = session.data?.societes ?? [];
   const societeActive = societeRetenue(societes, societeMemo);
@@ -107,19 +132,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSocieteMemo(id);
   }, []);
 
-  const simulerRole = useCallback((role: RoleMembre | null) => {
-    ecrirePreference(CLE_SIMULATION, role);
-    setSimulationMemo(role);
-  }, []);
+  const simulerRole = useCallback(
+    (role: RoleMembre | null) => {
+      const proprietaire = role ? uid : null;
+      ecrirePreference(CLE_SIMULATION, role);
+      ecrirePreference(CLE_SIMULATION_COMPTE, proprietaire);
+      setSimulation({ role, compte: proprietaire });
+    },
+    [uid]
+  );
 
   const deconnecter = useCallback(async () => {
     await seDeconnecter();
-    ecrirePreference(CLE_SIMULATION, null);
-    setSimulationMemo(null);
+    oublierSimulation();
     // Déconnexion voulue : aucun motif à afficher sur la page de connexion.
     setMotif(undefined);
     qc.clear();
-  }, [qc]);
+  }, [qc, oublierSimulation]);
 
   const etat: EtatSession = useMemo(() => {
     if (compte.isPending) return { statut: "chargement" };

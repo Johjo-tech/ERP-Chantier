@@ -5,7 +5,7 @@ import { useState } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { Layout } from "@/app/Layout";
-import { sessionFactice } from "@/test/session-factice";
+import { rendreAvecSession, sessionFactice } from "@/test/session-factice";
 import type { RoleMembre } from "../domain/permissions";
 import { SessionContexte } from "../hooks/SessionContexte";
 import { RouteModule } from "./RouteProtegee";
@@ -89,5 +89,19 @@ describe("version construite (AUTH-12)", () => {
   it("sans marqueur (serveur de développement) : « inconnue », sans casser le menu", () => {
     render(<VersionConstruite />);
     expect(screen.getByText("inconnue")).toBeInTheDocument();
+  });
+});
+
+describe("URL directe d'un module hors abonnement (relecture 4, M4)", () => {
+  it("un module que le menu masque au niveau souscrit ne s'ouvre pas par son adresse", () => {
+    // Niveau 1 (Découverte) : les bons de commande demandent le niveau 3.
+    rendreAvecSession(<RouteModule module="bons_commande"><p>Liste des bons</p></RouteModule>, { role: "admin", niveau: 1 });
+    expect(screen.queryByText("Liste des bons")).not.toBeInTheDocument();
+    expect(screen.getByText("L'abonnement de la société n'inclut pas ce module.")).toBeInTheDocument();
+  });
+
+  it("au niveau qui l'ouvre (ou sans niveau connu), il s'ouvre", () => {
+    rendreAvecSession(<RouteModule module="bons_commande"><p>Liste des bons</p></RouteModule>, { role: "admin", niveau: 3 });
+    expect(screen.getByText("Liste des bons")).toBeInTheDocument();
   });
 });

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateFr } from "@/lib/dates";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { serieComparee, totalDesMois } from "../domain/indicateurs";
 import { bornesComparaison, bornesDuMois, moisDeLaPeriode, PERIODES_GRAPHIQUE, refusPlage, type Bornes, type PeriodeGraphique } from "../domain/periodes";
 import { useCaParMois } from "../hooks/useStatistiques";
@@ -16,6 +16,7 @@ type Choix = PeriodeGraphique | "plage";
 
 /** « Chiffre d'affaires (HT) » : 6 / 12 mois ou depuis janvier face à N-1, ou le total d'une plage libre. */
 export function BlocChiffreAffaires({ jour }: { jour: string }) {
+  useModeDiscret();
   const [choix, setChoix] = useState<Choix>("6m");
   return (
     <section aria-labelledby="titre-ca" className="flex flex-col gap-2">
@@ -35,6 +36,7 @@ export function BlocChiffreAffaires({ jour }: { jour: string }) {
 }
 
 function Comparaison({ periode, jour }: { periode: PeriodeGraphique; jour: string }) {
+  useModeDiscret();
   const mois = moisDeLaPeriode(periode, jour);
   const ca = useCaParMois(bornesComparaison(mois));
   if (ca.isPending) return <Chargement />;
@@ -51,6 +53,7 @@ function Comparaison({ periode, jour }: { periode: PeriodeGraphique; jour: strin
 
 /** `computeCustomRevenue` : le total HT entre deux dates, et le nombre de pièces. */
 function PlageLibre({ jour }: { jour: string }) {
+  useModeDiscret();
   const [saisie, setSaisie] = useState<Bornes>(() => ({ du: bornesDuMois(jour).du, au: jour }));
   const [retenue, setRetenue] = useState<Bornes | null>(null);
   const [refus, setRefus] = useState<string | null>(null);

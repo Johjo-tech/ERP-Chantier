@@ -28,6 +28,16 @@ export async function imputerAvoir(r: { avoirId: string; factureId: string; mont
   if (error) throw error;
 }
 
+/**
+ * Retirer une imputation d'avoir : ses DEUX moitiés partent ensemble, ou
+ * aucune (proposition 20260926132000, relecture 4, I8). En retirer une seule
+ * rendait la facture due en laissant le crédit consommé, ou l'inverse.
+ */
+export async function annulerImputation(reglementId: string): Promise<void> {
+  const { error } = await supabasePropositions().rpc("annuler_imputation", { p_reglement: reglementId });
+  if (error) throw error;
+}
+
 /** Corriger un règlement (✎) : montant, date, mode, référence ; la facture ne change pas. */
 export async function modifierReglement(id: string, r: { date: string; montant: number; mode: string; reference: string | null }): Promise<void> {
   const { data, error } = await supabase().from("reglements").update(r).eq("id", id).select("id");

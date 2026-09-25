@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { TachePlanifiee } from "../api/planification";
@@ -26,6 +26,7 @@ interface Props {
  * ENREGISTRÉ : une saisie non enregistrée ne part pas dans le bon.
  */
 export function DialoguePlanifier({ chantier, ligne, taches, fermer, planifiee }: Props) {
+  useModeDiscret();
   const societe = useSocieteActive();
   const titre = useId();
   const [saisie, setSaisie] = useState("");

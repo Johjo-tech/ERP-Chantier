@@ -3,7 +3,7 @@ import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { Card } from "@/components/ui/card";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { somme, ZERO } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { pourcentage } from "../domain/indicateurs";
 import type { Bornes } from "../domain/periodes";
 import { libelleMois } from "../domain/periodes";
@@ -16,6 +16,7 @@ const num = "text-right tabular-nums";
 
 /** Par conducteur (`computeStatsParConducteur`), trié par chiffre d'affaires. */
 export function StatsConducteurs({ bornes, jour }: { bornes: Bornes; jour: string }) {
+  useModeDiscret();
   const q = useParConducteur(bornes, jour);
   if (q.isPending) return <Chargement />;
   if (q.isError) return <Erreur erreur={q.error} reessayer={() => void q.refetch()} />;
@@ -65,6 +66,7 @@ export function StatsConducteurs({ bornes, jour }: { bornes: Bornes; jour: strin
 
 /** Par métier : un bon compte dans chacun de ses métiers ; son chiffre d'affaires, seulement s'il n'en a qu'un. */
 export function StatsMetiers({ bornes, jour }: { bornes: Bornes; jour: string }) {
+  useModeDiscret();
   const q = useParMetier(bornes, jour);
   if (q.isPending) return <Chargement />;
   if (q.isError) return <Erreur erreur={q.error} reessayer={() => void q.refetch()} />;
@@ -95,6 +97,7 @@ export function StatsMetiers({ bornes, jour }: { bornes: Bornes; jour: string })
 
 /** Par client : chiffre d'affaires, restant dû, devis — le dossier de règlements à un clic. */
 export function StatsClients({ bornes }: { bornes: Bornes }) {
+  useModeDiscret();
   const q = useParClient(bornes, null);
   if (q.isPending) return <Chargement />;
   if (q.isError) return <Erreur erreur={q.error} reessayer={() => void q.refetch()} />;
@@ -121,6 +124,7 @@ export function StatsClients({ bornes }: { bornes: Bornes }) {
 
 /** Chiffre d'affaires par équipe et par mois (`renderStatsBinomesHTML`). */
 export function StatsEquipes({ bornes }: { bornes: Bornes }) {
+  useModeDiscret();
   const q = useCaParEquipe(bornes);
   if (q.isPending) return <Chargement />;
   if (q.isError) return <Erreur erreur={q.error} reessayer={() => void q.refetch()} />;

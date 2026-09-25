@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatEuros, formatTaux, type Montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import type { LigneEdition } from "../domain/lignes";
 import { remiseDepuisCible, soldeAPayer, totauxDocument } from "../domain/totaux";
 
@@ -17,6 +17,7 @@ interface Props {
 }
 
 function Ligne({ libelle, valeur, fort = false, format }: { libelle: string; valeur: Montant; fort?: boolean; format: (m: Montant) => string }) {
+  useModeDiscret();
   return (
     <div className={`flex justify-between gap-6 ${fort ? "text-base font-semibold" : "text-sm"}`}>
       <dt>{libelle}</dt>
@@ -27,6 +28,7 @@ function Ligne({ libelle, valeur, fort = false, format }: { libelle: string; val
 
 /** Totaux du document ; le détail par taux ne s'affiche que s'il y a plus d'un taux. */
 export function BlocTotaux({ lignes, remise, onRemise, deductions, signe = 1, imprime = false }: Props) {
+  useModeDiscret();
   const format = imprime ? formatEuros : formatEurosEcran;
   const [mode, setMode] = useState<"pct" | "ht" | "ttc">("pct");
   const [cible, setCible] = useState("");

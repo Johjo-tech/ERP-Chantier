@@ -5,6 +5,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { clientNotifications } from "../../src/lib/supabase";
+import { filtreBonsASurveiller } from "../../src/modules/notifications/api/notifications";
 import { ALPHA, BETA, COMPTES, connecte, type Client } from "./cible";
 
 const MARQUE = "essai-rls-notif";
@@ -78,5 +79,23 @@ describe("[proposition] notifications traitées par société", () => {
     expect(refus.data ?? []).toEqual([]);
     const ok = await nt(admin).delete().eq("cle", c).select("id");
     expect(ok.data).toHaveLength(1);
+  });
+});
+
+describe("la cloche ne lit que les bons qui peuvent sonner (relecture 4, I4)", () => {
+  it("le filtre est compris par la base et écarte les bons clos dont la fin est passée", async () => {
+    const jour = "2026-09-25";
+    const { data, error } = await admin
+      .from("bons_commande")
+      .select("id, date_fin_travaux, rappel_date, statut_workflow")
+      .eq("societe_id", ALPHA)
+      .or(filtreBonsASurveiller(jour));
+    expect(error).toBeNull();
+    const peutSonner = (b: { date_fin_travaux: string | null; rappel_date: string | null; statut_workflow: string | null }) =>
+      (!!b.date_fin_travaux && b.date_fin_travaux < jour && (b.statut_workflow === null || b.statut_workflow === "en_cours")) || (!!b.rappel_date && b.rappel_date <= jour);
+    expect((data ?? []).every(peutSonner)).toBe(true);
+    // Ceux qu'il écarte ne sonneraient pas : la règle de l'écran et celle de la base disent la même chose.
+    const tous = await admin.from("bons_commande").select("id, date_fin_travaux, rappel_date, statut_workflow").eq("societe_id", ALPHA);
+    expect((tous.data ?? []).filter(peutSonner).map((b) => b.id).sort()).toEqual((data ?? []).map((b) => b.id).sort());
   });
 });

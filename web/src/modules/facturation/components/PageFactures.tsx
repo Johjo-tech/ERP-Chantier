@@ -9,7 +9,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { correspond } from "@/lib/recherche";
 import { CLASSE_EN_EVIDENCE, useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,7 @@ const FILTRES = [
  * (FAC-92, D-FAC-01) : la base calcule, l'écran montre.
  */
 export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
+  useModeDiscret();
   const factures = useFactures();
   const soldes = useSoldes();
   const voitReglements = usePermission("reglements", "voir");

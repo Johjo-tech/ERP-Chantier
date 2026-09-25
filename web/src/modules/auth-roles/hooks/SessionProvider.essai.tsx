@@ -21,8 +21,13 @@ vi.mock("../api/session", () => ({
 }));
 
 function Qui() {
-  const { etat: e, roleEffectif } = useSession();
-  return <p>{e.statut === "connecte" ? `${e.session.utilisateur.nom} ${roleEffectif}` : e.statut}</p>;
+  const { etat: e, roleEffectif, simulerRole } = useSession();
+  return (
+    <>
+      <p>{e.statut === "connecte" ? `${e.session.utilisateur.nom} ${roleEffectif}` : e.statut}</p>
+      <button type="button" onClick={() => simulerRole("technicien")}>Voir en tant que technicien</button>
+    </>
+  );
 }
 
 describe("SessionProvider", () => {
@@ -44,5 +49,51 @@ describe("SessionProvider", () => {
     await act(async () => etat.rappel());
     expect(await screen.findByText("tech technicien")).toBeInTheDocument();
     await waitFor(() => expect(qc.getQueryData(["chantiers", "alpha"])).toBeUndefined());
+  });
+
+  it("la simulation « voir en tant que » ne survit pas à l'expiration de la session (relecture 4, M5)", async () => {
+    etat.uid = "admin";
+    window.localStorage.clear();
+    const monter = () =>
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <SessionProvider>
+            <Qui />
+          </SessionProvider>
+        </QueryClientProvider>
+      );
+    const premier = monter();
+    expect(await screen.findByText("admin admin")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "Voir en tant que technicien" }).click());
+    expect(await screen.findByText("admin technicien")).toBeInTheDocument();
+    // La session expire : plus de compte.
+    etat.uid = null;
+    await act(async () => etat.rappel());
+    expect(await screen.findByText("anonyme")).toBeInTheDocument();
+    premier.unmount();
+    // L'administrateur suivant se connecte sur le même poste : il n'hérite pas du rôle simulé.
+    etat.uid = "admin";
+    monter();
+    expect(await screen.findByText("admin admin")).toBeInTheDocument();
+  });
+
+  it("la simulation survit à un rechargement du même compte", async () => {
+    etat.uid = "admin";
+    window.localStorage.clear();
+    const monter = () =>
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <SessionProvider>
+            <Qui />
+          </SessionProvider>
+        </QueryClientProvider>
+      );
+    const premier = monter();
+    expect(await screen.findByText("admin admin")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "Voir en tant que technicien" }).click());
+    expect(await screen.findByText("admin technicien")).toBeInTheDocument();
+    premier.unmount();
+    monter();
+    expect(await screen.findByText("admin technicien")).toBeInTheDocument();
   });
 });

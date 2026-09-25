@@ -95,24 +95,42 @@ export async function compteursChantiers(
   societeId: string,
   lire: { devis: boolean; factures: boolean }
 ): Promise<Map<string, { comptesRendus: number; devis: number; factures: number }>> {
-  const vide = Promise.resolve({ data: [], error: null });
+  // Lus en entier ou refusés (TRV-10) : un plafond du serveur faussait les compteurs sans le dire.
+  // Les comptes-rendus n'ont pas de `societe_id` : la société se lit par leur chantier,
+  // plutôt que de laisser la seule RLS trier entre les sociétés du compte (relecture 4, I1).
   const [cr, devis, factures] = await Promise.all([
-    supabase().from("chantier_comptes_rendus").select("chantier_id"),
-    lire.devis ? supabase().from("devis").select("chantier_id").eq("societe_id", societeId).not("chantier_id", "is", null) : vide,
-    lire.factures ? supabase().from("factures").select("chantier_id").eq("societe_id", societeId).not("chantier_id", "is", null) : vide,
+    lireTout(
+      (debut, fin) =>
+        supabase().from("chantier_comptes_rendus").select("id, chantier_id, chantiers!inner(societe_id)", { count: "exact" }).eq("chantiers.societe_id", societeId).order("id").range(debut, fin),
+      schemaRattache.element,
+      "liste des comptes-rendus"
+    ),
+    lire.devis
+      ? lireTout(
+          (debut, fin) => supabase().from("devis").select("id, chantier_id", { count: "exact" }).eq("societe_id", societeId).not("chantier_id", "is", null).order("id").range(debut, fin),
+          schemaRattache.element,
+          "liste des devis des chantiers"
+        )
+      : [],
+    lire.factures
+      ? lireTout(
+          (debut, fin) => supabase().from("factures").select("id, chantier_id", { count: "exact" }).eq("societe_id", societeId).not("chantier_id", "is", null).order("id").range(debut, fin),
+          schemaRattache.element,
+          "liste des factures des chantiers"
+        )
+      : [],
   ]);
-  for (const r of [cr, devis, factures]) if (r.error) throw r.error;
   const compte = new Map<string, { comptesRendus: number; devis: number; factures: number }>();
-  const ajouter = (lignes: unknown, cle: "comptesRendus" | "devis" | "factures") => {
-    for (const { chantier_id } of analyser(schemaRattache, lignes, "compteurs des chantiers")) {
+  const ajouter = (lignes: readonly { chantier_id: string | null }[], cle: "comptesRendus" | "devis" | "factures") => {
+    for (const { chantier_id } of lignes) {
       if (!chantier_id) continue;
       const c = compte.get(chantier_id) ?? { comptesRendus: 0, devis: 0, factures: 0 };
       c[cle]++;
       compte.set(chantier_id, c);
     }
   };
-  ajouter(cr.data, "comptesRendus");
-  ajouter(devis.data, "devis");
-  ajouter(factures.data, "factures");
+  ajouter(cr, "comptesRendus");
+  ajouter(devis, "devis");
+  ajouter(factures, "factures");
   return compte;
 }

@@ -1407,7 +1407,7 @@ le SIRET d'un autre client pouvait survivre à un changement de client).
 Devis, bons et rapports n'ont que `client_id` / `client_nom` : rien de plus
 à recopier.
 
-## D-CLI-04 — Mode discret : préférence de session, l'écran se remonte
+## D-CLI-04 — Mode discret : préférence de session, l'écran se remontait (remplacé par D-R4-01 : il ne remonte plus)
 Comme l'ancien `state.ghostMode` : non mémorisé (un rechargement le quitte).
 `formatEurosEcran` lit l'état au rendu ; basculer remonte le contenu de la
 page (clé de l'`Outlet`) pour que chaque montant se reformate — une saisie en
@@ -1573,3 +1573,97 @@ n'existe que sur les bases locales et est remplacée. `scripts/essai-base-neuve.
 rejoue migrations, rattrapage et propositions (deux passes) sur une base
 temporaire du conteneur local ; `rejouer-migrations.sh` et
 `rattraper-colonnes.mjs` acceptent `BASE_LOCALE` pour cela.
+
+## D-R4-01 — Mode discret : les montants se redessinent, l'écran ne remonte plus (remplace la fin de D-CLI-04)
+Basculer le mode démontait la page (clé de l'`Outlet`) : une saisie en cours
+était perdue, et les `onSuccess` d'un écran démonté ne partaient plus
+(relecture 4, B4). La clé ne porte plus que la société. Tout composant qui
+appelle `formatEurosEcran` appelle aussi `useModeDiscret()` — son abonnement,
+même sans lire la valeur — et se redessine seul ; ses enfants suivent (aucun
+`memo` dans l'application). Un garde-fou (`tests/garde-fous.essai.ts`) compte,
+fichier par fichier, composants et abonnements. Le reste de D-CLI-04 tient.
+
+## D-R4-02 — Une seule file Validation, une seule À facturer
+La fusion avait laissé deux paires d'écrans, de règles différentes (relecture 4,
+B3). Restent `PageValidation` / `PageAFacturer` (`commandes/domain/files.ts`,
+qui écarte les circuits clos), sous les onglets de Facturation ;
+`/factures/validation` et `/factures/a-facturer` redirigent. Les dossiers
+repliables par client de `PageFilesBons` deviennent un tableau trié par client,
+avec recherche : aucun bon ne se cache derrière un dossier fermé.
+
+## D-R4-03 — Supprimer un brouillon de facture : un appel à la base (proposition 20260926130000)
+Situation comprise : l'avancement est rendu au DPGF et la facture supprimée
+dans la même transaction, ou rien (B2). La fonction est SECURITY DEFINER pour
+que la secrétaire, qui a « factures / supprimer » sans « chantiers / modifier »,
+puisse supprimer son brouillon : rétablir le DPGF n'est pas un droit sur le
+chantier mais la conséquence de la suppression (I2). Le bouton reste donc
+visible pour elle — la matrice l'y autorise. La vente de véhicule garde
+`supprimerBrouillon` (brouillon sans situation, créé dans le même geste).
+`facturerSituation` distingue désormais « ligne du DPGF invisible » (droit
+manquant) de « facturée entre-temps ».
+
+## D-R4-04 — L'avoir s'établit par la base (proposition 20260926131000)
+Un seul appel crée, copie et émet l'avoir ; la liste est invalidée même sur
+échec. La copie reprend TOUTE l'identité de la facture rectifiée (émetteur,
+acheteur, adresses de facturation et de livraison) au lieu de relire la fiche
+client du jour : l'avoir corrige CE document. Un second avoir total sur la
+même facture est refusé (un reste de brouillon d'avoir se supprime d'abord).
+Les avoirs partiels n'existent pas à l'écran (parité) : la borne est donc
+« aucun avoir non nul déjà établi ».
+
+## D-R4-05 — Une imputation s'annule entière (proposition 20260926132000)
+« Annuler l'imputation » remplace « Retirer » sur les écritures de mode
+`avoir` / `imputation` : la base supprime les deux moitiés, ou aucune. Elles
+ne se corrigent toujours pas (✎ masqué).
+
+## D-R4-06 — `bc_generer_facture` verrouille le bon (proposition 20260926133000)
+`FOR UPDATE` et refus si une facture porte déjà le bon. La course HTTP ne se
+reproduit pas de façon fiable en test ; le cas déterministe (facture déjà là)
+échoue contre l'ancienne fonction et passe contre la nouvelle.
+
+## D-R4-07 — Gardes d'écriture côté client (en attendant mieux)
+- `emettreFacture` n'agit que sur un brouillon (`numero is null`, statut
+  « brouillon ») ; zéro ligne touchée est relu et expliqué (émise entre-temps,
+  supprimée, refus) — I3.
+- `modifierBrouillon` exige `verrouillee = false` et une ligne touchée avant
+  d'écrire les lignes ; le cadenas posé par un autre onglet est dit comme tel — I5.
+- `bonDepuisDevis` : un échec des lignes lève `EnregistrementPartiel(bonId)` et
+  l'écran ouvre le bon créé, au lieu de le perdre derrière « déjà lié » — I7.
+  La course entre deux onglets reste (migration à écrire, voir la liste).
+
+## D-R4-08 — Listes lues en entier (TRV-10 étendu)
+Règlements de la société, totaux des devis, compteurs des chantiers, salariés,
+bons de la cloche passent par `lireTout` (compte exact, ordre départagé par
+`id`) : au-delà du plafond du serveur, refus plutôt que liste coupée (I1).
+Les comptes-rendus, sans `societe_id`, se filtrent par leur chantier
+(`chantiers!inner`). La cloche ne demande plus que les bons qui peuvent sonner
+(travaux en cours en retard, ou rappel dû), la règle même de l'écran (I4).
+
+## D-R4-09 — `RouteModule` vérifie aussi l'abonnement
+Une URL tapée ouvrait un module que le menu masque au niveau souscrit
+(relecture 4, M4). `RouteModule` exige désormais le niveau que le menu exige,
+d'après la même correspondance module → fonctionnalité (clients, chantiers,
+devis, articles, factures, bons de commande). Un module qu'aucun niveau ne
+porte (planning, RH, parc, statistiques) reste ouvert selon la matrice seule.
+Reste un masquage d'affichage : le jour où un niveau devra être opposable, il
+se vérifiera en base.
+
+## D-R4-10 — « Voir en tant que » appartient au compte qui l'a choisi
+La simulation était gardée dans le navigateur jusqu'à une déconnexion voulue :
+après une expiration, l'administrateur suivant sur le même poste démarrait
+dans le rôle simulé (relecture 4, M5). Le compte propriétaire est gardé à côté
+du rôle ; une simulation d'un autre compte est ignorée et effacée, une session
+expirée l'efface. Un rechargement du même compte la garde (comme avant).
+
+## D-R4-11 — Ce qui reste de la relecture 4
+- **M6** (PDF d'un brouillon bâti sur la fiche enregistrée, pas sur l'écran) :
+  non traité — il faut l'état « modifié non enregistré » du formulaire de
+  facture pour prévenir ou enregistrer avant ; à reprendre avec lui.
+- **M7** (second dépôt sur la plateforme après expiration du délai) : non
+  traité — la garde vit dans la fonction Edge (`pdp_identifiant` relu avant
+  dépôt), hors de ce périmètre.
+- **Course « bon depuis devis »** (I7) : l'écran rattrape l'échec des lignes,
+  deux onglets peuvent encore créer deux bons (migration à écrire, listée).
+- **Course de `bc_generer_facture`** : corrigée par `FOR UPDATE`, mais la
+  preuve automatisée ne porte que sur le cas déterministe (D-R4-06).
+

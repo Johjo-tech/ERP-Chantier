@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { peutEcrireTerrain } from "../domain/circuit";
 import { badgeOrigine, lirePrixTravail, QUANTITE_DEFAUT, UNITE_DEFAUT, type Travail } from "../domain/prefacture";
@@ -14,6 +14,7 @@ const LIBELLES_STATUT: Record<Travail["statut"], string> = { a_chiffrer: "à chi
 
 /** « Demander le prix » : un seul champ, virgule admise, négatif refusé (BC-46, BC-72). */
 function ChiffrerTravail({ travail, onResultat }: { travail: Travail; onResultat: (m: string, e?: unknown) => void }) {
+  useModeDiscret();
   const [saisie, setSaisie] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
   const chiffrer = useChiffrerTravail();
@@ -48,6 +49,7 @@ interface Props {
  * retirés, chiffrés par qui voit les prix. L'écriture suit `peut_ecrire()`.
  */
 export function TravauxSupplementaires({ bonId, travaux, circuitOuvert, onResultat }: Props) {
+  useModeDiscret();
   const { roleEffectif } = useSession();
   const prix = useVoitLesPrix();
   const ecrit = peutEcrireTerrain(roleEffectif) && circuitOuvert;

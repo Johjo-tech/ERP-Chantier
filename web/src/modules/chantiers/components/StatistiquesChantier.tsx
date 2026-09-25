@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { statistiquesChantier } from "../domain/statistiques";
 import { progressionTodo } from "../domain/todo";
@@ -9,6 +9,7 @@ import { useDroitsChantier } from "../hooks/useDroitsChantier";
 import { useAchats, useComptesRendus, useDevisAvecLignes, useFacturesDuChantier, useTodos } from "../hooks/useFiche";
 
 function Case({ valeur, libelle }: { valeur: ReactNode; libelle: string }) {
+  useModeDiscret();
   return (
     <div className="flex flex-col">
       <dd className="text-xl font-semibold tabular-nums">{valeur}</dd>
@@ -22,6 +23,7 @@ function Case({ valeur, libelle }: { valeur: ReactNode; libelle: string }) {
  * app.js l. 13388-13415) : chaque case n'apparaît qu'à qui peut lire sa source.
  */
 export function StatistiquesChantier({ chantierId }: { chantierId: string }) {
+  useModeDiscret();
   const droits = useDroitsChantier();
   const voitDevis = usePermission("devis", "voir");
   const voitFactures = usePermission("factures", "voir");

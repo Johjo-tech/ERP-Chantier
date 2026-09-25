@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Reglement } from "../api/factures";
 import { libelleDelai } from "../domain/etat";
@@ -29,6 +29,7 @@ interface Props {
  * coche pour être lettré, jamais ne s'encaisse ni n'est « en retard ».
  */
 export function CartePieceDossier({ piece, soldes, reglements, coche, basculer }: Props) {
+  useModeDiscret();
   const peutCreer = usePermission("reglements", "creer");
   const [saisie, setSaisie] = useState<"reglement" | "avoir" | null>(null);
   const avoir = piece.sens < 0;

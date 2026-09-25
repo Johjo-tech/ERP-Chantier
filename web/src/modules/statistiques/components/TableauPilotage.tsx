@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Card } from "@/components/ui/card";
 import { todayISO } from "@/lib/dates";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useBons } from "@/modules/commandes/hooks/useBons";
 import { pourcentage, tauxEncaisse, type Indicateurs } from "../domain/indicateurs";
@@ -21,6 +21,7 @@ import { dateDuJourEnLettres, salutation } from "./format";
  * attend quelqu'un. Les montants viennent tous de la base.
  */
 export function TableauPilotage({ nom }: { nom: string }) {
+  useModeDiscret();
   const [requete, setRequete] = useState("");
   const jour = todayISO();
   return (
@@ -44,6 +45,7 @@ export function TableauPilotage({ nom }: { nom: string }) {
 
 /** Trois raccourcis, chacun sous le droit qui permet de créer (`quickActionsHTML`). */
 function ActionsRapides() {
+  useModeDiscret();
   const actions = [
     { module: "rapports", vers: DESTINATIONS.nouveauRapport, titre: "Nouveau rapport", detail: "Rapport, contrôles, photos" },
     { module: "devis", vers: DESTINATIONS.nouveauDevis, titre: "Nouveau devis", detail: "Créer un devis rapidement" },
@@ -64,6 +66,7 @@ function ActionsRapides() {
 }
 
 function Synthese({ jour }: { jour: string }) {
+  useModeDiscret();
   const indicateurs = useIndicateurs(jour);
   const bons = useBons();
   if (indicateurs.isPending || bons.isPending) return <Chargement />;
@@ -82,6 +85,7 @@ function Synthese({ jour }: { jour: string }) {
 }
 
 function Tuiles({ i, t }: { i: Indicateurs; t: ATraiterPilotage }) {
+  useModeDiscret();
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Tuile libelle="Encaissé ce mois (TTC)" valeur={formatEurosEcran(i.encaisse_mois)} sous="règlements reçus depuis le 1er" ton="succes" vers={DESTINATIONS.caEncaisse} titre="Voir les règlements" />
@@ -93,6 +97,7 @@ function Tuiles({ i, t }: { i: Indicateurs; t: ATraiterPilotage }) {
 }
 
 function ATraiter({ i, t }: { i: Indicateurs; t: ATraiterPilotage }) {
+  useModeDiscret();
   const total = t.enAttenteConducteur + t.aValiderDirecteur + t.aFacturer + t.rappels + i.nb_echues;
   return (
     <section aria-labelledby="titre-a-traiter" className="flex flex-col gap-2">
@@ -116,6 +121,7 @@ function ATraiter({ i, t }: { i: Indicateurs; t: ATraiterPilotage }) {
 
 /** Le résumé du mois : trois taux et leur jauge (`computeMonthSummary`). */
 function ResumeDuMois({ i }: { i: Indicateurs }) {
+  useModeDiscret();
   const conversion = pourcentage(i.devis_acceptes_du_mois, i.devis_du_mois);
   const encaissement = tauxEncaisse(i.impayes, i.ttc_emis);
   return (
@@ -130,6 +136,7 @@ function ResumeDuMois({ i }: { i: Indicateurs }) {
 }
 
 function Jauge({ libelle, detail, valeur, vers }: { libelle: string; detail: string; valeur: number; vers: string }) {
+  useModeDiscret();
   return (
     <Link to={vers} className="flex flex-col gap-1 rounded-md p-1 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <span className="flex justify-between"><span>{libelle}</span><b className="tabular-nums">{valeur} %</b></span>

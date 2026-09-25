@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { categorieDe, categoriesAchat, totauxParCategorie, trierAchats } from "../domain/achats";
 import { useAchats, useCategoriesAchat, useSupprimerAchat } from "../hooks/useFiche";
 import { FormulaireAchat } from "./FormulaireAchat";
@@ -18,6 +18,7 @@ import { FormulaireAchat } from "./FormulaireAchat";
  * chantier (lecture et écriture « chantiers / modifier »).
  */
 export function BlocAchats({ chantierId }: { chantierId: string }) {
+  useModeDiscret();
   const achats = useAchats(chantierId);
   const referentiel = useCategoriesAchat();
   const supprimer = useSupprimerAchat(chantierId);

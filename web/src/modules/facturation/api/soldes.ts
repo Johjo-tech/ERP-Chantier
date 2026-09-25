@@ -1,10 +1,6 @@
-import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { supabasePropositions } from "@/lib/supabase";
-import { analyser } from "@/lib/validation";
 import { COLONNES_SOLDE, schemaSolde, type Solde } from "../domain/solde";
-
-/** PostgREST plafonne une réponse (max_rows) : au-delà, on lit par pages. */
-const PAGE = 1000;
 
 /**
  * Les soldes de toutes les pièces de la société, calculés PAR LA BASE
@@ -14,18 +10,17 @@ const PAGE = 1000;
  * qu'au conducteur, à qui l'écran des règlements reste fermé.
  */
 export async function soldesDesFactures(societeId: string): Promise<Solde[]> {
-  const tout: Solde[] = [];
-  for (let debut = 0; ; debut += PAGE) {
-    const { data, error } = await supabasePropositions()
-      .from("v_facture_solde")
-      .select(COLONNES_SOLDE)
-      .eq("societe_id", societeId)
-      .order("date", { ascending: false })
-      .order("facture_id")
-      .range(debut, debut + PAGE - 1);
-    if (error) throw error;
-    const page = analyser(z.array(schemaSolde), data, "soldes des factures");
-    tout.push(...page);
-    if (page.length < PAGE) return tout;
-  }
+  // Compte exact et `lireTout` : une page courte ne prouve pas la fin (relecture 4, M1).
+  return lireTout(
+    (debut, fin) =>
+      supabasePropositions()
+        .from("v_facture_solde")
+        .select(COLONNES_SOLDE, { count: "exact" })
+        .eq("societe_id", societeId)
+        .order("date", { ascending: false })
+        .order("facture_id")
+        .range(debut, fin),
+    schemaSolde,
+    "liste des soldes des factures"
+  );
 }

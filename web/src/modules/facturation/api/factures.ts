@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Database } from "@/lib/database.types";
 import { lireTout } from "@/lib/lecture";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabasePropositions } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { identiteDuClient } from "@/modules/clients/api/clients";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
@@ -46,10 +46,24 @@ export const schemaReglement = z.object({
 });
 export type Reglement = z.infer<typeof schemaReglement>;
 
+/**
+ * Tous les règlements de la société, ou un refus (TRV-10) : le reste dû et le
+ * « déjà réglé » se calculent sur cette liste — coupée au plafond du serveur,
+ * elle laisserait encaisser au-delà du dû (relecture 4, I1).
+ */
 export async function reglementsDeLaSociete(societeId: string): Promise<Reglement[]> {
-  const { data, error } = await supabase().from("reglements").select("id, facture_id, date, montant, mode, reference").eq("societe_id", societeId);
-  if (error) throw error;
-  return analyser(z.array(schemaReglement), data, "règlements");
+  return lireTout(
+    (debut, fin) =>
+      supabase()
+        .from("reglements")
+        .select("id, facture_id, date, montant, mode, reference", { count: "exact" })
+        .eq("societe_id", societeId)
+        .order("date")
+        .order("id")
+        .range(debut, fin),
+    schemaReglement,
+    "liste des règlements"
+  );
 }
 
 export async function lireFacture(id: string): Promise<Facture> {
@@ -113,12 +127,38 @@ export async function creerFacture(
   return data.id;
 }
 
+/**
+ * Pourquoi une écriture conditionnée n'a touché aucune ligne : la facture a
+ * changé d'état dans un autre onglet (supprimée, émise, cadenassée), ou la RLS
+ * a refusé. Le message dit lequel — « utilisé ailleurs » ou un refus générique
+ * envoyaient chercher ailleurs.
+ */
+async function motifSansEffet(id: string, geste: string): Promise<{ code: string; message: string }> {
+  const { data, error } = await supabase().from("factures").select("numero, statut, verrouillee").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return { code: "P0001", message: `Ce brouillon n'existe plus (supprimé entre-temps) : ${geste} impossible.` };
+  if (data.numero) return { code: "P0001", message: `Cette facture a été émise entre-temps sous le numéro ${data.numero} : rechargez la page.` };
+  if (data.verrouillee) {
+    return { code: "P0001", message: "Cette facture a été téléchargée ou envoyée entre-temps (cadenas) : le client a reçu cette version. Levez le cadenas pour la modifier." };
+  }
+  return { code: "42501", message: `${geste[0]?.toUpperCase() ?? ""}${geste.slice(1)} refusé : vous n'avez pas le droit de modifier cette facture.` };
+}
+
 export async function modifierBrouillon(id: string, entete: EnteteAEnregistrer, lignes: readonly LigneAEnregistrer[]): Promise<void> {
-  // Le déclencheur factures_entete_figee refuserait de toute façon une facture numérotée.
   // Changer de client change l'identité de l'acheteur : relue sur sa fiche (CLI-26).
   const acheteur = (await identiteDuClient(entete.client_id)) ?? {};
-  const { error } = await supabase().from("factures").update({ ...entete, ...acheteur, conducteur: null }).eq("id", id).is("numero", null);
+  // Ni émise ni cadenassée : un autre onglet a pu envoyer CETTE version au client
+  // depuis l'ouverture de l'écran (relecture 4, I5). Sans ligne touchée, les
+  // lignes ne partent pas.
+  const { data, error } = await supabase()
+    .from("factures")
+    .update({ ...entete, ...acheteur, conducteur: null })
+    .eq("id", id)
+    .is("numero", null)
+    .eq("verrouillee", false)
+    .select("id");
   if (error) throw error;
+  if (!data?.length) throw await motifSansEffet(id, "l'enregistrement");
   await synchroniserLignes("facture_lignes", "facture_id", id, lignes);
 }
 
@@ -127,10 +167,37 @@ export async function modifierBrouillon(id: string, entete: EnteteAEnregistrer, 
  * dans la série légale, et refusé sans ligne chiffrée ; on le lit dans la réponse.
  */
 export async function emettreFacture(id: string): Promise<string> {
-  const { data, error } = await supabase().from("factures").update({ statut: "impayée" }).eq("id", id).select("numero").single();
+  // Seul un brouillon s'émet : sans cette garde, « Émettre » depuis un onglet
+  // périmé remettait « impayée » une facture émise puis soldée ailleurs — et
+  // une facture reprise payée redevenait due en entier (relecture 4, I3).
+  const { data, error } = await supabase().from("factures").update({ statut: "impayée" }).eq("id", id).is("numero", null).eq("statut", "brouillon").select("numero");
   if (error) throw error;
-  if (!data.numero) throw { code: "P0001", message: "La base n'a pas attribué de numéro : la facture reste un brouillon." };
-  return data.numero;
+  const emise = data?.[0];
+  if (!emise) throw await motifSansEffet(id, "l'émission");
+  if (!emise.numero) throw { code: "P0001", message: "La base n'a pas attribué de numéro : la facture reste un brouillon." };
+  return emise.numero;
+}
+
+/**
+ * Supprimer un brouillon, situation comprise : la base rend l'avancement au
+ * DPGF et supprime la facture dans la MÊME transaction (proposition
+ * 20260926130000). En deux appels, un refus de la suppression laissait le DPGF
+ * rendu et la facture debout — l'avancement se refacturait (relecture 4, B2).
+ */
+export async function supprimerBrouillonFacture(id: string): Promise<void> {
+  const { error } = await supabasePropositions().rpc("supprimer_brouillon_facture", { p_facture: id });
+  if (error) throw error;
+}
+
+/**
+ * Un avoir total sur une facture émise : créé, copié et émis par la base en
+ * un seul geste (proposition 20260926131000) — un échec ne laisse plus
+ * d'avoir brouillon orphelin, et un second avoir total est refusé.
+ */
+export async function etablirAvoirEnBase(factureId: string, motif: string): Promise<string> {
+  const { data, error } = await supabasePropositions().rpc("etablir_avoir", { p_facture: factureId, p_motif: motif });
+  if (error) throw error;
+  return analyser(z.string(), data, "avoir");
 }
 
 export async function supprimerBrouillon(id: string): Promise<void> {

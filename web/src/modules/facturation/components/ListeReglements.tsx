@@ -5,20 +5,22 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { Reglement } from "../api/factures";
-import { libelleModeReglement } from "../domain/reglements";
+import { estMoitieImputation, libelleModeReglement } from "../domain/reglements";
 import { useSupprimerReglement } from "../hooks/useFactures";
 import { SaisieReglement } from "./SaisieReglement";
 
 /**
  * L'historique des règlements d'une pièce, avec ✎ (corriger) et ✕ (retirer),
  * comme le dossier client de l'ancienne app (FAC-33). Les ponts d'une
- * imputation (modes « avoir » / « imputation ») se retirent, jamais ne se
- * corrigent : leurs deux moitiés doivent rester égales.
+ * imputation (modes « avoir » / « imputation ») ne se corrigent pas ; « Annuler
+ * l'imputation » retire leurs DEUX moitiés ensemble, par la base : elles
+ * doivent rester égales (relecture 4, I8).
  */
 export function ListeReglements({ factureId, totalDu, reglements, modeParDefaut }: { factureId: string; totalDu: number; reglements: readonly Reglement[]; modeParDefaut: string | null }) {
+  useModeDiscret();
   const peutModifier = usePermission("reglements", "modifier");
   const peutSupprimer = usePermission("reglements", "supprimer");
   const retirer = useSupprimerReglement();
@@ -40,7 +42,12 @@ export function ListeReglements({ factureId, totalDu, reglements, modeParDefaut 
                 {peutModifier && r.mode !== "avoir" && r.mode !== "imputation" && (
                   <Button size="sm" variant="ghost" aria-label={`Modifier le règlement du ${formatDateFr(r.date)}`} onClick={() => setEnCours(enCours === r.id ? null : r.id)}>✎</Button>
                 )}
-                {peutSupprimer && <BoutonConfirme libelle="Retirer" question="Retirer ce règlement ?" enCours={retirer.isPending} onConfirmer={() => retirer.mutate(r.id)} />}
+                {peutSupprimer &&
+                  (estMoitieImputation(r.mode) ? (
+                    <BoutonConfirme libelle="Annuler l'imputation" question="Annuler l'imputation ? Ses deux écritures partent ensemble : la facture redevient due et l'avoir retrouve ce crédit." enCours={retirer.isPending} onConfirmer={() => retirer.mutate(r)} />
+                  ) : (
+                    <BoutonConfirme libelle="Retirer" question="Retirer ce règlement ?" enCours={retirer.isPending} onConfirmer={() => retirer.mutate(r)} />
+                  ))}
               </span>
             </div>
             {enCours === r.id && <SaisieReglement factureId={factureId} totalDu={totalDu} reglements={reglements} modeParDefaut={modeParDefaut} enCours={r} fini={() => setEnCours(null)} />}

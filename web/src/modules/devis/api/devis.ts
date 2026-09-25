@@ -34,11 +34,17 @@ export async function listerDevis(societeId: string, filtre: { chantierId?: stri
   );
 }
 
-/** Totaux calculés PAR LA BASE (vue v_devis_totaux) : l'affichage de la liste ne recalcule rien. */
+/**
+ * Totaux calculés PAR LA BASE (vue v_devis_totaux) : l'affichage de la liste
+ * ne recalcule rien. Lus en entier ou refusés (TRV-10) : au-delà du plafond du
+ * serveur, des devis s'affichaient sans total (relecture 4, I1).
+ */
 export async function totauxDesDevis(societeId: string) {
-  const { data, error } = await supabase().from("v_devis_totaux").select("devis_id, ht, ttc").eq("societe_id", societeId);
-  if (error) throw error;
-  return analyser(schemaTotaux, data, "totaux des devis");
+  return lireTout(
+    (debut, fin) => supabase().from("v_devis_totaux").select("devis_id, ht, ttc", { count: "exact" }).eq("societe_id", societeId).order("devis_id").range(debut, fin),
+    schemaTotaux.element,
+    "liste des totaux de devis"
+  );
 }
 
 export async function lireDevis(id: string): Promise<Devis> {
@@ -73,8 +79,11 @@ export async function enregistrerDevis(
   const ligne = { ...entete, conducteur: entete.conducteur_id ? null : conducteurHistorique };
   let devisId = id;
   if (devisId) {
-    const { error } = await client.from("devis").update(ligne).eq("id", devisId);
+    // Zéro ligne touchée n'est pas une erreur pour PostgREST : sans ce compte, un
+    // refus de la RLS passait, puis les lignes partaient seules (relecture 4, M2).
+    const { data, error } = await client.from("devis").update(ligne).eq("id", devisId).select("id");
     if (error) throw error;
+    if (!data?.length) throw { code: "P0001", message: "Enregistrement refusé : ce devis n'existe plus, ou vous n'avez pas le droit de le modifier." };
   } else {
     const numero = await client.rpc("prochain_numero", { p_societe: societeId, p_type: "devis" });
     if (numero.error) throw numero.error;

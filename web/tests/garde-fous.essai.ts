@@ -30,6 +30,26 @@ describe("garde-fous", () => {
     expect(fautifs.map(rel)).toEqual([]);
   });
 
+  it("tout composant qui affiche un montant d'écran s'abonne au mode discret (la bascule ne remonte plus l'écran — relecture 4, B4)", () => {
+    const fautifs = code
+      .filter((f) => !f.includes(".essai.") && !f.endsWith("modeDiscret.ts"))
+      .flatMap((f) => {
+        const texte = readFileSync(f, "utf8");
+        if (!texte.includes("formatEurosEcran(")) return [];
+        const composants = (texte.match(/^(export )?function [A-Z]\w*/gm) ?? []).length;
+        const abonnements = (texte.match(/^ {2}useModeDiscret\(\);$/gm) ?? []).length;
+        return composants === abonnements ? [] : [`${rel(f)} : ${composants} composant(s), ${abonnements} abonnement(s)`];
+      });
+    expect(fautifs).toEqual([]);
+  });
+
+  it("une seule façon de lire par pages : `lireTout` (relecture 4, M1)", () => {
+    const fautifs = code
+      .filter((f) => !f.includes(".essai.") && !f.endsWith("lib/lecture.ts"))
+      .filter((f) => /\.length < (PAGE|taille)/.test(readFileSync(f, "utf8")));
+    expect(fautifs.map(rel)).toEqual([]);
+  });
+
   it("aucun composant n'appelle Supabase directement", () => {
     const composants = code.filter((f) => /\/(components|app)\//.test(f) && f.endsWith(".tsx"));
     const fautifs = composants.filter((f) => /from "@\/lib\/supabase"|@supabase\/supabase-js/.test(readFileSync(f, "utf8")));

@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { schemaNombreFr } from "@/lib/nombres";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
 import { imputer, refusImputation, RESTE_SOLDE_EUR } from "../domain/reglements";
@@ -20,6 +20,9 @@ import { useReglementGroupe } from "../hooks/useFactures";
  * (`enregistrer_reglement_groupe`) : l'aperçu montre, la base décide.
  */
 export function PanneauReglementGroupe({ factures, fermer }: { factures: readonly Solde[]; fermer: (message?: string) => void }) {
+  const cadre = useRef<HTMLElement>(null);
+  useEffect(() => cadre.current?.focus(), []);
+  useModeDiscret();
   const du = totalDu(factures);
   const [saisie, setSaisie] = useState({ montant: String(du).replace(".", ","), date: todayISO(), mode: "virement", reference: "" });
   const groupe = useReglementGroupe();
@@ -42,7 +45,19 @@ export function PanneauReglementGroupe({ factures, fermer }: { factures: readonl
   }
 
   return (
-    <section role="dialog" aria-label="Règlement groupé" className="flex flex-col gap-3 rounded-md border border-primary p-4">
+    // Un panneau DANS la page, pas une fenêtre modale : « dialog » sans modalité ni focus
+    // trompait les lecteurs d'écran (relecture 4, M8). Il prend le focus à l'ouverture
+    // et Échap le referme, comme un dialogue.
+    <section
+      ref={cadre}
+      tabIndex={-1}
+      role="region"
+      aria-label="Règlement groupé"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") fermer();
+      }}
+      className="flex flex-col gap-3 rounded-md border border-primary p-4 outline-none"
+    >
       <h2 className="font-semibold">Règlement groupé — {factures.length} facture{factures.length > 1 ? "s" : ""}</h2>
       <p className="text-sm text-muted-foreground">Total dû : {formatEurosEcran(du)}</p>
       <div className="grid gap-2 sm:grid-cols-4">

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { etatDepuisSolde, ETATS_REGLEMENT, facturesParEtat, totalDu, TRIS_REGLEMENT, type CriteresParFacture, type EtatFiltre, type Solde, type TriFactures } from "../domain/solde";
 import { BadgeEtat } from "./BadgeEtat";
 import { DU_A_RECLAMER_EUR } from "../domain/reglements";
@@ -18,6 +18,7 @@ import { DU_A_RECLAMER_EUR } from "../domain/reglements";
  * vivent dans l'adresse : « En retard » se partage d'un lien.
  */
 export function VueParFacture({ soldes }: { soldes: readonly Solde[] }) {
+  useModeDiscret();
   const [params, setParams] = useSearchParams();
   const c: CriteresParFacture = {
     etat: (params.get("etat") ?? "") as EtatFiltre,

@@ -26,6 +26,9 @@ export function PageBonCommande({ ChampReference }: { ChampReference?: ChampRefe
   const bon = useBon(id);
   const reglages = useReglages();
   // Après un enregistrement, la fiche RELUE remonte le formulaire : les lignes insérées prennent leur uuid (relecture 3, M12).
+  // La relecture est attendue ICI, dans le parent qui ne se démonte pas, et non dans la mutation : remonter
+  // le formulaire avant son retour le reconstruirait sur l'état d'AVANT, qu'un second « Enregistrer »
+  // réécrirait par-dessus (relecture 4, B1).
   const [generation, setGeneration] = useState<{ n: number; message: string | null }>({ n: 0, message: null });
   if ((id && bon.isPending) || reglages.isPending) return <Chargement />;
   if (id && bon.isError) return <Erreur erreur={bon.error} reessayer={() => void bon.refetch()} />;
@@ -41,7 +44,10 @@ export function PageBonCommande({ ChampReference }: { ChampReference?: ChampRefe
         reglages={reglages.data ?? REGLAGES_DEFAUT}
         ChampReference={ChampReference}
         messageInitial={message}
-        onEnregistre={(m) => setGeneration((g) => ({ n: g.n + 1, message: m }))}
+        onEnregistre={async (m) => {
+          await bon.refetch();
+          setGeneration((g) => ({ n: g.n + 1, message: m }));
+        }}
       />
       {bon.data && <PanneauCircuit bon={bon.data} />}
     </div>

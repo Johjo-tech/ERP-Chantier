@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useFacturesDuChantier } from "../hooks/useFiche";
 
@@ -21,6 +21,7 @@ function variante(statut: string | null): BadgeVariant {
  * statut, et l'aperçu imprimable (PDF). Rien pour qui ne voit pas les factures.
  */
 export function BlocFactures({ chantierId }: { chantierId: string }) {
+  useModeDiscret();
   const autorise = usePermission("factures", "voir");
   const factures = useFacturesDuChantier(chantierId);
   if (!autorise) return null;

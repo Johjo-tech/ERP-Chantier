@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { messageErreur } from "@/lib/erreurs";
 import { montant, somme } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { useChantier, useDpgf } from "@/modules/chantiers/hooks/useChantiers";
 import { montantLigneDpgf } from "@/modules/chantiers/domain/dpgf";
 import { REGLAGES_DEFAUT } from "@/modules/societes/domain/reglages";
@@ -20,6 +20,7 @@ const PALIERS = [25, 50, 75, 100];
 
 /** Situation de travaux : un % cumulé par ligne du DPGF, facturé comme un brouillon. */
 export function PageSituation() {
+  useModeDiscret();
   const { id } = useParams();
   const chantier = useChantier(id);
   const dpgf = useDpgf(id ?? "");

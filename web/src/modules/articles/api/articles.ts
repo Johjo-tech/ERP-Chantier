@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { supabase, type Client } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { motifRecherche, nombreDePages, PAR_PAGE, schemaArticle, type Article, type CriteresArticles, type SaisieArticle } from "../domain/article";
@@ -15,8 +16,6 @@ const schemaListe = z.array(schemaArticle);
 
 /** Taille d'un lot d'import (ART-22) : au-delà, la requête devient trop lourde. */
 export const LOT_IMPORT = 200;
-/** Plafond de lignes par réponse de PostgREST (`max_rows`) : les familles se lisent par pages de cette taille. */
-const PAGE_POSTGREST = 1000;
 /** Au-delà de vingt propositions, il faut affiner la saisie, pas dérouler. */
 export const LIMITE_SUGGESTIONS = 20;
 
@@ -82,22 +81,14 @@ export async function chercherArticles(societeId: string, c: CriteresArticles, c
 
 /** Les familles présentes, pour alimenter le filtre sans les deviner. */
 export async function listerFamilles(societeId: string, client: Client = supabase()): Promise<string[]> {
-  const familles = new Set<string>();
-  for (let debut = 0; ; debut += PAGE_POSTGREST) {
-    const { data, error } = await client
-      .from("articles")
-      .select("famille")
-      .eq("societe_id", societeId)
-      .not("famille", "is", null)
-      .order("famille")
-      .range(debut, debut + PAGE_POSTGREST - 1);
-    if (error) throw error;
-    const lues = analyser(z.array(z.object({ famille: z.string() })), data, "familles d'articles");
-    lues.forEach((l) => familles.add(l.famille));
-    // L'ancien code lisait une seule page : au-delà de mille articles, des familles manquaient au filtre.
-    if (lues.length < PAGE_POSTGREST) break;
-  }
-  return [...familles].sort((a, b) => a.localeCompare(b, "fr"));
+  // L'ancien code lisait une seule page : au-delà de mille articles, des familles manquaient au filtre.
+  // Lecture entière, compte exact et ordre départagé par l'id (relecture 4, M1).
+  const lues = await lireTout(
+    (debut, fin) => client.from("articles").select("id, famille", { count: "exact" }).eq("societe_id", societeId).not("famille", "is", null).order("famille").order("id").range(debut, fin),
+    z.object({ famille: z.string() }),
+    "liste des familles d'articles"
+  );
+  return [...new Set(lues.map((l) => l.famille))].sort((a, b) => a.localeCompare(b, "fr"));
 }
 
 export async function lireArticle(id: string, client: Client = supabase()): Promise<Article> {

@@ -8,13 +8,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { formatDateFr } from "@/lib/dates";
 import { montant } from "@/lib/money";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useChantiers } from "@/modules/chantiers/hooks/useChantiers";
 import { MODES_REGLEMENT } from "@/modules/clients/domain/delais";
 import type { Reglement } from "../api/factures";
 import { criteresActifs, criteresDepuisRequete, criteresVersRequete, estRapproche, filtrerReglements, totalReglements, type CriteresReglements } from "../domain/filtresReglements";
-import { libelleModeReglement } from "../domain/reglements";
+import { estMoitieImputation, libelleModeReglement } from "../domain/reglements";
 import type { Solde } from "../domain/solde";
 import { useSupprimerReglement } from "../hooks/useFactures";
 import { SaisieReglement } from "./SaisieReglement";
@@ -26,6 +26,7 @@ import { SaisieReglement } from "./SaisieReglement";
  * le total est celui de la liste affichée.
  */
 export function VueTousReglements({ soldes, reglements }: { soldes: readonly Solde[]; reglements: readonly Reglement[] }) {
+  useModeDiscret();
   const location = useLocation();
   const navigate = useNavigate();
   const chantiers = useChantiers();
@@ -102,7 +103,7 @@ export function VueTousReglements({ soldes, reglements }: { soldes: readonly Sol
                 <div className="mt-2 flex flex-wrap gap-2 text-sm">
                   {f && <Link className="text-primary hover:underline" to={`/factures/reglements/dossier?client=${encodeURIComponent(f.client_nom)}`}>Ouvrir le dossier</Link>}
                   {peutModifier && f && f.sens > 0 && r.mode !== "avoir" && <Button size="sm" variant="ghost" onClick={() => setEnCours(enCours === r.id ? null : r.id)}>✎ Modifier</Button>}
-                  {peutSupprimer && <BoutonConfirme libelle="Supprimer" question="Supprimer ce règlement ?" enCours={retirer.isPending} onConfirmer={() => retirer.mutate(r.id)} />}
+                  {peutSupprimer && <BoutonConfirme libelle="Supprimer" question={estMoitieImputation(r.mode) ? "Annuler cette imputation d'avoir ? Ses deux écritures (facture et avoir) partent ensemble." : "Supprimer ce règlement ?"} enCours={retirer.isPending} onConfirmer={() => retirer.mutate(r)} />}
                 </div>
                 {enCours === r.id && f && (
                   <SaisieReglement

@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatEurosEcran } from "@/lib/modeDiscret";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { deplacer, dupliquer, ligneVide, modifier, retirer, type ErreurLigne, type LigneEdition } from "../domain/lignes";
 import type { ChampReferenceLigne } from "./reference";
 import { sousTotauxChapitres } from "../domain/totaux";
@@ -25,6 +25,7 @@ interface Props {
 
 /** L'éditeur de lignes commun aux devis, factures et bons : lignes, chapitres, commentaires. */
 export function EditeurLignes({ lignes, onChange, tvaDefaut, unites: imposees, taux, erreurs = [], lectureSeule = false, ChampReference, ChampMetier }: Props) {
+  useModeDiscret();
   const referentiel = useUnitesLignes();
   const unites = imposees ?? referentiel;
   const sousTotaux = sousTotauxChapitres(lignes);
