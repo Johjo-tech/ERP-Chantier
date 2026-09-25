@@ -839,15 +839,15 @@ partagent avec les modules ci-dessus (tâches, prix masqués, numérotation) son
 
 ## Décompte
 
-Relevé le 25/09/2026, après la vague 2 (RH, véhicules et matériel,
-statistiques, facture électronique et import/export, transversal), d'après le
-code de `web/src` et les tests. Parité = ([x] + 0,5 × [~]) / (total − [-]).
+Relevé le 25/09/2026, après la vague 3 (droits, démarrage et session ;
+clients, annuaire, notifications, mode discret et transversal), d'après le code
+de `web/src` et les tests. Parité = ([x] + 0,5 × [~]) / (total − [-]).
 
 | Section | Préfixe | [x] | [~] | [-] | [ ] | Total | Parité |
 |---|---|---|---|---|---|---|---|
-| 1. auth-roles | AUTH | 36 | 13 | 3 | 2 | 54 | 83 % |
-| 2. societes | SOC | 20 | 0 | 2 | 1 | 23 | 95 % |
-| 3. clients | CLI | 18 | 3 | 0 | 2 | 23 | 85 % |
+| 1. auth-roles | AUTH | 51 | 0 | 3 | 0 | 54 | 100 % |
+| 2. societes | SOC | 21 | 0 | 2 | 0 | 23 | 100 % |
+| 3. clients | CLI | 23 | 0 | 0 | 0 | 23 | 100 % |
 | 4. chantiers | CHA | 33 | 0 | 0 | 0 | 33 | 100 % |
 | 5. devis | DEV | 37 | 0 | 1 | 0 | 38 | 100 % |
 | 6. articles | ART | 12 | 0 | 1 | 0 | 13 | 100 % |
@@ -862,5 +862,5 @@ code de `web/src` et les tests. Parité = ([x] + 0,5 × [~]) / (total − [-]).
 | 15. reglages | PAR | 8 | 0 | 1 | 0 | 9 | 100 % |
 | 16. facturation électronique | EFA | 6 | 0 | 4 | 0 | 10 | 100 % |
 | 17. import / export | IMP | 17 | 0 | 1 | 0 | 18 | 100 % |
-| 18. Transversal | TRV | 7 | 4 | 0 | 4 | 15 | 60 % |
-| **Total** | | **399** | **20** | **29** | **9** | **457** | **96 %** |
+| 18. Transversal | TRV | 15 | 0 | 0 | 0 | 15 | 100 % |
+| **Total** | | **428** | **0** | **29** | **0** | **457** | **100 %** |

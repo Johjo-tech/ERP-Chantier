@@ -23,10 +23,10 @@ test("devis → facture brouillon → émission : le numéro vient de la base, l
   await expect(page.getByText(/est émise : son contenu est définitif/)).toBeVisible();
   await expect(page.getByLabel("Désignation, ligne 1")).toHaveAttribute("readonly");
 
-  await page.getByLabel("Montant").fill("200");
+  await page.getByLabel("Montant", { exact: true }).fill("200");
   await page.getByRole("button", { name: "Enregistrer le règlement" }).click();
   await expect(page.getByText("déjà réglé 200,00 € · reste 394,00 €")).toBeVisible();
-  await page.getByLabel("Montant").fill("500");
+  await page.getByLabel("Montant", { exact: true }).fill("500");
   await page.getByRole("button", { name: "Enregistrer le règlement" }).click();
   await expect(page.getByText("Le montant dépasse le reste à payer (394,00 €).")).toBeVisible();
 
