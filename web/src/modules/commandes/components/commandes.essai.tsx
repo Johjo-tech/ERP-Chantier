@@ -149,6 +149,36 @@ describe("fiche d'un bon", () => {
     await waitFor(() => expect(api.enregistrerBcRecu).toHaveBeenCalledWith("b1", "CMD-42"));
     expect(await screen.findByText(/n'est plus en attente/)).toBeInTheDocument();
   });
+
+  it("après « BC reçu », Enregistrer garde le numéro reçu (relecture 3, B1)", async () => {
+    api.lireBon.mockResolvedValue(bon({ numero_bc: "En attente de BC", en_attente_bc: true }));
+    api.enregistrerBcRecu.mockResolvedValue(undefined);
+    api.enregistrerBon.mockResolvedValue("b1");
+    ouvrir("secretaire", "/commandes/b1");
+    await userEvent.type(await screen.findByLabelText("Numéro du bon reçu"), "CMD-42");
+    await userEvent.click(screen.getByRole("button", { name: "BC reçu" }));
+    await screen.findByText(/n'est plus en attente/);
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.enregistrerBon).toHaveBeenCalled());
+    const entete = api.enregistrerBon.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(entete).toMatchObject({ numero_bc: "CMD-42", en_attente_bc: false });
+  });
+
+  it("Entrée dans « N° du BC reçu » pose le numéro sans enregistrer le bon (relecture 3, I1)", async () => {
+    api.lireBon.mockResolvedValue(bon({ numero_bc: "En attente de BC", en_attente_bc: true }));
+    api.enregistrerBcRecu.mockResolvedValue(undefined);
+    ouvrir("secretaire", "/commandes/b1");
+    await userEvent.type(await screen.findByLabelText("Numéro du bon reçu"), "CMD-43{Enter}");
+    await waitFor(() => expect(api.enregistrerBcRecu).toHaveBeenCalledWith("b1", "CMD-43"));
+    expect(api.enregistrerBon).not.toHaveBeenCalled();
+  });
+
+  it("l'échec de « BC reçu » s'affiche en alerte", async () => {
+    api.lireBon.mockResolvedValue(bon({ numero_bc: "En attente de BC", en_attente_bc: true }));
+    ouvrir("secretaire", "/commandes/b1");
+    await userEvent.click(await screen.findByRole("button", { name: "BC reçu" }));
+    expect((await screen.findByText(/Indiquez le numéro/)).closest("[role=alert]")).not.toBeNull();
+  });
 });
 
 describe("création", () => {
@@ -169,6 +199,23 @@ describe("création", () => {
     expect(id).toBeNull();
     expect(entete).toMatchObject({ numero_bc: "En attente de BC", en_attente_bc: true, sans_bc: false, client_nom: "OPAC du Rhône" });
     expect(lignes).toEqual([]);
+  });
+
+  it("un échec des lignes à la création reste signalé sur la fiche (relecture 3, I2)", async () => {
+    class Partiel extends api.EnregistrementPartiel {
+      readonly bonId = "b1";
+      override name = "EnregistrementPartiel";
+      override message = "Le bon est enregistré, mais pas toutes ses lignes. Vérifiez-les puis enregistrez à nouveau.";
+    }
+    api.enregistrerBon.mockRejectedValue(new Partiel());
+    api.lireBon.mockResolvedValue(bon());
+    ouvrir("conducteur", "/commandes/nouveau");
+    await screen.findByRole("option", { name: "OPAC du Rhône" });
+    await userEvent.selectOptions(screen.getByLabelText(/^Client/), "c1");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer le brouillon" }));
+    expect(await screen.findByText(/pas toutes ses lignes/)).toBeInTheDocument();
+    await waitFor(() => expect(api.lireBon).toHaveBeenCalledWith("b1"));
+    expect(screen.getByText(/pas toutes ses lignes/)).toBeInTheDocument();
   });
 
   it("accepte un préremplissage par l'état de navigation (lecture automatique)", async () => {

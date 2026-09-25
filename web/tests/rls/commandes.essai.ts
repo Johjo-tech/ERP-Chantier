@@ -20,8 +20,11 @@ const crees: string[] = [];
 afterAll(async () => {
   const admin = await connecte(COMPTES.adminAlpha);
   if (!crees.length) return;
-  await admin.from("factures").delete().in("bon_commande_id", crees);
-  await admin.from("bons_commande").delete().in("id", crees);
+  // Une facture émise est indélébile, et son bon avec : on le dit plutôt que de laisser croire la base propre (relecture 3, M11).
+  for (const [table, colonne] of [["factures", "bon_commande_id"], ["bons_commande", "id"]] as const) {
+    const { error } = await admin.from(table).delete().in(colonne, crees);
+    if (error) console.warn(`Nettoyage partiel de ${table} : ${error.message}`);
+  }
 });
 
 const entete = (surcharges: Partial<EnteteAEnregistrer> = {}): EnteteAEnregistrer => ({
@@ -122,6 +125,39 @@ describe("écriture", () => {
     const { error } = await admin.from("bons_commande").update({ statut_workflow: "chiffre" }).eq("id", id);
     expect(error?.code).toBe("42501");
     expect(error?.message).toMatch(/par le circuit/);
+  });
+});
+
+describe("[proposition] circuit et verrou tenus par la base (relecture 3)", () => {
+  it("un bon créé « chiffré » naît quand même au début du circuit (I4)", async () => {
+    const cond = await connecte(COMPTES.conducteurAlpha);
+    const { data, error } = await cond
+      .from("bons_commande")
+      .insert({ ...entete(), societe_id: ALPHA, date: "2026-09-24", statut: "en attente", statut_workflow: "chiffre" })
+      .select("id, statut_workflow")
+      .single();
+    expect(error).toBeNull();
+    if (data) crees.push(data.id);
+    expect(data?.statut_workflow).toBe("en_cours");
+  });
+
+  it("les lignes d'un bon dont la facture est émise sont figées ; en brouillon, non (I3)", async () => {
+    const admin = await connecte(COMPTES.adminAlpha);
+    const id = await nouveauBon(admin);
+    expect((await admin.rpc("bc_chiffrage_valide_hors_circuit", { p_bc_id: id })).error).toBeNull();
+    const factureId = await genererFacture(id, admin);
+    // Facture encore brouillon : rien n'est parti chez le client, corriger le bon reste permis.
+    const avant = await admin.from("bon_commande_lignes").update({ designation: "Corrigé avant émission" }).eq("bon_commande_id", id).select("id");
+    expect(avant.error).toBeNull();
+    const emise = await admin.from("factures").update({ statut: "impayée" }).eq("id", factureId).select("numero").single();
+    expect(emise.data?.numero).toBeTruthy();
+    const cond = await connecte(COMPTES.conducteurAlpha);
+    const maj = await cond.from("bon_commande_lignes").update({ designation: "MODIFIÉ" }).eq("bon_commande_id", id).select("id");
+    expect(maj.error?.code).toBe("23001");
+    const sup = await cond.from("bon_commande_lignes").delete().eq("bon_commande_id", id).select("id");
+    expect(sup.error?.code).toBe("23001");
+    const ajout = await cond.from("bon_commande_lignes").insert({ bon_commande_id: id, position: 9, type: "ligne", designation: "AJOUT", quantite: 1, prix_unitaire: 999, unite: "u", tva: 20 });
+    expect(ajout.error?.message).toMatch(/facturé/);
   });
 });
 

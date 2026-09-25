@@ -14,6 +14,8 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 3 | `20260925020000_la_secretaire_numerote_ses_devis.sql` | Droits | La secrétaire a `devis/creer` mais `prochain_numero` exige `peut_ecrire` : elle ne peut enregistrer aucun devis (DEV-50). Ajoute la matrice comme seconde voie, pour les devis seulement. | `tests/rls/filles.essai.ts` (« numérotation des devis ») |
 | 4 | `20260925030000_espace_client_en_lecture.sql` | Fonction | Espace client : table `acces_clients`, fonctions `mes_clients()` / `est_mon_client()`, vues restreintes (`v_mes_acces_clients`, `v_espace_client_chantiers`), politiques de LECTURE seule sur devis envoyés et factures émises. Aucune écriture. Le client n'est membre d'aucune société (D-008, D-029). | `tests/rls/espace-client.essai.ts` |
 | 5 | `20260925040000_le_numero_ne_se_fournit_pas.sql` | **Intégrité** | Un INSERT (ou UPDATE d'un brouillon) qui fournit lui-même `numero` crée une facture émise hors série légale et sans ligne. Refusé, sauf reprise historique (`legacy_id` « compta: »). Constaté en local avec le compte secrétaire. | `tests/rls/numerotation.essai.ts` |
+| 6 | `20260925050000_les_lignes_d_un_bon_facture_sont_figees.sql` | **Intégrité** | `bon_commande_facture_fige` protège l'en-tête d'un bon facturé, pas ses lignes : un conducteur les modifiait, supprimait ou complétait après émission de la facture. Même critère (facture numérotée), renommage de métier toléré. Relecture 3, I3. | `tests/rls/commandes.essai.ts` (« [proposition] … lignes … figées ») |
+| 7 | `20260925060000_un_bon_nait_au_debut_du_circuit.sql` | **Intégrité** | `circuit_etat_reserve` ne veille qu'à l'UPDATE : un INSERT créait un bon directement « chiffré ». Ramené à `en_cours` (pas refusé : l'écran historique envoie la clé — D-051). Relecture 3, I4. | `tests/rls/commandes.essai.ts` (« [proposition] … naît quand même au début ») |
 
 ## Comment les appliquer (par un humain)
 
@@ -41,4 +43,5 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 - **Niveau d'abonnement** : `alter table societes add column niveau_abonnement smallint check (niveau_abonnement between 1 and 5)` — lu par `select *`, pris en compte sans changer le code (D-009). Opposable seulement quand une RLS ou une fonction le vérifie.
 - **Situation de travaux atomique** : une RPC `facturer_situation(chantier, lignes jsonb)` qui crée la facture, la trace et le cumul dans une seule transaction (aujourd'hui trois écritures successives, dans l'ordre le moins risqué — FAC-97).
 - **Règlement + statut** : un déclencheur qui recale `factures.statut` à chaque règlement, au lieu du recalage côté écran.
+- **Client et conducteur d'une autre société** : un bon (comme un devis) accepte un `client_id` ou un `conducteur_id` d'une autre société ; l'écran ne les propose pas, la base devrait le refuser (relecture 3, M1).
 - **Préfixe BC 2027** : ligne `compteurs` du préfixe « BC » pour les années suivantes (BC-94).

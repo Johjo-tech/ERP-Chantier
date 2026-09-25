@@ -32,7 +32,7 @@ interface Props {
   prefill: PreRemplissageBon | null;
   reglages: ReglagesDocuments;
   ChampReference?: ChampReferenceLigne | undefined;
-  messageInitial: string | null;
+  messageInitial: { texte: string; alerte: boolean } | null;
 }
 
 function lignesInitiales(bon: Bon | null, prefill: PreRemplissageBon | null, tva: number): LigneEdition[] {
@@ -55,11 +55,17 @@ export function FormulaireBon({ bon, prefill, reglages, ChampReference, messageI
   const [erreursLignes, setErreursLignes] = useState<ErreurLigne[]>([]);
   const [manques, setManques] = useState<Manque[]>([]);
   const [montantIllisible, setMontantIllisible] = useState(false);
-  const [message, setMessage] = useState<string | null>(messageInitial);
+  const [message, setMessage] = useState<string | null>(messageInitial?.texte ?? null);
+  const [alerte, setAlerte] = useState(messageInitial?.alerte ?? false);
   const sav = bon ? estSav(bon) : false;
 
+  function signaler(texte: string | null, enAlerte = false) {
+    setMessage(texte);
+    setAlerte(enAlerte);
+  }
+
   function soumettre(brouillon: boolean) {
-    setMessage(null);
+    signaler(null);
     const saisie = valider(schemaSaisieBon);
     const client = clients.data?.find((c) => c.id === saisie?.client_id);
     if (!saisie || !client) return;
@@ -73,21 +79,35 @@ export function FormulaireBon({ bon, prefill, reglages, ChampReference, messageI
       { entete: p.entete, lignes: p.lignes },
       {
         onSuccess: (id) => {
-          setMessage(reussite);
+          signaler(reussite);
           if (!bon) void navigate(`/commandes/${id}`, { replace: true, state: { message: reussite } });
         },
         onError: (err) => {
-          if (err instanceof EnregistrementPartiel && !bon) void navigate(`/commandes/${err.bonId}`, { replace: true });
+          // La fiche remonte le formulaire : sans le message porté par la navigation, l'échec des lignes serait muet.
+          if (err instanceof EnregistrementPartiel && !bon) void navigate(`/commandes/${err.bonId}`, { replace: true, state: { message: messageErreur(err), alerte: true } });
         },
       }
     );
   }
 
+  /**
+   * « BC reçu » écrit hors du formulaire : sans reporter le numéro dans la
+   * saisie, le prochain « Enregistrer » remettrait la sentinelle d'attente
+   * par-dessus (relecture 3, B1). Les modifications en cours sont gardées.
+   */
+  function bcRecu(numero: string) {
+    setMode("normal");
+    changer("numero_bc", numero);
+    signaler(`Bon de commande n° ${numero} enregistré — ce bon n'est plus en attente, et le numéro partira sur sa facture.`);
+  }
+
   const titre = bon ? `${sav ? "SAV" : "Bon de commande"} ${bon.numero_interne ?? ""}`.trim() : "Nouveau bon de commande";
   const enErreur = Object.keys(erreurs).length > 0 || erreursLignes.length > 0 || montantIllisible;
+  // Les actions restent HORS du <form> : Entrée dans « N° du BC reçu » enregistrait sinon le bon entier (relecture 3, I1).
   return (
+    <div className="flex flex-col gap-4">
+    <EnTetePage titre={titre} sousTitre={bon && <BadgeEtape bon={bon} />} actions={bon && <ActionsBon bon={bon} onBcRecu={bcRecu} onErreur={(m) => signaler(m, true)} />} />
     <form onSubmit={(e) => { e.preventDefault(); soumettre(false); }} noValidate className="flex flex-col gap-4">
-      <EnTetePage titre={titre} sousTitre={bon && <BadgeEtape bon={bon} />} actions={bon && <ActionsBon bon={bon} onMessage={setMessage} />} />
       {verrou && <Alert>{verrou.libelle}</Alert>}
       {!verrou && lectureSeule && <Alert>Consultation : votre rôle ne permet pas de modifier ce bon de commande.</Alert>}
       {enregistrer.isError && <Alert variant="erreur">{messageErreur(enregistrer.error)}</Alert>}
@@ -97,7 +117,7 @@ export function FormulaireBon({ bon, prefill, reglages, ChampReference, messageI
           <ul className="list-disc pl-4">{manques.map((m) => <li key={m.code}>{m.libelle}</li>)}</ul>
         </Alert>
       )}
-      {message && <Alert variant={/enregistré/.test(message) ? "succes" : "info"}>{message}</Alert>}
+      {message && <Alert variant={alerte ? "erreur" : "succes"}>{message}</Alert>}
       {!bon && <SelecteurMode mode={mode} onChange={setMode} />}
       <Card>
         <CardContent className="flex flex-col gap-4 pt-4">
@@ -133,5 +153,6 @@ export function FormulaireBon({ bon, prefill, reglages, ChampReference, messageI
         <Button variant="ghost" asChild><Link to="/commandes">Retour à la liste</Link></Button>
       </div>
     </form>
+    </div>
   );
 }

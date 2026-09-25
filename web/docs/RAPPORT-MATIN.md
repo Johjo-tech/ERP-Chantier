@@ -28,7 +28,7 @@ item par item avec sa preuve (457 items au total).
 | **devis** | 78 % | Liste (totaux de la base), édition multi-TVA, remise en % ou par montant cible, lieu/logement, numéro par la base, duplication, aperçu imprimable, remplissage auto depuis le catalogue | parité totaux (3 000 documents), e2e |
 | **articles** | 96 % | Catalogue paginé serveur, fiche, retirer/remettre, **import CSV** (Windows-1252, guillemets non échappés, **INTER→10 %, NORMA→20 %, EXO/0→0 %**, inconnu→20 % signalé), choix d'article dans une ligne | parité import (600 fichiers, 5 encodages) |
 | **facturation** | 58 % | Factures brouillon → émission (numéro par la base), verrou L441-9, avoirs, règlements, états (reprise, avoir, retard), **situations de travaux** sur le DPGF, devis → facture, aperçu avec mentions légales | parité règlements/avoirs/verrous/situations, e2e |
-| **commandes** | 44 % | Bons (lecture par les vues terrain, prix masqués), trois modes de création, BC reçu, facture du bon par `bc_generer_facture`, pièces à commander / commandées / reçues | parité `regles-bc.ts` + `app.js`, RLS, e2e |
+| **commandes** | 43 % | Bons (lecture par les vues terrain, prix masqués), trois modes de création, BC reçu, facture du bon par `bc_generer_facture`, pièces à commander / commandées / reçues | parité `regles-bc.ts` + `app.js`, RLS, e2e |
 | **ocr** | 69 % | Lecture d'un bon (Edge Function `extraire-bc`), contrat Zod, essentiels signalés, client rapproché, préremplissage du bon | parité rapprochement, contrat OCR→bon |
 | **espace-client** | 50 % | Consultation en lecture seule des chantiers, devis envoyés, factures émises (migration **proposée**) | RLS espace client, e2e |
 | documents (partagé) | — | Lignes, totaux, TVA, remise, net à payer, éditeur de lignes, document imprimable (D-015) | parité totaux |
@@ -37,8 +37,8 @@ Modules hors périmètre de la nuit (planning, RH, véhicules, statistiques,
 réglages, facture électronique) : 0 %. **Global : 45 %** ; sur les sections
 traitées : 55 %.
 
-Chiffres des capteurs à la fin de la nuit : **290 tests** unitaires, de parité
-et de garde-fous (`npm run check`), **66 tests RLS** contre la base locale,
+Chiffres des capteurs à la fin de la nuit : **294 tests** unitaires, de parité
+et de garde-fous (`npm run check`), **68 tests RLS** contre la base locale,
 **11 parcours** navigateur (Playwright), CI GitHub `web` et CI historique vertes.
 
 ## Lancer l'app sur votre Mac
@@ -80,7 +80,9 @@ consommer la série de devis d'une société et en lire le compteur. Prouvé en
 local : les tests échouent contre la fonction de production, passent avec la
 proposition `20260925015000` (une ligne : `coalesce(…, false)`). **À appliquer
 en premier.** Dans la même veine, un INSERT de facture qui fournit lui-même son
-`numero` est accepté hors série et sans ligne (proposition `20260925040000`).
+`numero` est accepté hors série et sans ligne (proposition `20260925040000`). Les lignes d'un bon facturé restent aussi modifiables en
+base, et un bon peut naître déjà « chiffré » (propositions `20260925050000` et
+`20260925060000`).
 
 ## Ce qui manque, ce qui a été contourné, les décisions
 
@@ -96,7 +98,7 @@ en premier.** Dans la même veine, un INSERT de facture qui fournit lui-même so
   typées à la main (`src/lib/database.propositions.ts`) ; OCR non testable en
   local sans clé Mistral (le parcours e2e simule la réponse réseau) ; lignes
   réordonnées par ↑/↓ au lieu du glisser-déposer.
-- **Décisions** : 50 entrées dans `DECISIONS.md` (D-001 à D-050), dont
+- **Décisions** : 52 entrées dans `DECISIONS.md` (D-001 à D-052), dont
   l'arithmétique en décimal exact arrondie au bord (5 écarts d'affichage sur
   24 000 montants, tous sur un demi-centime exact où l'ancien flottant se
   trompait), l'espace client par table d'accès et vues restreintes plutôt
@@ -108,7 +110,7 @@ en premier.** Dans la même veine, un INSERT de facture qui fournit lui-même so
   devis ; rôle lecture capable de supprimer des lignes filles (20 tables) ;
   DPGF, to-do, prêts et absences perdus au rechargement (champs sans colonne) ;
   situation qui consomme l'avancement si la facture échoue ; préfixe BC absent
-  pour 2027.
+  pour 2027 ; lignes d'un bon facturé modifiables ; bon créé directement « chiffré ».
 
 ## Migrations de schéma nécessaires (non appliquées)
 
@@ -119,7 +121,9 @@ Détail, ordre et essai à blanc : `docs/migrations-proposees.md`.
 3. `20260925020000_la_secretaire_numerote_ses_devis`
 4. `20260925030000_espace_client_en_lecture`
 5. `20260925040000_le_numero_ne_se_fournit_pas` — intégrité de la série
-6. À écrire : suppression dans les 20 autres tables filles, `societes.niveau_abonnement`,
+6. `20260925050000_les_lignes_d_un_bon_facture_sont_figees` — intégrité bon ↔ facture
+7. `20260925060000_un_bon_nait_au_debut_du_circuit` — intégrité du circuit
+8. À écrire : suppression dans les 20 autres tables filles, `societes.niveau_abonnement`,
    RPC de situation atomique, déclencheur statut ↔ règlements, vue de solde
    tenant compte des avoirs, préfixe BC 2027, droit de création de bon pour la
    secrétaire (si voulu, D-042).
@@ -141,8 +145,8 @@ Détail, ordre et essai à blanc : `docs/migrations-proposees.md`.
   déploiements, lecture des `.env`, écriture hors de `web/`) et hook
   `garde-prod.mjs` testé (production, suppressions massives, push forcé).
 - Boucle : 3 relectures indépendantes par sous-agent, constats traités
-  (dont 2 bloquants de fait : suppression des lignes neuves d'un document,
-  message de réussite perdu) — chaque défaut corrigé a son test.
+  (dont 3 bloquants de fait : suppression des lignes neuves d'un document,
+  message de réussite perdu, numéro de BC reçu écrasé au réenregistrement) — chaque défaut corrigé a son test.
 
 **Reste à faire**
 - Faire tourner les tests RLS aussi SANS les propositions, pour mesurer l'écart
@@ -154,7 +158,7 @@ Détail, ordre et essai à blanc : `docs/migrations-proposees.md`.
 ## Les 5 prochaines tâches recommandées
 
 1. **Appliquer la proposition de sécurité `20260925015000`** en production
-   (essai à blanc d'abord), puis les propositions 2 à 5.
+   (essai à blanc d'abord), puis les propositions 2 à 7.
 2. **Réglages de la société** (identité légale, IBAN, mentions, délais) : les
    factures en dépendent et rien ne permet de les saisir dans `web/`.
 3. **Règlements groupés, dossier client et lettrage** : les règles sont portées

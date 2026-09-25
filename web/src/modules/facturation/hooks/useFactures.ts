@@ -1,3 +1,4 @@
+import { clesBons } from "@/modules/commandes/hooks/useBons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Montant } from "@/lib/money";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
@@ -44,6 +45,8 @@ function useInvalider() {
     // Une situation déplace l'avancement du DPGF.
     void qc.invalidateQueries({ queryKey: ["dpgf"] });
     void qc.invalidateQueries({ queryKey: ["chantiers-avancement", s.id] });
+    // Émettre une facture fige son bon : sa fiche en cache montrerait encore un bon modifiable (relecture 3, I3).
+    void qc.invalidateQueries({ queryKey: clesBons.racine(s.id) });
   };
 }
 

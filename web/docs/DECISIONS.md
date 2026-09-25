@@ -288,3 +288,17 @@ règles portées (arrondi au centime, avoirs, reprise historique), parce que la
 vue `v_facture_solde` ignore le signe des avoirs, les acomptes et la retenue
 (FAC-93). À basculer sur une vue corrigée (migration à écrire) — écart assumé
 avec la règle « pas de solde recalculé côté client » du dépôt.
+
+## D-051 — Un bon inséré hors du début du circuit y est ramené, pas refusé
+Proposition `20260925060000` (relecture 3, I4). Refuser un INSERT portant
+`statut_workflow` casserait l'écran historique, qui envoie toutes les clés du
+bon (une clé absente d'une ligne devient NULL). Le ramener à `en_cours` ferme
+le raccourci sans rien casser ; les rôles techniques (reprise, jeu d'essai)
+gardent la main, comme pour `circuit_etat_reserve`.
+
+## D-052 — « BC reçu » reporte le numéro dans la saisie en cours
+Le geste écrit tout de suite en base, hors du formulaire. Plutôt que de
+remonter le formulaire (et perdre ce qui est en cours de saisie), le numéro
+reçu et le mode « normal » y sont reportés : le prochain « Enregistrer »
+n'écrase plus le numéro par la sentinelle d'attente (relecture 3, B1). Les
+actions de l'en-tête vivent hors du `<form>` du bon (I1).

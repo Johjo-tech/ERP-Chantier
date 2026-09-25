@@ -7,6 +7,12 @@ import { lirePreRemplissage } from "../domain/bon";
 import { useBon } from "../hooks/useBons";
 import { FormulaireBon } from "./FormulaireBon";
 
+/** Le message laissé par l'écran précédent (création réussie, ou enregistrement partiel à signaler). */
+function lireMessage(etat: unknown): { texte: string; alerte: boolean } | null {
+  if (typeof etat !== "object" || etat === null || !("message" in etat) || typeof etat.message !== "string") return null;
+  return { texte: etat.message, alerte: "alerte" in etat && etat.alerte === true };
+}
+
 /**
  * Fiche et formulaire d'un bon. À la création, un autre écran (lecture
  * automatique d'un bon) peut préremplir par `location.state.prefill`.
@@ -26,7 +32,7 @@ export function PageBonCommande({ ChampReference }: { ChampReference?: ChampRefe
       prefill={prefill}
       reglages={reglages.data ?? REGLAGES_DEFAUT}
       ChampReference={ChampReference}
-      messageInitial={(location.state as { message?: string } | null)?.message ?? null}
+      messageInitial={lireMessage(location.state)}
     />
   );
 }

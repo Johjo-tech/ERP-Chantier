@@ -14,28 +14,23 @@ import { useBcRecu, useGenererFacture } from "../hooks/useBons";
  * sans ouvrir le bon, c'est le faire tout de suite — et il doit précéder la
  * facture, dont la référence client se fige à l'émission.
  */
-function BcRecu({ bon, onMessage }: { bon: Bon; onMessage: (m: string) => void }) {
+function BcRecu({ bon, onBcRecu, onErreur }: { bon: Bon; onBcRecu: (numero: string) => void; onErreur: (m: string) => void }) {
   const [numero, setNumero] = useState("");
   const recu = useBcRecu();
+  function poser() {
+    const n = numero.trim();
+    if (!n) return onErreur("Indiquez le numéro figurant sur le bon du client.");
+    recu.mutate({ id: bon.id, numero: n }, { onSuccess: () => { setNumero(""); onBcRecu(n); }, onError: (e) => onErreur(messageErreur(e)) });
+  }
+  // Un petit formulaire à lui : Entrée pose le numéro, et rien d'autre.
   return (
-    <span className="inline-flex flex-wrap items-center gap-2">
+    <form className="inline-flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); poser(); }}>
       <label htmlFor="numero-bc-recu" className="sr-only">Numéro du bon reçu</label>
       <Input id="numero-bc-recu" className="h-9 w-44" placeholder="N° du BC reçu" value={numero} onChange={(e) => setNumero(e.target.value)} />
-      <Button
-        variant="secondary"
-        disabled={recu.isPending}
-        onClick={() => {
-          const n = numero.trim();
-          if (!n) return onMessage("Indiquez le numéro figurant sur le bon du client.");
-          recu.mutate(
-            { id: bon.id, numero: n },
-            { onSuccess: () => onMessage(`Bon de commande n° ${n} enregistré — ce bon n'est plus en attente, et le numéro partira sur sa facture.`), onError: (e) => onMessage(messageErreur(e)) }
-          );
-        }}
-      >
+      <Button type="submit" variant="secondary" disabled={recu.isPending}>
         BC reçu
       </Button>
-    </span>
+    </form>
   );
 }
 
@@ -56,14 +51,14 @@ function CreerFacture({ bon }: { bon: Bon }) {
   );
 }
 
-export function ActionsBon({ bon, onMessage }: { bon: Bon; onMessage: (m: string) => void }) {
+export function ActionsBon({ bon, onBcRecu, onErreur }: { bon: Bon; onBcRecu: (numero: string) => void; onErreur: (m: string) => void }) {
   const fige = verrouBonCommande(bon.factures) !== null;
   const facture = bon.factures[0];
   return (
     <>
       {bon.en_attente_bc && !fige && (
         <Can module="bons_commande" action="modifier">
-          <BcRecu bon={bon} onMessage={onMessage} />
+          <BcRecu bon={bon} onBcRecu={onBcRecu} onErreur={onErreur} />
         </Can>
       )}
       {bon.statut_workflow === "chiffre" && !facture && (

@@ -38,6 +38,8 @@ Mot de passe de tous : `motdepasse-local`.
 | `lignes.essai.ts` | Synchronisation des lignes : nouvelles écrites, gardées modifiées, retirées supprimées, lecture refusée | non |
 | `articles.essai.ts` | Terrain sans accès au catalogue, conducteur lit sans écrire, secrétaire écrit, BETA invisible | non |
 | `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
+| `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
+| | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 
