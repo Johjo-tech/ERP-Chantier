@@ -1,0 +1,44 @@
+import { etatPieceDuBon, type EtatPiece, type TacheBon } from "./workflow";
+
+/** Le dossier d'une pièce dont le fournisseur n'a pas été saisi (renderDossiersFournisseurs). */
+export const SANS_FOURNISSEUR = "— Fournisseur non renseigné —";
+
+export interface BonDePiece {
+  id: string;
+  numero_interne: string | null;
+  numero_bc: string | null;
+  client_nom: string;
+  adresse: string | null;
+  ville: string | null;
+  statut_workflow: string | null;
+}
+
+export interface PieceDuBon extends EtatPiece {
+  bon: BonDePiece;
+}
+
+export function pieceDuBon(bon: BonDePiece, taches: readonly TacheBon[]): PieceDuBon {
+  return { bon, ...etatPieceDuBon(taches) };
+}
+
+export type OngletPieces = "a_commander" | "commandees" | "recues";
+
+/**
+ * Trois moments d'une même pièce (BC-20) : à commander tant qu'aucune date de
+ * commande n'est posée, commandée ensuite, reçue quand le drapeau est levé.
+ * L'ancien écran n'avait que les deux premiers ; « Reçues » garde la trace.
+ */
+export function ongletDe(p: EtatPiece): OngletPieces | null {
+  if (p.pieceACommander) return p.dateCommande ? "commandees" : "a_commander";
+  return p.recueLe ? "recues" : null;
+}
+
+/** Des dossiers par fournisseur, triés par nom ; le fournisseur absent a le sien. */
+export function parFournisseur(pieces: readonly PieceDuBon[]): { fournisseur: string; pieces: PieceDuBon[] }[] {
+  const dossiers = new Map<string, PieceDuBon[]>();
+  for (const p of pieces) {
+    const cle = p.fournisseur.trim() || SANS_FOURNISSEUR;
+    dossiers.set(cle, [...(dossiers.get(cle) ?? []), p]);
+  }
+  return [...dossiers.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([fournisseur, liste]) => ({ fournisseur, pieces: liste }));
+}
