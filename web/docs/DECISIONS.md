@@ -1138,3 +1138,100 @@ L'ancien écran redemandait à chaque enregistrement tant que le compte n'était
 pas conducteur. `web/` propose une fois, quand la case passe de décochée à
 cochée ; hors administrateur, il dit que le rôle n'a pas changé sans poser la
 question. Un refus garde la fiche enregistrée.
+
+## D-TRV-01 — D-CHA-04 vérifié : le planning date la tâche du bon né du DPGF
+`planPoser` adopte déjà une tâche sans date du même métier avant d'en créer
+une (« tâche dé-datée »). Le risque noté en D-CHA-04 ne se produit pas dans
+`web/` : prouvé de bout en bout contre la base locale (bon et tâche écrits
+comme `planifierQuantite`, puis `lirePlanning` → `planPoser` →
+`appliquerPlan` : une seule tâche, datée, `dpgf_ligne_id` et
+`quantite_planifiee` gardés — `tests/rls/transversal.essai.ts`) et au domaine
+(`planning.essai.ts`). L'écran historique, lui, en crée toujours une seconde.
+
+## D-TRV-02 — Seau `terrain` : la lecture suit la ligne qui porte le chemin (proposition 20260926100000)
+L'encadrement (admin, conducteur, secrétaire, lecture) lit toute la société,
+comme avant. Le terrain : `chantiers/<id>` si affecté, `salaries/<id>` son
+dossier seul, `bons`/`bons-commande` (technicien : tous, la vue terrain les
+lui montre ; sous-traitant : ceux où il a une tâche), `interventions/<id>`
+par `rapport_visible`, `vehicules`/`materiels` technicien seul, `societe` et
+`documents-legaux` pour tous, tout autre domaine refusé. Les politiques
+restrictives d'autres modules (RH : `terrain_rh_restreint`) s'y ajoutent ;
+un module qui ouvre un nouveau domaine de chemins doit y ajouter sa règle.
+
+## D-TRV-03 — Suppression des filles restantes : trois tables ici, le reste à leurs modules
+Relevé `pg_policy` : 11 tables filles suppriment sous `est_membre()`. Les
+véhicules (6), `materiel_prets` et `sous_traitant_documents` (intervenants,
+écran RH) sont laissés aux agents véhicules/matériel et RH ; la proposition
+20260926101000 aligne `facture_cycle_vie`, `facture_entrante_lignes`,
+`fournisseur_controle_lignes` sur l'écriture (`peut_ecrire`).
+
+## D-TRV-04 — `planning_taches` : le sous-traitant seul est restreint (AUTH-72)
+Le sous-traitant — entreprise extérieure — ne lit plus que les tâches où il
+est désigné (proposition 20260926102000, `tache_lisible`). Le technicien
+garde la lecture de toute la société : la « vue technicien » imposée (PLN-01)
+montre le planning de toutes les équipes. Les tables `chantier_*` suivent
+déjà l'affectation depuis 20260926021000 et les politiques de lecture de
+chantier.
+
+## D-TRV-05 — Journal du circuit : plus aucune écriture directe (AUTH-73)
+Toutes les écritures légitimes passent par les RPC SECURITY DEFINER du
+circuit ; la proposition 20260926103000 retire la politique INSERT et les
+droits d'écriture des rôles d'API. `tests/rls/circuit.essai.ts` prouve que
+les RPC écrivent toujours.
+
+## D-TRV-06 — Déclencheurs sans EXECUTE public ; annuaire en barrière (AUTH-75, AUTH-76)
+Les privilèges PAR DÉFAUT du schéma ne sont pas changés (les RPC en
+dépendent) : la proposition 20260926104000 retire le droit à toutes les
+fonctions de déclencheur existantes, et se rejoue après toute nouvelle.
+`v_salaries_annuaire` avait bien perdu `security_barrier` (constaté en base) :
+remis par `alter view … set`. **Si une proposition RH refait cette vue, elle
+doit porter `with (security_barrier = true)`** — constaté : elle a été refaite
+pendant cette vague et l'option perdue, puis remise en rejouant 104000.
+
+## D-TRV-07 — Alsace-Moselle : une colonne de société, lue à part (PLN-53)
+`societes.feries_alsace_moselle` (proposition 20260926105000), case dans
+Réglages › Organisation › Jours fériés, enregistrée au clic. Lue par une
+requête à part (`societes/api/feries.ts`) : tant que la colonne n'existe pas
+en production, la fiche société se lit toujours et le planning retombe sur
+les fériés nationaux (trace en console).
+
+## D-TRV-08 — Accès clients gérés par l'administrateur (proposition 20260926106000)
+Deux fonctions réservées à `est_admin` : lister les accès avec le compte,
+ouvrir un accès par l'adresse du compte. Un compte membre de la société est
+refusé (il voit déjà tout). La création du COMPTE d'un client (auth) demande
+la clé de service : non couverte — le client crée son compte, l'admin ouvre
+l'accès ensuite. L'ouverture révèle à l'admin si une adresse a un compte :
+accepté, l'admin est un utilisateur de confiance de sa société.
+
+## D-TRV-09 — Fiche du rapport : les boutons des modules devis et facturation
+Montés sur l'aperçu du rapport (`PageApercuRapport`) ; un rapport lié à un
+bon affiche « Facturer par le bon lié » au lieu de « Créer la facture »
+(`factureDepuisIntervention` du module facturation ne connaît pas encore le
+lien au bon de la proposition 20260926052000). **Doublon à résorber** : la
+carte de la liste utilise `interventions/api/transformations.ts`, qui fait la
+même chose avec des gardes de plus ; à la fusion, garder une seule voie.
+
+## D-TRV-10 — Couleurs des pièces : la palette de l'écran, lue avec l'identité (SOC-04)
+`lireIdentiteDocument` décline `paletteSociete(couleurAccent, couleurSecondaire)`
+(défauts de l'ancien écran `#FF6A1A` / `#182233`, parité `fusionnerReglages`) :
+titre et total au ton foncé de l'accent (4,5:1 sur blanc), filet d'accent sous
+l'en-tête, bandeau du tableau à la seconde couleur. L'aperçu HTML prend les
+couleurs du modèle, sinon les variables `--color-*-societe*`. Le logo du seau
+est téléchargé et passé en data-URL (PNG/JPEG, chemin de SA société seulement) ;
+introuvable, la pièce part sans logo.
+
+## D-TRV-11 — Fiche client : les colonnes e-facture, marché, livraison et comptabilité
+Blocs affichés par `sectionsEfactureVisibles` (parité) ; l'adresse électronique
+proposée depuis le SIRET est écrite à l'enregistrement si le champ est resté
+vide (l'ancien la proposait en placeholder et l'annuaire la posait) ; bandeau
+de complétude informatif. Les libellés de l'adresse de facturation sont
+distincts (« Adresse de facturation »…) : trois champs « Adresse » identiques
+étaient indiscernables au lecteur d'écran.
+
+## D-TRV-12 — Capteur axe-core dans les tests de composants
+`src/test/accessibilite.ts` (WCAG 2.1 A/AA ; contraste et régions coupés sous
+jsdom). Installé par `npm install --package-lock-only` puis copie du paquet
+dans `node_modules` partagé (un `npm install` complet aurait élagué les
+paquets d'autres agents). Première prise : `CartePosee` était un
+`role="button"` contenant des contrôles → groupe libellé et bouton
+« Ouvrir la fiche ».

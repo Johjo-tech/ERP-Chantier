@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { todayISO } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { useOptionsFeries } from "@/modules/societes/hooks/useFeries";
 import { estFerie, estNonOuvre, HEURE_PAUSE, HEURES_PLANNING, joursDeLaSemaine, libelleSemaine, lundiDe, semainesAffichees, type JourDeSemaine } from "../domain/calendrier";
 import type { CartePlanning } from "../domain/cartes";
 import { cartesDuJour } from "../domain/filtres";
@@ -20,9 +21,10 @@ function ColonneJour({ jour, cartes, glissee, onGlisser }: { jour: JourDeSemaine
   const { peutPlanifier, poser } = usePlanningContexte();
   const [survol, setSurvol] = useState<number | null>(null);
   const duJour = cartesDuJour(cartes, jour.iso);
-  const ferie = estFerie(jour.iso);
+  const feries = useOptionsFeries();
+  const ferie = estFerie(jour.iso, feries);
   return (
-    <div data-jour={jour.iso} className={cn("min-w-32 flex-1 border-l", estNonOuvre(jour.iso) && "bg-muted/60")}>
+    <div data-jour={jour.iso} className={cn("min-w-32 flex-1 border-l", estNonOuvre(jour.iso, feries) && "bg-muted/60")}>
       <div className={cn("h-12 border-b px-1 text-center text-xs", jour.iso === todayISO() && "bg-primary/10 font-semibold")}>
         {jour.libelle}
         <br />

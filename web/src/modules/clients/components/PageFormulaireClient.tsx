@@ -11,9 +11,12 @@ import { useFormulaire } from "@/lib/useFormulaire";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { CADRES_FACTURATION, saisieDepuis, schemaSaisieClient, type Client } from "../domain/client";
 import { CLE_DELAI_PAR_CADRE, DELAIS_PREREGLES } from "../domain/delais";
+import { adresseElectroniqueParDefaut, completudeClient, phraseManques, sectionsEfactureVisibles } from "../domain/efacture";
 import { chiffres, sirenDuSiret, tvaIntracomFr } from "../domain/identifiants";
+import { SCHEMAS_ADRESSE_ELECTRONIQUE } from "@/modules/societes/domain/societe";
 import { useClient, useEnregistrerClient } from "../hooks/useClients";
 import { ChampsDelai } from "./ChampsDelai";
+import { VillesProposees } from "./VillesProposees";
 
 export function PageFormulaireClient() {
   const { id } = useParams();
@@ -28,7 +31,14 @@ function FormulaireClient({ client }: { client: Client | null }) {
   const navigate = useNavigate();
   const enregistrer = useEnregistrerClient(client?.id);
   const { valeurs, erreurs, changer, valider } = useFormulaire(saisieDepuis(client));
-  const particulier = valeurs.cadre_facturation === "B2C";
+  const sections = sectionsEfactureVisibles(valeurs.cadre_facturation as Client["cadre_facturation"]);
+  const particulier = !sections.includes("immatriculation");
+  const adresseProposee = adresseElectroniqueParDefaut(valeurs);
+  const manques = completudeClient({
+    nom: valeurs.nom, adresse: valeurs.adresse, codePostal: valeurs.code_postal, ville: valeurs.ville, siret: valeurs.siret,
+    tvaIntracom: valeurs.tva_intracom, adresseElectroniqueValeur: valeurs.adresse_electronique_valeur || adresseProposee?.valeur,
+    codeService: valeurs.code_service, referenceEngagement: valeurs.reference_engagement, cadreFacturation: valeurs.cadre_facturation,
+  });
 
   function changerCadre(cadre: string) {
     changer("cadre_facturation", cadre);
@@ -49,8 +59,13 @@ function FormulaireClient({ client }: { client: Client | null }) {
 
   function soumettre(e: FormEvent) {
     e.preventDefault();
-    const saisie = valider(schemaSaisieClient);
-    if (!saisie) return;
+    const lue = valider(schemaSaisieClient);
+    if (!lue) return;
+    // L'adresse de routage se déduit du SIRET : proposée, et gardée si l'utilisateur n'en a pas dicté une autre.
+    const deduite = sections.includes("efacture") && !lue.adresse_electronique_valeur && adresseProposee;
+    const saisie = deduite
+      ? { ...lue, adresse_electronique_valeur: adresseProposee.valeur, adresse_electronique_schema: lue.adresse_electronique_schema ?? adresseProposee.schema }
+      : lue;
     enregistrer.mutate(saisie, { onSuccess: (c) => void navigate(`/clients/${c.id}`) });
   }
 
@@ -87,9 +102,40 @@ function FormulaireClient({ client }: { client: Client | null }) {
               </Button>
             </div>
           )}
-          {champ("pays_code", "Pays (code)")}
+          {sections.includes("pays") && champ("pays_code", "Pays (code)")}
         </CardContent>
       </Card>
+      {sections.includes("efacture") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Facture électronique</CardTitle>
+            <p className="text-xs text-muted-foreground">L'adresse électronique se déduit du SIRET. Ne la modifiez que si votre client vous en a communiqué une autre.</p>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <ChampChoix
+              libelle="Schéma de l'adresse"
+              valeur={valeurs.adresse_electronique_schema}
+              onChange={(v) => changer("adresse_electronique_schema", v)}
+              options={[{ valeur: "", libelle: "—" }, ...SCHEMAS_ADRESSE_ELECTRONIQUE.map((x) => ({ valeur: x.code, libelle: `${x.code} — ${x.libelle}` }))]}
+            />
+            {champ("adresse_electronique_valeur", "Adresse électronique", { placeholder: adresseProposee ? `${adresseProposee.valeur} (déduite)` : "déduite du SIRET" })}
+            {champ("code_routage", "Code de routage", { placeholder: "facultatif" })}
+            {champ("reference_acheteur", "Référence acheteur", { placeholder: "réf. interne exigée par le client" })}
+          </CardContent>
+        </Card>
+      )}
+      {sections.includes("marche") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Marché public</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {champ("code_service", "Code service exécutant")}
+            {champ("reference_engagement", "N° d'engagement")}
+            {champ("numero_marche", "N° de marché")}
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Coordonnées</CardTitle>
@@ -98,23 +144,46 @@ function FormulaireClient({ client }: { client: Client | null }) {
           <div className="sm:col-span-2">{champ("adresse", "Adresse")}</div>
           {champ("code_postal", "Code postal", { inputMode: "numeric" })}
           {champ("ville", "Ville")}
+          <VillesProposees codePostal={valeurs.code_postal} ville={valeurs.ville} onChoisir={(v) => changer("ville", v)} />
           {champ("email", "E-mail", { type: "email", inputMode: "email" })}
           {champ("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
-          {!particulier && champ("contact_nom", "Contact comptabilité")}
         </CardContent>
       </Card>
+      {!particulier && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Service comptabilité</CardTitle>
+            <p className="text-xs text-muted-foreground">Destinataire des factures. Les interlocuteurs restent l'annuaire opérationnel du chantier.</p>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {champ("contact_nom", "Contact comptabilité")}
+            {champ("contact_email", "E-mail comptabilité", { type: "email", inputMode: "email" })}
+            {champ("contact_telephone", "Téléphone comptabilité", { type: "tel", inputMode: "tel" })}
+          </CardContent>
+        </Card>
+      )}
       {!particulier && (
         <Card>
           <CardHeader>
             <CardTitle>Adresse de facturation (si différente)</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">{champ("facturation_adresse", "Adresse")}</div>
-            {champ("facturation_code_postal", "Code postal", { inputMode: "numeric" })}
-            {champ("facturation_ville", "Ville")}
+            <div className="sm:col-span-2">{champ("facturation_adresse", "Adresse de facturation")}</div>
+            {champ("facturation_code_postal", "Code postal de facturation", { inputMode: "numeric" })}
+            {champ("facturation_ville", "Ville de facturation")}
           </CardContent>
         </Card>
       )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Adresse de livraison (si différente)</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">{champ("livraison_adresse", "Adresse de livraison")}</div>
+          {champ("livraison_code_postal", "Code postal de livraison", { inputMode: "numeric" })}
+          {champ("livraison_ville", "Ville de livraison")}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Règlement</CardTitle>
@@ -133,6 +202,10 @@ function FormulaireClient({ client }: { client: Client | null }) {
         </CardContent>
       </Card>
       <ChampZone libelle="Notes internes" valeur={valeurs.notes} onChange={(v) => changer("notes", v)} />
+      {/* Informatif, jamais bloquant : ce qui manquera le jour d'émettre (CLI-05). */}
+      <Alert variant={manques.length ? "info" : "succes"}>
+        {manques.length ? phraseManques(manques) : "✓ Cette fiche est complète pour la facture électronique."}
+      </Alert>
       <div className="flex gap-2">
         <Button type="submit" disabled={enregistrer.isPending}>
           {enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}

@@ -68,8 +68,8 @@ export function datePaques(annee: number): string {
 export interface OptionsFeries {
   /**
    * Vendredi saint et 26 décembre, fériés en Alsace-Moselle seulement
-   * (PLN-53). Aucune société ne porte ce réglage en base aujourd'hui : l'option
-   * existe pour le jour où il sera ajouté, et vaut faux par défaut (D-PLN-09).
+   * (PLN-53). Lu sur `societes.feries_alsace_moselle` (proposition
+   * 20260926105000, `useOptionsFeries`) ; faux par défaut (D-PLN-09, D-TRV-07).
    */
   alsaceMoselle?: boolean;
 }

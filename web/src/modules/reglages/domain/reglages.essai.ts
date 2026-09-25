@@ -10,9 +10,10 @@ import { rubriqueRetenue, rubriquesVisibles } from "./rubriques";
 describe("rubriques (PAR-01)", () => {
   const ids = (role: RoleMembre) => rubriquesVisibles((m) => peut(MATRICE_REELLE, role, m, "voir")).flatMap((g) => g.rubriques.map((r) => r.id));
 
-  it("l'administrateur voit tout, comptes compris", () => {
+  it("l'administrateur voit tout, comptes et accès clients compris", () => {
     expect(ids("admin")).toContain("comptes");
-    expect(ids("admin")).toHaveLength(12);
+    expect(ids("admin")).toContain("acces-clients");
+    expect(ids("admin")).toHaveLength(13);
   });
 
   it("secrétaire, conducteur et lecture voient les réglages, pas les comptes", () => {

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { DatabaseAvecPropositions, DatabaseParc, DatabasePlanning, DatabaseStatistiques } from "./database.propositions";
+import type { DatabaseAvecPropositions, DatabaseParc, DatabasePlanning, DatabaseStatistiques, DatabaseTransversal } from "./database.propositions";
 import type { Database } from "./database.types";
 import { lireConfiguration } from "./env";
 
@@ -45,4 +45,9 @@ export function clientStatistiques(c: Client = supabase()): SupabaseClient<Datab
 /** Un client (celui de l'application, ou celui d'un test), typé avec la durée des prêts proposée pour le parc (20260926070000). */
 export function clientParc(c: Client = supabase()): SupabaseClient<DatabaseParc> {
   return c as unknown as SupabaseClient<DatabaseParc>;
+}
+
+/** Idem pour les propositions transversales (2026092610*) : Alsace-Moselle, accès clients. */
+export function clientTransversal(c: Client = supabase()): SupabaseClient<DatabaseTransversal> {
+  return c as unknown as SupabaseClient<DatabaseTransversal>;
 }

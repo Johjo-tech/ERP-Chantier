@@ -20,13 +20,19 @@ import {
 } from "@/modules/societes/domain/societe";
 import { useModifierSociete, useReglagesSociete, useSociete } from "@/modules/societes/hooks/useSocieteReglages";
 import { BandeauCompletude } from "./BandeauCompletude";
+import { BlocFeries } from "./BlocFeries";
 import { CaseACocher, PiedEnregistrement } from "./champs";
 
 export function SectionOrganisation() {
   const societe = useSociete();
   if (societe.isPending) return <Chargement />;
   if (societe.isError) return <Erreur erreur={societe.error} reessayer={() => void societe.refetch()} />;
-  return <FormulaireOrganisation key={societe.data.id} societe={societe.data} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <FormulaireOrganisation key={societe.data.id} societe={societe.data} />
+      <BlocFeries />
+    </div>
+  );
 }
 
 const vide = { valeur: "", libelle: "—" };

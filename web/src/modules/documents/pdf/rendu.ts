@@ -21,6 +21,33 @@ const ZONE_BAS_MM = HAUTEUR_A4_MM - PIED_MM - 4;
 const GRIS: [number, number, number] = [110, 116, 128];
 const ENCRE: [number, number, number] = [24, 34, 51];
 const TRAIT: [number, number, number] = [214, 219, 227];
+const BLANC: [number, number, number] = [255, 255, 255];
+/** Le filet d'accent sous l'en-tête, puis l'épaisseur par défaut de jsPDF qu'on lui rend. */
+const EPAISSEUR_FILET_MM = 0.6;
+const EPAISSEUR_TRAIT_MM = 0.200025;
+
+type Rvb = [number, number, number];
+
+/** « #C24E00 » → [194, 78, 0] ; une couleur malformée retombe sur l'encre (jamais d'exception à l'impression). */
+export function rvbDe(hex: string | undefined, repli: Rvb): Rvb {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex ?? "");
+  return m ? [parseInt(m[1] ?? "0", 16), parseInt(m[2] ?? "0", 16), parseInt(m[3] ?? "0", 16)] : repli;
+}
+
+/**
+ * Les encres de la pièce (SOC-04) : le titre et le total dans le ton foncé de
+ * l'accent, l'en-tête du tableau dans la seconde couleur. Sans couleurs, le
+ * document reste celui d'avant : tout à l'encre sombre.
+ */
+export function encresDe(m: Pick<ModeleDocument, "couleurs">): { titre: Rvb; filet: Rvb | null; bandeau: Rvb; surBandeau: Rvb } {
+  const c = m.couleurs;
+  return {
+    titre: rvbDe(c?.accentFonce, ENCRE),
+    filet: c ? rvbDe(c.accent, ENCRE) : null,
+    bandeau: rvbDe(c?.secondaire, ENCRE),
+    surBandeau: rvbDe(c?.surSecondaire, BLANC),
+  };
+}
 
 interface Espacements {
   bloc: number;
@@ -83,7 +110,7 @@ function enTete(doc: jsPDF, m: ModeleDocument, e: Espacements): number {
   doc.setFont("helvetica", "normal").setTextColor(...GRIS);
   let yGauche = lignesTexte(doc, m.emetteur.coordonnees, x, HAUT_MM + 5, 8, 85);
   yGauche = lignesTexte(doc, m.emetteur.fiscal, MARGE_MM, Math.max(yGauche, HAUT_MM + 18) + 1, 7.5, 110);
-  doc.setTextColor(...ENCRE).setFont("helvetica", "bold").setFontSize(20);
+  doc.setTextColor(...encresDe(m).titre).setFont("helvetica", "bold").setFontSize(20);
   doc.text(texteWinAnsi(m.titre), L - MARGE_MM, HAUT_MM + 2, { align: "right" });
   doc.setFont("helvetica", "normal").setFontSize(8.5);
   let yDroite = HAUT_MM + 9;
@@ -98,7 +125,13 @@ function enTete(doc: jsPDF, m: ModeleDocument, e: Espacements): number {
     doc.setFont("helvetica", "normal");
     yDroite += 6;
   }
-  return Math.max(yGauche, yDroite) + e.bloc;
+  const bas = Math.max(yGauche, yDroite);
+  const filet = encresDe(m).filet;
+  if (filet) {
+    doc.setDrawColor(...filet).setLineWidth(EPAISSEUR_FILET_MM).line(MARGE_MM, bas + 1, L - MARGE_MM, bas + 1);
+    doc.setLineWidth(EPAISSEUR_TRAIT_MM);
+  }
+  return bas + e.bloc;
 }
 
 function carte(doc: jsPDF, titre: string, lignes: readonly string[], refs: readonly [string, string][], x: number, y: number, largeur: number): number {
@@ -141,7 +174,7 @@ function tableauDesLignes(doc: jsPDF, autoTable: AutoTable, m: ModeleDocument, y
     head: [ENTETES.map(([content, halign]) => ({ content, styles: { halign } }))],
     body: corpsDuTableau(m),
     styles: { font: "helvetica", fontSize: e.corps, cellPadding: e.cellule, textColor: ENCRE, lineColor: TRAIT, overflow: "linebreak" },
-    headStyles: { fontStyle: "bold", fillColor: ENCRE, textColor: [255, 255, 255] },
+    headStyles: { fontStyle: "bold", fillColor: encresDe(m).bandeau, textColor: encresDe(m).surBandeau },
     bodyStyles: { lineWidth: { bottom: 0.1 } },
     columnStyles: { 0: { cellWidth: 80 }, 1: { halign: "right" }, 2: { halign: "center" }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" } },
     showHead: "everyPage",
@@ -162,7 +195,7 @@ function basDuDocument(doc: jsPDF, m: ModeleDocument, y0: number, e: Espacements
   }
   let yt = y + 3;
   for (const t of m.totaux) {
-    doc.setFont("helvetica", t.fort ? "bold" : "normal").setFontSize(t.fort ? 10 : 8.5).setTextColor(...ENCRE);
+    doc.setFont("helvetica", t.fort ? "bold" : "normal").setFontSize(t.fort ? 10 : 8.5).setTextColor(...(t.fort ? encresDe(m).titre : ENCRE));
     doc.text(texteWinAnsi(t.libelle), xTotaux, yt);
     doc.text(texteWinAnsi(t.valeur), LARGEUR_A4_MM - MARGE_MM, yt, { align: "right" });
     yt += t.fort ? 5.5 : 4.5;

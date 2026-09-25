@@ -287,3 +287,31 @@ export type DatabaseParc = Omit<DatabaseAvecPropositions, "public"> & {
     };
   };
 };
+
+/* ---------- Propositions transversales (2026092610xxxx) ----------
+ * `societes.feries_alsace_moselle` (20260926105000) et la gestion des accès
+ * clients par l'administrateur (20260926106000). Juxtaposé, comme le bloc du
+ * planning, pour que la fusion avec les autres modules reste un ajout. */
+type Societes = Public["Tables"]["societes"];
+type ColonnesSocieteTrv = { feries_alsace_moselle: boolean };
+
+export type IssueOuvertureAcces = "ouvert" | "rouvert" | "deja_ouvert" | "compte_absent" | "compte_membre";
+
+export type DatabaseTransversal = Omit<DatabaseAvecPropositions, "public"> & {
+  public: Omit<PubP, "Tables" | "Functions"> & {
+    Tables: Omit<PubP["Tables"], "societes"> & {
+      societes: Omit<Societes, "Row" | "Insert" | "Update"> & {
+        Row: Societes["Row"] & ColonnesSocieteTrv;
+        Insert: Societes["Insert"] & Partial<ColonnesSocieteTrv>;
+        Update: Societes["Update"] & Partial<ColonnesSocieteTrv>;
+      };
+    };
+    Functions: PubP["Functions"] & {
+      acces_clients_de_la_societe: {
+        Args: { p_societe: string };
+        Returns: { id: string; client_id: string; client_nom: string; profile_id: string; compte_nom: string; compte_email: string | null; interlocuteur: string | null; actif: boolean; cree_le: string }[];
+      };
+      ouvrir_acces_client: { Args: { p_client: string; p_email: string; p_interlocuteur: string | null }; Returns: IssueOuvertureAcces };
+    };
+  };
+};

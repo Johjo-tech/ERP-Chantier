@@ -22,7 +22,9 @@ function client(nom: string, extra: Partial<ClientListe> = {}): ClientListe {
     tva_intracom: null, pays_code: "FR", adresse: null, code_postal: "69002", ville: "Lyon", email: null,
     telephone: null, contact_nom: null, facturation_adresse: null, facturation_code_postal: null,
     facturation_ville: null, delai_paiement_jours: null, delai_paiement_mode: null, mode_paiement: null,
-    notes: null, interlocuteurs: [], ...extra,
+    notes: null, code_service: null, code_routage: null, reference_engagement: null, numero_marche: null, reference_acheteur: null,
+    adresse_electronique_schema: null, adresse_electronique_valeur: null, livraison_adresse: null, livraison_code_postal: null, livraison_ville: null,
+    contact_telephone: null, contact_email: null, interlocuteurs: [], ...extra,
   };
 }
 

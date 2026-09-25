@@ -8,9 +8,9 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { messageErreur } from "@/lib/erreurs";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
-import { libelleCadre, type Client } from "../domain/client";
+import { libelleCadre, questionSuppression, type Client } from "../domain/client";
 import { delaiPaiementRetenu, libelleDelaiPaiement } from "../domain/delais";
-import { useClient, useSupprimerClient } from "../hooks/useClients";
+import { useClient, useSupprimerClient, useUsagesClient } from "../hooks/useClients";
 import { BlocInterlocuteurs } from "./BlocInterlocuteurs";
 
 function Ligne({ libelle, valeur }: { libelle: string; valeur: string | null | undefined }) {
@@ -48,12 +48,7 @@ export function PageFicheClient({ complements }: { complements?: (client: Client
               </Button>
             </Can>
             <Can module="clients" action="supprimer">
-              <BoutonConfirme
-                libelle="Supprimer"
-                question="Supprimer définitivement ce client ?"
-                enCours={supprimer.isPending}
-                onConfirmer={() => supprimer.mutate(c.id, { onSuccess: () => void navigate("/clients") })}
-              />
+              <SupprimerClient id={c.id} enCours={supprimer.isPending} onConfirmer={() => supprimer.mutate(c.id, { onSuccess: () => void navigate("/clients") })} />
             </Can>
           </>
         }
@@ -80,4 +75,10 @@ export function PageFicheClient({ complements }: { complements?: (client: Client
     </div>
     </GardeSociete>
   );
+}
+
+/** Lit les usages seulement si le droit de supprimer est là (monté sous `<Can>`). */
+function SupprimerClient({ id, enCours, onConfirmer }: { id: string; enCours: boolean; onConfirmer: () => void }) {
+  const usages = useUsagesClient(id);
+  return <BoutonConfirme libelle="Supprimer" question={questionSuppression(usages.data)} enCours={enCours} onConfirmer={onConfirmer} />;
 }

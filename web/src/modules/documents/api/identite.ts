@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
-import { lireReglagesImpression, logoDesReglages, type IdentiteEmettrice, type ReglagesImpression } from "../domain/identite";
+import { BUCKET } from "@/modules/societes/api/societe";
+import { paletteSociete } from "@/modules/societes/theme/palette";
+import { cheminLogoDuSeau, lireReglagesImpression, logoDesReglages, type CouleursDocument, type IdentiteEmettrice, type ReglagesImpression } from "../domain/identite";
 
 const schemaSociete = z.object({
   nom: z.string(),
@@ -44,6 +46,8 @@ export async function lireIdentiteDocument(societeId: string): Promise<IdentiteD
   if (reglages.error) throw reglages.error;
   const s = analyser(schemaSociete, societe.data, "identité de l'émetteur");
   const infos = reglages.data?.infos_entreprise ?? null;
+  const impression = lireReglagesImpression(infos);
+  const chemin = cheminLogoDuSeau(infos, s.logo_url, societeId);
   return {
     identite: {
       // La raison sociale AVANT le nom d'usage : c'est elle que le client doit lire.
@@ -63,8 +67,44 @@ export async function lireIdentiteDocument(societeId: string): Promise<IdentiteD
       codeNaf: s.code_naf,
       iban: s.iban,
       bic: s.bic,
-      logo: logoDesReglages(infos, s.logo_url),
+      logo: chemin ? await logoDuSeau(chemin) : logoDesReglages(infos, s.logo_url),
+      couleurs: couleursDocument(impression),
     },
-    reglages: lireReglagesImpression(infos),
+    reglages: impression,
   };
+}
+
+/** La palette de l'écran, réduite à ce qu'imprime une pièce (SOC-04, D-TRV-10). */
+export function couleursDocument(r: Pick<ReglagesImpression, "couleurAccent" | "couleurSecondaire">): CouleursDocument {
+  const p = paletteSociete(r.couleurAccent, r.couleurSecondaire);
+  return { accent: p.accent, accentFonce: p.accentFonce, secondaire: p.secondaire, surSecondaire: p.surSecondaire };
+}
+
+function enDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resoudre, rejeter) => {
+    const lecteur = new FileReader();
+    lecteur.onload = () => (typeof lecteur.result === "string" ? resoudre(lecteur.result) : rejeter(new Error("Logo illisible.")));
+    lecteur.onerror = () => rejeter(lecteur.error ?? new Error("Logo illisible."));
+    lecteur.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Le logo du seau, en data-URL : le PDF se compose sans réseau. Un logo
+ * introuvable ou illisible ne doit jamais empêcher d'imprimer une facture —
+ * elle part sans, et on le dit en console.
+ */
+async function logoDuSeau(chemin: string): Promise<string | null> {
+  const { data, error } = await supabase().storage.from(BUCKET).download(chemin);
+  if (error) {
+    console.warn("Logo introuvable dans le seau, document imprimé sans logo :", chemin, error);
+    return null;
+  }
+  try {
+    const url = await enDataUrl(data);
+    return /^data:image\/(png|jpe?g);base64,/i.test(url) ? url : null;
+  } catch (e) {
+    console.warn("Logo illisible, document imprimé sans logo :", chemin, e);
+    return null;
+  }
 }

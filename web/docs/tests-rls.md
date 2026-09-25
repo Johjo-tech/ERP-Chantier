@@ -64,6 +64,8 @@ Mot de passe de tous : `motdepasse-local`.
 | `interventions.essai.ts` | Rapport du technicien : numéro INT par la base, contrôles, photo et signatures ; vacant : pas de signature client ; le sous-traitant rédige au nom de son entreprise et ne voit que ses rapports ; lecture ne supprime rien ; un rapport par bon | **oui** (20260926052000) |
 | `vehicules.essai.ts` | Conducteur ne crée pas de véhicule ; plaque unique par société ; CT dans `date_controle_technique` ; BETA ne voit rien. Secrétaire prête (durée), second prêt en cours refusé, durée ≤ 0 refusée, technicien ne note pas d'entretien, lecture ne supprime ni entretien ni prêt de matériel, secrétaire ne prête pas de matériel, technicien prête et rend ; secrétaire dépose sous `vehicules/`, lecture non | **oui** (20260926070000) |
 | `vehicules-api.essai.ts` | Les `api/` du parc telles quelles : fiche, plaque en double en clair, entretien avec facture (compteur qui monte, jamais ne descend), prêt avec schéma et retour, document à échéance vu par les alertes, vente → facture `FAC-` émise une seule fois, prêts de matériel | **oui** (20260926070000) |
+| `transversal.essai.ts` | D-CHA-04 : le bon né du DPGF, posé au planning, garde UNE tâche, datée, liée à sa ligne | non |
+| | Seau `terrain` : chantier affecté ou non, dossier RH d'un collègue, photos du bon d'un confrère sous-traitant, logo, domaine inconnu ; suppression des filles restantes refusée à la lecture ; tâches d'un confrère invisibles au sous-traitant ; journal du circuit non inscriptible ; Alsace-Moselle ; accès clients (admin seul, issues, fermer / rouvrir / retirer) | **oui** (2026092610*) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

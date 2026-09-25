@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { peut } from "@/modules/auth-roles/domain/permissions";
 import { useSession } from "@/modules/auth-roles/hooks/useSession";
 import { SectionComptes } from "@/modules/comptes/components/SectionComptes";
+import { SectionAccesClients } from "@/modules/espace-client/components/SectionAccesClients";
 import { rubriqueRetenue, rubriquesVisibles } from "../domain/rubriques";
 import { SectionDocuments } from "./SectionDocuments";
 import { SectionDocumentsLegaux } from "./SectionDocumentsLegaux";
@@ -30,6 +31,7 @@ const SECTIONS: Record<string, () => ReactNode> = {
   conduite: () => <SectionSeuils domaine="conduite" />,
   notifications: () => <SectionNotifications />,
   comptes: () => <SectionComptes />,
+  "acces-clients": () => <SectionAccesClients />,
 };
 
 /** L'écran Réglages : un rail de rubriques (une liste déroulante sur téléphone) et la rubrique ouverte. */

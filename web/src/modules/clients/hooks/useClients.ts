@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
-import { creerClient, listerClients, lireClient, modifierClient, supprimerClient } from "../api/clients";
+import { creerClient, listerClients, lireClient, modifierClient, supprimerClient, usagesDuClient } from "../api/clients";
 import { creerInterlocuteur, listerInterlocuteurs, supprimerInterlocuteur } from "../api/interlocuteurs";
 import type { SaisieClient } from "../domain/client";
 import type { SaisieInterlocuteur } from "../domain/interlocuteur";
@@ -43,6 +43,10 @@ export function useSupprimerClient() {
     mutationFn: supprimerClient,
     onSuccess: () => void qc.invalidateQueries({ queryKey: clesClients.liste(societe.id) }),
   });
+}
+
+export function useUsagesClient(id: string) {
+  return useQuery({ queryKey: ["usages-client", id], queryFn: () => usagesDuClient(id) });
 }
 
 export function useInterlocuteurs(clientId: string) {
