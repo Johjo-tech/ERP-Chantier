@@ -49,9 +49,33 @@ export interface ClientConnu {
 }
 
 export type RapprochementClient =
-  | { type: "exact" | "prefixe"; client: ClientConnu }
+  | { type: "exact" | "prefixe" | "contenu"; client: ClientConnu }
   | { type: "ambigu"; candidats: ClientConnu[] }
   | { type: "aucun" };
+
+/** En deçà, un fragment ne distingue plus rien : « sci » est dans tout. */
+const FRAGMENT_MIN = 4;
+
+/** Ce qui sépare deux mots dans un nom : ce qui peut ouvrir ou fermer un sigle. */
+const BORNE_MOT = /[\s(),.\-\/]/;
+
+/**
+ * `fragment` apparaît-il dans `nom` en ouvrant ET en fermant un mot ?
+ *
+ * L'ancrage des deux côtés est ce qui distingue ce rapprochement d'un
+ * « contient » : « milly » ne retrouve pas « millyon », et « sem4v » ne
+ * retrouve pas « sem4value ».
+ */
+function fragmentAncre(nom: string, fragment: string): boolean {
+  for (let i = nom.indexOf(fragment); i !== -1; i = nom.indexOf(fragment, i + 1)) {
+    const avant = i === 0 ? "" : nom.charAt(i - 1);
+    const apres = nom.charAt(i + fragment.length);
+    if ((avant === "" || BORNE_MOT.test(avant)) && (apres === "" || BORNE_MOT.test(apres))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * À quel client cette pièce se rattache-t-elle ?
@@ -66,10 +90,27 @@ export type RapprochementClient =
  * Sur les douze clients de l'export 2025, l'égalité exacte en reconnaît deux ;
  * le préfixe en reconnaît deux de plus, dont le deuxième client de la société.
  *
- * ── POURQUOI LE PRÉFIXE ET PAS « CONTIENT » ────────────────────────────────
- * Le préfixe est ancré : un nom commercial complet COMMENCE par la raison
- * sociale. « contient » rapprocherait « HABITAT » de tout, et l'ancrage est ce
- * qui rend la règle explicable à quelqu'un qui relit le rapport.
+ * ── LE PRÉFIXE, PUIS LE FRAGMENT ANCRÉ ─────────────────────────────────────
+ * Le préfixe est ancré à gauche : un nom commercial complet COMMENCE par la
+ * raison sociale. Mais tous ne la portent pas en tête — un SIGLE se met
+ * volontiers en FIN de nom, et le logiciel comptable, lui, ne garde que lui.
+ * « SEM4V » est ainsi le dernier mot d'une raison sociale que le fichier
+ * n'écrit pas : ni exact, ni préfixe, et la pièce partait créer un doublon.
+ *
+ * D'où un troisième niveau, sous trois gardes qui le rendent aussi explicable
+ * que les deux premiers :
+ *
+ *   1. le fragment est ANCRÉ des DEUX côtés — il ouvre et ferme un mot. Sans
+ *      quoi « SCI MILLY » attraperait « SCI MILLYON » ;
+ *   2. il compte au moins quatre caractères : en deçà, un sigle ne distingue
+ *      rien ;
+ *   3. il ne désigne qu'UN client. Deux candidats ne se départagent pas —
+ *      c'était déjà la règle du préfixe, et c'est ce qui empêche « HABITAT »
+ *      de se rapprocher de tout : il en trouverait trois, donc aucun.
+ *
+ * Le rapport le nomme à part : « probablement » n'est pas « trouvé », et sur
+ * des pièces qu'on ne pourra plus supprimer, la nuance doit se lire avant
+ * d'écrire.
  *
  * L'exact passe AVANT le préfixe, et cet ordre n'est pas cosmétique : « CDC
  * HABITAT » est le préfixe de « CDC HABITAT SOCIAL… » autant que de lui-même.
@@ -91,8 +132,26 @@ export function rapprocherClient(nom: string, existants: ClientConnu[]): Rapproc
     const k = cleNom(c.nom);
     return k.startsWith(cle) && /[\s(,-]/.test(k.charAt(cle.length));
   });
-  if (prefixes.length === 1) return { type: "prefixe", client: prefixes[0] };
-  if (prefixes.length > 1) return { type: "ambigu", candidats: prefixes };
+  /* Le sigle en fin de nom, ou au milieu. Ancré des deux côtés, et assez long
+     pour distinguer — les deux premières gardes détaillées plus haut. */
+  const fragments =
+    cle.length >= FRAGMENT_MIN
+      ? existants.filter((c) => fragmentAncre(cleNom(c.nom), cle))
+      : [];
+
+  /* La troisième garde, et elle compte les deux niveaux ENSEMBLE. Un préfixe
+     et un sigle qui désignent deux fiches différentes — « SEM4V ANNECY » et
+     « REGIE SEM4V » — ne se départagent pas : le préfixe l'emportait en
+     silence, alors que rien ne dit laquelle des deux a émis la pièce. Mieux
+     vaut une fiche créée en trop, visible dans l'aperçu, qu'une facture
+     indestructible attachée au mauvais client. */
+  const candidats = [...new Set([...prefixes, ...fragments])];
+  if (candidats.length > 1) return { type: "ambigu", candidats };
+  if (candidats.length === 1) {
+    return prefixes.length === 1
+      ? { type: "prefixe", client: candidats[0] }
+      : { type: "contenu", client: candidats[0] };
+  }
 
   return { type: "aucun" };
 }

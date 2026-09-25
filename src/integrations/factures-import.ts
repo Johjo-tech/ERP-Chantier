@@ -60,7 +60,7 @@ export interface ClientDuFichier {
   /** Net et signé : le poids de ce client dans ce qui s'importe. */
   ht: number;
   /** `aucun` et `ambigu` appellent une fiche neuve ; `prefixe` se montre. */
-  rapprochement: "exact" | "prefixe" | "ambigu" | "aucun";
+  rapprochement: "exact" | "prefixe" | "contenu" | "ambigu" | "aucun";
   /** Le nom de la fiche retenue, quand il diffère de celui du fichier. */
   versNom: string | null;
 }
@@ -225,7 +225,11 @@ export async function previsualiserImportFactures(
     }
 
     const r = resoudre(f.nomClient);
-    const trouve = r.type === "exact" || r.type === "prefixe" ? r.client : null;
+    /* Le fragment ancré compte comme une fiche trouvée : c'est le sigle en fin
+       de raison sociale, le cas de « SEM4V ». Le rapport le dit « probablement »,
+       et l'aperçu se lit avant d'écrire. */
+    const trouve =
+      r.type === "exact" || r.type === "prefixe" || r.type === "contenu" ? r.client : null;
     const cle = cleNom(f.nomClient);
 
     const vu = clients.get(cle) ?? {

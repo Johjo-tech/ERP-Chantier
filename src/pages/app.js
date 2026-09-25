@@ -5330,6 +5330,7 @@ function telechargerRapportFactures(){
   (a? a.clients : []).forEach(c => lignes.push({ ligne:0,
     motif:`Client « ${c.nom} » — ${c.rapprochement === 'exact' ? 'fiche trouvée'
       : c.rapprochement === 'prefixe' ? 'rapproché de « '+c.versNom+' »'
+      : c.rapprochement === 'contenu' ? 'probablement « '+c.versNom+' » (nom retrouvé dans la raison sociale)'
       : 'aucune fiche : elle sera créée'} (${c.pieces} pièces)`, contenu:c.code||'' }));
   lignes.sort((a2,b2)=>a2.ligne-b2.ligne);
   const blob = new Blob(['﻿' + window.rapportRejetsCsv(lignes)], {type:'text/csv;charset=utf-8'});
@@ -5432,6 +5433,10 @@ function importFacturesHTML(){
       <ul style="margin:0; padding-left:18px;">${a.clients.map(c=>`<li>${esc(c.nom)} <span class="card-sub">— ${c.pieces} pièce${c.pieces>1?'s':''}, ${moneyDisplay(c.ht)}</span> : ${
         c.rapprochement==='exact'? 'fiche existante'
         : c.rapprochement==='prefixe'? `rapproché de <b>${esc(c.versNom)}</b>`
+        /* « probablement », et pas « rapproché » : le nom du fichier n'est qu'un
+           fragment de la raison sociale — un sigle en fin de nom. Sur des pièces
+           qu'on ne pourra plus supprimer, la nuance se lit avant d'écrire. */
+        : c.rapprochement==='contenu'? `<b>probablement</b> ${esc(c.versNom)} <span class="card-sub">— « ${esc(c.nom)} » retrouvé dans la raison sociale, à vérifier</span>`
         : '<b>aucune fiche — elle sera créée</b>'}</li>`).join('')}</ul>
       ${a.clientsACreer.length? `<div class="card-sub" style="margin-top:6px;">${a.clientsACreer.length>1
         ? `${a.clientsACreer.length} fiches seront créées avec le seul nom du fichier. Complétez-les ensuite`
