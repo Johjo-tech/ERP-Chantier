@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { supabase, type Client } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
@@ -14,8 +15,6 @@ import { circuitDuBon, schemaTacheBon, type CircuitDuBon, type TacheBon } from "
 const COLONNES = Object.keys(schemaBon.shape).join(", ");
 const LIGNES = "id, position, type, designation, quantite, prix_unitaire, unite, tva, article_reference, commentaire, metier";
 export const COLONNES_TACHE = Object.keys(schemaTacheBon.shape).join(", ");
-/** PostgREST plafonne une réponse (max_rows) : au-delà, on lit par pages. */
-const PAGE = 1000;
 /** Des lots d'identifiants, pour que l'URL d'un `in.(…)` reste raisonnable. */
 const LOT = 150;
 
@@ -31,15 +30,14 @@ export interface Bon extends BonDeLaListe {
   lignes: LigneBonLue[];
 }
 
-export async function parPages<T>(lire: (debut: number, fin: number) => PromiseLike<{ data: unknown; error: unknown }>, schema: z.ZodType<T>, contexte: string) {
-  const tout: T[] = [];
-  for (let debut = 0; ; debut += PAGE) {
-    const { data, error } = await lire(debut, debut + PAGE - 1);
-    if (error) throw error;
-    const page = analyser(z.array(schema), data, contexte);
-    tout.push(...page);
-    if (page.length < PAGE) return tout;
-  }
+/**
+ * Une seule façon de lire par pages : `lireTout` (relecture 4, M1). S'arrêter
+ * sur une page de moins de 1 000 lignes tronquait en silence dès que le
+ * plafond du serveur descendait sous 1 000 ; le compte exact demandé par
+ * chaque appel (`{ count: "exact" }`) fait foi.
+ */
+export function parPages<T>(lire: (debut: number, fin: number) => PromiseLike<{ data: unknown; error: unknown; count?: number | null }>, schema: z.ZodType<T>, contexte: string): Promise<T[]> {
+  return lireTout(lire, schema, contexte);
 }
 
 export function lots(ids: readonly string[]): string[][] {
@@ -51,7 +49,7 @@ export function lots(ids: readonly string[]): string[][] {
 async function tachesDes(ids: readonly string[], client: Client): Promise<TacheBon[]> {
   const pages = await Promise.all(
     lots(ids).map((lot) =>
-      parPages((d, f) => client.from("planning_taches").select(COLONNES_TACHE).in("bon_commande_id", lot).order("cree_le").order("id").range(d, f), schemaTacheBon, "tâches des bons")
+      parPages((d, f) => client.from("planning_taches").select(COLONNES_TACHE, { count: "exact" }).in("bon_commande_id", lot).order("cree_le").order("id").range(d, f), schemaTacheBon, "liste des tâches des bons")
     )
   );
   return pages.flat();
@@ -60,7 +58,7 @@ async function tachesDes(ids: readonly string[], client: Client): Promise<TacheB
 /** Les factures qui désignent ces bons : elles disent « Facturé » et figent le bon. */
 async function facturesDes(ids: readonly string[], client: Client): Promise<FactureLiee[]> {
   const pages = await Promise.all(
-    lots(ids).map((lot) => parPages((d, f) => client.from("factures").select("id, numero, bon_commande_id").in("bon_commande_id", lot).order("id").range(d, f), schemaFactureLiee, "factures des bons"))
+    lots(ids).map((lot) => parPages((d, f) => client.from("factures").select("id, numero, bon_commande_id", { count: "exact" }).in("bon_commande_id", lot).order("id").range(d, f), schemaFactureLiee, "liste des factures des bons"))
   );
   return pages.flat();
 }
@@ -88,7 +86,7 @@ export async function listerBons(societeId: string, client: Client = supabase())
     (d, f) =>
       client
         .from("v_bons_commande_terrain")
-        .select(COLONNES)
+        .select(COLONNES, { count: "exact" })
         .eq("societe_id", societeId)
         .order("date", { ascending: false })
         .order("numero_interne", { ascending: false })

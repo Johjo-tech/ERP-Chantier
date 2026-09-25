@@ -59,17 +59,17 @@ const schemaFactureLiee = z.object({ bon_commande_id: z.string() });
 export async function bonsDuConducteur(societeId: string, conducteurId: string | null, client: Client = supabase()): Promise<BonConducteur[]> {
   const bons = await parPages(
     (d, f) => {
-      let q = client.from("v_bons_commande_terrain").select(COLONNES_BON).eq("societe_id", societeId);
+      let q = client.from("v_bons_commande_terrain").select(COLONNES_BON, { count: "exact" }).eq("societe_id", societeId);
       if (conducteurId) q = q.eq("conducteur_id", conducteurId);
       return q.order("id").range(d, f);
     },
     schemaBonLu,
-    "bons du conducteur"
+    "liste des bons du conducteur"
   );
   const paquets = lots(bons.map((b) => b.id));
   const [taches, factures] = await Promise.all([
-    Promise.all(paquets.map((lot) => parPages((d, f) => client.from("planning_taches").select(COLONNES_TACHE).in("bon_commande_id", lot).order("id").range(d, f), schemaTache, "tâches des bons"))),
-    Promise.all(paquets.map((lot) => parPages((d, f) => client.from("factures").select("bon_commande_id").in("bon_commande_id", lot).order("id").range(d, f), schemaFactureLiee, "factures des bons"))),
+    Promise.all(paquets.map((lot) => parPages((d, f) => client.from("planning_taches").select(COLONNES_TACHE, { count: "exact" }).in("bon_commande_id", lot).order("id").range(d, f), schemaTache, "liste des tâches des bons"))),
+    Promise.all(paquets.map((lot) => parPages((d, f) => client.from("factures").select("bon_commande_id", { count: "exact" }).in("bon_commande_id", lot).order("id").range(d, f), schemaFactureLiee, "liste des factures des bons"))),
   ]);
   const tachesPar = new Map<string, TacheDuBon[]>();
   for (const t of taches.flat()) if (t.bon_commande_id) tachesPar.set(t.bon_commande_id, [...(tachesPar.get(t.bon_commande_id) ?? []), t]);

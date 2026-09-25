@@ -17,7 +17,7 @@ export async function listerPieces(societeId: string, client: Client = supabase(
     (d, f) =>
       client
         .from("planning_taches")
-        .select(COLONNES_TACHE)
+        .select(COLONNES_TACHE, { count: "exact" })
         .eq("societe_id", societeId)
         .not("bon_commande_id", "is", null)
         .or("piece_a_commander.is.true,piece_description.not.is.null,piece_recue_le.not.is.null")
@@ -25,13 +25,13 @@ export async function listerPieces(societeId: string, client: Client = supabase(
         .order("id")
         .range(d, f),
     schemaTacheBon,
-    "pièces à commander"
+    "liste des pièces à commander"
   );
   const ids = [...new Set(lues.map((t) => t.bon_commande_id).filter((id): id is string => id !== null))];
   if (!ids.length) return [];
   const colonnes = Object.keys(schemaBonDePiece.shape).join(", ");
   const pages = await Promise.all(
-    lots(ids).map((lot) => parPages((d, f) => client.from("v_bons_commande_terrain").select(colonnes).in("id", lot).order("id").range(d, f), schemaBonDePiece, "bons des pièces"))
+    lots(ids).map((lot) => parPages((d, f) => client.from("v_bons_commande_terrain").select(colonnes, { count: "exact" }).in("id", lot).order("id").range(d, f), schemaBonDePiece, "liste des bons des pièces"))
   );
   return pages.flat().map((b) => pieceDuBon(b, lues.filter((t) => t.bon_commande_id === b.id)));
 }

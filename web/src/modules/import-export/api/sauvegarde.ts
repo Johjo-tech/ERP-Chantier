@@ -1,10 +1,7 @@
 import { z } from "zod";
+import { lireTout } from "@/lib/lecture";
 import { supabase } from "@/lib/supabase";
-import { analyser } from "@/lib/validation";
 import { COLLECTIONS_SAUVEGARDE, documentSauvegarde } from "../domain/sauvegarde";
-
-/** PostgREST plafonne une réponse (max_rows) : au-delà, par pages. */
-const PAGE = 1000;
 
 const schemaLignes = z.array(z.record(z.string(), z.unknown()));
 
@@ -14,19 +11,12 @@ const schemaLignes = z.array(z.record(z.string(), z.unknown()));
  * ici, le contenu part tel que la base le rend.
  */
 async function lireCollection(source: string, select: string, societeId: string): Promise<Record<string, unknown>[]> {
-  const tout: Record<string, unknown>[] = [];
-  for (let debut = 0; ; debut += PAGE) {
-    const { data, error } = await supabase()
-      .from(source as "clients")
-      .select(select)
-      .eq("societe_id", societeId)
-      .order("id")
-      .range(debut, debut + PAGE - 1);
-    if (error) throw error;
-    const page = analyser(schemaLignes, data, `sauvegarde : ${source}`);
-    tout.push(...page);
-    if (page.length < PAGE) return tout;
-  }
+  // Une sauvegarde incomplète serait pire qu'aucune : compte exact et `lireTout` (relecture 4, M1).
+  return lireTout(
+    (debut, fin) => supabase().from(source as "clients").select(select, { count: "exact" }).eq("societe_id", societeId).order("id").range(debut, fin),
+    schemaLignes.element,
+    `collection « ${source} » de la sauvegarde`
+  );
 }
 
 /** Le fichier de sauvegarde complet, prêt à télécharger. */

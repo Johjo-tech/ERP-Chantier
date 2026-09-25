@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Database } from "@/lib/database.types";
 import { arrondiCentimes, enCentimes, montant } from "@/lib/money";
+import { lireTout } from "@/lib/lecture";
 import { supabase, type Client } from "@/lib/supabase";
 import { analyser } from "@/lib/validation";
 import { schemaBonPlanning, schemaTachePlanning, type BonPlanning, type Equipe, type SousTraitant, type TachePlanning, type Tentative } from "../domain/cartes";
@@ -15,7 +16,6 @@ import type { OperationTache, Plan } from "../domain/planification";
  * dans `planning_taches` (`peut_ecrire`). Les transitions d'état ne s'écrivent
  * JAMAIS en direct (`circuit_etat_reserve`) : RPC `tache_*` seulement.
  */
-const PAGE = 1000;
 const COLONNES_BON = Object.keys(schemaBonPlanning.shape).join(", ");
 export const COLONNES_TACHE = Object.keys(schemaTachePlanning.shape).join(", ");
 
@@ -26,17 +26,6 @@ export const COLONNES_TACHE = Object.keys(schemaTachePlanning.shape).join(", ");
 type AppelRpc = (fonction: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
 const rpcProposee = (c: Client): AppelRpc => c.rpc.bind(c) as unknown as AppelRpc;
 type MajBon = Database["public"]["Tables"]["bons_commande"]["Update"];
-
-async function parPages<T>(lire: (debut: number, fin: number) => PromiseLike<{ data: unknown; error: unknown }>, schema: z.ZodType<T>, contexte: string): Promise<T[]> {
-  const tout: T[] = [];
-  for (let debut = 0; ; debut += PAGE) {
-    const { data, error } = await lire(debut, debut + PAGE - 1);
-    if (error) throw error;
-    const page = analyser(z.array(schema), data, contexte);
-    tout.push(...page);
-    if (page.length < PAGE) return tout;
-  }
-}
 
 /** Une fonction PROPOSÉE absente de la base (production pas encore migrée) : on continue sans elle, en le disant. */
 function estFonctionAbsente(e: unknown): boolean {
@@ -85,8 +74,9 @@ async function rpcFacultative<T>(appel: PromiseLike<{ data: unknown; error: unkn
 export async function lirePlanning(societeId: string, utilisateurId: string, client: Client = supabase()): Promise<DonneesPlanning> {
   const rpc = rpcProposee(client);
   const [bons, taches, equipes, sousTraitants, metiers, annuaire, travaux] = await Promise.all([
-    parPages((d, f) => client.from("v_bons_commande_terrain").select(COLONNES_BON).eq("societe_id", societeId).order("date", { ascending: false }).order("id").range(d, f), schemaBonPlanning, "bons du planning"),
-    parPages((d, f) => client.from("planning_taches").select(COLONNES_TACHE).eq("societe_id", societeId).not("bon_commande_id", "is", null).order("cree_le").order("id").range(d, f), schemaTachePlanning, "tâches du planning"),
+    // Une seule façon de lire par pages, avec le compte exact (relecture 4, M1).
+    lireTout((d, f) => client.from("v_bons_commande_terrain").select(COLONNES_BON, { count: "exact" }).eq("societe_id", societeId).order("date", { ascending: false }).order("id").range(d, f), schemaBonPlanning, "liste des bons du planning"),
+    lireTout((d, f) => client.from("planning_taches").select(COLONNES_TACHE, { count: "exact" }).eq("societe_id", societeId).not("bon_commande_id", "is", null).order("cree_le").order("id").range(d, f), schemaTachePlanning, "liste des tâches du planning"),
     client.from("techniciens").select("id, nom, couleur, metiers").eq("societe_id", societeId).order("nom"),
     client.from("sous_traitants").select("id, nom, metiers").eq("societe_id", societeId).order("nom"),
     client.from("metiers").select("libelle, couleur").eq("societe_id", societeId).order("position"),
