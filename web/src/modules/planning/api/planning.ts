@@ -90,7 +90,8 @@ export async function lirePlanning(societeId: string, utilisateurId: string, cli
     client.from("techniciens").select("id, nom, couleur, metiers").eq("societe_id", societeId).order("nom"),
     client.from("sous_traitants").select("id, nom, metiers").eq("societe_id", societeId).order("nom"),
     client.from("metiers").select("libelle, couleur").eq("societe_id", societeId).order("position"),
-    client.from("v_salaries_annuaire").select("technicien_id").eq("societe_id", societeId).eq("profile_id", utilisateurId).eq("actif", true),
+    // Sans compte connu (session en cours de lecture), pas d'équipe : un identifiant vide ferait échouer toute la lecture (22P02).
+    utilisateurId ? client.from("v_salaries_annuaire").select("technicien_id").eq("societe_id", societeId).eq("profile_id", utilisateurId).eq("actif", true) : Promise.resolve({ data: [], error: null }),
     client.from("v_travaux_supplementaires_terrain").select("planning_tache_id").eq("societe_id", societeId).not("planning_tache_id", "is", null),
   ]);
   for (const r of [equipes, sousTraitants, metiers, annuaire, travaux]) if (r.error) throw r.error;

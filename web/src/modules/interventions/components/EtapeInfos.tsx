@@ -20,12 +20,15 @@ const LOGEMENTS: { valeur: LogementStatut; libelle: string }[] = [
 ];
 
 function Champ({ libelle, children, erreur }: { libelle: string; children: React.ReactNode; erreur?: string | undefined }) {
+  // L'erreur hors du libellé : sinon elle ferait partie du nom accessible du champ.
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      {libelle}
-      {children}
+    <div className="flex flex-col gap-1">
+      <label className="flex flex-col gap-1 text-sm">
+        {libelle}
+        {children}
+      </label>
       {erreur && <span className="text-xs text-destructive">{erreur}</span>}
-    </label>
+    </div>
   );
 }
 
