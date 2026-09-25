@@ -46,7 +46,10 @@ export const GROUPES_RUBRIQUES: readonly GroupeRubriques[] = [
   },
   {
     titre: "Accès",
-    rubriques: [{ id: "comptes", libelle: "Comptes et invitations", description: "Membres, rôles, invitations", module: "utilisateurs" }],
+    rubriques: [
+      { id: "comptes", libelle: "Comptes et invitations", description: "Membres, rôles, invitations", module: "utilisateurs" },
+      { id: "acces-clients", libelle: "Accès clients", description: "Espace client : qui lit quoi", module: "utilisateurs" },
+    ],
   },
 ];
 

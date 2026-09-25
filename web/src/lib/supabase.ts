@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { DatabaseAvecPropositions, DatabasePlanning } from "./database.propositions";
+import type { DatabaseAvecPropositions, DatabasePlanning, DatabaseTransversal } from "./database.propositions";
 import type { Database } from "./database.types";
 import { lireConfiguration } from "./env";
 
@@ -35,4 +35,9 @@ export function supabasePropositions(): SupabaseClient<DatabaseAvecPropositions>
 /** Un client (celui de l'application, ou celui d'un test), typé avec les colonnes et fonctions proposées du planning et des rapports (2026092605*). */
 export function clientPlanning(c: Client = supabase()): SupabaseClient<DatabasePlanning> {
   return c as unknown as SupabaseClient<DatabasePlanning>;
+}
+
+/** Idem pour les propositions transversales (2026092610*) : Alsace-Moselle, accès clients. */
+export function clientTransversal(c: Client = supabase()): SupabaseClient<DatabaseTransversal> {
+  return c as unknown as SupabaseClient<DatabaseTransversal>;
 }

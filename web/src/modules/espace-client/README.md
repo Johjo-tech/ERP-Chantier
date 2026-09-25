@@ -18,5 +18,9 @@ bons de commande ; pièces imprimables et téléchargeables en PDF.
   (parité `tests/parite/espace-client.essai.ts`) ; aucune navigation de gestion.
 - **Tests** : `tests/rls/espace-client.essai.ts`, `espace-client-bons.essai.ts`,
   `components/bons-client.essai.tsx`, parcours e2e.
-- **Non repris** : gestion des accès par l'admin (écran de réglages, section
-  15) ; date de validité des devis (réglage non lisible par le client).
+- **Gestion des accès** : Réglages › Accès clients (`SectionAccesClients`,
+  administrateur seul) — ouvrir par l'adresse du compte, restreindre à un
+  interlocuteur, fermer / rouvrir / retirer. Proposition `20260926106000`
+  (`acces_clients_de_la_societe`, `ouvrir_acces_client`), D-TRV-08. La
+  création du compte du client n'est pas couverte (clé de service).
+- **Non repris** : date de validité des devis (réglage non lisible par le client).
