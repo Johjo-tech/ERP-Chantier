@@ -28,6 +28,13 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 17 | `20260926051000_les_photos_du_terrain.sql` | Droits | `bon_commande_photos` illisible au terrain (sous-requête sur une table à prix), suppression ouverte au rôle lecture, seau `terrain` fermé au sous-traitant (D-PLN-06). | `tests/rls/planning.essai.ts` (« [proposition] … photo ») |
 | 18 | `20260926052000_rapports_d_intervention_complets.sql` | Fonction + droits | Rapport : lien au bon (un par bon), émetteur sous-traitant, signature du technicien, numéro posé par la base ; le sous-traitant ne voit que ses rapports (PLN-52) ; tables filles sur la matrice « rapports ». Dépend du n° 8 (D-PLN-07). | `tests/rls/interventions.essai.ts` |
 | 19 | `20260926053000_le_terrain_joint_le_locataire.sql` | Fonction | Téléphone de l'occupant, absent de la vue terrain : `telephones_locataires(societe)` pour les membres (D-PLN-10). | `tests/rls/planning.essai.ts` (« [proposition] … téléphone ») |
+| 20 | `20260926100000_le_terrain_ne_lit_que_ses_fichiers.sql` | **Sécurité** | La lecture du seau `terrain` ne se jugeait que par société : un technicien ou un sous-traitant qui connaît un chemin lit le document d'un chantier où il n'est pas affecté, le dossier RH d'un collègue, la photo d'un confrère. `peut_lire_terrain(nom)` lit le domaine et l'entité du chemin. Dépend des n° 16 et 18. D-TRV-02. | `tests/rls/transversal.essai.ts` (« [proposition] seau terrain ») |
+| 21 | `20260926101000_filles_restantes_suppriment_par_l_ecriture.sql` | Droits | `facture_cycle_vie`, `facture_entrante_lignes`, `fournisseur_controle_lignes` : suppression par `est_membre` (rôle lecture compris) → `peut_ecrire`. Véhicules, matériel, `sous_traitant_documents` : à leurs modules. Relevé : `select c.relname from pg_policy p join pg_class c on c.oid=p.polrelid where p.polcmd='d' and pg_get_expr(p.polqual,p.polrelid) ilike '%est_membre%';` D-TRV-03. | `tests/rls/transversal.essai.ts` (« [proposition] suppression des filles ») |
+| 22 | `20260926102000_le_sous_traitant_ne_lit_que_ses_taches.sql` | Droits | `planning_taches` lisible par tout membre : le sous-traitant lisait les tâches de ses confrères. `tache_lisible()` ; technicien inchangé (AUTH-72, D-TRV-04). | `tests/rls/transversal.essai.ts`, `tests/rls/planning.essai.ts` |
+| 23 | `20260926103000_le_journal_du_circuit_ne_s_ecrit_que_par_le_circuit.sql` | **Intégrité** | `workflow_journal` acceptait l'INSERT de tout membre (fausses transitions). Plus de politique INSERT ni de droit d'écriture ; les RPC SECURITY DEFINER écrivent toujours (AUTH-73, D-TRV-05). | `tests/rls/transversal.essai.ts`, `tests/rls/circuit.essai.ts` |
+| 24 | `20260926104000_fonctions_de_declencheur_sans_execute_public.sql` | Hygiène | EXECUTE retiré à PUBLIC/anon/authenticated sur toutes les fonctions de déclencheur ; `security_barrier` remis sur `v_salaries_annuaire`. **À rejouer après toute proposition qui crée un déclencheur ou refait cette vue.** Contrôles : la requête de l'en-tête rend 0 ligne ; `reloptions` = `{security_barrier=true}`. AUTH-75, AUTH-76, D-TRV-06. | contrôle SQL (non observable par l'API) + `npm run test:rls` entier |
+| 25 | `20260926105000_jours_feries_d_alsace_moselle.sql` | Fonction | `societes.feries_alsace_moselle` (faux par défaut) : Vendredi saint et 26/12 au planning (PLN-53, D-TRV-07). | `tests/rls/transversal.essai.ts` (« [proposition] Alsace-Moselle ») |
+| 26 | `20260926106000_acces_clients_geres_par_l_admin.sql` | Fonction | Réglages › Accès clients : `acces_clients_de_la_societe()` et `ouvrir_acces_client()`, réservées à `est_admin`. Après les n° 4 et 14 (D-TRV-08). | `tests/rls/transversal.essai.ts` (« [proposition] accès clients ») |
 
 ## Comment les appliquer (par un humain)
 
@@ -54,18 +61,14 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 
 ## Migrations à écrire ensuite (non rédigées)
 
-- **Planning restreint au terrain** : `planning_taches` se lit sous `est_membre` — un sous-traitant lit toutes les tâches de la société, celles de ses confrères comprises (AUTH-72). L'écran filtre ; la base devrait le faire.
-- **Réglage Alsace-Moselle** : une colonne de société pour activer Vendredi saint et 26 décembre (D-PLN-09).
+- *(Planning restreint au terrain : rédigée, n° 22. Réglage Alsace-Moselle : rédigée, n° 25.)*
 
-- **Suppression dans les autres tables filles** : 20 tables (véhicules, matériel,
-  photos…) suppriment encore sous `est_membre()` — même défaut que le n° 2 (les
-  six filles du chantier sont traitées par le n° 9). Liste : `select … from pg_policy where polcmd='d' and … est_membre` (voir tests-rls.md).
-- **Documents de chantier et terrain** : les politiques Storage du bucket `terrain`
-  jugent la lecture par `est_membre()` sur le premier segment (la société) : un
-  technicien qui connaîtrait le chemin d'un fichier d'un chantier où il n'est pas
-  affecté pourrait le lire. Les lignes qui donnent ces chemins, elles, suivent
-  bien l'affectation (sous-requête sur `chantiers`). Resserrer demanderait une
-  fonction qui lise le troisième segment (`<société>/chantiers/<chantier>/…`).
+- **Suppression dans les autres tables filles** : restent 8 tables sous
+  `est_membre()` — véhicules (cartes carburant, consommations, contrôles
+  périodiques, documents, entretiens, prêts), `materiel_prets`,
+  `sous_traitant_documents` — laissées aux modules véhicules/matériel et RH
+  (les trois autres : n° 21).
+- *(Lecture du seau `terrain` par chantier : rédigée, n° 20.)*
 - **Niveau d'abonnement** : `alter table societes add column niveau_abonnement smallint check (niveau_abonnement between 1 and 5)` — lu par `select *`, pris en compte sans changer le code (D-009). Opposable seulement quand une RLS ou une fonction le vérifie.
 - **Situation de travaux atomique** : une RPC `facturer_situation(chantier, lignes jsonb)` qui crée la facture, la trace et le cumul dans une seule transaction (aujourd'hui trois écritures successives, dans l'ordre le moins risqué — FAC-97).
 - **Client et conducteur d'une autre société** : un bon (comme un devis) accepte un `client_id` ou un `conducteur_id` d'une autre société ; l'écran ne les propose pas, la base devrait le refuser (relecture 3, M1).

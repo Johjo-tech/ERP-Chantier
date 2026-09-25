@@ -61,6 +61,8 @@ Mot de passe de tous : `motdepasse-local`.
 | | Circuit : l'équipe consigne puis déclare faite ; l'état ne s'écrit pas en direct ; une autre équipe est refusée en toutes lettres ; refus sans motif refusé, avec motif renvoyé | non |
 | | Sous-traitant : pointe ses tâches et pas celles d'un confrère, lit SON montant seul, signale un travail sur SON bon ; photos déposées et lues par le terrain, pas effacées par le rôle lecture ; téléphone de l'occupant | **oui** (20260926050000, 051000, 053000) |
 | `interventions.essai.ts` | Rapport du technicien : numéro INT par la base, contrôles, photo et signatures ; vacant : pas de signature client ; le sous-traitant rédige au nom de son entreprise et ne voit que ses rapports ; lecture ne supprime rien ; un rapport par bon | **oui** (20260926052000) |
+| `transversal.essai.ts` | D-CHA-04 : le bon né du DPGF, posé au planning, garde UNE tâche, datée, liée à sa ligne | non |
+| | Seau `terrain` : chantier affecté ou non, dossier RH d'un collègue, photos du bon d'un confrère sous-traitant, logo, domaine inconnu ; suppression des filles restantes refusée à la lecture ; tâches d'un confrère invisibles au sous-traitant ; journal du circuit non inscriptible ; Alsace-Moselle ; accès clients (admin seul, issues, fermer / rouvrir / retirer) | **oui** (2026092610*) |
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 
