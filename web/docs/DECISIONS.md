@@ -1065,3 +1065,76 @@ lu 1,234, `;` retenu seulement sans virgule en 1re ligne, prix jamais deviné pa
 le contenu) sont gardées à l'identique, faute de quoi des fichiers préparés
 pour l'ancien liraient autrement ; le remplacement sans confirmation est
 tempéré par D-CHA-07 (l'écran annonce ce qui sera remplacé, lignes figées gardées).
+
+
+## D-RH-01 — Les données RH restent aux RH (proposition 20260926060000)
+`v_salaries_annuaire` masquait salaires, coûts, naissance, IBAN… mais montrait à
+tout membre (technicien, sous-traitant, lecture) les deux dates du suivi médical
+et les notes de la fiche — des données de santé (RGPD art. 9) que la table des
+visites, elle, réserve à `rh / modifier`. Et le seau `terrain` laissait tout
+membre lire `<société>/salaries/…` (contrats, pièces d'identité, RIB,
+attestations médicales), tandis que la secrétaire (`rh / modifier`) ne pouvait
+ni y déposer ni y retirer une pièce (`peut_ecrire`). Proposition : trois
+expressions de la vue masquées (définition vivante, colonnes inchangées) ; une
+politique RESTRICTIVE sur le sous-dossier `salaries` et trois politiques
+permissives pour qui tient les dossiers — les politiques existantes du seau (et
+celles d'autres propositions) ne sont pas refaites. Impact sur l'ancien écran :
+le conducteur n'y voit plus le badge de visite (c'est voulu).
+
+## D-RH-02 — Absences dans `salarie_absences`, actées
+L'ancien écran posait `absences` sur la fiche, sans colonne : perdues au
+rechargement, solde faux (RH-20). `web/` écrit une ligne par absence (jours
+ouvrés calculés, justificatif au seau). Saisie par qui tient les dossiers,
+l'absence est ACTÉE : `statut = 'approuvee'`, `date_approbation` = jour de
+saisie (le défaut `en_attente` dirait le contraire). Types = libellés de
+l'ancien écran (« Congé payé »…). L'acquis de CP s'enregistre avec la fiche,
+plus à chaque frappe. Contrainte `fin >= début` proposée (NOT VALID).
+
+## D-RH-03 — Habilitations au dossier, pas dans `salarie_habilitations`
+Comme l'ancien écran corrigé : une habilitation est un `salarie_documents` de
+type `habilitation` (fichier au seau). `salarie_habilitations` reste inutilisée ;
+y migrer demanderait de reprendre les alertes de l'ancien écran en même temps.
+
+## D-RH-04 — Seuils réglables partout
+La liste codait 30 jours en dur pour la carte BTP et les habilitations alors que
+`carteBtp` et `habilitation` (60 j par défaut) sont réglables et servent aux
+alertes : `web/` applique les seuils de Réglages › RH (documents 30 j, visites
+45 j, carte BTP 60 j, habilitations 60 j). Les documents de sous-traitant
+(30 j en dur) suivent le seuil `documentLegal`.
+
+## D-RH-05 — Équipes, sous-traitants et fiche conducteur : l'administrateur
+La matrice range ces écrans sous `rh` (admin, secrétaire en écriture) ; la base
+exige `peut_ecrire()` (admin, conducteur, technicien) sur `techniciens`,
+`sous_traitants`, `sous_traitant_documents` et `conducteurs`. L'écran demande
+les deux, soit l'administrateur : il ne propose pas à la secrétaire un geste
+voué au refus, ni au conducteur un geste que la matrice ne lui donne pas. La
+secrétaire rattache toutefois un salarié à une équipe (c'est la fiche du
+salarié qui porte le lien). À trancher par le métier ; migration à écrire si
+la secrétaire doit gérer équipes et sous-traitants.
+
+## D-RH-06 — Équipe : nom, métiers, couleur ; membres = salariés (RH-21)
+`nom2`, `nom3` et la composition « binôme » n'avaient pas de colonne ; l'ancien
+écran les a déjà retirés. Les membres sont les salariés actifs dont
+`technicien_id` désigne l'équipe. Aucune migration.
+
+## D-RH-07 — L'onglet RH sans `rh / modifier`
+Conducteur, technicien, lecture ont `rh / voir` : ils voient la liste par
+l'annuaire (sans coût, sans badges de dossier ni de visite — les lire serait
+un refus, et « dossier incomplet » partout mentirait), les équipes et les
+sous-traitants. Dossiers, visites, registre et fiche exigent `rh / modifier`.
+
+## D-RH-08 — Documents de sous-traitant dans `sous_traitant_documents`
+L'ancien écran posait `documents` (data-URL) sur la fiche du sous-traitant,
+sans colonne : décennales et attestations se perdaient. `web/` écrit la table
+(nom = type) et range le fichier sous `<société>/sous-traitants/<id>/`.
+
+## D-RH-09 — Une fiche conducteur retirée n'est pas cochée
+L'ancien écran cochait la case dès qu'une fiche existait, même retirée, et
+l'enregistrement suivant la réactivait sans qu'on l'ait demandé. `web/` coche
+selon `actif` (test : `rh.essai.tsx`).
+
+## D-RH-10 — Le rôle conducteur se propose au passage à « coché »
+L'ancien écran redemandait à chaque enregistrement tant que le compte n'était
+pas conducteur. `web/` propose une fois, quand la case passe de décochée à
+cochée ; hors administrateur, il dit que le rôle n'a pas changé sans poser la
+question. Un refus garde la fiche enregistrée.

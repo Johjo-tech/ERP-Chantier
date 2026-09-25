@@ -57,6 +57,9 @@ import { PageMateriel } from "@/modules/materiel/components/PageMateriel";
 import { PageFicheVehicule } from "@/modules/vehicules/components/PageFicheVehicule";
 import { PageFormulaireVehicule } from "@/modules/vehicules/components/PageFormulaireVehicule";
 import { PageVehicules } from "@/modules/vehicules/components/PageVehicules";
+import { PageFicheSalarie } from "@/modules/rh/components/PageFicheSalarie";
+import { PageRegistre } from "@/modules/rh/components/PageRegistre";
+import { PageRh } from "@/modules/rh/components/PageRh";
 import { Accueil } from "./Accueil";
 import { Layout } from "./Layout";
 import { PageIntrouvable } from "./PageIntrouvable";
@@ -166,6 +169,10 @@ export const routes: RouteObject[] = [
       { path: "materiel/nouveau", element: <RouteModule module="materiel" action="creer"><PageFormulaireMateriel /></RouteModule> },
       { path: "materiel/:id", element: <RouteModule module="materiel"><PageFicheMateriel /></RouteModule> },
       { path: "materiel/:id/modifier", element: <RouteModule module="materiel" action="modifier"><PageFormulaireMateriel /></RouteModule> },
+      { path: "rh", element: <RouteModule module="rh"><PageRh /></RouteModule> },
+      { path: "rh/registre", element: <RouteModule module="rh" action="modifier"><PageRegistre /></RouteModule> },
+      { path: "rh/salaries/nouveau", element: <RouteModule module="rh" action="creer"><PageFicheSalarie /></RouteModule> },
+      { path: "rh/salaries/:id", element: <RouteModule module="rh" action="modifier"><PageFicheSalarie /></RouteModule> },
       { path: "*", element: <PageIntrouvable /> },
     ],
   },
