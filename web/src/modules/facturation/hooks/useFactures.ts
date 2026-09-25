@@ -4,10 +4,11 @@ import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import {
   ajouterReglement, contexteImpression, creerFacture, deverrouillerBrouillon, emettreFacture, listerFactures, lireFacture, modifierBrouillon,
-  reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, verrouillerBrouillon,
+  reglementsDeLaSociete, supprimerBrouillonFacture, supprimerReglement, verrouillerBrouillon,
 } from "../api/factures";
-import { dupliquerFacture, etablirAvoir, factureDepuisDevis, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
-import { enregistrerReglementGroupe, imputerAvoir, modifierReglement } from "../api/reglements";
+import { dupliquerFacture, etablirAvoir, factureDepuisDevis, facturerSituation } from "../api/operations";
+import { annulerImputation, enregistrerReglementGroupe, imputerAvoir, modifierReglement } from "../api/reglements";
+import { estMoitieImputation } from "../domain/reglements";
 import { soldesDesFactures } from "../api/soldes";
 import type { EnteteAEnregistrer } from "../domain/facture";
 import type { LigneSituation } from "../domain/situation";
@@ -76,15 +77,10 @@ export function useEmettre() {
   return useMutation({ mutationFn: emettreFacture, onSettled: (_n, _e, id) => invalider(id) });
 }
 
+/** Un seul appel : la base rend l'avancement d'une situation et supprime, tout ou rien (relecture 4, B2). */
 export function useSupprimerBrouillon() {
   const invalider = useInvalider();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      await rendreAvancementDuBrouillon(id);
-      await supprimerBrouillon(id);
-    },
-    onSettled: () => invalider(),
-  });
+  return useMutation({ mutationFn: supprimerBrouillonFacture, onSettled: () => invalider() });
 }
 
 /** Les règlements d'une facture, pris dans ceux de la société (une seule lecture pour tous les écrans). */
@@ -114,9 +110,9 @@ export function useFactureDepuisDevis() {
 }
 
 export function useEtablirAvoir() {
-  const s = useSocieteActive();
   const invalider = useInvalider();
-  return useMutation({ mutationFn: ({ factureId, motif }: { factureId: string; motif: string }) => etablirAvoir(s.id, factureId, motif), onSuccess: (id) => invalider(id) });
+  // Invalidé aussi sur échec : la liste doit dire ce que la base contient, quoi qu'il arrive.
+  return useMutation({ mutationFn: ({ factureId, motif }: { factureId: string; motif: string }) => etablirAvoir(factureId, motif), onSettled: (id) => invalider(id ?? undefined) });
 }
 
 /** Lettrage / « Régler par un avoir » : la base contrôle et écrit les deux règlements liés. */
@@ -139,9 +135,13 @@ export function useModifierReglement() {
   });
 }
 
+/** Retirer un règlement ; une moitié d'imputation emporte sa jumelle, par la base (relecture 4, I8). */
 export function useSupprimerReglement() {
   const invalider = useInvalider();
-  return useMutation({ mutationFn: supprimerReglement, onSettled: () => invalider() });
+  return useMutation({
+    mutationFn: (r: { id: string; mode: string | null }) => (estMoitieImputation(r.mode) ? annulerImputation(r.id) : supprimerReglement(r.id)),
+    onSettled: () => invalider(),
+  });
 }
 
 export function useDupliquerFacture() {

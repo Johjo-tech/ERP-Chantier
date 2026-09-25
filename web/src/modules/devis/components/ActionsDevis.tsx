@@ -6,6 +6,7 @@ import { BoutonConfirme } from "@/components/ui/confirmation";
 import { messageErreur } from "@/lib/erreurs";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
+import { EnregistrementPartiel } from "@/modules/commandes/api/bons";
 import { useClients } from "@/modules/clients/hooks/useClients";
 import { BoutonPdf } from "@/modules/documents/components/BoutonPdf";
 import { PanneauEmail } from "@/modules/documents/components/PanneauEmail";
@@ -45,7 +46,15 @@ export function ActionsDevis({ devis }: { devis: Devis }) {
         <Button
           variant="outline"
           disabled={bon.isPending}
-          onClick={() => bon.mutate(devis.id, { onSuccess: (id) => void navigate(`/commandes/${id}`, { state: { message: "Bon de commande créé depuis le devis (en attente du numéro du client). Relisez-le." } }) })}
+          onClick={() =>
+            bon.mutate(devis.id, {
+              onSuccess: (id) => void navigate(`/commandes/${id}`, { state: { message: "Bon de commande créé depuis le devis (en attente du numéro du client). Relisez-le." } }),
+              // Bon créé sans toutes ses lignes : on l'ouvre, l'alerte dit quoi compléter.
+              onError: (e) => {
+                if (e instanceof EnregistrementPartiel) void navigate(`/commandes/${e.bonId}`, { state: { message: messageErreur(e), alerte: true } });
+              },
+            })
+          }
         >
           Créer un bon de commande
         </Button>

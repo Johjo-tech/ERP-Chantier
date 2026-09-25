@@ -80,7 +80,8 @@ export function useBonDepuisDevis() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (devisId: string) => bonDepuisDevis(societe.id, devisId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: clesBons.racine(societe.id) }),
+    // Aussi sur échec : un bon créé sans toutes ses lignes existe, la liste doit le montrer.
+    onSettled: () => void qc.invalidateQueries({ queryKey: clesBons.racine(societe.id) }),
   });
 }
 

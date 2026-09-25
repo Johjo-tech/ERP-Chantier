@@ -11,6 +11,10 @@ imprimable, PDF et e-mail.
   crédit — proposition `20260926040000`, D-FAC-01) ; RPC
   `enregistrer_reglement_groupe`, `imputer_avoir` et déclencheur de statut
   (proposition `20260926041000`, D-FAC-02) ; numérotation et gel par la base.
+  Gestes d'un seul tenant (relecture 4, propositions `2026092613*`) :
+  `supprimer_brouillon_facture` (situation comprise, D-R4-03), `etablir_avoir`
+  (D-R4-04), `annuler_imputation` (D-R4-05) ; émission et enregistrement d'un
+  brouillon gardés (`numero is null`, statut, cadenas — D-R4-07).
 - **Droits** : `factures` (écrire, émettre = modifier : admin, secrétaire),
   `reglements` (voir : aussi le rôle lecture) ; files de bons sous
   `bons_commande/voir`. Le terrain n'y a aucun accès.

@@ -139,3 +139,11 @@ export function libelleModeReglement(mode: string | null | undefined): string {
   if (!brut) return "—";
   return LIBELLES_MODES[brut] ?? brut;
 }
+
+/**
+ * Une moitié d'imputation d'avoir (`imputer_avoir` en écrit deux, liées) : elle
+ * ne se corrige ni ne se retire seule, sa jumelle part avec elle (relecture 4, I8).
+ */
+export function estMoitieImputation(mode: string | null | undefined): boolean {
+  return mode === "avoir" || mode === "imputation";
+}

@@ -1,6 +1,7 @@
 import { todayISO } from "@/lib/dates";
 import { arrondiCentimes, montant } from "@/lib/money";
 import { supabase } from "@/lib/supabase";
+import { EnregistrementPartiel } from "@/modules/commandes/api/bons";
 import { synchroniserLignes } from "@/modules/documents/api/lignes";
 import { depuisBase, lignesPourEnregistrement } from "@/modules/documents/domain/lignes";
 import { nettoyerLogement } from "@/modules/documents/domain/logement";
@@ -52,6 +53,12 @@ export async function bonDepuisDevis(societeId: string, devisId: string): Promis
     .single();
   if (error) throw error;
   const { lignes } = lignesPourEnregistrement(d.lignes.map(depuisBase).map((l) => ({ ...l, id: null })));
-  await synchroniserLignes("bon_commande_lignes", "bon_commande_id", data.id, lignes);
+  try {
+    await synchroniserLignes("bon_commande_lignes", "bon_commande_id", data.id, lignes);
+  } catch (cause) {
+    // Le bon existe déjà, lié au devis : un nouvel essai serait refusé (« déjà lié »).
+    // L'erreur porte donc son id, pour l'ouvrir et le compléter (relecture 4, I7).
+    throw new EnregistrementPartiel(data.id, cause, "Le bon de commande est créé depuis le devis, mais pas toutes ses lignes : complétez-les sur le bon, puis enregistrez.");
+  }
   return data.id;
 }

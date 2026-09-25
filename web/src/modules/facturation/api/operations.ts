@@ -9,7 +9,7 @@ import { chargerReglages } from "@/modules/societes/api/reglages";
 import { refusAvoir } from "../domain/avoir";
 import { copieDeFacture, refusDuplication } from "../domain/duplication";
 import { designationSituation, refusSituation, type LigneSituation } from "../domain/situation";
-import { creerFacture, emettreFacture, lireFacture, listerFactures } from "./factures";
+import { creerFacture, etablirAvoirEnBase, lireFacture, listerFactures } from "./factures";
 
 /** Délai, libellé et échéance d'une nouvelle facture : client, sinon société, sinon 30 j net. */
 export async function conditions(societeId: string, clientId: string | null, date: string) {
@@ -49,25 +49,15 @@ export async function dupliquerFacture(societeId: string, factureId: string): Pr
 /**
  * Avoir sur une facture émise : mêmes lignes (positives, le type donne le
  * sens), l'émetteur DE LA FACTURE D'ORIGINE, puis émission immédiate —
- * numéroté dans la série « AV » par la base, comme dans l'ancienne app.
+ * numéroté dans la série « AV » par la base, comme dans l'ancienne app. Le
+ * refus se lit d'abord ici, pour un message sans aller-retour ; la base refait
+ * les mêmes contrôles et fait le reste d'un seul geste (D-R4-04).
  */
-export async function etablirAvoir(societeId: string, factureId: string, motif: string): Promise<string> {
+export async function etablirAvoir(factureId: string, motif: string): Promise<string> {
   const f = await lireFacture(factureId);
   const refus = refusAvoir(f, motif);
   if (refus) throw { code: "P0001", message: refus };
-  const {
-    id: _i, societe_id: _s, numero: _n, statut: _st, lignes, conducteur: _c, legacy_id: _l, verrouillee: _v, devis_id: _d, bon_commande_id: _b, intervention_id: _it,
-    statut_cycle: _sc, pdp_identifiant: _pi, pdp_transmission_id: _pt, ...entete
-  } = f;
-  // Ni devis, ni bon, ni intervention : ces liens disent « ce travail a été facturé » ; l'avoir ne facture rien.
-  // Ni cycle ni identifiant de plateforme : l'avoir aura les siens.
-  const avoirId = await creerFacture(
-    societeId,
-    { ...entete, type_document: "avoir", date: todayISO(), facture_rectifiee_id: factureId, motif_rectification: motif.trim(), acomptes_deduits: 0, retenue_garantie_pourcentage: null },
-    copieDesLignes(lignes)
-  );
-  await emettreFacture(avoirId);
-  return avoirId;
+  return etablirAvoirEnBase(factureId, motif.trim());
 }
 
 /**
@@ -135,7 +125,7 @@ export async function facturerSituation(
       .select("id");
     if (error || !data?.length) {
       await defaireSituation(factureId, faits);
-      throw error ?? { code: "P0001", message: `« ${l.designation} » a été facturée entre-temps : rechargez la page avant de recommencer.` };
+      throw error ?? (await motifAvancementRefuse(l));
     }
     faits.push(l);
   }
@@ -155,6 +145,18 @@ export async function facturerSituation(
   return factureId;
 }
 
+/**
+ * Zéro ligne touchée ne veut pas toujours dire « facturée entre-temps » : sans
+ * « chantiers / modifier », la RLS cache la ligne du DPGF — la secrétaire se
+ * voyait annoncer une course qui n'avait pas eu lieu (relecture 4, I2).
+ */
+async function motifAvancementRefuse(l: LigneSituation): Promise<{ code: string; message: string }> {
+  const { data, error } = await supabase().from("chantier_dpgf_lignes").select("id").eq("id", l.dpgfId).maybeSingle();
+  if (error) throw error;
+  if (!data) return { code: "42501", message: "Vous n'avez pas le droit de modifier l'avancement du chantier : la situation n'est pas facturée. Demandez-la à un administrateur ou au conducteur." };
+  return { code: "P0001", message: `« ${l.designation} » a été facturée entre-temps : rechargez la page avant de recommencer.` };
+}
+
 /** Remet le DPGF où il était et supprime le brouillon : une situation ne reste jamais à moitié écrite. */
 async function defaireSituation(factureId: string, faits: readonly LigneSituation[]) {
   const db = supabase();
@@ -168,28 +170,4 @@ async function defaireSituation(factureId: string, faits: readonly LigneSituatio
   }
   const { error } = await db.from("factures").delete().eq("id", factureId).is("numero", null);
   if (error) console.error("Situation : brouillon non supprimé", factureId, error);
-}
-
-/**
- * Supprimer le brouillon d'une situation rend au DPGF l'avancement qu'elle
- * avait pris (relecture 2, I-1) — sans quoi il serait consommé sans facture.
- * Refusé si une situation plus récente s'appuie déjà sur celle-ci.
- */
-export async function rendreAvancementDuBrouillon(factureId: string): Promise<void> {
-  const db = supabase();
-  const { data, error } = await db
-    .from("chantier_avancement_factures")
-    .select("dpgf_ligne_id, avancement_avant, avancement_apres")
-    .eq("facture_id", factureId);
-  if (error) throw error;
-  for (const t of data ?? []) {
-    const r = await db
-      .from("chantier_dpgf_lignes")
-      .update({ avancement_cumule: t.avancement_avant })
-      .eq("id", t.dpgf_ligne_id)
-      .eq("avancement_cumule", t.avancement_apres)
-      .select("id");
-    if (r.error) throw r.error;
-    if (!r.data?.length) throw { code: "P0001", message: "Une situation plus récente s'appuie sur ce brouillon : supprimez-la d'abord." };
-  }
 }
