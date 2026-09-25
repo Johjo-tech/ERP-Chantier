@@ -4,7 +4,7 @@ import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
 import {
   ajouterReglement, contexteImpression, creerFacture, deverrouillerBrouillon, emettreFacture, listerFactures, lireFacture, modifierBrouillon,
-  reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, totauxDesFactures, verrouillerBrouillon,
+  reglementsDeLaSociete, supprimerBrouillon, supprimerReglement, verrouillerBrouillon,
 } from "../api/factures";
 import { dupliquerFacture, etablirAvoir, factureDepuisDevis, factureDepuisIntervention, facturerSituation, rendreAvancementDuBrouillon } from "../api/operations";
 import { enregistrerReglementGroupe, imputerAvoir, modifierReglement } from "../api/reglements";
@@ -15,7 +15,6 @@ import type { LigneSituation } from "../domain/situation";
 const cles = {
   racine: (s: string) => ["factures", s] as const,
   liste: (s: string, f: object) => ["factures", s, "liste", f] as const,
-  totaux: (s: string) => ["factures", s, "totaux"] as const,
   reglements: (s: string) => ["factures", s, "reglements"] as const,
   soldes: (s: string) => ["factures", s, "soldes"] as const,
   fiche: (id: string) => ["facture", id] as const,
@@ -24,10 +23,6 @@ const cles = {
 export function useFactures(filtre: { chantierId?: string } = {}) {
   const s = useSocieteActive();
   return useQuery({ queryKey: cles.liste(s.id, filtre), queryFn: () => listerFactures(s.id, filtre) });
-}
-export function useTotauxFactures() {
-  const s = useSocieteActive();
-  return useQuery({ queryKey: cles.totaux(s.id), queryFn: () => totauxDesFactures(s.id) });
 }
 export function useReglements() {
   const s = useSocieteActive();

@@ -27,15 +27,6 @@ export async function listerFactures(societeId: string, filtre: { chantierId?: s
   return analyser(schemaListe, data, "liste des factures");
 }
 
-const schemaTotaux = z.array(z.object({ facture_id: z.string().nullable(), ht: z.number().nullable(), ttc: z.number().nullable() }));
-
-/** Totaux par la base (v_facture_totaux) — jamais recalculés pour la liste. */
-export async function totauxDesFactures(societeId: string) {
-  const { data, error } = await supabase().from("v_facture_totaux").select("facture_id, ht, ttc").eq("societe_id", societeId);
-  if (error) throw error;
-  return analyser(schemaTotaux, data, "totaux des factures");
-}
-
 export const schemaReglement = z.object({
   id: z.string(),
   facture_id: z.string(),
@@ -144,12 +135,6 @@ export async function supprimerReglement(id: string) {
   const { data, error } = await supabase().from("reglements").delete().eq("id", id).select("id");
   if (error) throw error;
   if (!data?.length) throw { code: "42501", message: "Suppression refusée" };
-}
-
-/** Le statut stocké suit le règlement : écrit seulement s'il change. */
-export async function synchroniserStatut(id: string, statut: "payée" | "impayée") {
-  const { error } = await supabase().from("factures").update({ statut }).eq("id", id).neq("statut", statut).neq("statut", "brouillon");
-  if (error) throw error;
 }
 
 /**

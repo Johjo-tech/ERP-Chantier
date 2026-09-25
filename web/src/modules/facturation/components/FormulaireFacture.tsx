@@ -97,63 +97,66 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
 
   const erreur = enregistrer.error ?? emettre.error ?? supprimer.error ?? dupliquer.error ?? lever.error;
   return (
-    <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
+    <>
+      {/* Les actions de l'en-tête (PDF, e-mail) vivent HORS du formulaire : Entrée dans le panneau e-mail n'enregistre pas la facture. */}
       <EnTetePage
         titre={facture ? "Facture brouillon" : "Nouvelle facture"}
         sousTitre="Le numéro sera attribué par la base à l'émission."
         actions={facture && <ActionsDocumentFacture facture={facture} />}
       />
-      {!droitEcrire && <Alert>Lecture seule : votre rôle ne permet pas de modifier cette facture.</Alert>}
-      {verrou && (
-        <Alert>
-          {verrou.libelle}{" "}
-          {droitEcrire && (
+      <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
+        {!droitEcrire && <Alert>Lecture seule : votre rôle ne permet pas de modifier cette facture.</Alert>}
+        {verrou && (
+          <Alert>
+            {verrou.libelle}{" "}
+            {droitEcrire && (
+              <BoutonConfirme
+                libelle="Déverrouiller"
+                question="Confirmez-vous le déverrouillage ? Si le client a déjà reçu une version, renvoyez-lui la version corrigée."
+                enCours={lever.isPending}
+                onConfirmer={() => lever.mutate()}
+              />
+            )}
+          </Alert>
+        )}
+        {erreur && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
+        {(Object.keys(erreurs).length > 0 || erreursLignes.length > 0) && <Alert variant="erreur">La facture contient des erreurs : corrigez les champs signalés.</Alert>}
+        {message && <Alert variant={message.startsWith("Client introuvable") ? "erreur" : "succes"}>{message}</Alert>}
+        <Card>
+          <CardContent className="flex flex-col gap-4 pt-4">
+            <ChampsEnteteDocument valeurs={valeurs} erreurs={erreurs} changer={changer} conducteurCourant={facture?.conducteur_id ?? null} lectureSeule={!peutEcrire} />
+            <ChampsReglementFacture valeurs={valeurs} changer={changer} delai={delai} setDelai={setDelaiSaisi} echeance={echeance} lectureSeule={!peutEcrire} devisId={facture?.devis_id ?? null} />
+            <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={!peutEcrire} sansTelephone />
+          </CardContent>
+        </Card>
+        <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} ChampReference={ChampReference} />
+        <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={peutEcrire ? (v) => changer("remise_pourcentage", v) : undefined} deductions={facture ? { acomptes: facture.acomptes_deduits, retenuePct: facture.retenue_garantie_pourcentage } : undefined} />
+        <div className="flex flex-wrap gap-2">
+          {peutEcrire && <Button type="submit" disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer le brouillon"}</Button>}
+          {facture && droitEcrire && (
             <BoutonConfirme
-              libelle="Déverrouiller"
-              question="Confirmez-vous le déverrouillage ? Si le client a déjà reçu une version, renvoyez-lui la version corrigée."
-              enCours={lever.isPending}
-              onConfirmer={() => lever.mutate()}
+              libelle="Émettre la facture"
+              question={
+                // La réf. de commande du client est figée dès l'émission, même vide (FAC-100) : on le dit avant.
+                valeurs.ref_bon_commande_client.trim()
+                  ? "Émettre ? Le numéro est définitif et la facture ne sera plus modifiable."
+                  : "Émettre sans réf. de bon de commande client ? Elle sera figée vide, comme tout l'en-tête."
+              }
+              enCours={emettre.isPending}
+              onConfirmer={() => void emettreEcran()}
             />
           )}
-        </Alert>
-      )}
-      {erreur && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
-      {(Object.keys(erreurs).length > 0 || erreursLignes.length > 0) && <Alert variant="erreur">La facture contient des erreurs : corrigez les champs signalés.</Alert>}
-      {message && <Alert variant={message.startsWith("Client introuvable") ? "erreur" : "succes"}>{message}</Alert>}
-      <Card>
-        <CardContent className="flex flex-col gap-4 pt-4">
-          <ChampsEnteteDocument valeurs={valeurs} erreurs={erreurs} changer={changer} conducteurCourant={facture?.conducteur_id ?? null} lectureSeule={!peutEcrire} />
-          <ChampsReglementFacture valeurs={valeurs} changer={changer} delai={delai} setDelai={setDelaiSaisi} echeance={echeance} lectureSeule={!peutEcrire} devisId={facture?.devis_id ?? null} />
-          <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={!peutEcrire} sansTelephone />
-        </CardContent>
-      </Card>
-      <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} ChampReference={ChampReference} />
-      <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={peutEcrire ? (v) => changer("remise_pourcentage", v) : undefined} deductions={facture ? { acomptes: facture.acomptes_deduits, retenuePct: facture.retenue_garantie_pourcentage } : undefined} />
-      <div className="flex flex-wrap gap-2">
-        {peutEcrire && <Button type="submit" disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer le brouillon"}</Button>}
-        {facture && droitEcrire && (
-          <BoutonConfirme
-            libelle="Émettre la facture"
-            question={
-              // La réf. de commande du client est figée dès l'émission, même vide (FAC-100) : on le dit avant.
-              valeurs.ref_bon_commande_client.trim()
-                ? "Émettre ? Le numéro est définitif et la facture ne sera plus modifiable."
-                : "Émettre sans réf. de bon de commande client ? Elle sera figée vide, comme tout l'en-tête."
-            }
-            enCours={emettre.isPending}
-            onConfirmer={() => void emettreEcran()}
-          />
-        )}
-        {facture && peutCreer && (
-          <Button type="button" variant="outline" disabled={dupliquer.isPending} onClick={() => dupliquer.mutate(facture.id, { onSuccess: (id) => void navigate(`/factures/${id}`, { state: { message: "Copie créée en brouillon — elle recevra son numéro à l'émission." } }) })}>
-            Dupliquer
-          </Button>
-        )}
-        {facture && peutSupprimer && (
-          <BoutonConfirme libelle="Supprimer le brouillon" question="Supprimer ce brouillon ?" enCours={supprimer.isPending} onConfirmer={() => supprimer.mutate(facture.id, { onSuccess: () => void navigate("/factures") })} />
-        )}
-        <Button variant="ghost" asChild><Link to="/factures">Retour à la liste</Link></Button>
-      </div>
-    </form>
+          {facture && peutCreer && (
+            <Button type="button" variant="outline" disabled={dupliquer.isPending} onClick={() => dupliquer.mutate(facture.id, { onSuccess: (id) => void navigate(`/factures/${id}`, { state: { message: "Copie créée en brouillon — elle recevra son numéro à l'émission." } }) })}>
+              Dupliquer
+            </Button>
+          )}
+          {facture && peutSupprimer && (
+            <BoutonConfirme libelle="Supprimer le brouillon" question="Supprimer ce brouillon ?" enCours={supprimer.isPending} onConfirmer={() => supprimer.mutate(facture.id, { onSuccess: () => void navigate("/factures") })} />
+          )}
+          <Button variant="ghost" asChild><Link to="/factures">Retour à la liste</Link></Button>
+        </div>
+      </form>
+    </>
   );
 }

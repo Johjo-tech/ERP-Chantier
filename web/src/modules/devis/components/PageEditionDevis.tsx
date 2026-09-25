@@ -100,65 +100,68 @@ function FormulaireDevis({ devis, reglages, actions, ChampReference }: PropsForm
   }
 
   return (
-    <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
+    <>
+      {/* Les actions de l'en-tête (PDF, e-mail, bon de commande) vivent HORS du formulaire : Entrée dans le panneau e-mail n'enregistre pas le devis. */}
       <EnTetePage
         titre={devis ? `Devis ${devis.numero}` : "Nouveau devis"}
         sousTitre={devis && <BadgeStatutDevis statut={devis.statut} />}
         actions={devis && actions?.(devis)}
       />
-      {lectureSeule && <Alert>Lecture seule : votre rôle ne permet pas de modifier ce devis.</Alert>}
-      {enregistrer.isError && <Alert variant="erreur">{messageErreur(enregistrer.error)}</Alert>}
-      {(Object.keys(erreurs).length > 0 || erreursLignes.length > 0) && (
-        <Alert variant="erreur">Le devis contient des erreurs : corrigez les champs signalés en rouge.</Alert>
-      )}
-      {message && <Alert variant={message.startsWith("Devis") ? "succes" : "erreur"}>{message}</Alert>}
-      <Card>
-        <CardContent className="flex flex-col gap-4 pt-4">
-          <ChampsEnteteDocument
-            valeurs={valeurs}
-            erreurs={erreurs}
-            changer={changer}
-            conducteurCourant={devis?.conducteur_id ?? null}
-            lectureSeule={lectureSeule}
-            enPlus={
-              <ChampChoix
-                libelle="Statut"
-                valeur={valeurs.statut}
-                desactive={lectureSeule}
-                onChange={(v) => changer("statut", v)}
-                options={STATUTS_DEVIS.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))}
-              />
-            }
-          />
-          <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={lectureSeule} />
-        </CardContent>
-      </Card>
-      <EditeurLignes
-        lignes={lignes}
-        onChange={setLignes}
-        tvaDefaut={reglages.tvaDefaut}
-       
-        taux={reglages.tauxTva}
-        erreurs={erreursLignes}
-        lectureSeule={lectureSeule}
-        ChampReference={ChampReference}
-      />
-      <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={lectureSeule ? undefined : (v) => changer("remise_pourcentage", v)} />
-      <div className="flex flex-wrap gap-2">
-        {!lectureSeule && (
-          <Button type="submit" disabled={enregistrer.isPending}>
-            {enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}
-          </Button>
+      <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
+        {lectureSeule && <Alert>Lecture seule : votre rôle ne permet pas de modifier ce devis.</Alert>}
+        {enregistrer.isError && <Alert variant="erreur">{messageErreur(enregistrer.error)}</Alert>}
+        {(Object.keys(erreurs).length > 0 || erreursLignes.length > 0) && (
+          <Alert variant="erreur">Le devis contient des erreurs : corrigez les champs signalés en rouge.</Alert>
         )}
-        {devis && (
-          <Button variant="outline" asChild>
-            <Link to={`/devis/${devis.id}/apercu`}>Aperçu / imprimer</Link>
+        {message && <Alert variant={message.startsWith("Devis") ? "succes" : "erreur"}>{message}</Alert>}
+        <Card>
+          <CardContent className="flex flex-col gap-4 pt-4">
+            <ChampsEnteteDocument
+              valeurs={valeurs}
+              erreurs={erreurs}
+              changer={changer}
+              conducteurCourant={devis?.conducteur_id ?? null}
+              lectureSeule={lectureSeule}
+              enPlus={
+                <ChampChoix
+                  libelle="Statut"
+                  valeur={valeurs.statut}
+                  desactive={lectureSeule}
+                  onChange={(v) => changer("statut", v)}
+                  options={STATUTS_DEVIS.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))}
+                />
+              }
+            />
+            <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={lectureSeule} />
+          </CardContent>
+        </Card>
+        <EditeurLignes
+          lignes={lignes}
+          onChange={setLignes}
+          tvaDefaut={reglages.tvaDefaut}
+         
+          taux={reglages.tauxTva}
+          erreurs={erreursLignes}
+          lectureSeule={lectureSeule}
+          ChampReference={ChampReference}
+        />
+        <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={lectureSeule ? undefined : (v) => changer("remise_pourcentage", v)} />
+        <div className="flex flex-wrap gap-2">
+          {!lectureSeule && (
+            <Button type="submit" disabled={enregistrer.isPending}>
+              {enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          )}
+          {devis && (
+            <Button variant="outline" asChild>
+              <Link to={`/devis/${devis.id}/apercu`}>Aperçu / imprimer</Link>
+            </Button>
+          )}
+          <Button variant="ghost" asChild>
+            <Link to="/devis">Retour à la liste</Link>
           </Button>
-        )}
-        <Button variant="ghost" asChild>
-          <Link to="/devis">Retour à la liste</Link>
-        </Button>
-      </div>
-    </form>
+        </div>
+      </form>
+    </>
   );
 }
