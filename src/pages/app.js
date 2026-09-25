@@ -3974,7 +3974,15 @@ function validiteDevis(doc){
 }
 
 function metaDocHTML(type, doc){
-  const l = [['Numéro', esc(doc.numero)], ["Date d'émission", fmtDate(doc.date)]];
+  /* Un brouillon sortait avec un champ « Numéro » VIDE sous un titre qui annonce
+     une facture — un document qui a l'air d'une pièce comptable et n'en est pas.
+     L'application ne l'imprime plus, mais un Cmd+P sur l'aperçu, lui, ne passe
+     par aucun bouton. */
+  const numero = String(doc.numero || '').trim();
+  const l = [
+    [numero? 'Numéro' : 'État', numero? esc(numero) : 'Brouillon — non émis'],
+    ["Date d'émission", fmtDate(doc.date)],
+  ];
   if(type==='devis'){
     const v = validiteDevis(doc);
     /* La durée EN PLUS de la date : « 24/10/2026 » ne dit pas si l'offre tenait
