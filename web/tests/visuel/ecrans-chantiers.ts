@@ -23,12 +23,32 @@ function puis(...gestes: Geste[]): Geste {
   };
 }
 
+/** Durée sans changement du texte de la page au-delà de laquelle le redessin est tenu pour fini. */
+const CALME_MS = 800;
+const PAS_MS = 100;
+const ATTENTE_MAX_MS = 8_000;
+
+async function attendreTexteStable(page: Page): Promise<void> {
+  let precedent = "";
+  let calme = 0;
+  for (let ecoule = 0; ecoule < ATTENTE_MAX_MS; ecoule += PAS_MS) {
+    const texte = await page.evaluate(() => document.body.innerText);
+    calme = texte === precedent ? calme + PAS_MS : 0;
+    if (calme >= CALME_MS) return;
+    precedent = texte;
+    await page.waitForTimeout(PAS_MS);
+  }
+  console.warn(`[visuel] le texte de la page change encore après ${ATTENTE_MAX_MS} ms, capture quand même`);
+}
+
 /** Saisit un texte dans le champ désigné — le même sélecteur des deux côtés. */
 function saisir(selecteur: string, texte: string): Geste {
   return async (page) => {
     await page.fill(selecteur, texte, { timeout: 5_000 });
-    // La recherche du catalogue attend que la main s'arrête (250 ms), des deux côtés.
-    await page.waitForTimeout(600);
+    // La recherche attend que la main s'arrête (250 ms), des deux côtés ; sous charge, le
+    // redessin arrive plus tard qu'une attente fixe (l'ancien montrait encore la liste
+    // entière) : on attend que le texte de la page cesse de changer.
+    await attendreTexteStable(page);
     // L'ancien redessinait la zone et perdait le focus ; le nouveau le garde (D-ECR-CHA-05) : on compare sans.
     await page.locator(selecteur).first().blur();
   };
