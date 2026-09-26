@@ -49,3 +49,9 @@ body.has-deux-bandeaux #app{ padding-top:84px; }
 /* Le chargement : l'ancien écran n'en montrait pas — il attendait tout avant
    de dessiner. La page pleine d'un écran qui charge reprend donc l'état vide. */
 .chargement{ color:var(--text-dim); font-size:13.5px; padding:30px 10px; text-align:center; }
+
+/* Le code article d'une ligne vient du catalogue (module articles), qui pose
+   son propre champ : la case qui l'accueille lui donne la mesure de
+   `input.art-pick` de l'ancienne feuille (D-ECR-FAC-09). */
+.art-pick-hote input{flex-shrink:0; width:108px !important; font-size:12.5px; padding:0 8px;}
+@media(max-width:640px){ .art-pick-hote input{width:84px !important;} }

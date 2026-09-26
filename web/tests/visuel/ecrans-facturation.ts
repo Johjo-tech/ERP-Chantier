@@ -111,6 +111,47 @@ export function ecransFacturation(): Ecran[] {
       nouveau: { chemin: "/devis?statut=envoy%C3%A9" },
       seuils: seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 }),
     },
+    {
+      id: "facture-nouvelle",
+      titre: "Factures › + Nouvelle facture (formulaire vide)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer("button:has-text('+ Nouvelle facture')")) },
+      nouveau: { chemin: "/factures/nouvelle" },
+      seuils: seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 }),
+      masques: [".horodatage-brouillon"],
+    },
+    {
+      id: "devis-nouveau",
+      titre: "Devis › + Nouveau devis (formulaire vide)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: enchainer(onglet("devis"), cliquer("button:has-text('+ Nouveau devis')")) },
+      nouveau: { chemin: "/devis/nouveau" },
+      seuils: seuils({ pixels: 1, texte: 10_000 }, { pixels: 1, texte: 10_000 }),
+    },
+    {
+      id: "facture-brouillon",
+      titre: "Factures › Modifier un brouillon (Mme Durand)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer(".card:has-text('Brouillon — non émise'):has-text('Mme Durand') button:has-text('Modifier')")) },
+      nouveau: { chemin: "/factures", gestes: cliquer(".card:has-text('Brouillon — non émise'):has-text('Mme Durand') button:has-text('Modifier')") },
+      seuils: seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 }),
+    },
+    {
+      id: "facture-emise",
+      titre: "Factures › Consulter une facture émise (FAC-2026-000025)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer(".card:has-text('FAC-2026-000025') button:has-text('Consulter')")) },
+      nouveau: { chemin: "/factures", gestes: cliquer(".card:has-text('FAC-2026-000025') button:has-text('Consulter')") },
+      seuils: seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 }),
+    },
+    {
+      id: "devis-modifier",
+      titre: "Devis › Modifier (DEV-2026-900002)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: enchainer(onglet("devis"), cliquer(".card:has-text('DEV-2026-900002') button:has-text('Modifier')")) },
+      nouveau: { chemin: "/devis", gestes: cliquer(".card:has-text('DEV-2026-900002') button:has-text('Modifier')") },
+      seuils: seuils({ pixels: 1, texte: 10_000 }, { pixels: 1, texte: 10_000 }),
+    },
   ];
 }
 
