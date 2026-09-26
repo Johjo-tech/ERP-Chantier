@@ -1,77 +1,52 @@
 import { useState } from "react";
-import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Can } from "@/modules/auth-roles/components/Can";
-import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
+import { useNavigate } from "react-router";
+import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
+import { usePermission, useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import type { Bon, BonDeLaListe } from "../api/bons";
 import { estSav } from "../domain/bon";
 import { actionsFacturation, MOTIF_CLOTURE_DEFAUT, peutCloturerSansFacturation } from "../domain/circuit";
 import { savDuBon } from "../domain/sav";
 import { useCloturerGratuit } from "../hooks/useBons";
-
-/** Clôturer sans facturation (BC-14) : motif proposé « Reprise sous garantie », conservé au journal. */
-function Cloture({ bon, onResultat }: { bon: Bon; onResultat: (m: string, e?: unknown) => void }) {
-  const [ouvert, setOuvert] = useState(false);
-  const [motif, setMotif] = useState(MOTIF_CLOTURE_DEFAUT);
-  const cloturer = useCloturerGratuit();
-  if (!ouvert) return <Button variant="secondary" onClick={() => setOuvert(true)}>Clôturer sans facturation</Button>;
-  return (
-    <form
-      className="flex flex-wrap items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        cloturer.mutate({ bonId: bon.id, motif: motif.trim() || null }, { onSuccess: () => { setOuvert(false); onResultat("Affaire clôturée sans facturation."); }, onError: (e) => onResultat("", e) });
-      }}
-    >
-      <label htmlFor="motif-cloture" className="text-sm">Motif (facultatif, conservé au journal)</label>
-      <Input id="motif-cloture" className="h-9 w-64" value={motif} onChange={(e) => setMotif(e.target.value)} autoFocus />
-      <Button type="submit" variant="destructive" disabled={cloturer.isPending}>Clôturer</Button>
-      <Button variant="ghost" onClick={() => setOuvert(false)}>Annuler</Button>
-    </form>
-  );
-}
-
-interface Props {
-  bon: Bon;
-  tous: readonly BonDeLaListe[];
-  onResultat: (m: string, e?: unknown) => void;
-}
+import { ModalePrefacture } from "./ModalePrefacture";
 
 /**
- * Les gestes du circuit, là où le prix se décide (app.js l. 6942-6954) : la
- * pré-facture (ni pour une affaire facturée, ni close, ni pour un SAV), la
- * clôture sans facturation (un SAV, par l'administrateur), le SAV (un seul par bon).
+ * Les gestes du circuit, avec les boutons et libellés de la carte de l'ancien
+ * (app.js l. 7040-7062) : la pré-facture s'ouvre dans SA fenêtre
+ * (`openValidationDirecteurModal`), la clôture d'un SAV demande son motif par
+ * `prompt`, le SAV (un seul par bon) s'ouvre en page.
  */
-export function ActionsCircuit({ bon, tous, onResultat }: Props) {
+export function ActionsCircuit({ bon, tous }: { bon: Bon; tous: readonly BonDeLaListe[] }) {
+  const navigate = useNavigate();
   const { roleEffectif } = useSession();
   const prix = useVoitLesPrix();
+  const peutCreer = usePermission("bons_commande", "creer");
+  const cloturer = useCloturerGratuit();
+  const [prefacture, setPrefacture] = useState(false);
   const sav = estSav(bon);
   const savLie = savDuBon(bon.id, tous);
   const origine = sav ? tous.find((b) => b.id === bon.bon_commande_parent_id) : undefined;
   const facturee = bon.factures.length > 0;
-  const prefacture = prix && actionsFacturation(roleEffectif).peutModifierPrefacture && !facturee && bon.statut_workflow !== "cloture_gratuit" && !sav;
+  const chiffrable = prix && actionsFacturation(roleEffectif).peutModifierPrefacture && !facturee && bon.statut_workflow !== "cloture_gratuit" && !sav;
+  function clore() {
+    const motif = window.prompt(`Clôturer ${bon.numero_bc || "ce SAV"} sans facturation ?\n\nMotif (facultatif, conservé sur la fiche et dans le journal) :`, MOTIF_CLOTURE_DEFAUT);
+    if (motif === null) return;
+    cloturer.mutate({ bonId: bon.id, motif: motif.trim() }, { onSuccess: () => afficherToast("Affaire clôturée sans facturation.", "success"), onError: (e) => afficherToast(messageErreur(e)) });
+  }
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {prefacture && (
-        <Button asChild>
-          <Link to={`/commandes/${bon.id}/prefacture`}>Ouvrir la pré-facture</Link>
-        </Button>
-      )}
-      {sav && peutCloturerSansFacturation(roleEffectif, bon, facturee) && <Cloture bon={bon} onResultat={onResultat} />}
-      {!sav && !savLie && (
-        <Can module="bons_commande" action="creer">
-          <Button variant="outline" asChild>
-            <Link to={`/commandes/${bon.id}/sav`}>Créer un SAV</Link>
-          </Button>
-        </Can>
-      )}
-      <Button variant="ghost" asChild>
-        <Link to={`/commandes/${bon.id}/apercu`}>Imprimer le bon</Link>
-      </Button>
-      {savLie && <Link className="text-sm text-primary hover:underline" to={`/commandes/${savLie.id}`}>Voir le SAV {savLie.numero_bc ?? savLie.numero_interne ?? ""}</Link>}
-      {origine && <Link className="text-sm text-primary hover:underline" to={`/commandes/${origine.id}`}>Bon de commande d'origine : {origine.numero_bc ?? origine.numero_interne ?? ""}</Link>}
-      {bon.gratuite && <span className="text-sm text-muted-foreground">Clôturé sans facturation{bon.gratuite_motif ? ` — ${bon.gratuite_motif}` : ""}.</span>}
-    </div>
+    <>
+      <div className="bc-actions-bas">
+        {chiffrable && <button type="button" className="btn small primary" onClick={() => setPrefacture(true)}>🧾 Ouvrir la pré-facture</button>}
+        {sav && peutCloturerSansFacturation(roleEffectif, bon, facturee) && (
+          <button type="button" className="btn small primary" title="Un SAV est une reprise sous garantie : il se clôt, il ne se facture pas" disabled={cloturer.isPending} onClick={clore}>✓ Clôturer sans facturation</button>
+        )}
+        {!sav && !savLie && peutCreer && <button type="button" className="btn small" onClick={() => void navigate(`/commandes/${bon.id}/sav`)}>Créer un SAV</button>}
+        <button type="button" className="btn small" onClick={() => void navigate(`/commandes/${bon.id}/apercu`)}>Imprimer / PDF</button>
+        {savLie && <button type="button" className="btn small ghost" onClick={() => void navigate(`/commandes/${savLie.id}`)}>Voir le SAV {savLie.numero_bc ?? savLie.numero_interne ?? ""}</button>}
+        {origine && <button type="button" className="btn small ghost" onClick={() => void navigate(`/commandes/${origine.id}`)}>Bon de commande d'origine : {origine.numero_bc ?? origine.numero_interne ?? ""}</button>}
+      </div>
+      {bon.gratuite && <div className="bc-attente-message" style={{ marginTop: "8px" }}>Clôturé sans facturation{bon.gratuite_motif ? ` — ${bon.gratuite_motif}` : ""}.</div>}
+      {prefacture && <ModalePrefacture bonId={bon.id} onFermer={() => setPrefacture(false)} />}
+    </>
   );
 }

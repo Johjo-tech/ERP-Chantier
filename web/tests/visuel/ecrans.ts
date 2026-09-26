@@ -307,9 +307,9 @@ function ecransCommandes(): Ecran[] {
   const BON_EN_ATTENTE = "#bonCommande-card-a5000000-0000-0000-0000-000000000002";
   // Ce qui reste d'écart sous la fenêtre, DÉCIDÉ : l'éditeur de lignes est le composant partagé des
   // documents (`documents/EditeurLignes`, repris avec les devis — 16 lignes pour une ligne de travaux, 23 pour deux),
-  // et le panneau « Circuit du bon » sous le formulaire (D-BC-03, D-ECR-BC-06 — 25 lignes).
+  // et le panneau « Circuit du bon » sous le formulaire (D-BC-03, D-ECR-BC-06 — 22 lignes, habit de la carte dépliée de l’ancien).
   const LIGNES_PARTAGEES = 16;
-  const CIRCUIT = 25;
+  const CIRCUIT = 22;
   const BON_PIECE = "#bonCommande-card-c9000000-0000-0000-0000-000000000001";
   const SAV = "#bonCommande-card-c9000000-0000-0000-0000-000000000003";
   const pieces = (id: string, titre: string, gestes?: Geste): Ecran => ({
