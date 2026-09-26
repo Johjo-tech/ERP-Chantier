@@ -1,11 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
-import { usePermission, useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
-import { listerBons } from "@/modules/commandes/api/bons";
-import { aFacturer, fileValidation } from "@/modules/commandes/domain/files";
-import { clesBons } from "@/modules/commandes/hooks/useBons";
-import { estAvoir } from "@/modules/documents/domain/totaux";
-import { useFacturesEcran } from "../hooks/useEcranFactures";
+import { useComptesFacturation } from "../hooks/useComptesFacturation";
 
 /** Les files du circuit : une seule adresse chacune, que le tableau de bord et les notifications ouvrent aussi. */
 export const FILE_VALIDATION = "/facturation/validation";
@@ -21,21 +15,14 @@ const compte = (n: number) => (n ? ` (${n})` : "");
  * (bons, règlements) ne s'affiche pas : la base le refuserait (D-ECR-FAC-01).
  */
 export function OngletsFacturation() {
-  const s = useSocieteActive();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const voitBons = usePermission("bons_commande", "voir");
-  const voitReglements = usePermission("reglements", "voir");
-  const factures = useFacturesEcran();
-  const bons = useQuery({ queryKey: clesBons.liste(s.id), queryFn: () => listerBons(s.id), enabled: voitBons });
-  const avoirs = (factures.data ?? []).filter((f) => estAvoir(f.type_document)).length;
-  const enValidation = fileValidation(bons.data ?? []).length;
-  const aFacturerN = aFacturer(bons.data ?? []).length;
+  const n = useComptesFacturation();
   const onglets = [
     { chemin: "/factures", libelle: "Factures" },
-    { chemin: "/factures/avoirs", libelle: `Avoirs${compte(avoirs)}` },
-    ...(voitBons ? [{ chemin: FILE_VALIDATION, libelle: `Validation${compte(enValidation)}` }, { chemin: FILE_A_FACTURER, libelle: `À facturer${compte(aFacturerN)}` }] : []),
-    ...(voitReglements ? [{ chemin: "/factures/reglements", libelle: "Règlements" }] : []),
+    { chemin: "/factures/avoirs", libelle: `Avoirs${compte(n.avoirs)}` },
+    ...(n.voitBons ? [{ chemin: FILE_VALIDATION, libelle: `Validation${compte(n.enValidation)}` }, { chemin: FILE_A_FACTURER, libelle: `À facturer${compte(n.aFacturer)}` }] : []),
+    ...(n.voitReglements ? [{ chemin: "/factures/reglements", libelle: "Règlements" }] : []),
   ];
   return <BarreOnglets onglets={onglets} actif={ongletActif(pathname, onglets.map((o) => o.chemin))} aller={(c) => void navigate(c)} />;
 }

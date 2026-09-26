@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
@@ -85,11 +85,6 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
   const echeanceCalculee = dateEcheance(valeurs.date || todayISO(), delai);
   const echeanceAffichee = echeance.auto ? echeanceCalculee : echeance.valeur;
   const hors = delaiHorsPlafond(delai);
-
-  // L'ancien faisait défiler jusqu'au formulaire à l'ouverture (`editItem`).
-  useEffect(() => {
-    document.getElementById("formZoneFacture")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-  }, []);
 
   function changerClient(id: string) {
     changer("client_id", id);
