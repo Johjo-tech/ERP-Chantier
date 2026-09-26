@@ -7,6 +7,7 @@ import { pieceImprimee } from "@/modules/documents/impression/pieces";
 import type { PieceImprimee } from "@/modules/documents/impression/zone";
 import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { enregistrerDevis, listerDevis, lireDevis, supprimerDevis, totauxDesDevis } from "../api/devis";
+import { listerDevisEcran } from "../api/ecran";
 import { bonDepuisDevis } from "../api/operations";
 import type { Devis } from "../domain/devis";
 import { contexteDevis } from "../domain/impression";
@@ -23,6 +24,12 @@ export const clesDevis = {
 export function useListeDevis(filtre: { chantierId?: string; clientId?: string } = {}) {
   const societe = useSocieteActive();
   return useQuery({ queryKey: clesDevis.liste(societe.id, filtre), queryFn: () => listerDevis(societe.id, filtre) });
+}
+
+/** L'en-tête entier de chaque devis, pour les cartes de la liste (sous la racine : toute écriture l'invalide). */
+export function useDevisEcran() {
+  const societe = useSocieteActive();
+  return useQuery({ queryKey: [...clesDevis.racine(societe.id), "ecran"], queryFn: () => listerDevisEcran(societe.id) });
 }
 
 export function useTotauxDevis() {

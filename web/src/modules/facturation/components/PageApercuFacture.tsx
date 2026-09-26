@@ -27,6 +27,14 @@ export function PageApercuFacture() {
   );
 }
 
+/** L'aperçu ouvert depuis une carte de la liste, par-dessus elle (`cardRowClick` → `openViewDoc`). */
+export function ApercuFactureParId({ id, fermer }: { id: string; fermer: () => void }) {
+  const facture = useFacture(id);
+  if (facture.isPending) return <Chargement />;
+  if (facture.isError) return <Erreur erreur={facture.error} reessayer={() => void facture.refetch()} />;
+  return <Apercu facture={facture.data} fermer={fermer} />;
+}
+
 function Apercu({ facture, fermer }: { facture: Facture; fermer: () => void }) {
   const { modele, erreur } = useModeleFacture(facture);
   const options = useOptionsPdfFacture(facture);

@@ -12,6 +12,15 @@ import { useDevis, useModeleDevis } from "../hooks/useDevis";
  * du PDF — « Valable jusqu'au » et sa durée, « Bon pour accord » du client
  * seul, aucune mention de facture — avec « Imprimer » et « Enregistrer ».
  */
+/** L'aperçu ouvert depuis une carte de la liste, par-dessus elle (`cardRowClick` → `openViewDoc`). */
+export function ApercuDevisParId({ id, fermer }: { id: string; fermer: () => void }) {
+  const devis = useDevis(id);
+  const reglages = useReglages();
+  const piece = useModeleDevis(devis.data ?? null, (reglages.data ?? REGLAGES_DEFAUT).validiteDevisJours);
+  if (devis.isError) return <Erreur erreur={devis.error} reessayer={() => void devis.refetch()} />;
+  return piece ? <ApercuPiece piece={piece} fermer={fermer} /> : <Chargement />;
+}
+
 export function PageApercuDevis() {
   const { id } = useParams();
   const navigate = useNavigate();

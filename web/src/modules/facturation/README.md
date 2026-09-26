@@ -18,7 +18,12 @@ imprimable, PDF et e-mail.
 - **Droits** : `factures` (écrire, émettre = modifier : admin, secrétaire),
   `reglements` (voir : aussi le rôle lecture) ; files de bons sous
   `bons_commande/voir`. Le terrain n'y a aucun accès.
-- **Écrans** : `/factures` (+ bandeau « à relancer »), `/factures/avoirs`,
+- **Écrans identiques à l'ancien** (vague « écrans identiques », D-ECR-FAC-xx,
+  mesurés par `tests/visuel/ecrans-facturation.ts`) : cartes de factures et
+  barre « ne montre que le possible » (`domain/actions.ts`, parité exhaustive),
+  modales avoir / imputation / e-mail / règlement groupé, dossiers par client,
+  formulaire de facture dans le panneau de l'ancien (voile sur une émise).
+- **Écrans** : `/factures`, `/factures/avoirs`,
   onglets Validation / À facturer (les files du menu, `/facturation/…` ; les
   anciennes adresses `/factures/validation`, `/factures/a-facturer` y
   redirigent — D-R4-02), `/factures/reglements`

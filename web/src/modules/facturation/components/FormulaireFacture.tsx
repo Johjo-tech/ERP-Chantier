@@ -1,162 +1,277 @@
-import { useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { BoutonConfirme } from "@/components/ui/confirmation";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { schemaNombreFr } from "@/lib/nombres";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
-import { dateEcheance, delaiPaiementRetenu, libelleDelaiPaiement, type DelaiPaiement } from "@/modules/clients/domain/delais";
-import { useClients } from "@/modules/clients/hooks/useClients";
-import { BlocTotaux } from "@/modules/documents/components/BlocTotaux";
-import { ChampsEnteteDocument } from "@/modules/documents/components/ChampsEnteteDocument";
-import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
-import { SectionLieu } from "@/modules/documents/components/SectionLieu";
+import { dateEcheance, delaiHorsPlafond, delaiPaiementRetenu, delaiPreregle, DELAIS_PREREGLES, libelleDelaiPaiement, MODES_REGLEMENT, type DelaiPaiement } from "@/modules/clients/domain/delais";
+import { useClients, useInterlocuteurs } from "@/modules/clients/hooks/useClients";
+import { LignesAncien } from "@/modules/documents/components/LignesAncien";
+import { SectionLieuAncien } from "@/modules/documents/components/SectionLieuAncien";
+import { TotauxAncien } from "@/modules/documents/components/TotauxAncien";
 import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import { depuisBase, ligneVide, lignesPourEnregistrement, type ErreurLigne, type LigneEdition } from "@/modules/documents/domain/lignes";
+import { estAvoir, totauxDocument } from "@/modules/documents/domain/totaux";
+import { showToast } from "@/modules/documents/impression/zone";
 import type { ReglagesDocuments } from "@/modules/societes/domain/reglages";
+import { useConducteurs } from "@/modules/societes/hooks/useConducteurs";
 import { FacturePartielle } from "../api/factures";
+import { actionsFacture, refusGesteFacture } from "../domain/actions";
+import { DUREE_AVIS } from "../domain/avis";
 import { enteteAEnregistrer, schemaSaisieFacture, valeursDepuis, type Facture } from "../domain/facture";
 import { verrouFacture } from "../domain/verrou";
-import { useCadenas, useDupliquerFacture, useEmettre, useEnregistrerFacture, useSupprimerBrouillon } from "../hooks/useFactures";
-import { ActionsDocumentFacture } from "./ActionsDocumentFacture";
-import { ChampsReglementFacture } from "./ChampsReglementFacture";
+import { useDroitsFacture, useFacturesEcran } from "../hooks/useEcranFactures";
+import { useCadenas, useDupliquerFacture, useEnregistrerFacture } from "../hooks/useFactures";
+import { ModaleAvoir } from "./ModalesFacture";
 
+/** Le délai tel que la facture le porte : `null` tant qu'elle suit le client. */
+function delaiDeLaFacture(f: Facture | null): DelaiPaiement | null {
+  return f?.delai_paiement_jours != null ? { jours: f.delai_paiement_jours, mode: f.delai_paiement_mode ?? "net" } : null;
+}
+/** La clé de la liste (`optionsDelaiFactureHTML`) : un préréglage, « client », ou « autre » pour un délai hors liste. */
+function cleDuDelai(d: DelaiPaiement | null): string {
+  if (!d) return "client";
+  return delaiPreregle(d)?.cle ?? "autre";
+}
+const heureCourte = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+/**
+ * Le formulaire d'une facture (`factureForm`, app.js l. 6037), dans le panneau
+ * de l'ancien : « Client & contact », « Lieu & locataire », « Lignes »,
+ * « Remise & totaux », puis la barre d'actions collée en bas. Une facture
+ * émise s'y lit derrière un voile (la base la refuserait) ; son bandeau dit
+ * pourquoi et propose l'avoir. L'émission se fait depuis la carte de la liste.
+ */
 export function FormulaireFacture({ facture, reglages, ChampReference }: { facture: Facture | null; reglages: ReglagesDocuments; ChampReference?: ChampReferenceLigne | undefined }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const clients = useClients();
+  const conducteurs = useConducteurs();
+  const factures = useFacturesEcran();
+  const droits = useDroitsFacture();
+  const peutCreer = usePermission("factures", "creer");
+  const peutModifier = usePermission("factures", "modifier");
   const enregistrer = useEnregistrerFacture(facture?.id);
-  const emettre = useEmettre();
-  const supprimer = useSupprimerBrouillon();
   const dupliquer = useDupliquerFacture();
   const { lever } = useCadenas(facture?.id ?? "");
-  const droitEcrire = usePermission("factures", facture ? "modifier" : "creer");
-  const peutSupprimer = usePermission("factures", "supprimer");
-  const peutCreer = usePermission("factures", "creer");
+  const [avoirOuvert, setAvoirOuvert] = useState(false);
+  const [horodatage, setHorodatage] = useState("");
+
   const verrou = facture ? verrouFacture(facture) : null;
-  // Le cadenas « téléchargée / envoyée » fige la saisie ; on le lève d'abord (FAC-09).
-  const peutEcrire = droitEcrire && !verrou;
-  const { valeurs, erreurs, changer, valider } = useFormulaire(valeursDepuis(facture, todayISO()));
+  const emise = verrou?.code === "emise";
+  const verrouillee = verrou?.code === "telechargee";
+  // Trois raisons de ne pas écrire, un seul voile : émise, verrouillée, ou un rôle en lecture.
+  const peutEcrire = facture ? actionsFacture(facture, droits).peutModifier : peutCreer;
+  const unAvoir = estAvoir(facture?.type_document);
+  const rectifiee = facture?.facture_rectifiee_id ? (factures.data ?? []).find((f) => f.id === facture.facture_rectifiee_id) : undefined;
+
+  const { valeurs, changer } = useFormulaire(valeursDepuis(facture, todayISO()));
   const [lignes, setLignes] = useState<LigneEdition[]>(() => (facture?.lignes.length ? facture.lignes.map(depuisBase) : [ligneVide(reglages.tvaDefaut)]));
   const [erreursLignes, setErreursLignes] = useState<ErreurLigne[]>([]);
-  const [message, setMessage] = useState<string | null>(() => (location.state as { message?: string } | null)?.message ?? null);
+  const [cleDelai, setCleDelai] = useState(() => cleDuDelai(delaiDeLaFacture(facture)));
+  // Une échéance déjà posée est tenue pour saisie ; une facture neuve part calculée (`appliquerDelaiPaiement`).
+  const [echeance, setEcheance] = useState({ valeur: facture?.echeance ?? "", auto: !facture?.echeance, aide: !facture?.echeance });
+  const client = (clients.data ?? []).find((c) => c.id === valeurs.client_id) ?? null;
+  const interlocuteurs = useInterlocuteurs(valeurs.client_id);
+  const [mode, setMode] = useState(() => (facture?.mode_paiement ?? "").trim() || "virement");
 
-  const client = clients.data?.find((c) => c.id === valeurs.client_id) ?? null;
-  // Le délai figé sur la facture l'emporte ; à défaut celui du client, puis de la société. Il reste modifiable (FAC-04).
-  const [delaiSaisi, setDelaiSaisi] = useState<DelaiPaiement | null>(() =>
-    facture?.delai_paiement_jours != null ? { jours: facture.delai_paiement_jours, mode: facture.delai_paiement_mode ?? "net" } : null
-  );
-  const delai = delaiSaisi ?? delaiPaiementRetenu(client, { delai_paiement_jours: reglages.delaiPaiementJours, delai_paiement_mode: reglages.modeDelaiPaiement });
-  const echeance = valeurs.echeance_manuelle === "oui" ? valeurs.echeance : dateEcheance(valeurs.date, delai);
+  const delaiSaisi = (): DelaiPaiement => {
+    const preregle = DELAIS_PREREGLES.find((d) => d.cle === cleDelai);
+    if (preregle) return preregle;
+    if (cleDelai === "autre") return delaiDeLaFacture(facture) ?? delaiPaiementRetenu(client, { delai_paiement_jours: reglages.delaiPaiementJours, delai_paiement_mode: reglages.modeDelaiPaiement });
+    return delaiPaiementRetenu(client, { delai_paiement_jours: reglages.delaiPaiementJours, delai_paiement_mode: reglages.modeDelaiPaiement });
+  };
+  const delai = delaiSaisi();
+  const echeanceCalculee = dateEcheance(valeurs.date || todayISO(), delai);
+  const echeanceAffichee = echeance.auto ? echeanceCalculee : echeance.valeur;
+  const hors = delaiHorsPlafond(delai);
 
-  /** Valide et enregistre ce qui est à l'écran ; rend l'id, ou null si la saisie est refusée. */
-  async function enregistrerEcran(): Promise<string | null> {
-    setMessage(null);
-    const saisie = valider(schemaSaisieFacture);
-    const remise = schemaNombreFr.safeParse(valeurs.remise_pourcentage);
+  // L'ancien faisait défiler jusqu'au formulaire à l'ouverture (`editItem`).
+  useEffect(() => {
+    document.getElementById("formZoneFacture")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, []);
+
+  function changerClient(id: string) {
+    changer("client_id", id);
+    changer("interlocuteur", "");
+    // Changer de client reprend SES conditions, tant que la facture suit le client (`reprendreConditionsDuClient`).
+    const c = (clients.data ?? []).find((x) => x.id === id);
+    if (cleDelai === "client") setMode((c?.mode_paiement ?? "").trim() || "virement");
+  }
+
+  async function sauver(brouillon: boolean) {
+    if (facture) {
+      const refus = refusGesteFacture("modifier", facture, droits);
+      if (refus) {
+        showToast(refus, "danger", DUREE_AVIS.refus);
+        return;
+      }
+    }
+    if (!valeurs.client_id || !client) {
+      window.alert("Le nom du client est requis.");
+      return;
+    }
+    const saisie = schemaSaisieFacture.safeParse({ ...valeurs, chantier_id: facture?.chantier_id ?? valeurs.chantier_id });
+    const remise = schemaNombreFr.safeParse(valeurs.remise_pourcentage || "0");
     const l = lignesPourEnregistrement(lignes);
     setErreursLignes(l.erreurs);
-    if (!saisie || !remise.success || l.erreurs.length) return null;
-    if (!client) {
-      setMessage("Client introuvable : rechargez la page (la liste des clients n'a pas pu être lue).");
-      return null;
+    if (!saisie.success || !remise.success || l.erreurs.length) {
+      showToast(l.erreurs[0]?.message ?? "La facture contient des erreurs : corrigez les champs signalés.", "danger", DUREE_AVIS.refus);
+      return;
     }
-    const entete = enteteAEnregistrer(saisie, client, Math.min(100, Math.max(0, remise.data)), delai, libelleDelaiPaiement(delai), echeance || null);
+    const entete = enteteAEnregistrer({ ...saisie.data, mode_paiement: mode as typeof saisie.data.mode_paiement }, client, Math.min(100, Math.max(0, remise.data)), delai, libelleDelaiPaiement(delai), echeanceAffichee || null);
     try {
-      return await enregistrer.mutateAsync({ entete, lignes: l.lignes });
+      const id = await enregistrer.mutateAsync({ entete, lignes: l.lignes });
+      if (!brouillon) {
+        void navigate("/factures");
+        return;
+      }
+      // L'identifiant est posé sur la saisie en cours : sans lui, le prochain enregistrement créerait une seconde facture.
+      setHorodatage(`Brouillon enregistré à ${heureCourte()}`);
+      showToast("Brouillon enregistré.", "success", DUREE_AVIS.texteCopie);
+      if (!facture) void navigate(`/factures/${id}`, { replace: true });
     } catch (err) {
       if (err instanceof FacturePartielle && !facture) void navigate(`/factures/${err.factureId}`, { replace: true });
-      return null;
+      showToast(`Enregistrement refusé : ${messageErreur(err)}`, "danger", DUREE_AVIS.refus);
     }
   }
 
-  async function soumettre(e: FormEvent) {
-    e.preventDefault();
-    const id = await enregistrerEcran();
-    if (!id) return;
-    setMessage("Brouillon enregistré.");
-    if (!facture) void navigate(`/factures/${id}`, { replace: true, state: { message: "Brouillon enregistré." } });
+  function deverrouiller() {
+    if (!window.confirm("Cette facture a déjà été téléchargée ou envoyée. Confirmez-vous vouloir la déverrouiller pour la modifier ?\n\nAttention : si le client a déjà reçu une version, pensez à lui renvoyer la version corrigée.")) return;
+    lever.mutate(undefined, { onError: (err) => showToast(messageErreur(err), "danger", DUREE_AVIS.refus) });
   }
 
-  /**
-   * Émettre la version À L'ÉCRAN : elle est d'abord enregistrée (D-028). Sous
-   * cadenas, rien n'a pu changer : on émet ce qui a été envoyé, sans réécrire.
-   */
-  async function emettreEcran() {
-    const id = verrou && facture ? facture.id : await enregistrerEcran();
-    if (!id) return;
-    emettre.mutate(id, {
-      onSuccess: (n) => void navigate(`/factures/${id}`, { replace: true, state: { message: `Facture émise sous le numéro ${n}.` } }),
-    });
-  }
+  const nomsClients = [...(clients.data ?? [])].sort((a, b) => a.nom.localeCompare(b.nom));
+  const clientConnu = !valeurs.client_id || nomsClients.some((c) => c.id === valeurs.client_id);
+  const listeInterlocuteurs = interlocuteurs.data ?? [];
+  const conducteursProposes = (conducteurs.data ?? []).filter((c) => c.actif || c.id === valeurs.conducteur_id).sort((a, b) => a.nom.localeCompare(b.nom));
+  const titre = facture ? (emise ? `${unAvoir ? "Avoir " : "Facture "}${facture.numero ?? ""}` : "Modifier la facture") : "Nouvelle facture";
+  const ttc = totauxDocument(lignes.map((l) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva })), valeurs.remise_pourcentage).ttc;
 
-  const erreur = enregistrer.error ?? emettre.error ?? supprimer.error ?? dupliquer.error ?? lever.error;
   return (
-    <>
-      {/* Les actions de l'en-tête (PDF, e-mail) vivent HORS du formulaire : Entrée dans le panneau e-mail n'enregistre pas la facture. */}
-      <EnTetePage
-        titre={facture ? "Facture brouillon" : "Nouvelle facture"}
-        sousTitre="Le numéro sera attribué par la base à l'émission."
-        actions={facture && <ActionsDocumentFacture facture={facture} />}
-      />
-      <form onSubmit={soumettre} noValidate className="flex flex-col gap-4">
-        {!droitEcrire && <Alert>Lecture seule : votre rôle ne permet pas de modifier cette facture.</Alert>}
-        {verrou && (
-          <Alert>
-            {verrou.libelle}{" "}
-            {droitEcrire && (
-              <BoutonConfirme
-                libelle="Déverrouiller"
-                question="Confirmez-vous le déverrouillage ? Si le client a déjà reçu une version, renvoyez-lui la version corrigée."
-                enCours={lever.isPending}
-                onConfirmer={() => lever.mutate()}
-              />
-            )}
-          </Alert>
-        )}
-        {erreur && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
-        {(Object.keys(erreurs).length > 0 || erreursLignes.length > 0) && <Alert variant="erreur">La facture contient des erreurs : corrigez les champs signalés.</Alert>}
-        {message && <Alert variant={message.startsWith("Client introuvable") ? "erreur" : "succes"}>{message}</Alert>}
-        <Card>
-          <CardContent className="flex flex-col gap-4 pt-4">
-            <ChampsEnteteDocument valeurs={valeurs} erreurs={erreurs} changer={changer} conducteurCourant={facture?.conducteur_id ?? null} lectureSeule={!peutEcrire} />
-            <ChampsReglementFacture valeurs={valeurs} changer={changer} delai={delai} setDelai={setDelaiSaisi} echeance={echeance} lectureSeule={!peutEcrire} devisId={facture?.devis_id ?? null} />
-            <SectionLieu valeurs={valeurs} changer={changer} lectureSeule={!peutEcrire} sansTelephone />
-          </CardContent>
-        </Card>
-        <EditeurLignes lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} lectureSeule={!peutEcrire} ChampReference={ChampReference} />
-        <BlocTotaux lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={peutEcrire ? (v) => changer("remise_pourcentage", v) : undefined} deductions={facture ? { acomptes: facture.acomptes_deduits, retenuePct: facture.retenue_garantie_pourcentage } : undefined} />
-        <div className="flex flex-wrap gap-2">
-          {peutEcrire && <Button type="submit" disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer le brouillon"}</Button>}
-          {facture && droitEcrire && (
-            <BoutonConfirme
-              libelle="Émettre la facture"
-              question={
-                // La réf. de commande du client est figée dès l'émission, même vide (FAC-100) : on le dit avant.
-                valeurs.ref_bon_commande_client.trim()
-                  ? "Émettre ? Le numéro est définitif et la facture ne sera plus modifiable."
-                  : "Émettre sans réf. de bon de commande client ? Elle sera figée vide, comme tout l'en-tête."
-              }
-              enCours={emettre.isPending}
-              onConfirmer={() => void emettreEcran()}
-            />
-          )}
-          {facture && peutCreer && (
-            <Button type="button" variant="outline" disabled={dupliquer.isPending} onClick={() => dupliquer.mutate(facture.id, { onSuccess: (id) => void navigate(`/factures/${id}`, { state: { message: "Copie créée en brouillon — elle recevra son numéro à l'émission." } }) })}>
-              Dupliquer
-            </Button>
-          )}
-          {facture && peutSupprimer && (
-            <BoutonConfirme libelle="Supprimer le brouillon" question="Supprimer ce brouillon ?" enCours={supprimer.isPending} onConfirmer={() => supprimer.mutate(facture.id, { onSuccess: () => void navigate("/factures") })} />
-          )}
-          <Button variant="ghost" asChild><Link to="/factures">Retour à la liste</Link></Button>
+    <div className="form-panel">
+      <h3>{titre}</h3>
+      {emise && verrou && (
+        <div className="facture-verrou-banner">
+          <span>🔒 {verrou.libelle}</span>
+          <span style={{ fontWeight: 400 }}>L'encaissement s'enregistre dans l'onglet <b>Règlements</b>.</span>
+          {!unAvoir && <button type="button" className="btn small" onClick={() => setAvoirOuvert(true)} title="Rectifier cette facture par un avoir">↩ Établir un avoir</button>}
         </div>
-      </form>
-    </>
+      )}
+      {verrouillee && verrou && (
+        <div className="facture-verrou-banner">
+          <span>🔒 {verrou.libelle}</span>
+          {peutModifier && <button type="button" className="btn small danger" onClick={deverrouiller}>🔓 Déverrouiller pour modifier</button>}
+        </div>
+      )}
+      {unAvoir && rectifiee && (
+        <div className="numref" style={{ marginBottom: "10px" }}>
+          Rectifie la facture {rectifiee.numero} du {rectifiee.date.split("-").reverse().join("/")}{facture?.motif_rectification ? ` — ${facture.motif_rectification}` : ""}
+        </div>
+      )}
+      <div style={peutEcrire ? undefined : { pointerEvents: "none", opacity: 0.55 }} aria-disabled={!peutEcrire}>
+        {facture?.devis_id && <div className="numref" style={{ marginBottom: "10px" }}>Générée à partir d'un devis</div>}
+        {facture?.intervention_id && <div className="numref" style={{ marginBottom: "10px" }}>Issue d'un rapport d'intervention</div>}
+        <div className="form-section">
+          <div className="form-section-head">Client &amp; contact</div>
+          <div className="field-grid">
+            <div className="field">
+              <label htmlFor="f_client">Client</label>
+              <select id="f_client" value={valeurs.client_id} onChange={(e) => changerClient(e.target.value)}>
+                <option value="">— Sélectionner un client —</option>
+                {!clientConnu && facture && <option value={valeurs.client_id}>{`${facture.client_nom} — hors répertoire`}</option>}
+                {nomsClients.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="f_interlocuteur">Interlocuteur</label>
+              <select id="f_interlocuteur" value={valeurs.interlocuteur} onChange={(e) => changer("interlocuteur", e.target.value)}>
+                <option value="">— Aucun —</option>
+                {valeurs.interlocuteur && !listeInterlocuteurs.some((i) => i.nom === valeurs.interlocuteur) && <option value={valeurs.interlocuteur}>{`${valeurs.interlocuteur} — hors répertoire`}</option>}
+                {listeInterlocuteurs.map((i) => <option key={i.id} value={i.nom}>{`${i.nom}${i.fonction ? ` (${i.fonction})` : ""}`}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="f_date">Date</label>
+              <input type="date" id="f_date" value={valeurs.date} onChange={(e) => changer("date", e.target.value)} />
+            </div>
+            {/* Le délai est recopié du client À LA CRÉATION puis figé ; il reste modifiable tant que la facture ne l'est pas. */}
+            <div className="field">
+              <label htmlFor="f_delaiPreset">Délai de paiement</label>
+              <select id="f_delaiPreset" value={cleDelai} onChange={(e) => { setCleDelai(e.target.value); setEcheance((x) => ({ ...x, auto: true, aide: true })); }}>
+                <option value="client">Conditions du client</option>
+                {DELAIS_PREREGLES.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+                {cleDelai === "autre" && <option value="autre">{libelleDelaiPaiement(delai)}</option>}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="f_modePaiement">Mode de règlement</label>
+              <select id="f_modePaiement" value={mode} onChange={(e) => setMode(e.target.value)}>
+                {MODES_REGLEMENT.map((m) => <option key={m.code} value={m.code}>{m.libelle}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="f_echeance">
+                Échéance{" "}
+                <button type="button" className="btn small ghost" style={{ padding: "0 6px" }} onClick={() => setEcheance((x) => ({ ...x, auto: true, aide: true }))} title="Recalculer d'après le délai">↻</button>
+              </label>
+              <input type="date" id="f_echeance" value={echeanceAffichee} onChange={(e) => setEcheance({ valeur: e.target.value, auto: false, aide: echeance.aide })} />
+              <small id="f_echeanceAide" className="card-sub" style={hors && echeance.auto && echeance.aide ? { color: "var(--danger)" } : undefined}>
+                {echeance.auto && echeance.aide ? `${libelleDelaiPaiement(delai)}${hors ? ` — ${hors}` : ""}` : ""}
+              </small>
+            </div>
+            <div className="field">
+              <label htmlFor="f_conducteur">Conducteur de travaux</label>
+              <select id="f_conducteur" value={valeurs.conducteur_id} onChange={(e) => changer("conducteur_id", e.target.value)}>
+                <option value="">— Non attribué —</option>
+                {conducteursProposes.map((c) => <option key={c.id} value={c.id}>{`${c.nom}${c.actif ? "" : " (retiré)"}`}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="f_dateFinExecution">Travaux achevés le <small className="card-sub">(si différent de la date)</small></label>
+              <input type="date" id="f_dateFinExecution" value={valeurs.date_fin_execution} onChange={(e) => changer("date_fin_execution", e.target.value)} />
+            </div>
+            {/* BT-13 : la référence que l'acheteur rapproche — visible, vérifiable, corrigeable. */}
+            <div className="field">
+              <label htmlFor="f_refBonCommandeClient">N° de bon de commande du client</label>
+              <input type="text" id="f_refBonCommandeClient" value={valeurs.ref_bon_commande_client} placeholder="La référence que le client rapprochera" onChange={(e) => changer("ref_bon_commande_client", e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="f_refMarche">N° de marché</label>
+              <input type="text" id="f_refMarche" value={valeurs.ref_marche} placeholder="Lorsqu'il en existe un" onChange={(e) => changer("ref_marche", e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <SectionLieuAncien valeurs={valeurs} changer={changer} suffixe="Facture" avecTelephone={false} />
+        <div className="form-section">
+          <div className="form-section-head">Lignes</div>
+          <LignesAncien lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} ChampReference={ChampReference} />
+        </div>
+        <div className="form-section">
+          <div className="form-section-head">Remise &amp; totaux</div>
+          <TotauxAncien lignes={lignes} remise={valeurs.remise_pourcentage} onRemise={(v) => changer("remise_pourcentage", v)} />
+        </div>
+      </div>
+      <div className="form-actions-sticky">
+        {emise ? (
+          <>
+            {facture && actionsFacture(facture, droits).peutDupliquer && (
+              <button type="button" className="btn primary" disabled={dupliquer.isPending} onClick={() => dupliquer.mutate(facture.id, { onSuccess: (id) => { showToast("Copie créée en brouillon — elle recevra son numéro à l'émission.", "success", DUREE_AVIS.copieCreee); void navigate(`/factures/${id}`); }, onError: (err) => showToast(messageErreur(err), "danger", DUREE_AVIS.echec) })} title="Repartir de cette facture pour en établir une nouvelle, en brouillon">⧉ Dupliquer</button>
+            )}
+            <button type="button" className="btn ghost" onClick={() => void navigate("/factures")}>Fermer</button>
+          </>
+        ) : peutEcrire ? (
+          <>
+            <button type="button" className="btn primary" disabled={enregistrer.isPending} onClick={() => void sauver(false)}>Enregistrer la facture</button>
+            <button type="button" className="btn" disabled={enregistrer.isPending} onClick={() => void sauver(true)} title="Garder la saisie en cours sans refermer, et sans attribuer de numéro">💾 Enregistrer le brouillon</button>
+            <button type="button" className="btn ghost" onClick={() => void navigate("/factures")}>Annuler</button>
+            <span id="brouillonHorodatage" className="card-sub horodatage-brouillon" style={{ marginLeft: "auto", alignSelf: "center" }}>{horodatage}</span>
+          </>
+        ) : (
+          <button type="button" className="btn ghost" onClick={() => void navigate("/factures")}>Fermer</button>
+        )}
+      </div>
+      {avoirOuvert && facture && <ModaleAvoir facture={facture} ttc={ttc} fermer={() => setAvoirOuvert(false)} etabli={() => void navigate("/factures/avoirs")} />}
+    </div>
   );
 }

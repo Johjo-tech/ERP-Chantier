@@ -125,8 +125,7 @@ export function refusImputation(montantRecu: unknown, factures: readonly Facture
 
 const LIBELLES_MODES: Record<string, string> = {
   virement: "Virement", cheque: "Chèque", prelevement: "Prélèvement", carte: "Carte bancaire", especes: "Espèces",
-  // Les ponts d'une imputation : pas des modes de saisie, mais des façons dont une pièce s'éteint.
-  avoir: "Avoir", imputation: "Imputation",
+  // Les ponts d'une imputation (« avoir », « imputation ») ne sont pas des modes de saisie : l'ancien les écrivait tels quels.
 };
 
 /**

@@ -1,155 +1,124 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatDateFr, todayISO } from "@/lib/dates";
-import { montant } from "@/lib/money";
-import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import { correspond } from "@/lib/recherche";
-import { CLASSE_EN_EVIDENCE, useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
-import { cn } from "@/lib/utils";
-import { Can } from "@/modules/auth-roles/components/Can";
-import { BoutonImport } from "@/modules/import-export/components/Recapitulatif";
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { Chargement, Erreur } from "@/components/etats/Etats";
+import { useModeDiscret } from "@/lib/modeDiscret";
+import { useEntreeDefile, useRechercheDifferee } from "@/lib/useRecherche";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { estAvoir } from "@/modules/documents/domain/totaux";
-import { libelleDelai } from "../domain/etat";
-import { etatDepuisSolde, totalDu } from "../domain/solde";
-import { useCroisement } from "../hooks/useCroisement";
-import { useFactures, useSoldes } from "../hooks/useFactures";
-import { BadgeEtat } from "./BadgeEtat";
+import { motifRoleFacture } from "../domain/actions";
+import { syntheseListe } from "../domain/carte";
+import { criteresDeLaVue, filtrageActif, retenu } from "../domain/filtresEcran";
+import { useCartesFactures } from "../hooks/useCartesFactures";
+import { useFiltresFacturation } from "../hooks/useEcranFactures";
+import { ActionsCarteFacture } from "./ActionsCarteFacture";
+import { BarreFiltresFactures } from "./BarreFiltresFactures";
+import { CarteFacture } from "./CarteFacture";
 import { OngletsFacturation } from "./OngletsFacturation";
-import { OrigineRecherche } from "./OrigineRecherche";
+import { ApercuFactureParId } from "./PageApercuFacture";
 
 type Vue = "factures" | "avoirs";
-const FILTRES = [
-  { valeur: "", libelle: "Tous les états" },
-  { valeur: "impayee", libelle: "Non réglées" },
-  { valeur: "partiel", libelle: "Partiellement réglées" },
-  { valeur: "payee", libelle: "Réglées" },
-  { valeur: "retard", libelle: "En retard" },
-  { valeur: "brouillon", libelle: "Brouillons" },
-];
 
 /**
- * Factures et avoirs. Reste, état et retard sont LUS dans `v_facture_solde`
- * (FAC-92, D-FAC-01) : la base calcule, l'écran montre.
+ * Facturation › Factures et › Avoirs (`renderFactures`, app.js l. 5162) : les
+ * sous-onglets en tête, le titre et ses deux boutons, la barre de filtres,
+ * puis les cartes. Les avoirs restent AUSSI dans la liste des factures : ce
+ * sont des pièces de la même suite ; l'onglet Avoirs ne les isole pas, il les
+ * rend trouvables.
  */
 export function PageFactures({ vue = "factures" }: { vue?: Vue }) {
   useModeDiscret();
-  const factures = useFactures();
-  const soldes = useSoldes();
-  const voitReglements = usePermission("reglements", "voir");
-  const [recherche, setRecherche] = useState("");
-  const saisie = useRechercheDifferee(recherche, setRecherche);
-  const croisement = useCroisement();
-  const [filtre, setFiltre] = useState("");
-  const aujourdhui = todayISO();
+  const navigate = useNavigate();
+  const { cartes, soldes, chargement, erreur, reessayer, droits, aujourdhui } = useCartesFactures();
+  const peutCreer = usePermission("factures", "creer");
+  const peutModifier = usePermission("factures", "modifier");
+  // `peutImporterFactures` : créer ET modifier — une pièce importée est émise d'emblée.
+  const peutImporter = peutCreer && peutModifier;
+  const [filtres, changer] = useFiltresFacturation();
+  const saisie = useRechercheDifferee(filtres.recherche, (q) => changer({ recherche: q }));
+  const [apercu, setApercu] = useState<string | null>(null);
+  const cle = vue === "avoirs" ? "avoirs" : "liste";
+  const criteres = criteresDeLaVue(filtres, cle);
+  const actif = filtrageActif(criteres);
 
-  const lignes = useMemo(() => {
-    const parId = new Map((soldes.data ?? []).map((s) => [s.facture_id, s]));
-    return (factures.data ?? []).map((f) => {
-      const s = parId.get(f.id);
-      const etat = s ? etatDepuisSolde(s) : ({ nature: "brouillon" } as const);
-      // La facture se cherche aussi par son montant et par ce que disent ses bons (TRV-06, TRV-07).
-      const propres = [f.numero, f.client_nom, f.occupant, f.adresse_locataire, f.ref_bon_commande_client];
-      return { f, s, ttc: s?.ttc ?? 0, etat, delai: libelleDelai(etat, f.echeance || f.date, aujourdhui), propres, apports: croisement.apportsFacture(f) };
-    });
-  }, [factures.data, soldes.data, aujourdhui, croisement]);
+  const dansLaVue = vue === "avoirs" ? cartes.filter((c) => estAvoir(c.f.type_document)) : cartes;
+  const retenues = dansLaVue.filter((c) => retenu(c.filtrable, criteres));
+  const defile = useEntreeDefile("facture-card", retenues.map((c) => c.f.id), criteres.recherche, saisie);
+  const motifRole = motifRoleFacture(droits);
+  const synthese = syntheseListe(retenues.length, dansLaVue.length, "facture", actif);
 
-  const visibles = lignes.filter(({ f, etat, propres, apports }) => {
-    if (estAvoir(f.type_document) !== (vue === "avoirs")) return false;
-    if (!correspond(recherche, ...propres, ...apports.map((a) => a.valeur))) return false;
-    if (!filtre) return true;
-    if (filtre === "brouillon") return etat.nature === "brouillon";
-    if (etat.nature !== "facture") return filtre === "payee" && etat.nature === "reprise";
-    if (filtre === "retard") return etat.enRetard;
-    return { impayee: "non_reglee", partiel: "partiellement_reglee", payee: "reglee" }[filtre] === etat.cle;
-  });
-  const enRetard = (soldes.data ?? []).filter((s) => s.en_retard);
-  const defile = useEntreeDefile("facture", visibles.map((v) => v.f.id), recherche, saisie);
-
-  const chargement = factures.isPending || soldes.isPending;
-  const erreur = factures.error ?? soldes.error;
+  const liste = () => {
+    if (vue === "avoirs" && !dansLaVue.length) {
+      return <div className="empty">Aucun avoir pour cette société. Un avoir s'établit depuis une facture émise, par le bouton « ↩ Établir un avoir ».</div>;
+    }
+    if (!retenues.length) {
+      // Une recherche infructueuse n'est pas une société vide : les confondre enverrait chercher une panne.
+      return <div className="empty">{dansLaVue.length && actif ? "Aucune facture ne correspond à vos filtres." : "Aucune facture pour cette société."}</div>;
+    }
+    return (
+      <>
+        {synthese && <div className="card-sub" style={{ marginBottom: "10px" }}>{synthese}</div>}
+        {retenues.map((c) => (
+          <CarteFacture
+            key={c.f.id}
+            f={c.f}
+            ht={c.ht}
+            ttc={c.ttc}
+            etat={c.etat}
+            numerosBC={c.numerosBC}
+            origines={c.origines}
+            requete={criteres.recherche}
+            cherchables={c.cherchables}
+            apports={c.apports}
+            enEvidence={defile.enEvidence === c.f.id}
+            aujourdhui={aujourdhui}
+            ouvrir={() => setApercu(c.f.id)}
+            refusImpression={c.actions.peutImprimer ? null : c.refusImpression}
+            actions={
+              <ActionsCarteFacture
+                f={c.f}
+                ttc={c.ttc}
+                actions={c.actions}
+                verrou={c.verrou}
+                plateforme={c.plateforme}
+                imputable={c.imputable}
+                solde={c.solde}
+                soldes={soldes}
+                destinataire={c.destinataire}
+                avoirEtabli={() => void navigate("/factures/avoirs")}
+              />
+            }
+          />
+        ))}
+      </>
+    );
+  };
 
   return (
     <>
-      <EnTetePage
-        titre={vue === "avoirs" ? "Avoirs" : "Factures"}
-        actions={
-          <>
-            {vue !== "avoirs" && <BoutonImport adminSeul module="factures" vers="/factures/import" libelle="Reprendre un historique" />}
-            <Can module="factures" action="creer">
-              <Button asChild>
-                <Link to="/factures/nouvelle">Nouvelle facture</Link>
-              </Button>
-            </Can>
-          </>
-        }
-      />
       <OngletsFacturation />
-      {vue === "factures" && enRetard.length > 0 && (
-        // « Factures échues à relancer » (app.js l. 2097) : le compte, le montant, et le chemin vers la liste.
-        <Alert>
-          {enRetard.length} facture{enRetard.length > 1 ? "s" : ""} échue{enRetard.length > 1 ? "s" : ""} à relancer — {formatEurosEcran(totalDu(enRetard))} en retard.{" "}
-          {voitReglements && <Link className="font-medium text-primary hover:underline" to="/factures/reglements/par-facture?etat=en_retard">Voir les retards</Link>}
-        </Alert>
-      )}
-      {vue === "avoirs" && <p className="mb-3 text-sm text-muted-foreground">Les avoirs rectifient une facture émise. Ils portent leur propre série « AV » et comptent en négatif ; ils s'imputent, ils ne s'encaissent pas.</p>}
-      <div className="mb-3 flex flex-wrap gap-2">
-        <label htmlFor="recherche-factures" className="sr-only">Rechercher une facture</label>
-        <Input id="recherche-factures" type="search" className="max-w-sm" placeholder="N°, client, n° de BC, montant…" value={saisie.saisie} onChange={(e) => saisie.setSaisie(e.target.value)} onKeyDown={defile.surTouche} />
+      <div className="page-head">
+        <h1>{vue === "avoirs" ? "Avoirs" : "Factures"}</h1>
         {vue === "factures" && (
-          <>
-            <label htmlFor="filtre-etat" className="sr-only">Filtrer par état</label>
-            <Select id="filtre-etat" className="max-w-56" value={filtre} onChange={(e) => setFiltre(e.target.value)}>
-              {FILTRES.map((x) => <option key={x.valeur} value={x.valeur}>{x.libelle}</option>)}
-            </Select>
-          </>
+          <div style={{ display: "flex", gap: "8px" }}>
+            {peutImporter && <button type="button" className="btn" onClick={() => void navigate("/factures/import")}>📥 Reprendre un historique</button>}
+            {peutCreer && <button type="button" className="btn primary" onClick={() => void navigate("/factures/nouvelle")}>+ Nouvelle facture</button>}
+          </div>
         )}
       </div>
-      {chargement && <Chargement />}
-      {erreur && <Erreur erreur={erreur} reessayer={() => { void factures.refetch(); void soldes.refetch(); }} />}
-      {!chargement && !erreur && visibles.length === 0 && <Vide message={vue === "avoirs" ? "Aucun avoir." : "Aucune facture ne correspond."} />}
-      {!chargement && visibles.length > 0 && (
-        <Table>
-          <THead>
-            <Tr>
-              <Th>N°</Th>
-              <Th>Date</Th>
-              <Th>Client</Th>
-              <Th className="text-right">TTC</Th>
-              <Th className="text-right">{vue === "avoirs" ? "À imputer" : "Reste dû"}</Th>
-              <Th>État</Th>
-            </Tr>
-          </THead>
-          <TBody>
-            {visibles.map(({ f, ttc, etat, delai, propres, apports }) => (
-              <Tr key={f.id} id={defile.idDomDe(f.id)} className={cn(defile.enEvidence === f.id && CLASSE_EN_EVIDENCE)}>
-                <Td>
-                  <Link to={`/factures/${f.id}`} className="font-medium text-primary hover:underline">{f.numero || "Brouillon"}</Link>
-                </Td>
-                <Td>{formatDateFr(f.date)}</Td>
-                <Td>
-                  {f.client_nom}
-                  <OrigineRecherche requete={recherche} propres={propres} apports={apports} />
-                </Td>
-                {/* Un avoir se lit en négatif ; ses montants sont stockés positifs. */}
-                <Td className="text-right tabular-nums">{formatEurosEcran(estAvoir(f.type_document) ? montant(ttc).neg() : montant(ttc))}</Td>
-                <Td className="text-right tabular-nums">{etat.nature === "facture" || etat.nature === "avoir" ? formatEurosEcran(etat.reste) : "—"}</Td>
-                <Td className="flex flex-wrap gap-1">
-                  <BadgeEtat etat={etat} />
-                  {delai && <Badge variant={delai.startsWith("En retard") ? "danger" : "neutre"} className={cn(delai.startsWith("En retard") && "font-semibold")}>{delai}</Badge>}
-                </Td>
-              </Tr>
-            ))}
-          </TBody>
-        </Table>
+      {motifRole && <div className="card-sub" style={{ margin: "0 0 12px" }}>{motifRole}</div>}
+      <BarreFiltresFactures vue={cle} filtres={filtres} changer={changer} saisie={saisie.saisie} onSaisie={saisie.setSaisie} onEntree={defile.surTouche} />
+      {vue === "avoirs" && (
+        <div className="card-sub" style={{ marginBottom: "14px" }}>
+          Les avoirs rectifient une facture émise. Ils portent leur propre série « AV » et comptent en négatif ; leurs montants s'enregistrent positifs, le type dit le sens.
+        </div>
       )}
+      <div id="formZoneFacture" />
+      <div id="factureListZone">
+        {chargement && <Chargement />}
+        {erreur && <Erreur erreur={erreur} reessayer={reessayer} />}
+        {!chargement && !erreur && liste()}
+      </div>
+      {apercu && <ApercuFactureParId id={apercu} fermer={() => setApercu(null)} />}
     </>
   );
 }
