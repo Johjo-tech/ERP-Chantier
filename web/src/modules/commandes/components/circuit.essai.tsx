@@ -46,6 +46,9 @@ const documents = vi.hoisted(() => ({
   SavSansToutesSesPhotos: class extends Error {},
 }));
 vi.mock("../api/documents", () => documents);
+const toast = vi.hoisted(() => ({ afficherToast: vi.fn(), useToast: vi.fn(() => null) }));
+vi.mock("@/lib/toast", () => toast);
+vi.mock("@/modules/interventions/api/rapports", () => ({ listerRapports: vi.fn(async () => []) }));
 vi.mock("../api/metiers", () => ({ listerMetiersDeclares: vi.fn(async () => ["Peinture", "Plomberie", "Sol"]) }));
 vi.mock("@/modules/devis/api/devis", () => ({ listerDevis: vi.fn(async () => []), lireDevis: vi.fn() }));
 vi.mock("@/modules/clients/api/clients", () => ({ listerClients: vi.fn(async () => [{ id: "c1", nom: "OPAC du Rhône", interlocuteurs: [] }]) }));
@@ -210,13 +213,16 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.validerPrefacture.mockResolvedValue(undefined);
     ouvrir("admin", "/commandes/b1/prefacture");
     expect(await screen.findByText(/travail\(aux\) supplémentaire\(s\) restent à chiffrer/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Valider la pré-facture" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "✓ Valider la pré-facture" })).toBeDisabled();
     await userEvent.type(screen.getByLabelText("Prix unitaire HT de « Reprise plinthes »"), "15");
     const document = screen.getByRole("table", { name: "Document de facturation" });
-    const rangs = within(document).getAllByRole("row").map((r) => r.textContent ?? "");
-    expect(rangs.findIndex((r) => r.includes("Reprise plinthes"))).toBe(rangs.findIndex((r) => r.includes("Murs")) + 1);
+    // Les lignes du bon se saisissent (la désignation est dans un champ) ; le travail, lui, se lit.
+    const rangs = within(document).getAllByRole("row");
+    const murs = rangs.findIndex((r) => within(r).queryByDisplayValue("Murs"));
+    expect(murs).toBeGreaterThan(0);
+    expect(rangs.findIndex((r) => (r.textContent ?? "").includes("Reprise plinthes"))).toBe(murs + 1);
     expect(screen.getByLabelText("Totaux de la pré-facture")).toHaveTextContent("260,00 €");
-    await userEvent.click(screen.getByRole("button", { name: "Valider la pré-facture" }));
+    await userEvent.click(screen.getByRole("button", { name: "✓ Valider la pré-facture" }));
     await waitFor(() => expect(circuit.validerPrefacture).toHaveBeenCalled());
     const c = circuit.validerPrefacture.mock.calls[0]?.[0] as { lignes: { designation: string }[]; integres: string[]; prix: unknown[]; montant: number; horsCircuit: boolean };
     expect(c.lignes.map((l) => l.designation)).toEqual(["PEINTURE", "Murs", "Reprise plinthes"]);
@@ -229,12 +235,13 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.listerTravaux.mockResolvedValue([]);
     circuit.validerPrefacture.mockRejectedValue({ code: "P0001", message: "Refusé par la base" });
     ouvrir("admin", "/commandes/b1/prefacture");
-    await userEvent.click(await screen.findByRole("button", { name: "Valider sans passer par le planning" }));
-    expect(screen.getByText(/220,00 € TTC/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Confirmer hors circuit" }));
-    expect(await screen.findByText("Refusé par la base")).toBeInTheDocument();
+    // Comme l'ancien : une confirmation native, qui dit le client et le TTC.
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await userEvent.click(await screen.findByRole("button", { name: "⏭️ Valider sans passer par le planning" }));
+    expect(confirmer).toHaveBeenCalledWith(expect.stringMatching(/OPAC du Rhône — 220,00\s€ TTC/));
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith("Prix enregistrés, mais validation refusée : Refusé par la base"));
     expect(circuit.validerPrefacture.mock.calls[0]?.[0]).toMatchObject({ horsCircuit: true });
-    expect(screen.queryByRole("button", { name: "Confirmer hors circuit" })).not.toBeInTheDocument();
+    confirmer.mockRestore();
   });
 
   it("un bon encore « en attente de BC » demande confirmation avant validation (BC-18)", async () => {
@@ -243,11 +250,13 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.listerTravaux.mockResolvedValue([]);
     circuit.validerPrefacture.mockResolvedValue(undefined);
     ouvrir("admin", "/commandes/b1/prefacture");
-    await userEvent.click(await screen.findByRole("button", { name: "Valider la pré-facture" }));
-    expect(screen.getByText(/attend encore le numéro de commande du client/)).toBeInTheDocument();
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await userEvent.click(await screen.findByRole("button", { name: "✓ Valider la pré-facture" }));
+    expect(confirmer).toHaveBeenCalledWith(expect.stringMatching(/attend encore le numéro de commande du client/));
     expect(circuit.validerPrefacture).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Valider quand même" }));
+    await userEvent.click(screen.getByRole("button", { name: "✓ Valider la pré-facture" }));
     await waitFor(() => expect(circuit.validerPrefacture).toHaveBeenCalled());
+    confirmer.mockRestore();
   });
 
   it("la secrétaire complète mais ne valide pas ; le conducteur n'ouvre pas la pré-facture", async () => {
@@ -256,8 +265,8 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.listerTravaux.mockResolvedValue([]);
     const vue = ouvrir("secretaire", "/commandes/b1/prefacture");
     expect(await screen.findByText(/La validation revient à un administrateur/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enregistrer les prix" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Valider la pré-facture" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "💾 Enregistrer sans valider" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "✓ Valider la pré-facture" })).not.toBeInTheDocument();
     vue.unmount();
     ouvrir("conducteur", "/commandes/b1/prefacture");
     expect(screen.getByText(/depuis un compte administrateur ou secrétariat/)).toBeInTheDocument();

@@ -1,37 +1,12 @@
 import { useState } from "react";
-import { Alert } from "@/components/ui/alert";
 import { messageErreur } from "@/lib/erreurs";
 import { preparerDocument } from "@/modules/ocr/api/preparer";
-import { apercuDe, refusPieceJointe, urlApercuPdf } from "../domain/pieceJointe";
-import { useUrlPieceJointe } from "../hooks/useBons";
+import { refusPieceJointe } from "../domain/pieceJointe";
 
 interface Document {
   chemin: string | null;
   nom: string | null;
   mime: string | null;
-}
-
-/**
- * Le bon du client tel qu'il l'a envoyé, affiché d'après une URL signée
- * (bucket privé) demandée une seule fois par chemin (BC-09, BC-73).
- */
-export function ApercuPieceJointe({ doc, grand = false }: { doc: Document; grand?: boolean }) {
-  const url = useUrlPieceJointe(doc.chemin);
-  if (!doc.chemin) return null;
-  if (url.isPending) return <p className="text-sm text-muted-foreground">Chargement du document…</p>;
-  if (url.isError) return <Alert variant="erreur">{messageErreur(url.error)}</Alert>;
-  const mode = apercuDe(doc.mime, doc.nom);
-  const titre = doc.nom ?? "Bon du client";
-  const hauteur = grand ? "h-[80vh]" : "h-96";
-  return (
-    <figure className="flex flex-col gap-2">
-      {mode === "image" && <img src={url.data} alt={titre} className={`${hauteur} w-full object-contain`} />}
-      {mode === "pdf" && <iframe src={urlApercuPdf(url.data)} title={titre} className={`${hauteur} w-full rounded border`} />}
-      <figcaption className="text-xs">
-        <a href={url.data} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ouvrir « {titre} » dans un nouvel onglet</a>
-      </figcaption>
-    </figure>
-  );
 }
 
 interface Props {

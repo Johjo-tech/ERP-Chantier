@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { formatEuros, formatTaux } from "@/lib/money";
-import { useModeDiscret } from "@/lib/modeDiscret";
 import { EditeurLignes } from "@/modules/documents/components/EditeurLignes";
 import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import type { ErreurLigne, LigneEdition } from "@/modules/documents/domain/lignes";
-import { totauxDocument } from "@/modules/documents/domain/totaux";
 import type { LigneBonLue } from "../domain/bon";
 import { zoneMontant } from "../domain/formulaire";
+import { BoiteTotaux } from "./BoiteTotaux";
 import { ChampMetierChapitre } from "./ChampMetierChapitre";
 import { LignesSansPrix } from "./LignesSansPrix";
 
@@ -60,24 +58,6 @@ function ZoneMontant({ lignes, montant, onMontant, metiers, montantsParMetier, o
   );
 }
 
-/** La boîte des totaux (`totalsBoxInnerHTML`) : HT, TVA — détaillée par taux s'il y en a plusieurs —, TTC. */
-function BoiteTotaux({ lignes }: { lignes: readonly LigneEdition[] }) {
-  useModeDiscret();
-  const t = totauxDocument(lignes.map((l) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva })), 0);
-  const v = t.ventilation;
-  const tva =
-    v.length > 1
-      ? [...v.map((p) => ({ libelle: `TVA ${formatTaux(p.taux)} sur ${formatEuros(p.base)}`, montant: p.montant })), { libelle: "Total TVA", montant: t.tva }]
-      : [{ libelle: v[0] ? `TVA ${formatTaux(v[0].taux)}` : "TVA", montant: t.tva }];
-  return (
-    <div className="totals-box" id="bcTotalsBoxContent" style={{ marginTop: "10px" }}>
-      <div>Total HT <b>{formatEuros(t.htAvant)}</b></div>
-      {tva.map((l) => <div key={l.libelle}>{l.libelle} <b>{formatEuros(l.montant)}</b></div>)}
-      <div>Total TTC <b>{formatEuros(t.ttc)}</b></div>
-    </div>
-  );
-}
-
 interface Props extends PropsMontant {
   prix: boolean;
   onLignes: (l: LigneEdition[]) => void;
@@ -109,7 +89,7 @@ export function ChiffrageBon(p: Props) {
         {p.prix ? (
           <>
             <EditeurLignes lignes={[...p.lignes]} onChange={p.onLignes} tvaDefaut={p.tvaDefaut} taux={p.taux} erreurs={p.erreursLignes} lectureSeule={p.desactive} ChampReference={p.ChampReference} ChampMetier={ChampMetierChapitre} />
-            <BoiteTotaux lignes={p.lignes} />
+            <BoiteTotaux id="bcTotalsBoxContent" lignes={p.lignes.map((l) => ({ type: l.type, quantite: l.quantite, prix_unitaire: l.prix_unitaire, tva: l.tva }))} />
           </>
         ) : (
           <LignesSansPrix lignes={p.lignesLues} />

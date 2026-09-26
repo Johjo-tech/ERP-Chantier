@@ -347,6 +347,8 @@ function ecransCommandes(): Ecran[] {
     liste("bons-de-commande-lecture-echec", "Bons de commande › importer un BC : issue d'une lecture qui échoue", {}, "/commandes", enchainer(deposer(".page-head label.btn input[type=file]"), attendre(3000)), { bureau: { pixels: 0.05, texte: 4 }, mobile: { pixels: 0.04, texte: 4 } }),
     // Seul écart : le motif du refus — l'ancien affichait « Edge Function returned a non-2xx status code »,
     // la lecture de web/ le dit en français (D-ECR-BC-10) ; 2 lignes (écran et toast), de chaque côté.
+    // La pré-facture, fenêtre ouverte depuis la carte (bon « Sans BC » de Mme Durand, une tâche à pointer).
+    liste("bons-de-commande-prefacture", "Bons de commande › pré-facture (fenêtre)", {}, "/commandes", enchainer(cliquer("#bonCommande-card-a5000000-0000-0000-0000-000000000003 .bc-actions-bas .btn.primary"), attendre(1500))),
     pieces("pieces-en-commande", "Pièces en commande"),
     pieces("pieces-dossier-ouvert", "Pièces en commande › dossier fournisseur ouvert", cliquer(".dossier-header")),
     // Téléphone : le champ date de la commande diffère d'un pixel sur son bord droit (rendu natif du sélecteur de date).
