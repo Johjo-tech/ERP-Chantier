@@ -117,7 +117,9 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   // Repris : le groupe « Accès » du rail (D-ECR-PAR-08) et la carte des jours fériés (D-ECR-PAR-10).
   reglages: { bureau: { pixels: 0.001, texte: 10 } },
   rh: { bureau: { pixels: 0.001, texte: 0 } },
-  statistiques: { bureau: { pixels: 0.33, texte: 50 } },
+  // Repris (D-ECR-PAR-13). Reste la ligne « Sans conducteur » et les comptes par la référence (D-STA-05),
+  // qui décalent graphiques et tableau, la plage libre et les vues par métier / par client repliées.
+  statistiques: { bureau: { pixels: 0.28, texte: 24 } },
   vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };
 

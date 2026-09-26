@@ -127,3 +127,11 @@ export function libelleMois(cle: string): string {
   const m = moisCalendaire(p.annee, p.mois);
   return `${m.libelle} ${m.annee}`;
 }
+
+const MOIS_COURTS_ANCIEN = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"] as const;
+
+/** « 2026-09 » → « Sep 2026 », les abréviations de `moisLabelCourt` (app.js l. 12141), en-têtes du tableau par équipe. */
+export function moisLabelCourt(cle: string): string {
+  const p = partiesDe(cle);
+  return `${MOIS_COURTS_ANCIEN[p.mois - 1] ?? ""} ${p.annee}`;
+}

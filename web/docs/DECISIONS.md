@@ -1972,3 +1972,14 @@ factures et pièces commandées gardent leur conducteur ou leur fournisseur (PAR
 prend la place et l'habit de « Supprimer » (`btn small danger`) sous le libellé « Retirer » ; une
 fiche retirée porte « Retiré » et se remet d'un clic. La case « Proposé dans les listes » du
 fournisseur est la même bascule.
+
+## D-ECR-PAR-13 — Statistiques : la page de l'ancien, les ajouts repliés en bas
+`renderStatistiques` : titre « Statistiques par conducteur de travaux » et sa liste de période,
+phrase « Période affichée », trois tuiles `.stat-card` (devis, factures, bons), les trois cartes
+`.stats-charts-grid` aux couleurs de `STATS_PALETTE`, le tableau à neuf colonnes, puis « Chiffre
+d'affaires par équipe et par mois » (mois abrégés comme `moisLabelCourt`). La colonne « Devis
+acceptés » que web/ avait ajoutée disparaît (absente de l'ancien). Restent, décidés : la plage de
+dates libre (option « Entre deux dates »), les vues par métier et par client (D-STA-05), repliées
+en deux `<details>` au bas de l'écran au lieu d'onglets, et les chiffres eux-mêmes — groupés par
+`conducteur_id` avec une ligne « Sans conducteur », retard compté sur un bon ouvert (D-STA-05) —,
+qui diffèrent de l'ancien sur la même base.
