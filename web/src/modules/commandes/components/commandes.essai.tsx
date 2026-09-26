@@ -6,6 +6,7 @@ import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
 import { rendreAvecSession } from "@/test/session-factice";
 import { bonEssai } from "../essai-fixtures";
 import { circuitDuBon } from "../domain/workflow";
+import { PageFacture } from "@/modules/facturation/components/PageFacture";
 import { PageBonCommande } from "./PageBonCommande";
 import { PageBonsCommande } from "./PageBonsCommande";
 
@@ -38,6 +39,13 @@ vi.mock("@/modules/societes/api/reglages", () => ({
   chargerReglages: vi.fn(async () => ({ validiteDevisJours: 30, tvaDefaut: 10, delaiPaiementJours: 30, modeDelaiPaiement: "net", unites: ["u", "m²"], tauxTva: [5.5, 10, 20] })),
 }));
 
+// La facture ouverte après « 🧾 Créer la facture » : seul son message importe ici, elle reste en chargement.
+vi.mock("@/modules/facturation/hooks/useFactures", async (original) => ({
+  ...(await original<typeof import("@/modules/facturation/hooks/useFactures")>()),
+  useFacture: vi.fn(() => ({ isPending: true, isError: false, data: undefined })),
+}));
+vi.mock("@/modules/facturation/api/ecran", () => ({ listerFacturesEcran: vi.fn(async () => []) }));
+
 const toast = vi.hoisted(() => ({ afficherToast: vi.fn(), useToast: vi.fn(() => null) }));
 vi.mock("@/lib/toast", () => toast);
 
@@ -51,6 +59,7 @@ function ouvrir(role: RoleMembre, chemin: string, etat?: unknown) {
       <Route path="/commandes" element={<PageBonsCommande />} />
       <Route path="/commandes/nouveau" element={<PageBonCommande />} />
       <Route path="/commandes/:id" element={<PageBonCommande />} />
+      <Route path="/factures/:id" element={<PageFacture />} />
       <Route path="/aller" element={<Navigate to="/commandes/nouveau" state={etat} />} />
     </Routes>,
     { role, chemin }
@@ -135,6 +144,16 @@ describe("fiche d'un bon", () => {
     ouvrir("conducteur", "/commandes");
     await screen.findByText("CMD-OPAC-7781");
     expect(screen.queryByRole("button", { name: "🧾 Créer la facture" })).not.toBeInTheDocument();
+  });
+
+  it("« 🧾 Créer la facture » : la facture s'ouvre et le dit — le message n'est plus perdu en route (D-E2E-02)", async () => {
+    api.listerBons.mockResolvedValue([bon({ statut_workflow: "chiffre", circuit: circuitDuBon([], "chiffre") })]);
+    api.genererFacture.mockResolvedValue("f9");
+    ouvrir("secretaire", "/commandes");
+    await userEvent.click(await screen.findByRole("button", { name: "🧾 Créer la facture" }));
+    await waitFor(() => expect(api.genererFacture).toHaveBeenCalledWith("b1"));
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith("Facture créée en brouillon depuis le bon de commande.", "success"));
+    expect(toast.afficherToast).toHaveBeenCalledTimes(1);
   });
 
   it("le rôle lecture consulte seulement", async () => {

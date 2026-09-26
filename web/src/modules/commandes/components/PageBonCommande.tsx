@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router";
+import { useMessageNavigation } from "@/lib/useMessageNavigation";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
 import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
@@ -35,6 +36,7 @@ function lireHorodatage(etat: unknown): string | null {
 export function PageBonCommande({ ChampReference }: { ChampReference?: ChampReferenceLigne }) {
   const { id } = useParams();
   const location = useLocation();
+  useMessageNavigation();
   const bon = useBon(id);
   const reglages = useReglages();
   // Après un brouillon, la fiche RELUE remonte le formulaire : les lignes insérées prennent leur uuid (relecture 3, M12).

@@ -6,6 +6,7 @@ import { REGLAGES_DEFAUT } from "@/modules/societes/domain/reglages";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
 import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import { Alert } from "@/components/ui/alert";
+import { useMessageNavigation } from "@/lib/useMessageNavigation";
 import { motifRoleFacture } from "../domain/actions";
 import { useDroitsFacture } from "../hooks/useEcranFactures";
 import { useFacture } from "../hooks/useFactures";
@@ -20,6 +21,7 @@ import { OngletsFacturation } from "./OngletsFacturation";
  */
 export function PageFacture({ ChampReference }: { ChampReference?: ChampReferenceLigne }) {
   const { id } = useParams();
+  useMessageNavigation();
   const facture = useFacture(id);
   const reglages = useReglages();
   const droits = useDroitsFacture();

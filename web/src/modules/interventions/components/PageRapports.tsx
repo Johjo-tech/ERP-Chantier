@@ -1,9 +1,8 @@
-import { useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
-import { afficherToast } from "@/lib/toast";
 import { useFiltresAdresse } from "@/lib/useFiltresAdresse";
+import { useMessageNavigation } from "@/lib/useMessageNavigation";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { useSession } from "@/modules/auth-roles/hooks/useSession";
 import { useConducteurs } from "@/modules/societes/hooks/useConducteurs";
@@ -21,8 +20,6 @@ const FILTRES = { recherche: "", conducteur: "", logement: "" };
  */
 export function PageRapports() {
   const conducteurs = useConducteurs();
-  const location = useLocation();
-  const navigate = useNavigate();
   const { filtres, changer } = useFiltresAdresse(FILTRES);
   // `conducteurFilterOptions` : les fiches actives, plus celle déjà choisie, par nom.
   const optionsConducteurs = (conducteurs.data ?? [])
@@ -30,12 +27,7 @@ export function PageRapports() {
     .map((c) => c.nom)
     .sort((a, b) => a.localeCompare(b));
   // Le message d'un enregistrement arrive par la navigation : il se dit dans la bulle de l'ancien, une fois.
-  const message = (location.state as { message?: string } | null)?.message;
-  useEffect(() => {
-    if (!message) return;
-    afficherToast(message, "success");
-    void navigate(location.pathname + location.search, { replace: true, state: null });
-  }, [message, navigate, location.pathname, location.search]);
+  useMessageNavigation();
 
   return (
     <>

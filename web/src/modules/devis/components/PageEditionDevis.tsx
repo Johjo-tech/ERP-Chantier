@@ -5,6 +5,7 @@ import { todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { schemaNombreFr } from "@/lib/nombres";
 import { useFormulaire } from "@/lib/useFormulaire";
+import { useMessageNavigation } from "@/lib/useMessageNavigation";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useClients, useInterlocuteurs } from "@/modules/clients/hooks/useClients";
 import { LignesAncien } from "@/modules/documents/components/LignesAncien";
@@ -32,6 +33,7 @@ const heureCourte = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digi
  */
 export function PageEditionDevis({ ChampReference }: { ChampReference?: ChampReferenceLigne }) {
   const { id } = useParams();
+  useMessageNavigation();
   const devis = useDevis(id);
   const reglages = useReglages();
   // L'annuaire des conducteurs d'abord : un ancien devis n'a que le NOM du sien (DEV-26).
