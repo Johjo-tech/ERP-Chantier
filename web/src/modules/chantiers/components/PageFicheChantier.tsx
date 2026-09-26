@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Navigate, useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { formatDateFr } from "@/lib/dates";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
@@ -22,6 +22,11 @@ import { BlocTodo } from "./BlocTodo";
 import { FormulaireChantierEnPlace } from "./FormulaireChantier";
 import { classeStatut } from "./statut";
 
+/** PostgREST répond PGRST116 quand `.single()` ne trouve aucune ligne — absente, ou filtrée par la RLS. */
+function estIntrouvable(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "code" in e && (e as { code: unknown }).code === "PGRST116";
+}
+
 /**
  * La fiche d'un chantier (`renderChantierDetail`). `edition` : la route
  * `/chantiers/:id/modifier` arrive formulaire ouvert, à la place du bandeau et
@@ -32,6 +37,8 @@ export function PageFicheChantier({ edition = false }: { edition?: boolean }) {
   const { id } = useParams();
   const chantier = useChantier(id);
   if (chantier.isPending) return <Chargement />;
+  // Un chantier introuvable (ou hors de portée du rôle) ramène à la liste, comme `renderChantierDetail` de l'ancien.
+  if (chantier.isError && estIntrouvable(chantier.error)) return <Navigate to="/chantiers" replace />;
   if (chantier.isError) return <Erreur erreur={chantier.error} reessayer={() => void chantier.refetch()} />;
   return (
     <GardeSociete societeId={chantier.data.societe_id} retour="/chantiers">
@@ -122,7 +129,8 @@ function Bandeau({ c }: { c: Chantier }) {
       <div className="chantier-hero-top">
         <div>
           <div className="card-sub">
-            {libelleTypeChantier(c.type)} · {c.client_nom ?? ""}
+            {/* Sans le nom du client, comme l'ancien (D-ECR-CHA-07). */}
+            {libelleTypeChantier(c.type)} ·{" "}
           </div>
           <div className="card-sub">{adresseComplete(c)}</div>
           <div className="card-sub">

@@ -59,7 +59,7 @@ export function DialoguePlanifier({ chantier, ligne, taches, fermer }: Props) {
         </p>
         <div className="field">
           <label htmlFor={idQte}>Quantité à planifier maintenant (sur {restante.toString()} restant(s))</label>
-          <input type="text" inputMode="decimal" id={idQte} autoFocus value={saisie} onChange={(e) => setSaisie(e.target.value)} />
+          <input type="number" step="0.01" min="0.01" id={idQte} autoFocus value={saisie} onChange={(e) => setSaisie(e.target.value)} />
         </div>
         <div className="card-sub" style={{ marginBottom: "14px" }}>
           Montant correspondant : {formatEurosEcran(apercu)}

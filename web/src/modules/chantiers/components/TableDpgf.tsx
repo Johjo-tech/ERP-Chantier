@@ -137,8 +137,8 @@ function Ligne({ l, changer, erreurs, selection, basculer, taches, metiers, devi
       </td>
       <td>
         <input
-          type="text"
-          inputMode="decimal"
+          type="number"
+          step="0.01"
           aria-label="Quantité"
           aria-invalid={!!erreur("quantite")}
           style={{ width: "70px" }}
@@ -149,8 +149,8 @@ function Ligne({ l, changer, erreurs, selection, basculer, taches, metiers, devi
       </td>
       <td>
         <input
-          type="text"
-          inputMode="decimal"
+          type="number"
+          step="0.01"
           aria-label="Prix unitaire HT"
           aria-invalid={!!erreur("prix_unitaire")}
           style={{ width: "90px" }}

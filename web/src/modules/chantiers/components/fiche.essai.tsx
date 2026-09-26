@@ -87,6 +87,14 @@ function ouvrir(role: RoleMembre, chemin = "/chantiers/ch1") {
   );
 }
 
+describe("fiche introuvable", () => {
+  it("un chantier introuvable ou hors de portée ramène à la liste, comme l'ancien", async () => {
+    api.chantiers.lireChantier.mockRejectedValue({ code: "PGRST116", message: "Aucune donnée" });
+    ouvrir("sous_traitant", "/chantiers/inconnu");
+    expect(await screen.findByRole("heading", { name: "Chantiers" })).toBeInTheDocument();
+  });
+});
+
 describe("liste des chantiers (CHA-01) — les cartes de l'ancien", () => {
   it("filtre par type et compte comptes-rendus, devis, factures", async () => {
     ouvrir("admin", "/chantiers");
@@ -206,7 +214,7 @@ describe("achats (CHA-11, CHA-22)", () => {
     await waitFor(() => expect(within(form).getByRole("option", { name: "Jean Dupont" })).toBeInTheDocument());
     await userEvent.selectOptions(within(form).getByLabelText("Salarié"), "s1");
     await userEvent.type(within(form).getByLabelText("Heures"), "7.5");
-    expect(within(form).getByLabelText("Montant HT")).toHaveValue("243.75");
+    expect(within(form).getByLabelText("Montant HT")).toHaveValue(243.75);
     expect(within(form).getByLabelText("Désignation")).toHaveValue("Jean Dupont");
     await userEvent.click(within(form).getByRole("button", { name: "+ Ajouter" }));
     await waitFor(() => expect(api.achats.ajouterAchat).toHaveBeenCalledWith("ch1", expect.objectContaining({ categorie: "salarie", montant: 243.75, heures: 7.5, salarie_id: "s1" })));

@@ -13,7 +13,6 @@ import { PageFormulaireChantier } from "@/modules/chantiers/components/PageFormu
 import { PageDevis } from "@/modules/devis/components/PageDevis";
 import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
 import { PageApercuDevis } from "@/modules/devis/components/PageApercuDevis";
-import { DevisLies } from "@/modules/devis/components/DevisLies";
 import { PageApercuFacture } from "@/modules/facturation/components/PageApercuFacture";
 import { PageFacture } from "@/modules/facturation/components/PageFacture";
 import { PageFactures } from "@/modules/facturation/components/PageFactures";
@@ -88,7 +87,7 @@ export const routes: RouteObject[] = [
       { path: "clients", element: <RouteModule module="clients"><PageClients /></RouteModule> },
       { path: "clients/import", element: <RouteModule module="clients" action="creer"><PageImportClients /></RouteModule> },
       { path: "clients/nouveau", element: <RouteModule module="clients" action="creer"><PageFormulaireClient /></RouteModule> },
-      { path: "clients/:id", element: <RouteModule module="clients"><PageFicheClient complements={(c) => <DevisLies clientId={c.id} />} /></RouteModule> },
+      { path: "clients/:id", element: <RouteModule module="clients"><PageFicheClient /></RouteModule> },
       { path: "clients/:id/modifier", element: <RouteModule module="clients" action="modifier"><PageFormulaireClient /></RouteModule> },
       { path: "chantiers", element: <RouteModule module="chantiers"><PageChantiers /></RouteModule> },
       { path: "chantiers/nouveau", element: <RouteModule module="chantiers" action="creer"><PageFormulaireChantier /></RouteModule> },

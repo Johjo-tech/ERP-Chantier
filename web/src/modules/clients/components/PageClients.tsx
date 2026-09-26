@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
+import { z } from "zod";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { BarreRecherche } from "@/components/ui/barre-recherche";
 import { correspond } from "@/lib/recherche";
@@ -36,7 +37,9 @@ export function PageClients({ formulaire }: Props) {
   // Un import CRÉE et MET À JOUR : il faut les deux droits (CLI-08).
   const peutModifier = usePermission("clients", "modifier");
   const peutImporter = peutCreer && peutModifier;
-  const [recherche, setRecherche] = useState("");
+  // `/clients/:id` arrive ici avec le nom du client à chercher : sa carte, seule (D-ECR-CHA-13). Validé : l'état vient de l'historique.
+  const arrivee = z.object({ recherche: z.string() }).safeParse(useLocation().state);
+  const [recherche, setRecherche] = useState(arrivee.success ? arrivee.data.recherche : "");
   const [edition, setEdition] = useState<{ id: string | null } | null>(formulaire === undefined ? null : { id: formulaire });
   const [interlocuteur, setInterlocuteur] = useState<{ clientId: string; edite: InterlocuteurEdite | null } | null>(null);
 
