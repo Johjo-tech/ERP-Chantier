@@ -38,7 +38,7 @@ export function TotauxAncien({ lignes, remise, onRemise }: Props) {
 
   return (
     <>
-      <div className="totals-box" id="totalsBoxContent">
+      <div className="totals-box" id="totalsBoxContent" aria-label="Totaux du document">
         {ligne("Total HT", t.htAvant)}
         {avecRemise && (
           <>

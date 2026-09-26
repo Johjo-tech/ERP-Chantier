@@ -126,7 +126,7 @@ export function ecransFacturation(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: enchainer(onglet("devis"), cliquer("button:has-text('+ Nouveau devis')")) },
       nouveau: { chemin: "/devis/nouveau" },
-      seuils: seuils({ pixels: 1, texte: 10_000 }, { pixels: 1, texte: 10_000 }),
+      seuils: seuils({ pixels: 0.003, texte: 0 }, { pixels: 0.003, texte: 0 }),
     },
     {
       id: "facture-brouillon",
@@ -150,7 +150,8 @@ export function ecransFacturation(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: enchainer(onglet("devis"), cliquer(".card:has-text('DEV-2026-900002') button:has-text('Modifier')")) },
       nouveau: { chemin: "/devis", gestes: cliquer(".card:has-text('DEV-2026-900002') button:has-text('Modifier')") },
-      seuils: seuils({ pixels: 1, texte: 10_000 }, { pixels: 1, texte: 10_000 }),
+      // Le champ « Statut » (D-ECR-FAC-10) : une ligne de plus dans la grille, tout le bas descend.
+      seuils: seuils({ pixels: 0.22, texte: 5 }, { pixels: 0.16, texte: 5 }),
     },
   ];
 }

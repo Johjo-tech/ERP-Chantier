@@ -88,7 +88,7 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
 
   // L'ancien faisait défiler jusqu'au formulaire à l'ouverture (`editItem`).
   useEffect(() => {
-    document.getElementById("formZoneFacture")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("formZoneFacture")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, []);
 
   function changerClient(id: string) {

@@ -44,21 +44,21 @@ describe("édition d'un devis", () => {
     await userEvent.type(await screen.findByLabelText("Désignation, ligne 1"), "Receveur");
     expect(screen.getByLabelText("TVA, ligne 1")).toHaveValue("20");
     await userEvent.clear(screen.getByLabelText("Prix unitaire HT, ligne 1"));
-    await userEvent.type(screen.getByLabelText("Prix unitaire HT, ligne 1"), "420,50");
+    await userEvent.type(screen.getByLabelText("Prix unitaire HT, ligne 1"), "420.50");
     const totaux = screen.getByLabelText("Totaux du document");
     expect(within(totaux).getByText("504,60 €")).toBeInTheDocument();
-    expect(within(totaux).getByText("Total TVA 20 %")).toBeInTheDocument();
+    // Un seul taux : il se dit dans le libellé, comme l'ancien (`tvaLignesHTML`).
+    expect(within(totaux).getByText(/^TVA 20 %/)).toBeInTheDocument();
   });
 
-  it("n'envoie rien sans client, et signale une ligne illisible", async () => {
+  it("n'envoie rien sans client : l'ancien le disait par une alerte", async () => {
+    const alerte = vi.spyOn(window, "alert").mockImplementation(() => undefined);
     ouvrir("secretaire");
     await userEvent.type(await screen.findByLabelText("Désignation, ligne 1"), "X");
-    await userEvent.clear(screen.getByLabelText("Quantité, ligne 1"));
-    await userEvent.type(screen.getByLabelText("Quantité, ligne 1"), "deux");
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
-    expect(screen.getByText("Choisissez un client.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Quantité, ligne 1")).toHaveAttribute("aria-invalid", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer le devis" }));
+    expect(alerte).toHaveBeenCalledWith("Le nom du client est requis.");
     expect(api.enregistrerDevis).not.toHaveBeenCalled();
+    alerte.mockRestore();
   });
 
   it("enregistre l'en-tête (adresse du client, pas de \"\") et les lignes converties", async () => {
@@ -71,8 +71,8 @@ describe("édition d'un devis", () => {
     await userEvent.clear(screen.getByLabelText("Quantité, ligne 1"));
     await userEvent.type(screen.getByLabelText("Quantité, ligne 1"), "3");
     await userEvent.clear(screen.getByLabelText("Prix unitaire HT, ligne 1"));
-    await userEvent.type(screen.getByLabelText("Prix unitaire HT, ligne 1"), "0,1");
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await userEvent.type(screen.getByLabelText("Prix unitaire HT, ligne 1"), "0.1");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer le devis" }));
     await waitFor(() => expect(api.enregistrerDevis).toHaveBeenCalled());
     const [societe, id, entete, lignes] = api.enregistrerDevis.mock.calls[0] as [string, string | null, Record<string, unknown>, Record<string, unknown>[]];
     expect([societe, id]).toEqual(["alpha", null]);
@@ -90,8 +90,9 @@ describe("édition d'un devis", () => {
       lignes: [{ id: "l1", position: 0, type: "ligne", designation: "Robinet", quantite: 1, prix_unitaire: 45, unite: "u", tva: 20, article_reference: null, commentaire: null, metier: null }],
     });
     ouvrir("lecture", "/devis/d1");
-    expect(await screen.findByText(/Lecture seule/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Enregistrer" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Désignation, ligne 1")).toHaveAttribute("readonly");
+    // Comme l'ancien : la saisie se lit derrière un voile, et le seul geste est de refermer.
+    expect(await screen.findByRole("button", { name: "Fermer" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enregistrer le devis" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Désignation, ligne 1").closest("[aria-disabled]")).toHaveAttribute("aria-disabled", "true");
   });
 });

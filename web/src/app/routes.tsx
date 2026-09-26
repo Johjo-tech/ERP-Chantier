@@ -15,9 +15,7 @@ import { lienDevisComplementaire } from "@/modules/chantiers/domain/liens";
 import { PageDevis } from "@/modules/devis/components/PageDevis";
 import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
 import { PageApercuDevis } from "@/modules/devis/components/PageApercuDevis";
-import { ActionsDevis } from "@/modules/devis/components/ActionsDevis";
 import { DevisLies } from "@/modules/devis/components/DevisLies";
-import { BoutonFacturerDevis } from "@/modules/facturation/components/BoutonFacturerDevis";
 import { PageApercuFacture } from "@/modules/facturation/components/PageApercuFacture";
 import { PageFacture } from "@/modules/facturation/components/PageFacture";
 import { PageFactures } from "@/modules/facturation/components/PageFactures";
@@ -119,7 +117,7 @@ export const routes: RouteObject[] = [
       { path: "chantiers/:id/modifier", element: <RouteModule module="chantiers" action="modifier"><PageFormulaireChantier /></RouteModule> },
       { path: "devis", element: <RouteModule module="devis"><PageDevis /></RouteModule> },
       { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis ChampReference={ReferenceArticleLigne} /></RouteModule> },
-      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis ChampReference={ReferenceArticleLigne} actions={(d) => (<><BoutonFacturerDevis devisId={d.id} /><ActionsDevis devis={d} /></>)} /></RouteModule> },
+      { path: "devis/:id", element: <RouteModule module="devis"><PageEditionDevis ChampReference={ReferenceArticleLigne} /></RouteModule> },
       { path: "devis/:id/apercu", element: <RouteModule module="devis"><PageApercuDevis /></RouteModule> },
       { path: "chantiers/:id/situation", element: <RouteModule module="factures" action="creer"><PageSituation /></RouteModule> },
       { path: "factures", element: <RouteModule module="factures"><PageFactures /></RouteModule> },
