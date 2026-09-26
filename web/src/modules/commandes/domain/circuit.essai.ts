@@ -7,7 +7,6 @@ import { nouvelleTentative, tentativesDuBon } from "./contacts";
 import { preparerEnregistrement } from "./enregistrement";
 import { aFacturer, fileValidation, filtrerFile } from "./files";
 import { metierChoisi, METIER_AUCUN, metiersDuBon, metiersRetenus, montantDuMetierDansLeDevis, totauxDesChapitres } from "./metiers";
-import { ongletVoisin } from "./pieces";
 import { comptesRendus, documentDirecteur, lirePrixTravail, travauxSaisis, versLignesAEnregistrer, type LigneDocument } from "./prefacture";
 import { enteteSav, savDuBon } from "./sav";
 
@@ -151,8 +150,4 @@ describe("contacts et onglets", () => {
     expect(nouvelleTentative("sms", "id", "2026-09-25", new Date(2026, 8, 25, 9, 5))).toEqual({ id: "id", type: "sms", date: "2026-09-25", heure: "09:05" });
   });
 
-  it("flèches circulaires, Début et Fin", () => {
-    const o = ["a", "b", "c"];
-    expect([ongletVoisin(o, "a", "ArrowLeft"), ongletVoisin(o, "c", "ArrowRight"), ongletVoisin(o, "b", "Home"), ongletVoisin(o, "a", "End"), ongletVoisin(o, "a", "x")]).toEqual(["c", "a", "a", "c", null]);
-  });
 });

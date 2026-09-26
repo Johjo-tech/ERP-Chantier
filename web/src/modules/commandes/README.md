@@ -39,8 +39,11 @@ directeur, hors circuit, clôture sans facturation), Facturation › Validation 
   `bc_generer_facture`). Le téléphone du locataire n'est ni lu ni écrit (BC-93).
 - **Préremplissage** (lecture automatique) : `navigate("/commandes/nouveau", { state: { prefill, fichier } })`,
   `prefill` validé par Zod (`schemaPreRemplissage`), `fichier` retenu comme pièce jointe.
+- **Écrans du circuit** (D-ECR-BC-06, D-ECR-BC-11) : panneau `PanneauCircuit` sous le
+  formulaire, au balisage de l'ancien (stepper, `achat-row`, toasts) ; validation conducteur
+  dans `ModaleValidationConducteur`, pré-facture dans `ModalePrefacture` (fenêtres).
 - **Routes** : `/commandes`, `/commandes/nouveau`, `/commandes/:id`,
-  `/commandes/:id/prefacture`, `/commandes/:id/sav`, `/commandes/:id/apercu`,
+  `/commandes/:id/prefacture` (liste + fenêtre de pré-facture), `/commandes/:id/sav`, `/commandes/:id/apercu`,
   `/facturation/validation`, `/facturation/a-facturer`, `/pieces`.
 - **Non repris** : le planning (dates, équipes, saisie terrain, bascule après
   pièce reçue — D-BC-03), suppression d'un bon, lien rapport ↔ bon.

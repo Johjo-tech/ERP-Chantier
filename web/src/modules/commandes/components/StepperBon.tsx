@@ -1,27 +1,33 @@
+import { Fragment, type ReactNode } from "react";
 import type { BonDeLaListe } from "../api/bons";
 import { etapesDuCircuit } from "../domain/workflow";
 
-/** Le circuit en quatre étapes (BC-03) : où en est le dossier, d'un coup d'œil. */
-export function StepperBon({ bon }: { bon: BonDeLaListe }) {
+/**
+ * Le circuit en quatre étapes (`bcWorkflowStepperHTML`, BC-03), au balisage de
+ * l'ancien. Une étape est « en cours » dès que la précédente est franchie —
+ * règle recopiée telle quelle, y compris quand deux étapes le sont à la fois.
+ * `actions` remplit `.bc-step-actions`, comme le contexte « attente » de l'ancien.
+ */
+export function StepperBon({ bon, actions }: { bon: BonDeLaListe; actions?: ReactNode }) {
   const etapes = etapesDuCircuit(bon.circuit, bon.factures.length > 0);
-  const courante = etapes.findIndex((e) => !e.faite);
   return (
-    <ol aria-label="Circuit du bon" className="flex flex-wrap items-center gap-2 text-sm">
-      {etapes.map((e, i) => (
-        <li key={e.libelle} aria-current={i === courante ? "step" : undefined} className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${e.faite ? "border-success bg-success/15 text-success" : i === courante ? "border-primary font-semibold text-primary" : "text-muted-foreground"}`}
-          >
-            {e.faite ? "✓" : i + 1}
-          </span>
-          <span className={i === courante ? "font-medium" : e.faite ? "" : "text-muted-foreground"}>
-            {e.libelle}
-            <span className="sr-only">{e.faite ? " — franchie" : i === courante ? " — en cours" : " — à venir"}</span>
-          </span>
-          {i < etapes.length - 1 && <span aria-hidden="true" className="text-muted-foreground">—</span>}
-        </li>
-      ))}
-    </ol>
+    <div className="bc-stepper" role="group" aria-label="Circuit du bon">
+      {etapes.map((e, i) => {
+        const courante = !e.faite && (i === 0 || etapes[i - 1]?.faite === true);
+        return (
+          <Fragment key={e.libelle}>
+            <div className={`bc-step${e.faite ? " is-done" : ""}${courante ? " is-current" : ""}`} aria-current={courante ? "step" : undefined}>
+              <div className="bc-step-dot" aria-hidden="true">{e.faite ? "✓" : i + 1}</div>
+              <div className="bc-step-label">
+                {e.libelle}
+                <span className="sr-only">{e.faite ? " — franchie" : courante ? " — en cours" : " — à venir"}</span>
+              </div>
+            </div>
+            {i < etapes.length - 1 && <div className={`bc-step-line${e.faite ? " is-done" : ""}`} aria-hidden="true" />}
+          </Fragment>
+        );
+      })}
+      <div className="bc-step-actions">{actions}</div>
+    </div>
   );
 }

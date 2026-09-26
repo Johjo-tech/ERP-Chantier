@@ -1930,10 +1930,48 @@ Le tableau des lignes (`documents/EditeurLignes`) et ses 16 à 23 lignes de text
 d'écart (poignée, « Code… », « Prix U. HT », « 10% ») sont repris avec les devis, qui
 le partagent ; le seuil des écrans du formulaire le chiffre (`LIGNES_PARTAGEES`).
 
-## D-ECR-BC-06 — Le panneau « Circuit du bon » reste sous le formulaire (D-BC-03)
-L'ancien menait le circuit depuis le planning et Facturation › Validation (modales).
-Le panneau reste sous le formulaire d'un bon existant, hors de la première fenêtre ;
-son texte (25 lignes) est chiffré dans le seuil des écrans « modifier / consulter ».
+## D-ECR-BC-06 — Le panneau « Circuit du bon » reste sous le formulaire, dans l'habit de l'ancien (révisé)
+L'ancien menait le circuit depuis la carte dépliée (contexte « attente »), le planning et ses
+fenêtres ; son formulaire n'en portait rien. Le panneau reste sous le formulaire d'un bon
+enregistré (D-BC-03 : le planning n'est pas repris, il faut bien un endroit pour ces gestes),
+mais il est désormais fait des pièces de l'ancien, sans Tailwind : `.card`, `section-title`,
+le stepper `bc-stepper` de `bcWorkflowStepperHTML` (même règle « en cours », même
+« ✓ Valider (conducteur) » ou même message d'attente dans `.bc-step-actions`), le
+`bc-attente-message` de la carte, les tâches en `achat-row` aux couleurs d'`ETAT_TACHE`
+avec les boutons de la fiche d'intervention (« ✓ Travaux terminés », « ✓ Valider »,
+« ✕ Refuser » et son `prompt` de motif), les travaux supplémentaires de
+`renderTravauxSupplementairesListe` (💶 par `prompt`, ✕) sous leur `entretien-add-row`, puis
+les boutons de la carte (« 🧾 Ouvrir la pré-facture » qui ouvre la fenêtre de D-ECR-BC-11,
+« ✓ Clôturer sans facturation » par `prompt`, « Créer un SAV », « Imprimer / PDF »).
+Les résultats se disent par toast, comme dans l'ancien ; la validation conducteur s'ouvre dans
+la fenêtre `#validationConducteurModal` recopiée (`ModaleValidationConducteur`). Seuls ajouts :
+le titre « Circuit du bon », le motif de refus et le commentaire d'une tâche sous sa ligne, et
+le bouton « Créer les tâches manquantes » (BC-37, sans planning). Son texte (22 lignes) est
+chiffré dans le seuil des écrans « modifier / consulter ».
+
+## D-ECR-BC-10 — La lecture automatique vit dans le formulaire du bon, comme dans l'ancien
+« Importer un bon » ouvre le formulaire vierge et y lance la lecture (`ocrEcranHTML` dans
+`#formZoneBonCommande`) : pastille, étape, fichier, chronomètre, « Annuler la lecture » ; à
+l'échec, le titre coloré de l'issue, l'alerte, « ↻ Réessayer » et « Saisir à la main ». Le
+fichier choisi par le bouton d'import est celui qui est lu — il voyage dans l'état de
+navigation, on ne le redemande pas. Le compte rendu (`#ocrStatut`) et les « Clients les plus
+proches » s'affichent au-dessus du formulaire prérempli. `/commandes/lecture` n'est plus
+qu'une redirection vers ce formulaire. Écarts : le message d'échec est en français
+(« Lecture impossible : le service a refusé le document. ») là où l'ancien laissait passer
+« Edge Function returned a non-2xx status code » (4 lignes, seuil de l'écran) ; une lecture
+relancée depuis un formulaire déjà saisi repart du prérempli, sans fusion avec la saisie.
+
+## D-ECR-BC-11 — La pré-facture est une fenêtre (`openValidationDirecteurModal`)
+La pré-facture s'ouvre par-dessus la liste (ou la fiche), au format de l'ancien : colonne des
+prix (`pf-table` : métier des chapitres, code, désignation, qté/unité, PU HT, travaux placés
+dans leur chapitre puis « Travaux supplémentaires constatés sur le chantier », sous-totaux par
+métier, boîte des totaux), comptes rendus du terrain, pièce de référence à droite (fiche
+interne ou bon du client, « 🔎 Agrandir »), pied collant avec les blocages et les quatre
+boutons ; confirmations par la boîte du navigateur, textes recopiés. L'adresse
+`/commandes/:id/prefacture` ouvre la liste avec la fenêtre ouverte ; la fermer rend la liste.
+Écarts : les comptes rendus ne montrent ni heures ni validateur (pas de colonne lue) ; la
+`pf-table` n'a ni glisser-déposer ni recherche d'article ; les montants de la fenêtre suivent
+`money()` (hors mode discret), comme l'ancien.
 
 ## D-ECR-BC-07 — « 🧾 Créer la facture » garde la base (`bc_generer_facture`)
 L'ancien ouvrait un formulaire de facture prérempli côté écran ; web/ laisse la base

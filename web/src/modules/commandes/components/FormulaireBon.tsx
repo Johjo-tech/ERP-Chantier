@@ -18,6 +18,7 @@ import { preparerEnregistrement } from "../domain/enregistrement";
 import { memeMetier, metiersDuBon, metiersRetenus, montantDuMetierDansLeDevis, totauxDesChapitres } from "../domain/metiers";
 import type { ModeBon } from "../domain/regles";
 import { verrouBonCommande } from "../domain/verrou";
+import type { StatutLecture } from "../hooks/useLectureDuBon";
 import { useBons, useCreerSav, useEnregistrerBon, useMetiersDisponibles } from "../hooks/useBons";
 import { ChampZone } from "./ChampsBon";
 import { ChiffrageBon } from "./ChiffrageBon";
@@ -35,6 +36,8 @@ interface Props {
   fichierLu: File | null;
   reglages: ReglagesDocuments;
   ChampReference?: ChampReferenceLigne | undefined;
+  /** La lecture automatique, pour un bon neuf ; absente sans la fonctionnalité `ocr`. */
+  lecture?: Lecture | null;
   /** « Brouillon enregistré à 10:42 » : ce que la barre d'actions affiche après un brouillon. */
   horodatage: string | null;
   /** Après un BROUILLON d'un bon existant : la fiche relue remonte le formulaire (relecture 3, M12). */
@@ -70,19 +73,39 @@ function useMetiersDuFormulaire(depart: Bon | null, lignes: readonly LigneEditio
   return { coches, origines: lus.origines, ajoutes: coches.length - choix.filter((c) => coches.some((x) => memeMetier(x, c))).length, changer };
 }
 
-/** « 📄 Lire un bon de commande » : la lecture automatique, depuis un bon neuf (la zone `ocr-zone` de l'ancien). */
-function ZoneLecture() {
-  const navigate = useNavigate();
+/**
+ * « 📄 Lire un bon de commande » (la zone `ocr-zone` de l'ancien) : le document
+ * choisi est lu sur place, et le compte rendu de la dernière lecture s'affiche
+ * dessous (`#ocrStatut`), avec les clients proches quand le nom lu est douteux.
+ */
+function ZoneLecture({ lecture, onClient }: { lecture: Lecture; onClient: (id: string, nom: string) => void }) {
+  const s = lecture.statut;
   return (
     <div className="ocr-zone" style={{ margin: "-4px 0 16px", padding: "14px 16px", border: "2px dashed var(--accent-2)", borderRadius: "10px", background: "rgba(var(--accent-rgb), .06)" }}>
       <label className="btn primary" style={{ cursor: "pointer" }}>
         📄 Lire un bon de commande (PDF ou photo)
-        <input type="file" accept="application/pdf,image/*,.heic,.heif" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void navigate("/commandes/lecture", { state: { fichier: f } }); }} />
+        <input type="file" accept="application/pdf,image/*,.heic,.heif" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) lecture.onLire(f); }} />
       </label>
       <small style={{ display: "block", marginTop: "6px", color: "var(--text-dim)", fontSize: "11.5px" }}>Le formulaire est prérempli à partir du document — relisez et corrigez avant d&apos;enregistrer.</small>
-      <div id="ocrStatut" style={{ marginTop: "8px", fontSize: "12px" }} />
+      <div id="ocrStatut" role="status" style={{ marginTop: "8px", fontSize: "12px", ...(s ? { color: s.aVerifier ? "var(--accent-2)" : "var(--success, #1E6B37)" } : {}) }}>
+        {s?.texte}
+        {s && s.suggestions.length > 0 && (
+          <div style={{ marginTop: "8px" }}>
+            <div style={{ fontSize: "11.5px", color: "var(--text-dim)", marginBottom: "4px" }}>Clients les plus proches :</div>
+            {s.suggestions.map((c) => (
+              <button key={c.id} type="button" className="btn small" style={{ margin: "0 6px 6px 0" }} onClick={() => onClient(c.id, c.nom)}>{c.nom}</button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+/** Ce que la page confie au formulaire pour la lecture automatique : la lancer, et son compte rendu. */
+export interface Lecture {
+  onLire: (f: File) => void;
+  statut: StatutLecture | null;
 }
 
 /**
@@ -107,7 +130,7 @@ const heureCourte = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digi
  * que l'ancien ; la logique d'enregistrement reste celle du module
  * (`preparerEnregistrement`).
  */
-export function FormulaireBon({ bon, savDe = null, prefill, fichierLu, reglages, ChampReference, horodatage, onBrouillon }: Props) {
+export function FormulaireBon({ bon, savDe = null, prefill, fichierLu, reglages, ChampReference, lecture = null, horodatage, onBrouillon }: Props) {
   const navigate = useNavigate();
   const clients = useClients();
   const bons = useBons();
@@ -211,7 +234,7 @@ export function FormulaireBon({ bon, savDe = null, prefill, fichierLu, reglages,
         {!verrou && lectureSeule && <div className="facture-verrou-banner"><span>👁 Consultation : votre rôle ne permet pas de modifier ce bon de commande.</span></div>}
         {/* Sous verrou, l'ancien grisait tout le formulaire et en coupait les gestes. */}
         <div style={verrou ? { pointerEvents: "none", opacity: 0.55 } : undefined}>
-          {!sav && !bon && <ZoneLecture />}
+          {!sav && !bon && lecture && <ZoneLecture lecture={lecture} onClient={(id, nom) => { changer("client_id", id); afficherToast(`Client « ${nom} » retenu.`, "success"); }} />}
           {!sav && !bon && <ModesBon mode={mode} onChange={setMode} />}
           <SectionClient {...base} clients={clients.data ?? []} sav={sav} devisLies={devisLies} />
           <SectionNumero {...base} mode={mode} sav={sav} bas={basNumero} />

@@ -18,6 +18,7 @@ import { optionsDesFiltres } from "../domain/optionsFiltres";
 import { useBons, useMetiersDeclares } from "../hooks/useBons";
 import { BarreFiltresBons } from "./BarreFiltresBons";
 import { CarteBon } from "./CarteBon";
+import { ModalePrefacture } from "./ModalePrefacture";
 
 /** « 📄 Importer un BC (PDF ou photo) » : le fichier choisi part à la lecture automatique. */
 function BoutonImporter() {
@@ -32,7 +33,7 @@ function BoutonImporter() {
         onChange={(e) => {
           const fichier = e.target.files?.[0];
           e.target.value = "";
-          if (fichier) void navigate("/commandes/lecture", { state: { fichier } });
+          if (fichier) void navigate("/commandes/nouveau", { state: { lire: fichier } });
         }}
       />
     </label>
@@ -44,7 +45,7 @@ function BoutonImporter() {
  * boutons, les huit filtres, puis une carte repliable par bon — une seule
  * dépliée à la fois (D-ECR-BC-01).
  */
-export function PageBonsCommande() {
+export function PageBonsCommande({ prefacture: prefactureInitiale = null, onFermerPrefacture }: { prefacture?: string | null; onFermerPrefacture?: () => void } = {}) {
   useModeDiscret();
   const navigate = useNavigate();
   const bons = useBons();
@@ -63,6 +64,7 @@ export function PageBonsCommande() {
   const liensDe = useLiensDesBons(tous);
   const [ouverte, setOuverte] = useState<string | null>(null);
   const [lienOuvert, setLienOuvert] = useState<string | null>(null);
+  const [prefacture, setPrefacture] = useState<string | null>(prefactureInitiale);
   const options = optionsDesFiltres({ conducteurs: conducteurs.data ?? [], clients: clients.data ?? [], metiers: metiers.data ?? [] }, filtres);
   const synthese = syntheseListe(liste.length, tous.length, "bon de commande", filtre);
 
@@ -103,9 +105,11 @@ export function PageBonsCommande() {
             recherche={{ requete: filtres.recherche, apports: apportsDe(b) }}
             idDom={defile.idDomDe(b.id)}
             enEvidence={defile.enEvidence === b.id}
+            onPrefacture={setPrefacture}
           />
         ))}
       </div>
+      {prefacture && <ModalePrefacture bonId={prefacture} onFermer={() => { setPrefacture(null); onFermerPrefacture?.(); }} />}
     </>
   );
 }

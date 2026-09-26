@@ -45,6 +45,8 @@ interface Props {
   fournisseursEmployes?: readonly string[];
   idDom?: string;
   enEvidence?: boolean;
+  /** « 🧾 Ouvrir la pré-facture » : la fenêtre s'ouvre par-dessus l'écran (`openValidationDirecteurModal`). */
+  onPrefacture?: (bonId: string) => void;
 }
 
 /** Les durées des messages de l'ancien : le numéro reçu se relit (5 s), un refus de suppression aussi (8 s). */
@@ -144,7 +146,7 @@ function ZoneBcRecu({ bon }: { bon: BonDeLaListe }) {
 }
 
 /** Les actions, visibles carte repliée : le geste qu'on vient chercher sur cet écran (`bc-actions-bas`). */
-function ActionsBas({ bon, liens, contexte, onLien, lienOuvert }: Pick<Props, "bon" | "liens" | "contexte" | "onLien" | "lienOuvert">) {
+function ActionsBas({ bon, liens, contexte, onLien, lienOuvert, onPrefacture }: Pick<Props, "bon" | "liens" | "contexte" | "onLien" | "lienOuvert" | "onPrefacture">) {
   useModeDiscret();
   const navigate = useNavigate();
   const prix = useVoitLesPrix();
@@ -181,7 +183,7 @@ function ActionsBas({ bon, liens, contexte, onLien, lienOuvert }: Pick<Props, "b
   return (
     <div className="bc-actions-bas">
       {chiffrageIci && (
-        <button type="button" className="btn small primary" onClick={(e) => { arreter(e); void navigate(`/commandes/${bon.id}/prefacture`); }}>
+        <button type="button" className="btn small primary" onClick={(e) => { arreter(e); if (onPrefacture) onPrefacture(bon.id); else void navigate(`/commandes/${bon.id}/prefacture`); }}>
           🧾 Ouvrir la pré-facture{lignes.length ? ` — ${formatEuros(totauxDocument(lignes, 0).ttc)} TTC` : " — pas encore chiffrée"}
         </button>
       )}
@@ -223,7 +225,7 @@ function ActionsBas({ bon, liens, contexte, onLien, lienOuvert }: Pick<Props, "b
  * actions ; dépliée, tout le détail. Une seule carte ouverte à la fois — la
  * page le tient.
  */
-export function CarteBon({ bon, contexte, ouverte, onBasculer, liens, lienOuvert, onLien, recherche, fournisseursEmployes, idDom, enEvidence }: Props) {
+export function CarteBon({ bon, contexte, ouverte, onBasculer, liens, lienOuvert, onLien, recherche, fournisseursEmployes, idDom, enEvidence, onPrefacture }: Props) {
   useModeDiscret();
   const prix = useVoitLesPrix();
   const sav = estSav(bon);
@@ -266,7 +268,7 @@ export function CarteBon({ bon, contexte, ouverte, onBasculer, liens, lienOuvert
         </div>
       </div>
       {bon.en_attente_bc && !verrou && <ZoneBcRecu bon={bon} />}
-      <ActionsBas bon={bon} liens={liens} contexte={contexte} onLien={onLien} lienOuvert={lienOuvert} />
+      <ActionsBas bon={bon} liens={liens} contexte={contexte} onLien={onLien} lienOuvert={lienOuvert} onPrefacture={onPrefacture} />
       {ouverte && lienOuvert && <div style={{ marginTop: "8px" }}><LienRapport bon={bon} onFermer={() => onLien(false)} /></div>}
       {ouverte && enAttente && <div className="bc-attente-message" style={{ marginTop: "8px" }}>{messageAttenteFacturation(bon.circuit.valideConducteur)}</div>}
     </div>

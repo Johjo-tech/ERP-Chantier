@@ -46,6 +46,9 @@ const documents = vi.hoisted(() => ({
   SavSansToutesSesPhotos: class extends Error {},
 }));
 vi.mock("../api/documents", () => documents);
+const toast = vi.hoisted(() => ({ afficherToast: vi.fn(), useToast: vi.fn(() => null) }));
+vi.mock("@/lib/toast", () => toast);
+vi.mock("@/modules/interventions/api/rapports", () => ({ listerRapports: vi.fn(async () => []) }));
 vi.mock("../api/metiers", () => ({ listerMetiersDeclares: vi.fn(async () => ["Peinture", "Plomberie", "Sol"]) }));
 vi.mock("@/modules/devis/api/devis", () => ({ listerDevis: vi.fn(async () => []), lireDevis: vi.fn() }));
 vi.mock("@/modules/clients/api/clients", () => ({ listerClients: vi.fn(async () => [{ id: "c1", nom: "OPAC du Rhône", interlocuteurs: [] }]) }));
@@ -78,33 +81,52 @@ function ouvrir(role: RoleMembre, chemin: string) {
 }
 
 describe("tâches et validation conducteur (BC-16, BC-37, BC-38)", () => {
-  it("le conducteur arbitre : valider une tâche pointée, refuser exige un motif ; le bouton d'affaire reste fermé tant qu'une tâche n'est pas pointée", async () => {
+  it("le conducteur arbitre : valider une tâche pointée, refuser exige un motif (prompt) ; tant qu'une tâche n'est pas pointée, le stepper dit d'attendre", async () => {
     const taches = [tacheEssai({ id: "t1", metier: "Peinture", statut: "realisee" }), tacheEssai({ id: "t2", libelle: "Sol", metier: "Sol", statut: "planifiee" })];
     api.lireBon.mockResolvedValue(bonAvecTaches(taches, { metiers: ["Peinture", "Sol"] }));
     circuit.listerTaches.mockResolvedValue(taches);
     circuit.arbitrerTache.mockResolvedValue(undefined);
     ouvrir("conducteur", "/commandes/b1");
-    const section = await screen.findByRole("region", { name: "Validation conducteur" });
-    expect(within(section).getByText(/1 tâche\(s\) n'ont pas encore été pointées par le terrain\. \(Sol\)/)).toBeInTheDocument();
-    expect(within(section).getByRole("button", { name: "Valider l'affaire (conducteur)" })).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Refuser…" }));
-    expect(screen.getByRole("button", { name: "Refuser" })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText(/Motif du refus/), "Joints à reprendre");
-    await userEvent.click(screen.getByRole("button", { name: "Refuser" }));
+    expect(await screen.findByText(/tous les métiers doivent être marqués comme réalisés/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "✓ Valider (conducteur)" })).not.toBeInTheDocument();
+    const invite = vi.spyOn(window, "prompt").mockReturnValueOnce("  ").mockReturnValueOnce("Joints à reprendre");
+    const refuser = await screen.findByRole("button", { name: "✕ Refuser" });
+    await userEvent.click(refuser);
+    expect(circuit.arbitrerTache).not.toHaveBeenCalled();
+    await userEvent.click(refuser);
     await waitFor(() => expect(circuit.arbitrerTache).toHaveBeenCalledWith("t1", false, "Joints à reprendre"));
+    expect(invite).toHaveBeenCalledWith("Motif du refus (obligatoire) :");
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith("Travaux renvoyés au technicien.", "success"));
     // Tâche planifiée : le conducteur peut aussi la déclarer faite (même RPC que le terrain).
-    expect(screen.getByRole("button", { name: "Travaux faits" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "✓ Travaux terminés" })).toBeInTheDocument();
+    invite.mockRestore();
   });
 
-  it("toutes pointées : le conducteur valide l'affaire ; un métier sans tâche se crée d'ici", async () => {
+  it("toutes pointées : « ✓ Valider (conducteur) » ouvre la fenêtre de l'ancien, qui valide l'affaire", async () => {
     const taches = [tacheEssai({ statut: "realisee" })];
     api.lireBon.mockResolvedValue(bonAvecTaches(taches, { metiers: ["Peinture"] }));
     circuit.listerTaches.mockResolvedValue(taches);
     circuit.validerAffaireConducteur.mockResolvedValue(undefined);
     ouvrir("conducteur", "/commandes/b1");
-    await userEvent.click(await screen.findByRole("button", { name: "Valider l'affaire (conducteur)" }));
+    await userEvent.click(await screen.findByRole("button", { name: "✓ Valider (conducteur)" }));
+    const fenetre = screen.getByRole("dialog", { name: "Valider ce bon de commande" });
+    expect(within(fenetre).getByText("✓ Toutes les tâches sont pointées : l'affaire peut être validée.")).toBeInTheDocument();
+    await userEvent.click(within(fenetre).getByRole("button", { name: "✓ Confirmer la validation" }));
     await waitFor(() => expect(circuit.validerAffaireConducteur).toHaveBeenCalled());
-    expect(await screen.findByText(/Affaire validée par le conducteur/)).toBeInTheDocument();
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith("Affaire validée par le conducteur.", "success"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("dans la fenêtre, un métier sans tâche bloque la confirmation", async () => {
+    const taches = [tacheEssai({ statut: "realisee" })];
+    // Le compteur du bon dit « tout pointé », la lecture des tâches réelles dit le contraire : la fenêtre croit la seconde.
+    api.lireBon.mockResolvedValue(bonAvecTaches(taches, { metiers: ["Peinture", "Sol"] }));
+    circuit.listerTaches.mockResolvedValue(taches);
+    ouvrir("conducteur", "/commandes/b1");
+    await userEvent.click(await screen.findByRole("button", { name: "✓ Valider (conducteur)" }));
+    const fenetre = screen.getByRole("dialog", { name: "Valider ce bon de commande" });
+    expect(await within(fenetre).findByText(/^⚠/)).toBeInTheDocument();
+    expect(within(fenetre).getByRole("button", { name: "✓ Confirmer la validation" })).toBeDisabled();
   });
 
   it("le stepper dit l'étape ; la secrétaire n'arbitre pas", async () => {
@@ -112,11 +134,11 @@ describe("tâches et validation conducteur (BC-16, BC-37, BC-38)", () => {
     api.lireBon.mockResolvedValue(bonAvecTaches(taches));
     circuit.listerTaches.mockResolvedValue(taches);
     ouvrir("secretaire", "/commandes/b1");
-    const stepper = await screen.findByRole("list", { name: "Circuit du bon" });
-    expect(within(stepper).getByText(/Conducteur/).closest("li")).toHaveAttribute("aria-current", "step");
-    await screen.findByText("Tâches du terrain (1)");
-    expect(screen.queryByRole("button", { name: "Valider" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Validation conducteur" })).not.toBeInTheDocument();
+    const stepper = await screen.findByRole("group", { name: "Circuit du bon" });
+    expect(within(stepper).getByText(/^Conducteur/).closest(".bc-step")).toHaveAttribute("aria-current", "step");
+    await screen.findByText("✅ Travaux réalisés");
+    expect(screen.queryByRole("button", { name: "✓ Valider" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "✓ Valider (conducteur)" })).not.toBeInTheDocument();
   });
 
   it("un bon sans tâche mais avec des métiers : « Créer les tâches manquantes »", async () => {
@@ -129,22 +151,24 @@ describe("tâches et validation conducteur (BC-16, BC-37, BC-38)", () => {
 });
 
 describe("travaux supplémentaires (BC-46)", () => {
-  it("le conducteur ajoute un travail « à chiffrer » et le chiffre ; un prix illisible est refusé", async () => {
+  it("le conducteur ajoute un travail « à chiffrer » et le chiffre par 💶 ; un prix illisible est refusé", async () => {
     api.lireBon.mockResolvedValue(bonEssai());
     circuit.listerTravaux.mockResolvedValue([travailEssai()]);
     circuit.ajouterTravail.mockResolvedValue(undefined);
     circuit.chiffrerTravail.mockResolvedValue(undefined);
     ouvrir("conducteur", "/commandes/b1");
     await userEvent.type(await screen.findByLabelText("Nouveau travail supplémentaire"), "Remplacer siphon");
-    await userEvent.click(screen.getByRole("button", { name: "Ajouter" }));
+    await userEvent.click(screen.getByRole("button", { name: "+ Ajouter" }));
     await waitFor(() => expect(circuit.ajouterTravail).toHaveBeenCalledWith(expect.objectContaining({ bonId: "b1", libelle: "Remplacer siphon", origine: "conducteur", tacheId: null })));
-    await userEvent.type(screen.getByLabelText(/Prix de vente HT de « Reprise plinthes »/), "PLB-001");
-    await userEvent.click(screen.getByRole("button", { name: "Chiffrer" }));
-    expect(screen.getByText("Montant invalide.")).toBeInTheDocument();
-    await userEvent.clear(screen.getByLabelText(/Prix de vente HT/));
-    await userEvent.type(screen.getByLabelText(/Prix de vente HT/), "12,5");
-    await userEvent.click(screen.getByRole("button", { name: "Chiffrer" }));
+    const invite = vi.spyOn(window, "prompt").mockReturnValueOnce("PLB-001").mockReturnValueOnce("12,5");
+    const chiffrer = await screen.findByRole("button", { name: "Chiffrer « Reprise plinthes »" });
+    await userEvent.click(chiffrer);
+    expect(invite).toHaveBeenCalledWith("Prix de vente HT :");
+    expect(toast.afficherToast).toHaveBeenCalledWith("Montant invalide.");
+    expect(circuit.chiffrerTravail).not.toHaveBeenCalled();
+    await userEvent.click(chiffrer);
     await waitFor(() => expect(circuit.chiffrerTravail).toHaveBeenCalledWith("w1", { prix: 12.5, quantite: 4, unite: "ml" }));
+    invite.mockRestore();
   });
 
   it("la secrétaire voit les travaux mais ne les écrit pas (peut_ecrire)", async () => {
@@ -153,7 +177,7 @@ describe("travaux supplémentaires (BC-46)", () => {
     ouvrir("secretaire", "/commandes/b1");
     expect(await screen.findByText("Reprise plinthes")).toBeInTheDocument();
     expect(screen.queryByLabelText("Nouveau travail supplémentaire")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Chiffrer" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Chiffrer/ })).not.toBeInTheDocument();
   });
 });
 
@@ -162,17 +186,19 @@ describe("SAV et clôture sans facturation (BC-13, BC-14)", () => {
     api.lireBon.mockResolvedValue(bonEssai({ id: "s1", bon_commande_parent_id: "b1", numero_bc: "SAV-2026-000001", sans_bc: true }));
     circuit.cloturerGratuit.mockResolvedValue(undefined);
     ouvrir("admin", "/commandes/s1");
-    await userEvent.click(await screen.findByRole("button", { name: "Clôturer sans facturation" }));
-    expect(screen.getByLabelText(/Motif/)).toHaveValue("Reprise sous garantie");
-    await userEvent.click(screen.getByRole("button", { name: "Clôturer" }));
+    // Comme l'ancien : le motif se demande par prompt, « Reprise sous garantie » proposé.
+    const invite = vi.spyOn(window, "prompt").mockImplementation((_m, defaut) => defaut ?? null);
+    await userEvent.click(await screen.findByRole("button", { name: "✓ Clôturer sans facturation" }));
+    expect(invite).toHaveBeenCalledWith(expect.stringMatching(/^Clôturer SAV-2026-000001 sans facturation \?/), "Reprise sous garantie");
     await waitFor(() => expect(circuit.cloturerGratuit).toHaveBeenCalledWith("s1", "Reprise sous garantie"));
+    invite.mockRestore();
   });
 
   it("le conducteur ne clôture pas (admin seul en base)", async () => {
     api.lireBon.mockResolvedValue(bonEssai({ id: "s1", bon_commande_parent_id: "b1", numero_bc: "SAV-2026-000001", sans_bc: true }));
     ouvrir("conducteur", "/commandes/s1");
-    await screen.findByText(/Tâches du terrain/);
-    expect(screen.queryByRole("button", { name: "Clôturer sans facturation" })).not.toBeInTheDocument();
+    await screen.findByText("✅ Travaux réalisés");
+    expect(screen.queryByRole("button", { name: "✓ Clôturer sans facturation" })).not.toBeInTheDocument();
   });
 
   it("créer un SAV : « Ce qui ne va pas » et des photos ; un seul SAV par bon", async () => {
@@ -210,13 +236,16 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.validerPrefacture.mockResolvedValue(undefined);
     ouvrir("admin", "/commandes/b1/prefacture");
     expect(await screen.findByText(/travail\(aux\) supplémentaire\(s\) restent à chiffrer/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Valider la pré-facture" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "✓ Valider la pré-facture" })).toBeDisabled();
     await userEvent.type(screen.getByLabelText("Prix unitaire HT de « Reprise plinthes »"), "15");
     const document = screen.getByRole("table", { name: "Document de facturation" });
-    const rangs = within(document).getAllByRole("row").map((r) => r.textContent ?? "");
-    expect(rangs.findIndex((r) => r.includes("Reprise plinthes"))).toBe(rangs.findIndex((r) => r.includes("Murs")) + 1);
+    // Les lignes du bon se saisissent (la désignation est dans un champ) ; le travail, lui, se lit.
+    const rangs = within(document).getAllByRole("row");
+    const murs = rangs.findIndex((r) => within(r).queryByDisplayValue("Murs"));
+    expect(murs).toBeGreaterThan(0);
+    expect(rangs.findIndex((r) => (r.textContent ?? "").includes("Reprise plinthes"))).toBe(murs + 1);
     expect(screen.getByLabelText("Totaux de la pré-facture")).toHaveTextContent("260,00 €");
-    await userEvent.click(screen.getByRole("button", { name: "Valider la pré-facture" }));
+    await userEvent.click(screen.getByRole("button", { name: "✓ Valider la pré-facture" }));
     await waitFor(() => expect(circuit.validerPrefacture).toHaveBeenCalled());
     const c = circuit.validerPrefacture.mock.calls[0]?.[0] as { lignes: { designation: string }[]; integres: string[]; prix: unknown[]; montant: number; horsCircuit: boolean };
     expect(c.lignes.map((l) => l.designation)).toEqual(["PEINTURE", "Murs", "Reprise plinthes"]);
@@ -229,12 +258,13 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.listerTravaux.mockResolvedValue([]);
     circuit.validerPrefacture.mockRejectedValue({ code: "P0001", message: "Refusé par la base" });
     ouvrir("admin", "/commandes/b1/prefacture");
-    await userEvent.click(await screen.findByRole("button", { name: "Valider sans passer par le planning" }));
-    expect(screen.getByText(/220,00 € TTC/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Confirmer hors circuit" }));
-    expect(await screen.findByText("Refusé par la base")).toBeInTheDocument();
+    // Comme l'ancien : une confirmation native, qui dit le client et le TTC.
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await userEvent.click(await screen.findByRole("button", { name: "⏭️ Valider sans passer par le planning" }));
+    expect(confirmer).toHaveBeenCalledWith(expect.stringMatching(/OPAC du Rhône — 220,00\s€ TTC/));
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith("Prix enregistrés, mais validation refusée : Refusé par la base"));
     expect(circuit.validerPrefacture.mock.calls[0]?.[0]).toMatchObject({ horsCircuit: true });
-    expect(screen.queryByRole("button", { name: "Confirmer hors circuit" })).not.toBeInTheDocument();
+    confirmer.mockRestore();
   });
 
   it("un bon encore « en attente de BC » demande confirmation avant validation (BC-18)", async () => {
@@ -243,11 +273,13 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.listerTravaux.mockResolvedValue([]);
     circuit.validerPrefacture.mockResolvedValue(undefined);
     ouvrir("admin", "/commandes/b1/prefacture");
-    await userEvent.click(await screen.findByRole("button", { name: "Valider la pré-facture" }));
-    expect(screen.getByText(/attend encore le numéro de commande du client/)).toBeInTheDocument();
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await userEvent.click(await screen.findByRole("button", { name: "✓ Valider la pré-facture" }));
+    expect(confirmer).toHaveBeenCalledWith(expect.stringMatching(/attend encore le numéro de commande du client/));
     expect(circuit.validerPrefacture).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Valider quand même" }));
+    await userEvent.click(screen.getByRole("button", { name: "✓ Valider la pré-facture" }));
     await waitFor(() => expect(circuit.validerPrefacture).toHaveBeenCalled());
+    confirmer.mockRestore();
   });
 
   it("la secrétaire complète mais ne valide pas ; le conducteur n'ouvre pas la pré-facture", async () => {
@@ -256,8 +288,8 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     circuit.listerTravaux.mockResolvedValue([]);
     const vue = ouvrir("secretaire", "/commandes/b1/prefacture");
     expect(await screen.findByText(/La validation revient à un administrateur/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enregistrer les prix" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Valider la pré-facture" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "💾 Enregistrer sans valider" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "✓ Valider la pré-facture" })).not.toBeInTheDocument();
     vue.unmount();
     ouvrir("conducteur", "/commandes/b1/prefacture");
     expect(screen.getByText(/depuis un compte administrateur ou secrétariat/)).toBeInTheDocument();

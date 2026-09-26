@@ -40,5 +40,7 @@ export function useLectureBon() {
     etape,
     annuler: () => controle.current?.abort(),
     reessayer: () => dernier && lecture.mutate(dernier),
+    /** Le document de la dernière lecture : son nom s'affiche, et il reste joint au bon si l'on saisit à la main. */
+    dernier,
   };
 }

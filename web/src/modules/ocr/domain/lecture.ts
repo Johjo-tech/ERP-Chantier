@@ -82,6 +82,22 @@ export function etatDelaiDepasse(msEcoules: number): EtatLecture {
   return { libelle: `Aucune réponse après ${formaterDuree(msEcoules)}`, ton: "erreur", alerte: "Le service de lecture n'a pas répondu. Réessayez, ou saisissez le bon à la main.", enCours: false };
 }
 
+/**
+ * Ce que dit le bloc `#ocrStatut` sous le bouton de lecture, une fois le
+ * formulaire prérempli (`lireBonCommande`) : ce qu'il reste à vérifier — le
+ * client quand il n'est pas reconnu, les avertissements de la lecture — ou
+ * rien que la relecture d'usage.
+ */
+export function compteRenduLecture(avertissements: readonly string[], client: { nom: string; reconnu: boolean }): { texte: string; aVerifier: boolean } {
+  const messages: string[] = [];
+  if (!client.nom) messages.push("client non détecté");
+  else if (!client.reconnu) messages.push(`client « ${client.nom} » à confirmer`);
+  messages.push(...avertissements);
+  return messages.length
+    ? { texte: `Document lu — à vérifier : ${messages.join(" · ")}`, aVerifier: true }
+    : { texte: "Document lu — vérifiez les champs avant d'enregistrer.", aVerifier: false };
+}
+
 export function etatEchec(message: string): EtatLecture {
   return { libelle: "Lecture impossible", ton: "erreur", alerte: message, enCours: false };
 }

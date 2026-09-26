@@ -103,7 +103,7 @@ describe("fiche d'un bon : après un brouillon, le formulaire remonte", () => {
   });
 });
 
-describe("pré-facture : après « Enregistrer les prix », l'écran remonte sur la fiche relue", () => {
+describe("pré-facture : après « Enregistrer sans valider », la fenêtre remonte sur la fiche relue", () => {
   it("montre les lignes enregistrées, et un second enregistrement ne rétablit pas les anciennes", async () => {
     base.bon = bonEssai();
     base.prix = [];
@@ -116,13 +116,16 @@ describe("pré-facture : après « Enregistrer les prix », l'écran remonte sur
     const champ = await screen.findByDisplayValue("Pose faïence");
     await userEvent.clear(champ);
     await userEvent.type(champ, "Pose carrelage");
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer les prix" }));
-    await screen.findByText("Prix enregistrés.");
+    await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer sans valider" }));
+    await waitFor(() => expect(base.prix).toHaveLength(1));
     await attendre(200);
     expect(base.prix[0]).toEqual(["Pose carrelage"]);
     expect(screen.getByDisplayValue("Pose carrelage")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer les prix" }));
+    await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer sans valider" }));
     await waitFor(() => expect(base.prix).toHaveLength(2));
     expect(base.prix[1]).toEqual(["Pose carrelage"]);
+    // La relecture qui suit l'enregistrement doit aboutir avant la fin du test, sinon elle remonte un écran démonté.
+    await attendre(200);
+    expect(screen.getByDisplayValue("Pose carrelage")).toBeInTheDocument();
   });
 });

@@ -16,12 +16,16 @@ import { statutDe, type StatutTache } from "@/modules/auth-roles/domain/actions"
 export { actionsFacturation, actionsTache, statutDe, transitionPermise } from "@/modules/auth-roles/domain/actions";
 export type { ActionsFacturation, ActionsTache, GesteTache, StatutTache } from "@/modules/auth-roles/domain/actions";
 
-export const ETATS_TACHE: Record<StatutTache, { libelle: string; variante: "default" | "succes" | "alerte" | "danger" }> = {
-  planifiee: { libelle: "à pointer par le technicien", variante: "default" },
-  realisee: { libelle: "pointée — à arbitrer", variante: "alerte" },
-  validee: { libelle: "validée", variante: "succes" },
-  refusee: { libelle: "refusée — à reprendre", variante: "danger" },
+/** `ETAT_TACHE` de l'ancien (app.js l. 7278) : l'icône et la couleur d'une ligne `achat-row`, recopiées. */
+export const ETATS_TACHE: Record<StatutTache, { icone: string; couleur: string; libelle: string }> = {
+  planifiee: { icone: "⏳", couleur: "#8B93A7", libelle: "à pointer par le technicien" },
+  realisee: { icone: "✓", couleur: "#5BC97A", libelle: "pointée — à arbitrer" },
+  validee: { icone: "✓", couleur: "#2E9E5B", libelle: "validée" },
+  refusee: { icone: "✕", couleur: "#C0392B", libelle: "refusée — à reprendre" },
 };
+
+/** La couleur des travaux supplémentaires (`renderTravauxSupplementairesListe`). */
+export const COULEUR_TRAVAIL_SUPPLEMENTAIRE = "#9B6EF0";
 
 // ---------- Blocages (regles-bc.ts) ----------
 
