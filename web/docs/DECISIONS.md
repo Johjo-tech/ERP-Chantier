@@ -2343,3 +2343,28 @@ de son fournisseur. Le parcours cherchait un « ▸ » qui n'existe plus ; il v�
 ouverte, qu'elle dit « commandée le … », puis « ✓ Pièce arrivée ». Relevé au passage : sur la base locale,
 l'ancienne application annonce « 📦 Pièce commandée » sans que la pièce change de section (sa date de commande
 ne tient pas) — défaut de l'ancien, non repris.
+
+## D-VIS2-01 — Écrans « brouillon » et « facture émise » : un jeu d'essai à eux, pas les restes des e2e
+Sur base propre, « Factures › Modifier un brouillon (Mme Durand) » et « … Consulter une facture émise
+(FAC-2026-000025) » expiraient au clic DES DEUX CÔTÉS : aucune carte ne répondait. Ils visaient ce qu'un
+passage des parcours e2e laisse en base (le brouillon né de DEV-2026-900002, un numéro consommé au fil des
+passages). `tests/visuel/jeux/facturation.sql` (appliqué par `scripts/appliquer-jeux-visuels.sh`, après le
+jeu des PDF pour ne pas décaler leurs numéros) pose un brouillon de Mme Durand et une facture émise de
+SCI Les Tilleuls, tous deux à l'interlocuteur « Témoin visuel », que la carte affiche dans les deux
+applications : les écrans les trouvent par lui, quel que soit le numéro donné par la base et quoi que les
+e2e aient créé à côté. Le brouillon est sans chapitre, comme celui que l'écran mesurait : avec un chapitre,
+l'ancien montre la liste du métier du chapitre (`chapitreMetierHTML` : « — Déduit du titre — », « — Aucun
+métier — », les métiers), que les formulaires de devis et de facture de web/ n'ont PAS encore (seul le
+bon de commande l'a, `ChampMetierChapitre`). Écart d'application relevé, non traité ici : à reprendre dans
+`LignesAncien` (prop `ChampMetier`) avec l'habit de l'ancien (`select.chapitre-metier.est-deduit`).
+
+## D-VIS2-02 — Trois écarts d'application trouvés par la passe visuelle sur base propre
+- Liste des rapports : un rapport sans statut (le jeu des PDF en pose un) montrait « EN COURS » ; l'ancien
+  écrit `esc(i.statut)`, une pastille vide. `CarteRapport` écrit le statut tel quel. Sans lien avec le
+  passage de la page à `useMessageNavigation` (66409b0).
+- Nouvelle facture, téléphone : le formulaire défilait au montage, AVANT l'arrivée des comptes des
+  sous-onglets ; « Validation (n) » passe alors à la ligne, la zone descend de 16 px, et le défilement doux
+  garde sa cible de départ : 32 % de pixels d'écart. `useDefilementFormulaire` attend que l'écran soit posé
+  (comptes, réglages, pièce), une fois par pièce.
+- Code article des lignes (`ChoixArticle`) : sans `type="text"` ni `art-pick`, l'ancienne feuille ne
+  l'habillait pas (bordure du navigateur, police Arial, pas de « Code… »). Il porte les attributs de l'ancien.
