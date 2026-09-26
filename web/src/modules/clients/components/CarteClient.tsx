@@ -8,6 +8,8 @@ import { FormulaireInterlocuteur, type InterlocuteurEdite } from "./FormulaireIn
 
 /** La question de l'ancien (`deleteItem`) pour un interlocuteur. */
 const QUESTION_SUPPRESSION = "Supprimer définitivement cet élément ?";
+/** Un refus de la base se lit plus longtemps qu'une réussite (8 s, `showToast(…, 'danger', 8000)` de l'ancien). */
+const BULLE_REFUS_MS = 8000;
 
 type Interlocuteur = ClientListe["interlocuteurs"][number];
 
@@ -46,12 +48,12 @@ export function CarteClient({
       return undefined;
     }));
     if (!window.confirm(question)) return;
-    supprimer.mutate(c.id, { onError: (err) => afficherToast(messageErreur(err), "error", 8000) });
+    supprimer.mutate(c.id, { onError: (err) => afficherToast(messageErreur(err), "error", BULLE_REFUS_MS) });
   }
 
   function supprimerInterlocuteur(id: string) {
     if (!window.confirm(QUESTION_SUPPRESSION)) return;
-    supprimerContact.mutate(id, { onError: (err) => afficherToast(messageErreur(err), "error", 8000) });
+    supprimerContact.mutate(id, { onError: (err) => afficherToast(messageErreur(err), "error", BULLE_REFUS_MS) });
   }
 
   return (

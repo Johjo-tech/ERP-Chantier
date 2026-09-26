@@ -1,125 +1,200 @@
 import { Link } from "react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Input, Select } from "@/components/ui/input";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import type { LigneDpgfBase } from "../api/dpgf";
 import type { TachePlanifiee } from "../api/planification";
 import { estFactureeEntierement } from "../domain/dpgf";
 import { quantiteDejaPlanifiee } from "../domain/planification";
 import type { BrouillonLigneDpgf } from "../domain/saisie-dpgf";
 
+/** Une ligne telle que le tableau la montre : son brouillon, et — si elle est en base — ce que la base en dit. */
+export interface LigneAffichee {
+  brouillon: BrouillonLigneDpgf;
+  enBase: {
+    avancement_cumule: number;
+    devis_source_id: string | null;
+    quantite: number;
+    prix_unitaire: number;
+    metier: string | null;
+  } | null;
+}
+
+type Champ = "designation" | "quantite" | "prix_unitaire" | "metier";
+
 interface Props {
-  lignes: readonly LigneDpgfBase[];
-  brouillon: (l: LigneDpgfBase) => BrouillonLigneDpgf;
-  changer: (l: LigneDpgfBase, champ: "designation" | "quantite" | "prix_unitaire" | "metier", valeur: string) => void;
+  id: string;
+  lignes: readonly LigneAffichee[];
+  changer: (id: string, champ: Champ, valeur: string) => void;
   erreurs: Record<string, string>;
   selection: ReadonlySet<string>;
   basculer: (id: string) => void;
   taches: readonly TachePlanifiee[];
   metiers: readonly string[];
   devisSource: ReadonlyMap<string, string>;
-  onPlanifier: (l: LigneDpgfBase) => void;
-  onSupprimer: (id: string) => void;
+  onPlanifier: (id: string) => void;
+  onRetirer: (id: string) => void;
 }
 
-const nombreFr = (n: number | string) => String(n).replace(".", ",");
-
-/** Le tableau du DPGF chiffré, modifiable en place (CHA-06, CHA-07). */
+/** Le tableau du DPGF chiffré de l'ancien (`chantierDpgfLigneRowsHTML`), modifiable en place (CHA-06, CHA-07). */
 export function TableDpgf(p: Props) {
   useModeDiscret();
   return (
-    <Table>
-      <THead>
-        <Tr>
-          <Th><span className="sr-only">Sélection</span></Th>
-          <Th>Désignation</Th>
-          <Th className="text-right">Qté</Th>
-          <Th className="text-right">PU HT</Th>
-          <Th className="text-right">Montant HT</Th>
-          <Th className="text-right">Déjà facturé</Th>
-          <Th>Métier</Th>
-          <Th>Planning</Th>
-          <Th><span className="sr-only">Actions</span></Th>
-        </Tr>
-      </THead>
-      <TBody>
-        {p.lignes.map((l) => (l.type === "ligne" ? <Ligne key={l.id} l={l} {...p} /> : <Titre key={l.id} l={l} {...p} />))}
-      </TBody>
-    </Table>
+    <table className="lignes-table" id={p.id}>
+      <thead>
+        <tr>
+          <th style={{ width: "26px" }}>
+            <span className="sr-only">Sélection</span>
+          </th>
+          <th style={{ width: "32%" }}>Désignation</th>
+          <th>Qté</th>
+          <th>Prix U. HT</th>
+          <th>Montant HT</th>
+          <th>Déjà facturé</th>
+          <th>Métier</th>
+          <th>Planning</th>
+          <th>
+            <span className="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {p.lignes.length === 0 ? (
+          <tr>
+            <td colSpan={9} className="empty">
+              Aucune ligne pour l'instant.
+            </td>
+          </tr>
+        ) : (
+          p.lignes.map((l) => (l.brouillon.type === "ligne" ? <Ligne key={l.brouillon.id} l={l} {...p} /> : <Titre key={l.brouillon.id} l={l} {...p} />))
+        )}
+      </tbody>
+    </table>
   );
 }
 
-function Titre({ l, brouillon, changer, onSupprimer }: Props & { l: LigneDpgfBase }) {
+function BoutonRetirer({ onClick, libelle }: { onClick: () => void; libelle: string }) {
   useModeDiscret();
-  const b = brouillon(l);
   return (
-    <Tr className="bg-muted/60">
-      <Td />
-      <Td colSpan={7}>
-        <Input aria-label="Titre du chapitre" className={l.type === "chapitre" ? "font-semibold" : "italic"} value={b.designation} onChange={(e) => changer(l, "designation", e.target.value)} placeholder="Titre du chapitre" />
-      </Td>
-      <Td className="text-right">
-        <BoutonConfirme libelle="Retirer" question="Retirer ce titre ?" onConfirmer={() => onSupprimer(l.id)} />
-      </Td>
-    </Tr>
+    <button type="button" className="btn small danger" aria-label={libelle} onClick={onClick}>
+      ✕
+    </button>
   );
 }
 
-function Ligne({ l, brouillon, changer, erreurs, selection, basculer, taches, metiers, devisSource, onPlanifier, onSupprimer }: Props & { l: LigneDpgfBase }) {
+function Titre({ l, changer, onRetirer }: Props & { l: LigneAffichee }) {
   useModeDiscret();
-  const b = brouillon(l);
-  const complete = estFactureeEntierement(l);
-  const siennes = taches.filter((t) => t.dpgf_ligne_id === l.id);
+  const b = l.brouillon;
+  return (
+    <tr className="ligne-chapitre-row">
+      <td />
+      <td colSpan={7}>
+        <input
+          type="text"
+          aria-label="Titre du chapitre"
+          value={b.designation}
+          placeholder="Titre du chapitre"
+          style={{ fontWeight: b.type === "chapitre" ? 700 : 400, fontStyle: b.type === "chapitre" ? "normal" : "italic" }}
+          onChange={(e) => changer(b.id, "designation", e.target.value)}
+        />
+      </td>
+      <td>
+        <BoutonRetirer libelle="Retirer ce titre" onClick={() => onRetirer(b.id)} />
+      </td>
+    </tr>
+  );
+}
+
+function Ligne({ l, changer, erreurs, selection, basculer, taches, metiers, devisSource, onPlanifier, onRetirer }: Props & { l: LigneAffichee }) {
+  useModeDiscret();
+  const b = l.brouillon;
+  const base = l.enBase;
+  const complete = base ? estFactureeEntierement(base) : false;
+  const siennes = base ? taches.filter((t) => t.dpgf_ligne_id === b.id) : [];
   const deja = quantiteDejaPlanifiee(siennes);
-  const total = montant(l.quantite);
-  const numeroDevis = l.devis_source_id ? devisSource.get(l.devis_source_id) : undefined;
-  const erreur = (champ: string) => erreurs[`${l.id}.${champ}`];
+  const total = montant(b.quantite);
+  const numeroDevis = base?.devis_source_id ? devisSource.get(base.devis_source_id) : undefined;
+  const erreur = (champ: string) => erreurs[`${b.id}.${champ}`];
+  const metiersProposes = [...new Set([...metiers, ...(b.metier ? [b.metier] : [])])];
   return (
-    <Tr className={complete ? "opacity-70" : ""}>
-      <Td>
-        <input type="checkbox" aria-label={`Sélectionner ${l.designation || "la ligne"} pour facturer`} checked={selection.has(l.id)} disabled={complete} onChange={() => basculer(l.id)} title={complete ? "Déjà facturé à 100 %" : "Sélectionner pour facturer"} />
-      </Td>
-      <Td>
-        <Input aria-label="Désignation" aria-invalid={!!erreur("designation")} value={b.designation} onChange={(e) => changer(l, "designation", e.target.value)} />
-        {numeroDevis && <Badge variant="neutre" className="mt-1" title={`Ajoutée depuis le devis ${numeroDevis}`}>Devis {numeroDevis}</Badge>}
-        {erreur("designation") && <p className="text-xs text-destructive">{erreur("designation")}</p>}
-      </Td>
-      <Td>
-        <Input aria-label="Quantité" aria-invalid={!!erreur("quantite")} inputMode="decimal" className="w-20 text-right" value={b.quantite} disabled={b.figee} onChange={(e) => changer(l, "quantite", e.target.value)} />
-      </Td>
-      <Td>
-        <Input aria-label="Prix unitaire HT" aria-invalid={!!erreur("prix_unitaire")} inputMode="decimal" className="w-24 text-right" value={b.prix_unitaire} disabled={b.figee} onChange={(e) => changer(l, "prix_unitaire", e.target.value)} />
-      </Td>
-      <Td className="text-right tabular-nums">{formatEurosEcran(montant(l.quantite).times(montant(l.prix_unitaire)))}</Td>
-      <Td className="text-right tabular-nums">{nombreFr(l.avancement_cumule)} %</Td>
-      <Td>
-        <Select aria-label="Métier" className="w-36 text-xs" value={b.metier} onChange={(e) => changer(l, "metier", e.target.value)}>
+    <tr className={`dpgf-ligne-row${complete ? " is-complete" : ""}`}>
+      <td>
+        <input
+          type="checkbox"
+          className="dpgf-ligne-select"
+          aria-label={`Sélectionner ${b.designation || "la ligne"} pour facturer`}
+          checked={selection.has(b.id)}
+          disabled={complete || !base}
+          title={complete ? "Déjà facturé à 100%" : "Sélectionner pour facturer"}
+          onChange={() => basculer(b.id)}
+        />
+      </td>
+      <td>
+        <input type="text" aria-label="Désignation" aria-invalid={!!erreur("designation")} value={b.designation} placeholder="Désignation" onChange={(e) => changer(b.id, "designation", e.target.value)} />
+        {numeroDevis && (
+          <span className="dpgf-devis-source-badge" title={`Ajoutée depuis le devis ${numeroDevis}`}>
+            📄 {numeroDevis}
+          </span>
+        )}
+      </td>
+      <td>
+        <input
+          type="text"
+          inputMode="decimal"
+          aria-label="Quantité"
+          aria-invalid={!!erreur("quantite")}
+          style={{ width: "70px" }}
+          value={b.quantite}
+          disabled={b.figee}
+          onChange={(e) => changer(b.id, "quantite", e.target.value)}
+        />
+      </td>
+      <td>
+        <input
+          type="text"
+          inputMode="decimal"
+          aria-label="Prix unitaire HT"
+          aria-invalid={!!erreur("prix_unitaire")}
+          style={{ width: "90px" }}
+          value={b.prix_unitaire}
+          disabled={b.figee}
+          onChange={(e) => changer(b.id, "prix_unitaire", e.target.value)}
+        />
+      </td>
+      <td>{formatEurosEcran(montant(b.quantite).times(montant(b.prix_unitaire)))}</td>
+      <td>{montant(base?.avancement_cumule ?? 0).toFixed(0)}%</td>
+      <td>
+        <select aria-label="Métier" style={{ width: "auto", fontSize: "11px" }} value={b.metier} onChange={(e) => changer(b.id, "metier", e.target.value)}>
           <option value="">— Non précisé —</option>
-          {[...new Set([...metiers, ...(l.metier ? [l.metier] : [])])].map((m) => (
-            <option key={m}>{m}</option>
+          {metiersProposes.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
           ))}
-        </Select>
-      </Td>
-      <Td>
-        <div className="flex flex-wrap items-center gap-1 text-xs">
-          {siennes.length > 0 && <span title={`${deja} / ${total} planifié`}>{nombreFr(deja.toString())}/{nombreFr(total.toString())}</span>}
-          {siennes.map((t) =>
-            t.bon_commande_id ? (
-              <Link key={t.id} className="text-primary hover:underline" to={`/commandes/${t.bon_commande_id}`} title="Ouvrir le bon de commande">
-                ✓ {nombreFr(t.quantite_planifiee ?? 0)}
-              </Link>
-            ) : null
-          )}
-          {total.gt(0) && total.gt(deja) && (
-            <Button size="sm" variant="secondary" onClick={() => onPlanifier(l)}>Planifier</Button>
-          )}
-        </div>
-      </Td>
-      <Td className="text-right">{!b.figee && <BoutonConfirme libelle="Retirer" question="Retirer cette ligne ?" onConfirmer={() => onSupprimer(l.id)} />}</Td>
-    </Tr>
+        </select>
+      </td>
+      <td>
+        {siennes.length > 0 && (
+          <>
+            <div className="dpgf-planif-progress" title={`${deja.toString()}/${total.toString()} planifié`}>
+              {deja.toString()}/{total.toString()}
+            </div>
+            <div className="dpgf-planif-taches">
+              {siennes.map((t) =>
+                t.bon_commande_id ? (
+                  <Link key={t.id} className="btn small" to={`/commandes/${t.bon_commande_id}`} title="Voir le bon de commande">
+                    ✅ {String(t.quantite_planifiee ?? 0)}
+                  </Link>
+                ) : null
+              )}
+            </div>
+          </>
+        )}
+        {base && total.gt(0) && total.gt(deja) && (
+          <button type="button" className="btn small primary" onClick={() => onPlanifier(b.id)}>
+            📅 Planifier
+          </button>
+        )}
+      </td>
+      <td>{!b.figee && <BoutonRetirer libelle={`Retirer ${b.designation || "la ligne"}`} onClick={() => onRetirer(b.id)} />}</td>
+    </tr>
   );
 }

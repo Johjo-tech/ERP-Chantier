@@ -3,7 +3,6 @@ import { PageConnexion } from "@/modules/auth-roles/components/PageConnexion";
 import { PageMonCompte } from "@/modules/auth-roles/components/PageMonCompte";
 import { PageNouveauMotDePasse } from "@/modules/auth-roles/components/PageNouveauMotDePasse";
 import { PageReglages } from "@/modules/reglages/components/PageReglages";
-import { Can } from "@/modules/auth-roles/components/Can";
 import { RouteConnectee, RouteModule } from "@/modules/auth-roles/components/RouteProtegee";
 import { PageClients } from "@/modules/clients/components/PageClients";
 import { PageFicheClient } from "@/modules/clients/components/PageFicheClient";
@@ -11,7 +10,6 @@ import { PageFormulaireClient } from "@/modules/clients/components/PageFormulair
 import { PageChantiers } from "@/modules/chantiers/components/PageChantiers";
 import { PageFicheChantier } from "@/modules/chantiers/components/PageFicheChantier";
 import { PageFormulaireChantier } from "@/modules/chantiers/components/PageFormulaireChantier";
-import { lienDevisComplementaire } from "@/modules/chantiers/domain/liens";
 import { PageDevis } from "@/modules/devis/components/PageDevis";
 import { PageEditionDevis } from "@/modules/devis/components/PageEditionDevis";
 import { PageApercuDevis } from "@/modules/devis/components/PageApercuDevis";
@@ -24,8 +22,7 @@ import { PageFactures } from "@/modules/facturation/components/PageFactures";
 import { PageSituation } from "@/modules/facturation/components/PageSituation";
 import { PageDossierClient } from "@/modules/facturation/components/PageDossierClient";
 import { PageReglements } from "@/modules/facturation/components/PageReglements";
-import { Button } from "@/components/ui/button";
-import { Link, Navigate } from "react-router";
+import { Navigate } from "react-router";
 import { PageBonCommande } from "@/modules/commandes/components/PageBonCommande";
 import { PageBonsCommande } from "@/modules/commandes/components/PageBonsCommande";
 import { PagePieces } from "@/modules/commandes/components/PagePieces";
@@ -97,25 +94,7 @@ export const routes: RouteObject[] = [
       { path: "clients/:id/modifier", element: <RouteModule module="clients" action="modifier"><PageFormulaireClient /></RouteModule> },
       { path: "chantiers", element: <RouteModule module="chantiers"><PageChantiers /></RouteModule> },
       { path: "chantiers/nouveau", element: <RouteModule module="chantiers" action="creer"><PageFormulaireChantier /></RouteModule> },
-      { path: "chantiers/:id", element: <RouteModule module="chantiers">
-            <PageFicheChantier
-              complements={(c) => <DevisLies chantierId={c.id} lienNouveau={lienDevisComplementaire(c)} />}
-              actionsDpgf={(c) => (
-                <Can module="factures" action="creer">
-                  <Button asChild size="sm" variant="secondary"><Link to={`/chantiers/${c.id}/situation`}>Facturer l'avancement</Link></Button>
-                </Can>
-              )}
-              actionsSelection={(c, lignes) => (
-                <Can module="factures" action="creer">
-                  {lignes.length ? (
-                    <Button asChild size="sm"><Link to={`/chantiers/${c.id}/situation?lignes=${lignes.join(",")}`}>Facturer la sélection ({lignes.length})</Link></Button>
-                  ) : (
-                    <Button size="sm" disabled title="Cochez d'abord au moins une ligne à facturer">Facturer la sélection</Button>
-                  )}
-                </Can>
-              )}
-            />
-          </RouteModule> },
+      { path: "chantiers/:id", element: <RouteModule module="chantiers"><PageFicheChantier /></RouteModule> },
       { path: "chantiers/:id/modifier", element: <RouteModule module="chantiers" action="modifier"><PageFormulaireChantier /></RouteModule> },
       { path: "devis", element: <RouteModule module="devis"><PageDevis /></RouteModule> },
       { path: "devis/nouveau", element: <RouteModule module="devis" action="creer"><PageEditionDevis ChampReference={ReferenceArticleLigne} /></RouteModule> },

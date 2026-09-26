@@ -42,16 +42,19 @@ test("situation de travaux : la facture porte l'avancement, le DPGF le cumule", 
   await connexion(page, "admin.alpha@erp.local");
   await page.goto("/chantiers");
   await page.getByRole("link", { name: "Salle de bains Durand" }).click();
-  await page.getByRole("tab", { name: "DPGF" }).click();
-  const ajout = page.getByRole("form", { name: "Ajouter au DPGF" });
-  await ajout.getByLabel("Désignation").fill("E2E Carrelage mural");
-  await ajout.getByLabel("Quantité").fill("20");
-  await ajout.getByLabel("PU HT").fill("45");
-  await ajout.getByRole("button", { name: "+ Ligne" }).click();
+  // Comme l'ancien : « + Ligne » ajoute une ligne vide au tableau, « Enregistrer les lignes » l'écrit.
+  await page.getByRole("button", { name: "+ Ligne" }).click();
+  const tableau = page.locator('table[id^="dpgfLignesTable_"]');
+  await tableau.getByLabel("Désignation").last().fill("E2E Carrelage mural");
+  await tableau.getByLabel("Quantité").last().fill("20");
+  await tableau.getByLabel("Prix unitaire HT").last().fill("45");
+  await page.getByRole("button", { name: "Enregistrer les lignes" }).click();
+  await expect(page.getByText("Lignes DPGF enregistrées.")).toBeVisible();
   // Le DPGF s'édite sur place : la ligne ajoutée se lit dans son champ.
   const ligne = page.locator("tr", { has: page.locator('input[value="E2E Carrelage mural"]') });
   await expect(ligne).toBeVisible();
-  await page.getByRole("link", { name: "Facturer l'avancement" }).click();
+  await page.getByLabel("Sélectionner E2E Carrelage mural pour facturer").check();
+  await page.getByRole("link", { name: "Facturer la sélection" }).click();
   await page.getByLabel("Avancement cumulé, E2E Carrelage mural").fill("50");
   await expect(page.getByText("Total HT à facturer : 450,00 €")).toBeVisible();
   await page.getByRole("button", { name: "Créer la facture de situation" }).click();
@@ -59,6 +62,5 @@ test("situation de travaux : la facture porte l'avancement, le DPGF le cumule", 
   await expect(page.locator('input[value="E2E Carrelage mural (avancement 0% → 50%)"]')).toBeVisible();
   await page.goBack();
   await page.goBack();
-  await page.getByRole("tab", { name: "DPGF" }).click();
-  await expect(ligne).toContainText("50 %");
+  await expect(ligne).toContainText("50%");
 });

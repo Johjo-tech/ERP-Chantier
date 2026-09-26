@@ -11,6 +11,10 @@ import { cliquer, onglet, partout, type Ecran } from "./ecrans";
 
 type Geste = (page: Page) => Promise<void>;
 
+/** Les chantiers du jeu d'essai (`supabase/seed-web.sql`), ouverts par leur identifiant des deux côtés. */
+const CHANTIER_C = "a3000000-0000-0000-0000-000000000001";
+const CHANTIER_DURAND = "a3000000-0000-0000-0000-000000000002";
+
 /** Enchaîne des gestes : l'onglet de l'ancien, puis un clic. */
 function puis(...gestes: Geste[]): Geste {
   return async (page) => {
@@ -162,8 +166,52 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers") },
       nouveau: { chemin: "/chantiers" },
-      seuils: { bureau: { pixels: 0.16, texte: 33 } },
-      aFaire: "Écran de module : en cours de reprise.",
+      // Le nom du client sur la carte, que l'ancien laisse vide (D-ECR-CHA-07, 2 lignes) ; le DPGF de Durand, que l'ancien ne lit pas sur cette base (sa lecture des filles tombe sur `chantier_achats`, D-ECR-CHA-11, 4 lignes).
+      seuils: { bureau: { pixels: 0.021, texte: 6 }, mobile: { pixels: 0.101, texte: 6 } },
+    },
+    {
+      id: "chantiers-nouveau",
+      titre: "Chantiers › nouveau chantier",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(onglet("chantiers"), cliquer(".page-head .btn.primary")) },
+      nouveau: { chemin: "/chantiers", gestes: cliquer(".page-head .btn.primary") },
+      // Le nom du client sur la carte, que l'ancien laisse vide (D-ECR-CHA-07, 2 lignes) ; le DPGF de Durand, que l'ancien ne lit pas sur cette base (sa lecture des filles tombe sur `chantier_achats`, D-ECR-CHA-11, 4 lignes).
+      seuils: partout(0.001, 6),
+    },
+    {
+      id: "chantiers-recherche-vide",
+      titre: "Chantiers › recherche sans résultat",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(onglet("chantiers"), saisir("#chantierSearchInput", "zzzz")) },
+      nouveau: { chemin: "/chantiers", gestes: saisir("#chantierSearchInput", "zzzz") },
+      seuils: partout(0.001, 0),
+    },
+    {
+      id: "chantier-fiche",
+      titre: "Chantiers › fiche (Réhabilitation bât. C)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: onglet("chantiers", { viewingChantier: CHANTIER_C }) },
+      nouveau: { chemin: `/chantiers/${CHANTIER_C}` },
+      // Le client dans le bandeau (D-ECR-CHA-07, 2 lignes ; il passe à la ligne sur téléphone), « Reprendre un devis » (D-CHA-06, 5 lignes), la section Intervenants (D-ECR-CHA-09, 11 lignes).
+      seuils: { bureau: { pixels: 0.001, texte: 18 }, mobile: { pixels: 0.152, texte: 18 } },
+    },
+    {
+      id: "chantier-modifier",
+      titre: "Chantiers › fiche › Modifier les infos",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(onglet("chantiers", { viewingChantier: CHANTIER_C }), cliquer(".page-head > .btn")) },
+      nouveau: { chemin: `/chantiers/${CHANTIER_C}`, gestes: cliquer(".page-head > .btn") },
+      // Le client choisi dans la liste, que l'ancien ne retrouve pas (D-ECR-CHA-07).
+      seuils: { bureau: { pixels: 0.001, texte: 0 }, mobile: { pixels: 0.003, texte: 0 } },
+    },
+    {
+      id: "chantier-fiche-dpgf",
+      titre: "Chantiers › fiche avec DPGF (Salle de bains Durand)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: onglet("chantiers", { viewingChantier: CHANTIER_DURAND }) },
+      nouveau: { chemin: `/chantiers/${CHANTIER_DURAND}` },
+      // Le client dans le bandeau (D-ECR-CHA-07, 2 lignes ; il passe à la ligne sur téléphone), « Reprendre un devis » (D-CHA-06, 5 lignes), la section Intervenants (D-ECR-CHA-09, 11 lignes). Et la ligne de DPGF que l'ancien ne lit pas ici (D-ECR-CHA-11) : montants, métiers proposés, « 📅 Planifier ».
+      seuils: { bureau: { pixels: 0.002, texte: 40 }, mobile: { pixels: 0.01, texte: 40 } },
     },
   ];
 }

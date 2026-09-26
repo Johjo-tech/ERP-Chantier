@@ -161,7 +161,7 @@ export function ChampSiret({
 }
 
 /** Sous l'adresse : les adresses de la BAN (`#clientAdresseSuggestions`), à choisir d'un clic ; jamais imposées. */
-export function SuggestionsAdresse({ saisie, actif, onChoisir }: { saisie: string; actif: boolean; onChoisir: (a: SuggestionAdresse) => void }) {
+export function SuggestionsAdresse({ saisie, actif, onChoisir, id = "clientAdresseSuggestions" }: { saisie: string; actif: boolean; onChoisir: (a: SuggestionAdresse) => void; id?: string }) {
   const q = useDiffere(saisie.trim(), DELAI_ADRESSE_MS);
   const possible = actif && q.length >= CARACTERES_MINIMUM_ADRESSE;
   const r = useQuery({ queryKey: ["adresses", q], queryFn: ({ signal }) => rechercherAdresse(q, signal), enabled: possible, staleTime: FRAICHEUR_MS });
@@ -175,7 +175,7 @@ export function SuggestionsAdresse({ saisie, actif, onChoisir }: { saisie: strin
     );
   }
   return (
-    <div id="clientAdresseSuggestions" className="suggest-box" role="group" aria-label="Adresses proposées" style={{ display: contenu ? "block" : "none" }}>
+    <div id={id} className="suggest-box" role="group" aria-label="Adresses proposées" style={{ display: contenu ? "block" : "none" }}>
       {contenu}
     </div>
   );

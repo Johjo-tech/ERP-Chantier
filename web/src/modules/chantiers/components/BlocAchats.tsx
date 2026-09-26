@@ -1,20 +1,17 @@
 import { useState } from "react";
-import { Chargement, Erreur } from "@/components/etats/Etats";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Erreur } from "@/components/etats/Etats";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
+import { afficherToast } from "@/lib/toast";
 import { categorieDe, categoriesAchat, totauxParCategorie, trierAchats } from "../domain/achats";
 import { useAchats, useCategoriesAchat, useSupprimerAchat } from "../hooks/useFiche";
 import { FormulaireAchat } from "./FormulaireAchat";
 
 /**
- * Les achats du chantier (CHA-11) : totaux par catégorie avec leur part du
- * total, filtre par catégorie, ajout, suppression. Réservé à qui gère le
+ * « 💰 Achats » (`chantierAchatsHTML`, CHA-11) : totaux par catégorie avec leur
+ * part du total — un clic filtre —, ajout, liste. Réservé à qui gère le
  * chantier (lecture et écriture « chantiers / modifier »).
  */
 export function BlocAchats({ chantierId }: { chantierId: string }) {
@@ -24,71 +21,99 @@ export function BlocAchats({ chantierId }: { chantierId: string }) {
   const supprimer = useSupprimerAchat(chantierId);
   const [filtre, setFiltre] = useState("");
   const categories = categoriesAchat(referentiel.data ?? []);
-
-  if (achats.isPending) return <Chargement libelle="Chargement des achats…" />;
-  if (achats.isError) return <Erreur erreur={achats.error} reessayer={() => void achats.refetch()} />;
-  const { parCategorie, total } = totauxParCategorie(categories, achats.data);
-  const visibles = trierAchats(filtre ? achats.data.filter((a) => a.categorie === filtre) : achats.data);
+  const liste = achats.data ?? [];
+  const { parCategorie, total } = totauxParCategorie(categories, liste);
+  const visibles = trierAchats(filtre ? liste.filter((a) => a.categorie === filtre) : liste);
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Achats</CardTitle>
-        <p className="font-semibold tabular-nums">
-          {formatEurosEcran(total)} <span className="text-sm font-normal text-muted-foreground">au total</span>
-        </p>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {referentiel.isError && <Alert variant="erreur">Catégories indisponibles, liste par défaut : {messageErreur(referentiel.error)}</Alert>}
-        <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Totaux par catégorie">
-          {parCategorie.map(({ categorie, montant: m, pourcentage }) => (
-            <button
-              key={categorie.code}
-              type="button"
-              aria-pressed={filtre === categorie.code}
-              onClick={() => setFiltre(filtre === categorie.code ? "" : categorie.code)}
-              className={`flex flex-col gap-1 rounded-md border p-2 text-left ${filtre === categorie.code ? "border-primary bg-primary/5" : "border-border"}`}
-            >
-              <span className="text-sm"><span aria-hidden="true">{categorie.icone}</span> {categorie.libelle}</span>
-              <span className="font-semibold tabular-nums">{formatEurosEcran(m)}</span>
-              <span className="h-1.5 w-full rounded bg-muted" aria-label={`${pourcentage} % du total`} role="img">
-                <span className="block h-full rounded" style={{ width: `${pourcentage}%`, background: categorie.couleur }} />
-              </span>
-            </button>
-          ))}
-        </div>
-        {filtre && (
-          <Button size="sm" variant="ghost" className="self-start" onClick={() => setFiltre("")}>
-            Retirer le filtre « {categorieDe(categories, filtre).libelle} »
-          </Button>
-        )}
-        <FormulaireAchat chantierId={chantierId} categories={categories} />
-        {supprimer.isError && <Alert variant="erreur">{messageErreur(supprimer.error)}</Alert>}
-        {visibles.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucun achat enregistré pour l'instant.</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {visibles.map((a) => {
-              const cat = categorieDe(categories, a.categorie);
-              return (
-                <li key={a.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
-                  <span aria-hidden="true">{cat.icone}</span>
-                  <span className="flex-1">
+    <div className="chantier-section" style={{ gridColumn: "1/-1" }}>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>💰 Achats</span>
+        <span className="achats-grand-total">
+          {formatEurosEcran(total)}{" "}
+          <span className="card-sub" style={{ fontWeight: 400 }}>
+            au total
+          </span>
+        </span>
+      </div>
+      {achats.isError && <Erreur erreur={achats.error} reessayer={() => void achats.refetch()} />}
+      <div className="achats-totals" role="group" aria-label="Totaux par catégorie">
+        {parCategorie.map(({ categorie: cat, montant: m, pourcentage }) => (
+          <div
+            key={cat.code}
+            className={`achats-total-card${filtre === cat.code ? " is-active" : ""}`}
+            role="button"
+            tabIndex={0}
+            aria-pressed={filtre === cat.code}
+            style={{ "--cat-color": cat.couleur } as React.CSSProperties}
+            onClick={() => setFiltre(cat.code)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setFiltre(cat.code);
+              }
+            }}
+          >
+            <div className="achats-total-icon" style={{ background: `${cat.couleur}22`, color: cat.couleur }}>
+              {cat.icone}
+            </div>
+            <div className="achats-total-info">
+              <div className="achats-total-label">{cat.libelle}</div>
+              <div className="achats-total-montant">{formatEurosEcran(m)}</div>
+            </div>
+            <div className="achats-total-bar-wrap">
+              <div className="achats-total-bar" style={{ width: `${pourcentage}%`, background: cat.couleur }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      {filtre && (
+        <button type="button" className="btn small ghost" style={{ marginBottom: "10px" }} onClick={() => setFiltre("")}>
+          ✕ Retirer le filtre "{categorieDe(categories, filtre).libelle}"
+        </button>
+      )}
+      <FormulaireAchat chantierId={chantierId} categories={categories} />
+      <div className="achats-list">
+        {visibles.length ? (
+          visibles.map((a) => {
+            const cat = categorieDe(categories, a.categorie);
+            return (
+              <div key={a.id} className="achat-row" style={{ "--cat-color": cat.couleur } as React.CSSProperties}>
+                <div className="achat-row-icon" style={{ background: `${cat.couleur}22`, color: cat.couleur }}>
+                  {cat.icone}
+                </div>
+                <div className="achat-row-main">
+                  <div className="achat-designation">
                     {a.designation}
-                    {a.heures ? <span className="text-muted-foreground"> ({String(a.heures).replace(".", ",")} h)</span> : null}
-                    <span className="block text-xs text-muted-foreground">
-                      {cat.libelle} · {formatDateFr(a.date_achat)}
-                      {a.fournisseur ? ` · ${a.fournisseur}` : ""}
-                    </span>
-                  </span>
-                  <span className="font-semibold tabular-nums">{formatEurosEcran(montant(a.montant))}</span>
-                  <BoutonConfirme libelle="Retirer" question="Retirer cet achat ?" onConfirmer={() => supprimer.mutate(a.id)} />
-                </li>
-              );
-            })}
-          </ul>
+                    {a.heures ? (
+                      <>
+                        {" "}
+                        <span className="card-sub">({a.heures}h)</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="achat-date">
+                    {cat.libelle} · {formatDateFr(a.date_achat)}
+                    {a.fournisseur ? ` · ${a.fournisseur}` : ""}
+                  </div>
+                </div>
+                <div className="achat-montant">{formatEurosEcran(montant(a.montant))}</div>
+                <button
+                  type="button"
+                  className="todo-remove"
+                  title="Supprimer"
+                  aria-label={`Supprimer l'achat « ${a.designation} »`}
+                  onClick={() => supprimer.mutate(a.id, { onError: (err) => afficherToast(messageErreur(err)) })}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })
+        ) : (
+          <div className="empty">Aucun achat enregistré pour l'instant.</div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

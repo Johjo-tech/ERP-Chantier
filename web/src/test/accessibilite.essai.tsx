@@ -22,8 +22,12 @@ vi.mock("@/modules/clients/api/clients", () => ({
   ]),
   lireClient: vi.fn(),
   usagesDuClient: vi.fn(),
+  supprimerClient: vi.fn(),
 }));
-vi.mock("@/modules/clients/api/interlocuteurs", () => ({ listerInterlocuteurs: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/modules/societes/api/reglages", () => ({
+  chargerReglages: vi.fn().mockResolvedValue({ validiteDevisJours: 30, tvaDefaut: 20, delaiPaiementJours: 30, modeDelaiPaiement: "net", unites: ["u"], tauxTva: [20] }),
+}));
+vi.mock("@/modules/clients/api/interlocuteurs", () => ({ listerInterlocuteurs: vi.fn().mockResolvedValue([]), creerInterlocuteur: vi.fn(), modifierInterlocuteur: vi.fn(), supprimerInterlocuteur: vi.fn() }));
 vi.mock("@/modules/clients/api/communes", () => ({ communesDuCodePostal: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/modules/espace-client/api/acces", () => ({
   listerAccesClients: vi.fn().mockResolvedValue([{ id: "a1", client_id: "c1", client_nom: "OPAC du Rhône", profile_id: "p1", compte_nom: "Olivier", compte_email: "o@opac.fr", interlocuteur: null, actif: true, cree_le: "2026-09-20T10:00:00Z" }]),
@@ -58,7 +62,7 @@ describe("accessibilité automatique (axe-core) des écrans principaux", () => {
 
   it("formulaire client", async () => {
     rendreAvecSession(<Routes><Route path="/clients/nouveau" element={<PageFormulaireClient />} /></Routes>, { role: "admin", chemin: "/clients/nouveau" });
-    await screen.findByText("Facture électronique");
+    await screen.findByText("📧 Facture électronique");
     await sansViolation();
   });
 
