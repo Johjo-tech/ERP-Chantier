@@ -54,6 +54,16 @@ export async function marquerCommandee(bonId: string, commande: { date: string; 
 }
 
 /**
+ * Un seul champ de la commande — date OU fournisseur —, comme l'ancienne carte
+ * qui écrivait chaque sélecteur à son changement (`updatePieceCommandeChamp`).
+ */
+export async function modifierCommandePiece(bonId: string, champs: { piece_date_commande?: string | null; piece_fournisseur?: string | null }, client: Client = supabase()) {
+  const { data, error } = await client.from("planning_taches").update(champs).eq("bon_commande_id", bonId).eq("piece_a_commander", true).select("id");
+  if (error) throw error;
+  if (!data.length) throw { code: "42501", message: "Modification refusée" };
+}
+
+/**
  * Pièce reçue (BC-21, BC-52) : la RPC lève le drapeau sur toutes les tâches,
  * les retire du calendrier et journalise. Refusée si une tâche est validée,
  * si le bon est chiffré ou facturé, ou sans le droit planning/modifier.

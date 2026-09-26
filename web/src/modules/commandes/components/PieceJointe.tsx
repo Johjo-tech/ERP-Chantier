@@ -1,8 +1,5 @@
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { messageErreur } from "@/lib/erreurs";
 import { preparerDocument } from "@/modules/ocr/api/preparer";
 import { apercuDe, refusPieceJointe, urlApercuPdf } from "../domain/pieceJointe";
@@ -48,14 +45,14 @@ interface Props {
 }
 
 /**
- * Le champ « Pièce jointe » du bon : PDF, JPEG, PNG ou WebP, 14 Mo au plus ;
- * retirer demande explicitement de vider le chemin. Le fichier part au
- * stockage à l'enregistrement du bon, jamais avant.
+ * Le champ « Pièce jointe » du bon, dans l'habit de l'ancien : le nom du
+ * document et sa croix, puis le sélecteur de fichier. PDF, JPEG, PNG ou WebP,
+ * 14 Mo au plus ; retirer demande explicitement de vider le chemin. Le fichier
+ * part au stockage à l'enregistrement du bon, jamais avant.
  */
 export function ChampPieceJointe({ doc, enAttente, onChange, peutDeposer, lectureSeule }: Props) {
   const [refus, setRefus] = useState<string | null>(null);
-  const [voir, setVoir] = useState(false);
-  const actuel = enAttente === undefined ? doc : null;
+  const nom = enAttente === undefined ? (doc.chemin ? (doc.nom ?? "Bon du client") : null) : enAttente ? enAttente.name : null;
   /** La même préparation que la lecture automatique : ce que l'une accepte, l'autre l'archive (HEIC converti, image allégée). */
   async function choisir(f: File | undefined) {
     if (!f) return;
@@ -68,29 +65,21 @@ export function ChampPieceJointe({ doc, enAttente, onChange, peutDeposer, lectur
       setRefus(messageErreur(e));
     }
   }
+  const modifiable = !lectureSeule && peutDeposer;
   return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="piece-jointe-bon">Pièce jointe (document reçu)</Label>
-      {actuel?.chemin && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span>📎 {actuel.nom ?? "Bon du client"}</span>
-          <Button variant="outline" size="sm" onClick={() => setVoir(!voir)} aria-expanded={voir}>{voir ? "Masquer" : "Aperçu"}</Button>
-          {!lectureSeule && peutDeposer && <Button variant="ghost" size="sm" onClick={() => onChange(null)}>Retirer</Button>}
-        </div>
-      )}
-      {actuel?.chemin && voir && <ApercuPieceJointe doc={actuel} />}
-      {enAttente && (
-        <div className="flex items-center gap-2 text-sm">
-          <span>📎 {enAttente.name} — sera rangé à l'enregistrement</span>
-          <Button variant="ghost" size="sm" onClick={() => onChange(undefined)}>Annuler</Button>
-        </div>
-      )}
-      {enAttente === null && <p className="text-sm">Le document sera retiré à l'enregistrement. <Button variant="link" size="sm" onClick={() => onChange(undefined)}>Garder</Button></p>}
-      {!lectureSeule && peutDeposer && (
-        <Input id="piece-jointe-bon" type="file" accept="application/pdf,image/*,.heic,.heif" onChange={(e) => void choisir(e.target.files?.[0])} />
-      )}
-      {!lectureSeule && !peutDeposer && <p className="text-xs text-muted-foreground">Le dépôt de documents est réservé à l'administrateur, au conducteur et au terrain.</p>}
-      {refus && <Alert variant="erreur">{refus}</Alert>}
+    <div className="field full">
+      <label htmlFor="bc_pieceJointe">Pièce jointe (bon de commande scanné)</label>
+      <div id="bcAttachmentPreview">
+        {nom && (
+          <div className="card-sub" style={{ marginBottom: "6px" }}>
+            📎 {nom}{" "}
+            {modifiable && <button className="btn small danger" type="button" aria-label="Retirer la pièce jointe" onClick={() => onChange(doc.chemin ? null : undefined)}>✕</button>}
+          </div>
+        )}
+      </div>
+      <input type="file" id="bc_pieceJointe" accept="application/pdf,image/*,.heic,.heif" disabled={!modifiable} onChange={(e) => void choisir(e.target.files?.[0])} />
+      {!lectureSeule && !peutDeposer && <div className="card-sub">Le dépôt de documents est réservé à l&apos;administrateur, au conducteur et au terrain.</div>}
+      {refus && <small className="champ-erreur" role="alert">{refus}</small>}
     </div>
   );
 }

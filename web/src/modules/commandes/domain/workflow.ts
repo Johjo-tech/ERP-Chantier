@@ -65,6 +65,8 @@ export interface CircuitDuBon {
   /** Le chiffrage est arrêté : `statut_workflow` vaut « chiffre » ou « facture ». */
   valideDirecteur: boolean;
   piece: EtatPiece;
+  /** Le premier commentaire laissé sur une tâche : la « fiche d'intervention du technicien » de la carte. */
+  commentaireTerrain?: string;
 }
 
 const faite = (t: TacheBon) => t.statut === "realisee" || t.statut === "validee";
@@ -81,6 +83,7 @@ export function circuitDuBon(taches: readonly TacheBon[], statutWorkflow: string
     valideConducteur: taches.length > 0 && taches.every((t) => t.statut === "validee"),
     valideDirecteur: statutWorkflow === "chiffre" || statutWorkflow === "facture",
     piece: etatPieceDuBon(taches),
+    commentaireTerrain: taches.find((t) => t.commentaire)?.commentaire ?? "",
   };
 }
 

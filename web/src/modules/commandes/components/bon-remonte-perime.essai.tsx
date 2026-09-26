@@ -58,7 +58,7 @@ vi.mock("@/modules/societes/api/reglages", () => ({
   chargerReglages: vi.fn(async () => ({ validiteDevisJours: 30, tvaDefaut: 10, delaiPaiementJours: 30, modeDelaiPaiement: "net", unites: ["u", "m²"], tauxTva: [5.5, 10, 20] })),
 }));
 
-describe("fiche d'un bon : après « Enregistrer », le formulaire remonte", () => {
+describe("fiche d'un bon : après un brouillon, le formulaire remonte", () => {
   it("montre ce qui vient d'être enregistré — et un second « Enregistrer » ne le défait pas", async () => {
     base.bon = bonEssai();
     rendreAvecSession(
@@ -70,14 +70,14 @@ describe("fiche d'un bon : après « Enregistrer », le formulaire remonte", () 
     const champ = await screen.findByDisplayValue("Pose faïence");
     await userEvent.clear(champ);
     await userEvent.type(champ, "Pose carrelage");
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
-    await screen.findByText("Bon de commande enregistré.");
+    await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer le brouillon" }));
+    await screen.findByText(/^Brouillon enregistré à/);
     await attendre(200); // la relecture est revenue depuis longtemps
     expect(base.ecritures[0]).toEqual(["Pose carrelage"]);
     // L'écran doit montrer l'état enregistré…
     expect(screen.getByLabelText("Désignation, ligne 1")).toHaveValue("Pose carrelage");
     // … et ré-enregistrer ne doit pas réécrire l'ancienne valeur par-dessus.
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer le brouillon" }));
     await waitFor(() => expect(base.ecritures).toHaveLength(2));
     expect(base.ecritures[1]).toEqual(["Pose carrelage"]);
   });
@@ -94,10 +94,10 @@ describe("fiche d'un bon : après « Enregistrer », le formulaire remonte", () 
     const champ = await screen.findByDisplayValue("Pose faïence");
     await userEvent.clear(champ);
     await userEvent.type(champ, "Pose carrelage");
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
-    await screen.findByText("Bon de commande enregistré.");
+    await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer le brouillon" }));
+    await screen.findByText(/^Brouillon enregistré à/);
     await attendre(200);
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer le brouillon" }));
     await waitFor(() => expect(base.ecritures).toHaveLength(2));
     expect(base.ecritures[1]).toEqual(["Pose carrelage"]);
   });

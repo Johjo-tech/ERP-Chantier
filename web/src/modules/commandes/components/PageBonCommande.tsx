@@ -1,55 +1,58 @@
 import { useState } from "react";
 import { useLocation, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
+import { EnTetePage } from "@/components/page/EnTetePage";
 import type { ChampReferenceLigne } from "@/modules/documents/components/reference";
 import { REGLAGES_DEFAUT } from "@/modules/societes/domain/reglages";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
 import { lireFichierRetenu, lirePreRemplissage } from "../domain/bon";
 import { useBon } from "../hooks/useBons";
+import { useDefilerVersLeFormulaire } from "../hooks/useDefilerVersLeFormulaire";
 import { FormulaireBon } from "./FormulaireBon";
 import { PanneauCircuit } from "./PanneauCircuit";
 
-/** Le message laissé par l'écran précédent (création réussie, ou enregistrement partiel à signaler). */
-function lireMessage(etat: unknown): { texte: string; alerte: boolean } | null {
-  if (typeof etat !== "object" || etat === null || !("message" in etat) || typeof etat.message !== "string") return null;
-  return { texte: etat.message, alerte: "alerte" in etat && etat.alerte === true };
+/** « Brouillon enregistré à 10:42 », laissé par la création d'un brouillon qui a ouvert sa fiche. */
+function lireHorodatage(etat: unknown): string | null {
+  return typeof etat === "object" && etat !== null && "brouillon" in etat && typeof etat.brouillon === "string" ? etat.brouillon : null;
 }
 
 /**
- * Fiche et formulaire d'un bon, puis son circuit. À la création, la lecture
- * automatique peut préremplir par `location.state.prefill` et laisser le
- * document lu dans `location.state.fichier`.
+ * Le formulaire d'un bon, dans la page de la liste (`renderBonsCommande` quand
+ * le formulaire est ouvert : l'en-tête sans ses boutons, sans les filtres),
+ * puis son circuit (D-BC-03). À la création, la lecture automatique peut
+ * préremplir par `location.state.prefill` et laisser le document lu dans
+ * `location.state.fichier`.
  */
 export function PageBonCommande({ ChampReference }: { ChampReference?: ChampReferenceLigne }) {
   const { id } = useParams();
   const location = useLocation();
   const bon = useBon(id);
   const reglages = useReglages();
-  // Après un enregistrement, la fiche RELUE remonte le formulaire : les lignes insérées prennent leur uuid (relecture 3, M12).
-  // La relecture est attendue ICI, dans le parent qui ne se démonte pas, et non dans la mutation : remonter
-  // le formulaire avant son retour le reconstruirait sur l'état d'AVANT, qu'un second « Enregistrer »
-  // réécrirait par-dessus (relecture 4, B1).
-  const [generation, setGeneration] = useState<{ n: number; message: string | null }>({ n: 0, message: null });
+  // Après un brouillon, la fiche RELUE remonte le formulaire : les lignes insérées prennent leur uuid (relecture 3, M12).
+  // La relecture est attendue ICI, dans le parent qui ne se démonte pas (relecture 4, B1).
+  const [generation, setGeneration] = useState<{ n: number; horodatage: string | null }>({ n: 0, horodatage: null });
+  useDefilerVersLeFormulaire(id, !(id && bon.isPending) && !reglages.isPending);
   if ((id && bon.isPending) || reglages.isPending) return <Chargement />;
   if (id && bon.isError) return <Erreur erreur={bon.error} reessayer={() => void bon.refetch()} />;
-  const prefill = id ? null : lirePreRemplissage(location.state);
-  const message = generation.message ? { texte: generation.message, alerte: false } : lireMessage(location.state);
   return (
-    <div className="flex flex-col gap-4">
-      <FormulaireBon
-        key={`${id ?? "nouveau"}-${generation.n}`}
-        bon={bon.data ?? null}
-        prefill={prefill}
-        fichierLu={id ? null : lireFichierRetenu(location.state)}
-        reglages={reglages.data ?? REGLAGES_DEFAUT}
-        ChampReference={ChampReference}
-        messageInitial={message}
-        onEnregistre={async (m) => {
-          await bon.refetch();
-          setGeneration((g) => ({ n: g.n + 1, message: m }));
-        }}
-      />
+    <>
+      <EnTetePage titre="Bons de commande" />
+      <div id="formZoneBonCommande">
+        <FormulaireBon
+          key={`${id ?? "nouveau"}-${generation.n}`}
+          bon={bon.data ?? null}
+          prefill={id ? null : lirePreRemplissage(location.state)}
+          fichierLu={id ? null : lireFichierRetenu(location.state)}
+          reglages={reglages.data ?? REGLAGES_DEFAUT}
+          ChampReference={ChampReference}
+          horodatage={generation.horodatage ?? lireHorodatage(location.state)}
+          onBrouillon={async (h) => {
+            await bon.refetch();
+            setGeneration((g) => ({ n: g.n + 1, horodatage: h }));
+          }}
+        />
+      </div>
       {bon.data && <PanneauCircuit bon={bon.data} />}
-    </div>
+    </>
   );
 }

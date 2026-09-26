@@ -181,7 +181,7 @@ describe("SAV et clôture sans facturation (BC-13, BC-14)", () => {
     ouvrir("conducteur", "/commandes/b1/sav");
     await userEvent.type(await screen.findByLabelText("Ce qui ne va pas"), "Fuite revenue");
     await userEvent.upload(screen.getByLabelText(/Photos/), [new File(["x"], "a.jpg", { type: "image/jpeg" })]);
-    await userEvent.click(screen.getByRole("button", { name: "Créer le SAV" }));
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer le SAV" }));
     await waitFor(() => expect(documents.creerSav).toHaveBeenCalled());
     const [origine, probleme, photos] = documents.creerSav.mock.calls[0] as [{ id: string }, string, File[]];
     expect([origine.id, probleme, photos.map((p) => p.name)]).toEqual(["b1", "Fuite revenue", ["a.jpg"]]);

@@ -24,7 +24,16 @@ export type FactureLiee = z.infer<typeof schemaFactureLiee>;
 export interface BonDeLaListe extends EnteteBon {
   circuit: CircuitDuBon;
   factures: FactureLiee[];
+  /**
+   * Les lignes du bon, réduites à ce qui fait son total : la carte de la liste
+   * affiche « Ouvrir la pré-facture — 104,50 € TTC » (bonCommandeCardHTML),
+   * calculé sur les lignes. Lu par la seule liste ; absent d'une fiche.
+   */
+  lignesMontant?: LigneMontantBon[];
 }
+
+const schemaLigneMontant = z.object({ bon_commande_id: z.string(), type: z.string(), quantite: z.number(), prix_unitaire: z.number().nullable(), tva: z.number() });
+export type LigneMontantBon = z.infer<typeof schemaLigneMontant>;
 
 export interface Bon extends BonDeLaListe {
   lignes: LigneBonLue[];
@@ -81,6 +90,20 @@ async function avecCircuit(bons: readonly EnteteBon[], client: Client): Promise<
   return bons.map((b) => ({ ...b, circuit: circuitDuBon(tachesPar.get(b.id) ?? [], b.statut_workflow), factures: facturesPar.get(b.id) ?? [] }));
 }
 
+/** Les lignes des bons, pour leur total : la vue les rend sans prix au terrain, qui ne voit pas la pré-facture. */
+async function lignesDes(ids: readonly string[], client: Client): Promise<LigneMontantBon[]> {
+  const pages = await Promise.all(
+    lots(ids).map((lot) =>
+      parPages(
+        (d, f) => client.from("v_bon_commande_lignes_terrain").select("id, bon_commande_id, type, quantite, prix_unitaire, tva", { count: "exact" }).in("bon_commande_id", lot).order("id").range(d, f),
+        schemaLigneMontant,
+        "lignes des bons"
+      )
+    )
+  );
+  return pages.flat();
+}
+
 export async function listerBons(societeId: string, client: Client = supabase()): Promise<BonDeLaListe[]> {
   const bons = await parPages(
     (d, f) =>
@@ -96,7 +119,9 @@ export async function listerBons(societeId: string, client: Client = supabase())
     schemaBon,
     "liste des bons de commande"
   );
-  return avecCircuit(bons, client);
+  const [complets, lignes] = await Promise.all([avecCircuit(bons, client), lignesDes(bons.map((b) => b.id), client)]);
+  const lignesPar = grouper(lignes, (l) => l.bon_commande_id);
+  return complets.map((b) => ({ ...b, lignesMontant: lignesPar.get(b.id) ?? [] }));
 }
 
 export async function lireBon(id: string, client: Client = supabase()): Promise<Bon> {
@@ -160,6 +185,17 @@ export async function ecrireContacts(id: string, contacts: { tentatives_contact?
   const { data, error } = await client.from("bons_commande").update(contacts).eq("id", id).select("id");
   if (error) throw error;
   if (!data.length) throw { code: "42501", message: "Modification refusée" };
+}
+
+/**
+ * « Supprimer » (deleteItem de l'ancien) : la RLS le réserve au droit
+ * `bons_commande/supprimer`, les déclencheurs refusent un bon facturé. Une
+ * suppression qui ne touche aucune ligne est un refus, et se dit comme tel.
+ */
+export async function supprimerBon(id: string, client: Client = supabase()): Promise<void> {
+  const { data, error } = await client.from("bons_commande").delete().eq("id", id).select("id");
+  if (error) throw error;
+  if (!data.length) throw { code: "42501", message: "La suppression a été refusée. Rien n'a été supprimé." };
 }
 
 /** Facture BROUILLON née du bon, par la base (BC-49) : son id. */

@@ -98,7 +98,6 @@ function partout(pixels: number, texte: number): Partial<Record<Taille, Seuils>>
  * les ramène vers zéro, écran par écran.
  */
 const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
-  "bons-de-commande": { bureau: { pixels: 0.37, texte: 79 } },
   catalogue: { bureau: { pixels: 0.11, texte: 21 } },
   chantiers: { bureau: { pixels: 0.16, texte: 33 } },
   clients: { bureau: { pixels: 0.3, texte: 29 } },
@@ -109,7 +108,6 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   "factures-reglements": { bureau: { pixels: 0.27, texte: 21 } },
   "factures-validation": { bureau: { pixels: 0.05, texte: 36 } },
   materiel: { bureau: { pixels: 0.02, texte: 6 } },
-  "pieces-en-commande": { bureau: { pixels: 0.17, texte: 31 } },
   planning: { bureau: { pixels: 0.55, texte: 46 } },
   rapports: { bureau: { pixels: 0.03, texte: 7 } },
   reglages: { bureau: { pixels: 0.51, texte: 86 } },
@@ -228,6 +226,8 @@ export const ECRANS: readonly Ecran[] = [
     // Le compte d'essai n'a pas d'équipe : les deux montrent alors tout (D-VIS-09).
     seuils: partout(0.001, 0),
   },
+  // ── Bons de commande et pièces (vague « écrans identiques », D-ECR-BC) ──
+  ...ecransCommandes(),
   // ── Les écrans des modules (vague suivante) ─────────────────────────────
   ...ecransModules(),
 ];
@@ -243,7 +243,6 @@ interface Module {
 /** Les listes principales, telles que le menu les ouvre. Seuils : l'écart constaté (cliquet). */
 function ecransModules(): Ecran[] {
   const modules: Module[] = [
-    { id: "bons-de-commande", titre: "Bons de commande", onglet: "bonsCommande", route: "/commandes" },
     { id: "devis", titre: "Devis", onglet: "devis", route: "/devis" },
     { id: "factures", titre: "Factures › liste", onglet: "factures", etat: { facturesView: "liste" }, route: "/factures" },
     { id: "factures-avoirs", titre: "Factures › Avoirs", onglet: "factures", etat: { facturesView: "avoirs" }, route: "/factures/avoirs" },
@@ -258,7 +257,6 @@ function ecransModules(): Ecran[] {
     { id: "rh", titre: "RH", onglet: "rh", route: "/rh" },
     { id: "vehicules", titre: "Véhicules", onglet: "vehicules", route: "/vehicules" },
     { id: "materiel", titre: "Matériel", onglet: "materiel", route: "/materiel" },
-    { id: "pieces-en-commande", titre: "Pièces en commande", onglet: "piecesCommande", route: "/pieces" },
     { id: "statistiques", titre: "Statistiques", onglet: "statistiques", route: "/statistiques" },
     { id: "reglages", titre: "Réglages", onglet: "parametres", route: "/reglages" },
   ];
@@ -271,4 +269,78 @@ function ecransModules(): Ecran[] {
     seuils: SEUILS_MODULES[m.id] ?? { bureau: { pixels: 1, texte: 10_000 } },
     aFaire: "Écran de module : repris à la vague suivante.",
   }));
+}
+
+/** Amener un élément en haut de la fenêtre, des deux côtés : la capture ne voit que la fenêtre. */
+function defiler(selecteur: string): Geste {
+  return async (page) => {
+    await page.locator(selecteur).first().evaluate((e) => e.scrollIntoView({ block: "start" }));
+  };
+}
+
+/** Laisser finir un défilement doux (`openForm` défile 50 ms après l'ouverture) avant le geste suivant. */
+function attendre(ms: number): Geste {
+  return async (page) => {
+    await page.waitForTimeout(ms);
+  };
+}
+
+function enchainer(...gestes: Geste[]): Geste {
+  return async (page) => {
+    for (const g of gestes) await g(page);
+  };
+}
+
+
+/**
+ * Les écrans du module « commandes » repris à l'identique (D-ECR-BC-01…). La
+ * carte d'un bon a les mêmes identifiants des deux côtés : le même geste la
+ * déplie. Les états filtrés passent par l'état de l'ancien et par l'adresse
+ * de la nouvelle.
+ */
+function ecransCommandes(): Ecran[] {
+  // Le bon facturé du jeu d'essai (CMD-OPAC-7781) et le bon en attente de son numéro.
+  const BON_FACTURE = "#bonCommande-card-a5000000-0000-0000-0000-000000000001";
+  const BON_EN_ATTENTE = "#bonCommande-card-a5000000-0000-0000-0000-000000000002";
+  // Ce qui reste d'écart sous la fenêtre, DÉCIDÉ : l'éditeur de lignes est le composant partagé des
+  // documents (`documents/EditeurLignes`, repris avec les devis — 16 lignes pour une ligne de travaux, 23 pour deux),
+  // et le panneau « Circuit du bon » sous le formulaire (D-BC-03, D-ECR-BC-06 — 25 lignes).
+  const LIGNES_PARTAGEES = 16;
+  const CIRCUIT = 25;
+  const BON_PIECE = "#bonCommande-card-c9000000-0000-0000-0000-000000000001";
+  const SAV = "#bonCommande-card-c9000000-0000-0000-0000-000000000003";
+  const pieces = (id: string, titre: string, gestes?: Geste): Ecran => ({
+    id,
+    titre,
+    compte: "admin",
+    ancien: { chemin: "/", gestes: gestes ? enchainer(onglet("piecesCommande"), gestes) : onglet("piecesCommande") },
+    nouveau: { chemin: "/pieces", ...(gestes ? { gestes } : {}) },
+    seuils: partout(0.001, 0),
+  });
+  const liste = (id: string, titre: string, etat: Record<string, unknown>, route: string, gestes?: Geste, seuils = partout(0.001, 0)): Ecran => ({
+    id,
+    titre,
+    compte: "admin",
+    ancien: { chemin: "/", gestes: gestes ? enchainer(onglet("bonsCommande", etat), gestes) : onglet("bonsCommande", etat) },
+    nouveau: { chemin: route, ...(gestes ? { gestes } : {}) },
+    seuils,
+  });
+  return [
+    liste("bons-de-commande", "Bons de commande › liste", {}, "/commandes"),
+    liste("bons-de-commande-carte-ouverte", "Bons de commande › carte dépliée (bon facturé)", {}, "/commandes", enchainer(cliquer(`${BON_FACTURE} .bc-chevron`), defiler(BON_FACTURE))),
+    liste("bons-de-commande-en-attente", "Bons de commande › filtre « En attente de bon de commande », carte dépliée", { bonCommandeCreationTypeFilter: "attenteBC" }, "/commandes?mode=attente_bc", cliquer(`${BON_EN_ATTENTE} .bc-chevron`)),
+    liste("bons-de-commande-sans-resultat", "Bons de commande › recherche sans résultat", { bonCommandeSearch: "zzzz-introuvable" }, "/commandes?recherche=zzzz-introuvable"),
+    // Le jeu tests/visuel/jeux/commandes.sql : une pièce à commander (contacts, logement occupé), une commandée chez Cedeo, un SAV.
+    liste("bons-de-commande-carte-contacts", "Bons de commande › carte dépliée (contacts, locataire, pièce)", {}, "/commandes", enchainer(cliquer(`${BON_PIECE} .bc-chevron`), defiler(BON_PIECE))),
+    liste("bons-de-commande-sav", "Bons de commande › SAV déplié", {}, "/commandes", enchainer(cliquer(`${SAV} .bc-chevron`), defiler(SAV))),
+    // Le formulaire : le même bouton l'ouvre des deux côtés ; la modification passe par « Modifier » sur la carte.
+    liste("bons-de-commande-nouveau", "Bons de commande › nouveau bon (formulaire)", {}, "/commandes", enchainer(cliquer(".page-head .btn.primary"), attendre(800)), partout(0.001, LIGNES_PARTAGEES)),
+    liste("bons-de-commande-nouveau-sans-bc", "Bons de commande › nouveau bon, « Sans bon de commande »", {}, "/commandes", enchainer(cliquer(".page-head .btn.primary"), attendre(800), cliquer(".plus-subnav-btn:nth-child(2)")), partout(0.001, LIGNES_PARTAGEES)),
+    liste("bons-de-commande-modifier", "Bons de commande › modifier un bon (Sans BC)", {}, "/commandes", enchainer(cliquer("#bonCommande-card-a5000000-0000-0000-0000-000000000003 .bc-actions-bas .btn:nth-child(2)"), attendre(800)), partout(0.001, LIGNES_PARTAGEES + CIRCUIT)),
+    liste("bons-de-commande-consulter", "Bons de commande › consulter un bon facturé (verrou)", {}, "/commandes", enchainer(defiler(BON_FACTURE), cliquer(`${BON_FACTURE} .bc-actions-bas .btn:first-child`), attendre(800)), partout(0.001, 23 + CIRCUIT)),
+    pieces("pieces-en-commande", "Pièces en commande"),
+    pieces("pieces-dossier-ouvert", "Pièces en commande › dossier fournisseur ouvert", cliquer(".dossier-header")),
+    // Téléphone : le champ date de la commande diffère d'un pixel sur son bord droit (rendu natif du sélecteur de date).
+    { ...pieces("pieces-carte-ouverte", "Pièces en commande › carte dépliée (commander, pièce arrivée)", cliquer(`${BON_PIECE} .bc-chevron`)), seuils: { bureau: { pixels: 0.001, texte: 0 }, mobile: { pixels: 0.002, texte: 0 } } },
+  ];
 }
