@@ -81,8 +81,11 @@ describe("chaque rôle ne voit que ce qu'il doit", () => {
     expect(t?.map((c) => c.id)).toEqual(["a3000000-0000-0000-0000-000000000001"]);
     const { data: s } = await st.from("chantiers").select("id");
     expect(s?.map((c) => c.id)).toEqual(["a3000000-0000-0000-0000-000000000002"]);
+    // Le conducteur voit TOUS les chantiers de sa société (d'autres jeux d'essai peuvent en ajouter).
     const { data: c } = await conducteur.from("chantiers").select("id");
-    expect(c?.length).toBe(2);
+    const admin = await connecte(COMPTES.adminAlpha);
+    const { count } = await admin.from("chantiers").select("id", { count: "exact", head: true }).eq("societe_id", ALPHA);
+    expect(c?.length).toBe(count);
   });
 
   it("le rôle lecture lit mais n'écrit pas", async () => {

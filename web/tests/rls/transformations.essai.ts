@@ -69,8 +69,14 @@ describe("rapport → devis / facture, une seule voie (D-CLI-09)", () => {
     ids.factures.push(id);
     const f = (await admin.from("factures").select("intervention_id, statut, numero, client_pays_code").eq("id", id).single()).data;
     expect(f).toMatchObject({ intervention_id: r.id, statut: "brouillon", numero: null, client_pays_code: "FR" });
-    const bon = (await admin.from("bons_commande").select("id").eq("societe_id", ALPHA).limit(1).single()).data;
-    if (!bon) throw new Error("Aucun bon dans le jeu d'essai.");
+    // Un bon qu'aucun rapport ne cite encore : le lien rapport → bon est unique.
+    // `interventions.bon_commande_id` vient d'une proposition (20260926052000) : absente des types de production.
+    const lecture = await admin.from("interventions").select("*");
+    const lies = (lecture.data ?? []) as unknown as { bon_commande_id: string | null }[];
+    const pris = new Set(lies.map((l) => l.bon_commande_id).filter((v): v is string => v !== null));
+    const bons = (await admin.from("bons_commande").select("id").eq("societe_id", ALPHA)).data ?? [];
+    const bon = bons.find((b) => !pris.has(b.id));
+    if (!bon) throw new Error("Aucun bon libre dans le jeu d'essai.");
     const lie = await unRapport("x", bon.id);
     await expect(factureDepuisRapport(ALPHA, lie)).rejects.toMatchObject({ message: expect.stringMatching(/facture le bon de commande lié/) });
   });
