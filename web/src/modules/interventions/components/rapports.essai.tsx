@@ -70,6 +70,16 @@ describe("liste des rapports (PLN-20, PLN-52)", () => {
     expect(within(carte).queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
   });
 
+  it("un rapport sans statut porte la pastille vide de l'ancien, pas « en cours »", async () => {
+    api.listerRapports.mockResolvedValue([rapport({ statut: null })]);
+    rendreAvecSession(<PageRapports />, { role: "admin" });
+    const carte = await carteDe("OPAC du Rhône");
+    const pastille = carte.querySelector(".badge.gray");
+    expect(pastille).not.toBeNull();
+    expect(pastille?.textContent).toBe("");
+    expect(within(carte).queryByText("en cours")).not.toBeInTheDocument();
+  });
+
   it("transformer en devis crée le brouillon depuis le rapport", async () => {
     rendreAvecSession(<PageRapports />, { role: "admin" });
     const carte = await carteDe("OPAC du Rhône");
