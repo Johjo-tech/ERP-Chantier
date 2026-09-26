@@ -79,7 +79,12 @@ export function ChoixArticle({ libelle, valeur, onSaisie, onChoisir, onCreer, de
   const idOption = (i: number) => `${id}-option-${i}`;
   return (
     <div className="relative">
+      {/* Le champ de l'ancien (`art-pick`, app.js `ligneRow`) : sans `type="text"` l'ancienne feuille ne l'habille pas. */}
       <Input
+        type="text"
+        className="art-pick"
+        placeholder="Code…"
+        title="Tapez un code ou un mot de la désignation"
         role="combobox"
         aria-label={libelle}
         aria-autocomplete="list"
