@@ -1,131 +1,139 @@
-import { useState, type FormEvent } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { ChampTexte } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
+import { useState } from "react";
+import { Chargement, Erreur } from "@/components/etats/Etats";
+import { BarreRecherche } from "@/components/ui/barre-recherche";
 import { messageErreur } from "@/lib/erreurs";
-import { cn } from "@/lib/utils";
+import { correspond } from "@/lib/recherche";
+import { afficherToast } from "@/lib/toast";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
+import { useDefilerVersFormulaire } from "@/modules/materiel/components/communs";
 import type { Metier } from "../api/listes";
 import { echange, ordonner, PALETTE_METIERS, prochainePosition, schemaSaisieMetier } from "../domain/listes";
 import { useEcrireMetiers, useMetiers } from "../hooks/useReglagesEcran";
 
+type Edition = Metier | "nouveau" | null;
+
 /**
- * Les métiers (PAR-05) : couleur choisie dans la palette, position, et deux
- * règles tenues par la base — suppression refusée si le métier est employé,
- * renommage propagé partout sauf dans les factures émises.
+ * Les métiers (PAR-05), au HTML de `renderMetiersSection` (app.js l. 17801) :
+ * couleur choisie dans la palette, position, et deux règles tenues par la base
+ * — suppression refusée si le métier est employé (le motif de la base se dit
+ * dans la bulle), renommage propagé partout sauf dans les factures émises.
  */
 export function ListeMetiers() {
   const metiers = useMetiers();
   const ecrire = useEcrireMetiers();
   const modifiable = usePermission("reglages", "modifier");
-  const [edition, setEdition] = useState<{ id: string | null; libelle: string; couleur: string } | null>(null);
+  const [recherche, setRecherche] = useState("");
+  const [edition, setEdition] = useState<Edition>(null);
 
-  if (metiers.isPending) return <Chargement />;
-  if (metiers.isError) return <Erreur erreur={metiers.error} reessayer={() => void metiers.refetch()} />;
-  const liste = ordonner(metiers.data);
-  const erreur = [ecrire.creer, ecrire.modifier, ecrire.supprimer, ecrire.placer].find((m) => m.isError)?.error;
-
+  const liste = metiers.data ? ordonner(metiers.data) : [];
+  const affiches = liste.filter((m) => correspond(recherche, m.libelle));
   const deplacer = (m: Metier, sens: -1 | 1) => {
     const p = echange(liste, m.id, sens);
-    if (p) ecrire.placer.mutate(p);
+    if (p) ecrire.placer.mutate(p, { onError: (e) => afficherToast(messageErreur(e)) });
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">Les corps d'état de la société : bons, tâches, équipes et sous-totaux par métier.</p>
-      {erreur !== undefined && <Alert variant="erreur">{messageErreur(erreur)}</Alert>}
-      {liste.length === 0 ? (
-        <Vide message="Aucun métier enregistré pour cette société." />
-      ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-          {liste.map((m, i) => (
-            <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-              <span className="flex items-center gap-2">
-                <span aria-hidden="true" className="h-4 w-4 rounded border border-border" style={{ background: m.couleur ?? "#999999" }} />
-                {m.libelle}
-              </span>
-              {modifiable && (
-                <span className="flex gap-1">
-                  <Button size="sm" variant="ghost" aria-label={`Monter ${m.libelle}`} disabled={i === 0} onClick={() => deplacer(m, -1)}>↑</Button>
-                  <Button size="sm" variant="ghost" aria-label={`Descendre ${m.libelle}`} disabled={i === liste.length - 1} onClick={() => deplacer(m, 1)}>↓</Button>
-                  <Button size="sm" variant="outline" onClick={() => setEdition({ id: m.id, libelle: m.libelle, couleur: m.couleur ?? PALETTE_METIERS[0] })}>Modifier</Button>
-                  <BoutonConfirme libelle="Supprimer" question={`Supprimer le métier « ${m.libelle} » ?`} onConfirmer={() => ecrire.supprimer.mutate(m.id)} />
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {modifiable &&
-        (edition ? (
-          <FormulaireMetier
-            valeur={edition}
-            onChange={setEdition}
-            enCours={ecrire.creer.isPending || ecrire.modifier.isPending}
-            onFermer={() => setEdition(null)}
-            onEnregistrer={(saisie) => {
-              const fermer = { onSuccess: () => setEdition(null) };
-              if (edition.id) ecrire.modifier.mutate({ id: edition.id, saisie }, fermer);
-              else ecrire.creer.mutate({ saisie, position: prochainePosition(liste) }, fermer);
-            }}
-          />
-        ) : (
-          <div>
-            <Button onClick={() => setEdition({ id: null, libelle: "", couleur: PALETTE_METIERS[0] })}>Nouveau métier</Button>
+    <>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px" }}>
+        <span>Métiers</span>
+        {modifiable && (
+          <button type="button" className="btn small primary" onClick={() => setEdition("nouveau")}>
+            + Nouveau métier
+          </button>
+        )}
+      </div>
+      <BarreRecherche id="metierPerso" libelle="Rechercher un métier" valeur={recherche} onChange={setRecherche} placeholder="Rechercher un métier…" affiches={affiches.length} total={liste.length} />
+      <div id="formZoneMetierPerso">
+        {edition && <FormulaireMetier key={edition === "nouveau" ? "nouveau" : edition.id} metier={edition === "nouveau" ? null : edition} position={prochainePosition(liste)} onFermer={() => setEdition(null)} />}
+      </div>
+      <div id="liste-metierPerso">
+        {metiers.isPending && <Chargement />}
+        {metiers.isError && <Erreur erreur={metiers.error} reessayer={() => void metiers.refetch()} />}
+        {metiers.isSuccess && affiches.length === 0 && <div className="empty">{recherche.trim() ? "Aucun métier ne correspond à la recherche." : "Aucun métier enregistré pour cette société."}</div>}
+        {affiches.map((m, i) => (
+          <div key={m.id} className="card">
+            <div className="card-row">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ width: "16px", height: "16px", borderRadius: "4px", background: m.couleur ?? "#999", flexShrink: 0, border: "1px solid rgba(0,0,0,.1)" }} />
+                <div className="card-title">{m.libelle}</div>
+              </div>
+            </div>
+            {modifiable && (
+              <div style={{ marginTop: "8px", display: "flex", gap: "8px" }}>
+                <button type="button" className="btn small ghost" title="Monter" aria-label={`Monter ${m.libelle}`} disabled={i === 0} onClick={() => deplacer(m, -1)}>
+                  ▲
+                </button>
+                <button type="button" className="btn small ghost" title="Descendre" aria-label={`Descendre ${m.libelle}`} disabled={i === affiches.length - 1} onClick={() => deplacer(m, 1)}>
+                  ▼
+                </button>
+                <button type="button" className="btn small" onClick={() => setEdition(m)}>
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  className="btn small danger"
+                  title="Un métier employé par des bons, des tâches ou des lignes ne peut pas être supprimé : renommez-le, le nouveau nom suivra partout."
+                  onClick={() => {
+                    if (window.confirm("Supprimer définitivement cet élément ?")) ecrire.supprimer.mutate(m.id, { onError: (e) => afficherToast(messageErreur(e), "error", DUREE_REFUS_MS) });
+                  }}
+                >
+                  Supprimer
+                </button>
+              </div>
+            )}
           </div>
         ))}
-    </div>
+      </div>
+    </>
   );
 }
 
-interface EditionMetier {
-  id: string | null;
-  libelle: string;
-  couleur: string;
-}
+/** Le motif de refus que la base écrit est long : l'ancien le laissait huit secondes (`deleteItem`). */
+const DUREE_REFUS_MS = 8000;
 
-function FormulaireMetier(props: {
-  valeur: EditionMetier;
-  onChange: (v: EditionMetier) => void;
-  onEnregistrer: (s: { libelle: string; couleur: string }) => void;
-  onFermer: () => void;
-  enCours: boolean;
-}) {
-  const [erreur, setErreur] = useState<string | undefined>();
-  const v = props.valeur;
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
-    const r = schemaSaisieMetier.safeParse(v);
-    if (!r.success) return setErreur(r.error.issues[0]?.message);
-    setErreur(undefined);
-    props.onEnregistrer(r.data);
+/** `metierPersoForm` (app.js l. 17875) : le nom et la palette de pastilles. */
+function FormulaireMetier({ metier, position, onFermer }: { metier: Metier | null; position: number; onFermer: () => void }) {
+  const ecrire = useEcrireMetiers();
+  const [libelle, setLibelle] = useState(metier?.libelle ?? "");
+  const [couleur, setCouleur] = useState<string>(metier?.couleur ?? PALETTE_METIERS[0]);
+  useDefilerVersFormulaire("formZoneMetierPerso");
+
+  function enregistrer() {
+    const r = schemaSaisieMetier.safeParse({ libelle, couleur });
+    if (!r.success) {
+      window.alert("Le nom du métier est requis.");
+      return;
+    }
+    const fini = { onSuccess: onFermer, onError: (e: unknown) => afficherToast(messageErreur(e)) };
+    if (metier) ecrire.modifier.mutate({ id: metier.id, saisie: r.data }, fini);
+    else ecrire.creer.mutate({ saisie: r.data, position }, fini);
   }
+
   return (
-    <form onSubmit={soumettre} noValidate className="flex flex-col gap-3 rounded-md border border-dashed border-border p-3">
-      <ChampTexte libelle="Nom du métier" valeur={v.libelle} onChange={(libelle) => props.onChange({ ...v, libelle })} erreur={erreur} placeholder="Ex : Menuiserie, Serrurerie…" />
-      <fieldset>
-        <legend className="mb-1 text-sm font-medium">Couleur</legend>
-        <div className="flex flex-wrap gap-1.5">
-          {PALETTE_METIERS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              aria-label={c}
-              aria-pressed={c === v.couleur}
-              onClick={() => props.onChange({ ...v, couleur: c })}
-              className={cn("h-7 w-7 rounded border border-border", c === v.couleur && "ring-2 ring-ring ring-offset-2")}
-              style={{ background: c }}
-            />
-          ))}
+    <div className="form-panel">
+      <h3>{metier ? "Modifier le métier" : "Nouveau métier"}</h3>
+      <div className="field-grid">
+        <div className="field full">
+          <label htmlFor="mp_nom">Nom du métier</label>
+          <input type="text" id="mp_nom" value={libelle} placeholder="Ex : Menuiserie, Serrurerie, Peinture…" onChange={(e) => setLibelle(e.target.value)} />
         </div>
-      </fieldset>
-      {v.id && <p className="text-xs text-muted-foreground">Renommer suit partout — bons, tâches, lignes —, sauf les factures déjà émises.</p>}
-      <div className="flex gap-2">
-        <Button type="submit" disabled={props.enCours}>{props.enCours ? "Enregistrement…" : "Enregistrer"}</Button>
-        <Button variant="ghost" onClick={props.onFermer}>Annuler</Button>
+        <div className="field full">
+          <div className="reglage-titre">Couleur</div>
+          <div className="metier-palette" role="group" aria-label="Couleur">
+            {PALETTE_METIERS.map((c) => (
+              <button key={c} type="button" className={`metier-swatch ${c === couleur ? "is-selected" : ""}`} style={{ background: c }} title={c} aria-label={c} aria-pressed={c === couleur} onClick={() => setCouleur(c)} />
+            ))}
+          </div>
+        </div>
       </div>
-    </form>
+      <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+        <button type="button" className="btn primary" disabled={ecrire.creer.isPending || ecrire.modifier.isPending} onClick={enregistrer}>
+          Enregistrer
+        </button>
+        <button type="button" className="btn ghost" onClick={onFermer}>
+          Annuler
+        </button>
+      </div>
+    </div>
   );
 }

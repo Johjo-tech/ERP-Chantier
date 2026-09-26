@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { formatDateFr } from "@/lib/dates";
 import { Can } from "@/modules/auth-roles/components/Can";
-import { filtrerMateriels, type Materiel } from "../domain/materiel";
+import type { MaterielAvecPrets } from "../api/materiels";
+import { filtrerMateriels } from "../domain/materiel";
 import { nomEmprunteur, pretEnCours, retourPrevu, type PersonneAnnuaire } from "../domain/prets";
 import { useMateriels, usePersonnes } from "../hooks/useMateriel";
 
@@ -53,7 +54,7 @@ export function PageMateriel() {
   );
 }
 
-function TableauMateriel({ liste, annuaire }: { liste: readonly Materiel[]; annuaire: readonly PersonneAnnuaire[] }) {
+function TableauMateriel({ liste, annuaire }: { liste: readonly MaterielAvecPrets[]; annuaire: readonly PersonneAnnuaire[] }) {
   const navigate = useNavigate();
   return (
     <div className="vehicule-liste-wrap">

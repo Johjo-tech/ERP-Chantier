@@ -1,109 +1,168 @@
-import { useState, type FormEvent } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { ChampTexte, ChampZone } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Chargement, Erreur } from "@/components/etats/Etats";
+import { ChampTexte } from "@/components/formulaire/Champ";
+import { BarreRecherche } from "@/components/ui/barre-recherche";
 import { messageErreur } from "@/lib/erreurs";
+import { correspond } from "@/lib/recherche";
+import { afficherToast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
+import { useDefilerVersFormulaire } from "@/modules/materiel/components/communs";
 import type { Fournisseur } from "../api/intervenants";
 import { schemaSaisieFournisseur, type SaisieFournisseur } from "../domain/intervenants";
 import { useEcrireFournisseurs, useFournisseurs } from "../hooks/useReglagesEcran";
 
-/** L'annuaire des fournisseurs — pièces, matériaux, location (PAR-06). */
+/** « 12 rue X, 69000 Lyon » (`withVille` de l'ancien écran). */
+function avecVille(adresse: string | null, cp: string | null, ville: string | null): string {
+  const cpVille = [cp, ville].filter(Boolean).join(" ");
+  return [adresse, cpVille].filter(Boolean).join(", ");
+}
+
+/**
+ * L'annuaire des fournisseurs — pièces, matériaux, location (PAR-06), au HTML
+ * de `renderFournisseursSection` (app.js l. 18109). Un fournisseur ne se
+ * supprime pas : il se retire des listes (D-ECR-PAR-12).
+ */
 export function BlocFournisseurs() {
   const fournisseurs = useFournisseurs();
   const ecrire = useEcrireFournisseurs();
   const modifiable = usePermission("reglages", "modifier");
+  const [recherche, setRecherche] = useState("");
   const [edition, setEdition] = useState<Fournisseur | "nouveau" | null>(null);
+  const tous = fournisseurs.data ?? [];
+  const affiches = tous.filter((f) => correspond(recherche, f.nom, f.specialite, f.ville, f.contact_nom));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Fournisseurs</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {ecrire.actif.isError && <Alert variant="erreur">{messageErreur(ecrire.actif.error)}</Alert>}
-        {fournisseurs.isPending ? (
-          <Chargement />
-        ) : fournisseurs.isError ? (
-          <Erreur erreur={fournisseurs.error} reessayer={() => void fournisseurs.refetch()} />
-        ) : fournisseurs.data.length === 0 ? (
-          <Vide message="Aucun fournisseur enregistré." />
-        ) : (
-          <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-            {fournisseurs.data.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-                <div>
-                  <p className="font-medium">
-                    {f.nom} {f.specialite && <span className="text-muted-foreground">— {f.specialite}</span>} {!f.actif && <Badge variant="neutre">inactif</Badge>}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{[f.contact_nom, f.telephone, f.email, f.ville].filter(Boolean).join(" · ")}</p>
-                </div>
-                {modifiable && (
-                  <span className="flex gap-1">
-                    <Button size="sm" variant="outline" onClick={() => setEdition(f)}>Modifier</Button>
-                    <Button size="sm" variant="ghost" onClick={() => ecrire.actif.mutate({ id: f.id, actif: !f.actif })}>{f.actif ? "Désactiver" : "Réactiver"}</Button>
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
+    <>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px" }}>
+        <span>Fournisseurs</span>
+        {modifiable && (
+          <button type="button" className="btn small primary" onClick={() => setEdition("nouveau")}>
+            + Nouveau fournisseur
+          </button>
         )}
-        {modifiable &&
-          (edition ? (
-            <FormulaireFournisseur key={edition === "nouveau" ? "nouveau" : edition.id} fournisseur={edition === "nouveau" ? null : edition} onFermer={() => setEdition(null)} />
-          ) : (
-            <div>
-              <Button onClick={() => setEdition("nouveau")}>Nouveau fournisseur</Button>
+      </div>
+      <div className="card-sub" style={{ marginBottom: "12px" }}>
+        Pièces, matériaux, location. C&apos;est ce nom qui regroupe les pièces commandées en dossiers.
+      </div>
+      <BarreRecherche id="fournisseur" libelle="Rechercher un fournisseur" valeur={recherche} onChange={setRecherche} placeholder="Rechercher : nom, spécialité, ville…" affiches={affiches.length} total={tous.length} />
+      <div id="formZoneFournisseur">
+        {edition && <FormulaireFournisseur key={edition === "nouveau" ? "nouveau" : edition.id} fournisseur={edition === "nouveau" ? null : edition} onFermer={() => setEdition(null)} />}
+      </div>
+      <div id="liste-fournisseur">
+        {fournisseurs.isPending && <Chargement />}
+        {fournisseurs.isError && <Erreur erreur={fournisseurs.error} reessayer={() => void fournisseurs.refetch()} />}
+        {fournisseurs.isSuccess && affiches.length === 0 && <div className="empty">{recherche.trim() ? "Aucun fournisseur ne correspond à la recherche." : "Aucun fournisseur enregistré."}</div>}
+        {affiches.map((f) => (
+          <div key={f.id} className="card">
+            <div className="card-row">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="card-title">
+                  {f.nom}
+                  {!f.actif && (
+                    <>
+                      {" "}
+                      <span className="badge gray" style={{ marginLeft: "6px" }}>
+                        Retiré
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div className="card-sub">{[f.specialite, f.contact_nom, f.telephone, avecVille(f.adresse, f.code_postal, f.ville)].filter(Boolean).join(" · ") || "—"}</div>
+              </div>
+              {f.telephone && (
+                <a className="btn small" href={`tel:${f.telephone.replace(/[^+0-9]/g, "")}`} title="Appeler" aria-label={`Appeler ${f.nom}`}>
+                  ☎
+                </a>
+              )}
             </div>
-          ))}
-      </CardContent>
-    </Card>
+            {modifiable && (
+              <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button type="button" className="btn small" onClick={() => setEdition(f)}>
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  className={`btn small ${f.actif ? "danger" : ""}`}
+                  title="Les commandes passées gardent son nom : elles restent lisibles."
+                  onClick={() => ecrire.actif.mutate({ id: f.id, actif: !f.actif }, { onError: (e) => afficherToast(messageErreur(e)) })}
+                >
+                  {f.actif ? "Retirer" : "Remettre"}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
-const CHAMPS: readonly [keyof SaisieFournisseur, string][] = [
-  ["nom", "Nom"],
-  ["specialite", "Spécialité"],
-  ["contact_nom", "Contact"],
+const CHAMPS: readonly [keyof SaisieFournisseur, string, string?][] = [
+  ["specialite", "Spécialité", "Ex : Plomberie, Électricité, Outillage"],
+  ["contact_nom", "Contact", "Ex : M. Durand"],
   ["telephone", "Téléphone"],
-  ["email", "E-mail"],
-  ["siret", "SIRET"],
-  ["adresse", "Adresse"],
-  ["code_postal", "Code postal"],
-  ["ville", "Ville"],
+  ["email", "Email"],
 ];
 
+/** `fournisseurForm` (app.js l. 18140) : la disponibilité « Proposé dans les listes » y est la même case que « Retirer ». */
 function FormulaireFournisseur({ fournisseur, onFermer }: { fournisseur: Fournisseur | null; onFermer: () => void }) {
   const ecrire = useEcrireFournisseurs();
-  const initiales = Object.fromEntries([...CHAMPS.map(([c]) => c), "notes"].map((c) => [c, fournisseur?.[c as keyof Fournisseur]?.toString() ?? ""])) as Record<
-    keyof SaisieFournisseur,
-    string
-  >;
-  const { valeurs, erreurs, changer, valider } = useFormulaire(initiales);
+  const cles: (keyof SaisieFournisseur)[] = ["nom", "specialite", "contact_nom", "telephone", "email", "adresse", "code_postal", "ville", "siret", "notes"];
+  const initiales = Object.fromEntries(cles.map((c) => [c, fournisseur?.[c as keyof Fournisseur]?.toString() ?? ""])) as Record<keyof SaisieFournisseur, string>;
+  const { valeurs, changer } = useFormulaire(initiales);
+  const [actif, setActif] = useState(fournisseur?.actif ?? true);
+  useDefilerVersFormulaire("formZoneFournisseur");
 
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
-    const saisie = valider(schemaSaisieFournisseur);
-    if (saisie) ecrire.enregistrer.mutate({ avant: fournisseur, saisie }, { onSuccess: onFermer });
+  function enregistrer() {
+    const r = schemaSaisieFournisseur.safeParse(valeurs);
+    if (!r.success) {
+      window.alert(r.error.issues[0]?.message ?? "Saisie invalide.");
+      return;
+    }
+    ecrire.enregistrer.mutate(
+      { avant: fournisseur, saisie: r.data },
+      {
+        onSuccess: () => {
+          if (fournisseur && actif !== fournisseur.actif) ecrire.actif.mutate({ id: fournisseur.id, actif });
+          onFermer();
+          afficherToast(fournisseur ? "Fournisseur modifié." : "Fournisseur créé.", "success");
+        },
+        onError: (e) => afficherToast(messageErreur(e)),
+      }
+    );
   }
 
+  const c = (cle: keyof SaisieFournisseur) => ({ valeur: valeurs[cle], onChange: (v: string) => changer(cle, v) });
   return (
-    <form onSubmit={soumettre} noValidate className="grid gap-3 rounded-md border border-dashed border-border p-3 sm:grid-cols-2">
-      {CHAMPS.map(([c, libelle]) => (
-        <ChampTexte key={c} libelle={libelle} valeur={valeurs[c]} onChange={(v) => changer(c, v)} erreur={erreurs[c]} requis={c === "nom"} />
-      ))}
-      <div className="sm:col-span-2">
-        <ChampZone libelle="Notes" valeur={valeurs.notes} onChange={(v) => changer("notes", v)} />
+    <div className="form-panel">
+      <h3>{fournisseur ? "Modifier le fournisseur" : "Nouveau fournisseur"}</h3>
+      <div className="field-grid">
+        <ChampTexte className="full" libelle="Nom" {...c("nom")} placeholder="Ex : Point P, Rexel, Cedeo…" />
+        {CHAMPS.map(([cle, libelle, exemple]) => (
+          <ChampTexte key={cle} libelle={libelle} type={cle === "email" ? "email" : cle === "telephone" ? "tel" : "text"} {...c(cle)} {...(exemple ? { placeholder: exemple } : {})} />
+        ))}
+        <ChampTexte className="full" libelle="Adresse" {...c("adresse")} />
+        <ChampTexte libelle="Code postal" inputMode="numeric" {...c("code_postal")} />
+        <ChampTexte libelle="Ville" {...c("ville")} />
+        <ChampTexte libelle="SIRET" {...c("siret")} />
+        <div className="field">
+          <div className="reglage-titre">Disponibilité</div>
+          <label className="bc-tache-row">
+            <input type="checkbox" id="fo_actif" checked={actif} disabled={!fournisseur} onChange={(e) => setActif(e.target.checked)} />
+            <span>Proposé dans les listes</span>
+          </label>
+        </div>
+        <ChampTexte className="full" libelle="Notes" {...c("notes")} />
       </div>
-      {ecrire.enregistrer.isError && <Alert variant="erreur" className="sm:col-span-2">{messageErreur(ecrire.enregistrer.error)}</Alert>}
-      <div className="flex gap-2 sm:col-span-2">
-        <Button type="submit" disabled={ecrire.enregistrer.isPending}>{ecrire.enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}</Button>
-        <Button variant="ghost" onClick={onFermer}>Annuler</Button>
+      <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+        <button type="button" className="btn primary" disabled={ecrire.enregistrer.isPending} onClick={enregistrer}>
+          Enregistrer
+        </button>
+        <button type="button" className="btn ghost" onClick={onFermer}>
+          Annuler
+        </button>
       </div>
-    </form>
+    </div>
   );
 }

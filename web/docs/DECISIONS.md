@@ -1909,3 +1909,66 @@ seul « Effacer les marques » reste à l'écran, comme avant.
 listes : il devient `components/ui/barre-recherche.tsx`, libellé caché en plus. La liste du matériel
 garde son champ nu (`renderMateriel` n'utilisait pas la barre commune), et son message vide
 « Aucun matériel pour l'instant. » même quand la recherche écarte tout — c'est celui de l'ancien.
+
+## D-ECR-PAR-05 — RH : la barre de l'ancien au-dessus de chaque rubrique ; les sous-traitants rendus aux Réglages
+`renderRH` pose `.plus-subnav` centrée AU-DESSUS de l'en-tête de la rubrique (« RH », « Dossiers
+documentaires », « Visites médicales », « Équipes »), et la fiche salarié s'ouvre DANS la rubrique
+Salariés, au-dessus de la liste (`#formZoneSalarie`) — la route `/rh/salaries/:id` rend donc
+barre + en-tête sans boutons + formulaire + liste. Le registre a son propre en-tête, sans barre.
+L'onglet « Sous-traitants » que web/ avait ajouté au RH n'existe pas dans l'ancien : les
+sous-traitants y vivent dans Réglages › Intervenants (`renderSousTraitantsSection`), ils y
+retournent ; `/rh?vue=sous-traitants` retombe sur les salariés. Restent décidés : les droits de
+D-RH-05 et D-RH-07 (onglets Documents et Visites, coûts et badges réservés à `rh / modifier`), la
+confirmation avant de retirer une pièce, une visite, une absence (l'ancien retirait sans demander,
+mais il le faisait sur un tableau que la base perdait). Les refus se disent comme avant : `alert()`
+pour une fiche sans nom, bulle pour le reste.
+
+## D-ECR-PAR-06 — Métiers proposés par les écrans RH : les déclarés, triés comme l'ancien
+`metiersDisponibles` de l'ancien fusionne les métiers déclarés et ceux employés sur les bons, puis
+trie à la française. Les écrans RH (poste, filtre, équipes, sous-traitants) prennent les déclarés,
+dédoublonnés et triés par la même règle (`referentielMetiers`) : lire tous les bons pour proposer
+un poste coûterait une requête lourde à chaque fiche. Un métier employé sur un bon et jamais
+déclaré n'est donc pas proposé ici — il l'est aux bons et au planning, où il sert.
+
+## D-ECR-PAR-07 — Écarts de capture qui ne sont pas des écarts de rendu
+Quand l'ancien atteint un état par `window.state` et le nouveau par un clic, Playwright fait
+défiler l'élément cliqué dans la vue : sur téléphone, un tableau large se retrouve décalé. Ces
+écarts sont chiffrés dans le seuil de l'écran et commentés dans `tests/visuel/ecrans-parc-rh.ts`.
+
+## D-ECR-PAR-08 — Réglages : le rail de l'ancien, « Mon nom » compris ; le groupe « Accès » en dernier
+Le rail reprend `REGLAGES_GROUPES` mot pour mot (icônes, libellés, descriptions : « Logo et couleur
+dominante », « Conducteurs, techniciens, sous-traitants »), liste déroulante sur téléphone
+(`.reglages-choix`), et « Mon compte › 👤 Mon nom » redevient une rubrique (le mot de passe reste
+sur `/mon-compte`, D-SOC-06). L'ancien écran ne gérait ni les membres ni l'espace client : ces
+écrans web/ (« Comptes et invitations », « Accès clients ») n'ont pas d'équivalent où se ranger —
+l'invitation d'un salarié, seule trace de l'ancien, vit déjà dans sa fiche RH. Ils restent donc
+dans un groupe « Accès », APRÈS « Mon compte », visible du seul administrateur : le rail que
+connaissent les autres rôles est intact, l'administrateur voit 7 lignes de plus (chiffrées dans
+les seuils).
+
+## D-ECR-PAR-09 — « ⬆ Importer une sauvegarde » mène à Import / export
+La carte « 💾 Sauvegarde de vos données » reprend texte et boutons. « ⬇ Exporter mes données »
+télécharge la sauvegarde de web/ ; celle-ci est une archive qui ne se réimporte pas par l'écran
+(module import-export) : le second bouton, au même endroit et dans le même habit, ouvre l'écran
+Import / export, qui dit ce qui s'importe.
+
+## D-ECR-PAR-10 — Jours fériés d'Alsace-Moselle : une carte sous la fiche
+PLN-53 n'existe pas dans l'ancien écran. La case vit dans une `.card` sous « Informations de
+l'entreprise », en habit de l'ancien (titre, phrase, `.bc-tache-row`), enregistrée au clic.
+
+## D-ECR-PAR-11 — Organisation : gérant, site web et annuaire reviennent
+L'onglet reprend `renderInfosEntrepriseSection` : adresse avec suggestions de la BAN, site web
+(rangé dans les réglages de documents, comme l'ancien), SIRET / SIREN avec « 🔍 Rechercher »
+(annuaire : l'identité choisie écrase, le reste ne remplit que le vide), gérant et son téléphone
+(fusionnés dans `societe_settings.infos_entreprise`, où le PPSPS les relit — web/ ne permettait
+plus de les saisir), puis les trois volets repliables. Un identifiant mal formé se dit dans une
+fenêtre d'alerte, comme `verifierEntite` ; la réussite dans la bulle. « Devis & factures »
+affiche les taux comme l'ancien (« 0, 5.5, 10, 20 ») — la saisie accepte toujours les deux
+écritures (D-SOC-11) — et garde délai compté et mode de règlement après les champs de l'ancien.
+
+## D-ECR-PAR-12 — Conducteurs et fournisseurs se retirent, ne se suppriment pas
+L'ancien « Supprimer » effaçait la fiche ; web/ la retire (`actif`), pour que bons, devis,
+factures et pièces commandées gardent leur conducteur ou leur fournisseur (PAR-06). Le bouton
+prend la place et l'habit de « Supprimer » (`btn small danger`) sous le libellé « Retirer » ; une
+fiche retirée porte « Retiré » et se remet d'un clic. La case « Proposé dans les listes » du
+fournisseur est la même bascule.

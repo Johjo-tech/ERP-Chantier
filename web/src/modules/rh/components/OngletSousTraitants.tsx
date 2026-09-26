@@ -1,21 +1,19 @@
 import { useState } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Input } from "@/components/ui/input";
+import { Chargement, Erreur } from "@/components/etats/Etats";
+import { BarreRecherche } from "@/components/ui/barre-recherche";
 import { todayISO } from "@/lib/dates";
-import { messageErreur } from "@/lib/erreurs";
 import { correspond } from "@/lib/recherche";
+import { useToastErreur } from "@/modules/materiel/components/communs";
 import { echeanceDocumentSousTraitant, type SousTraitant } from "../domain/intervenants";
 import { useDocumentsSousTraitants, useDroitsRh, useGererIntervenants, useSeuilsRh, useSousTraitants } from "../hooks/useRh";
 import { FormulaireSousTraitant } from "./FormulaireSousTraitant";
 
 /**
- * Les sous-traitants (PAR-06) : entreprises, métiers, compte relié (AUTH-44) et
- * voit l'onglet RH ; l'écriture suit « rh / modifier » (D-RH-05, tranché par D-AUTH-05).
- * voit l'onglet RH ; l'écriture suit `peut_ecrire()` ET la matrice (D-RH-05).
+ * Les sous-traitants (PAR-06), au HTML de `renderSousTraitantsSection`
+ * (app.js l. 18189) : rangés, comme dans l'ancien écran, sous Réglages ›
+ * Intervenants (D-ECR-PAR-05). L'écriture suit `peut_ecrire()` ET la matrice
+ * (D-RH-05). En plus de l'ancien, décidés : la pastille d'un document expiré
+ * ou à renouveler, et « sans compte » quand l'entreprise n'a pas de compte relié.
  */
 export function OngletSousTraitants() {
   const liste = useSousTraitants();
@@ -23,53 +21,83 @@ export function OngletSousTraitants() {
   const droits = useDroitsRh();
   const seuils = useSeuilsRh();
   const gerer = useGererIntervenants();
+  useToastErreur(gerer.supprimerSousTraitant.error);
   const [recherche, setRecherche] = useState("");
   const [edition, setEdition] = useState<SousTraitant | "nouveau" | null>(null);
 
-  if (liste.isPending) return <Chargement />;
-  if (liste.isError) return <Erreur erreur={liste.error} reessayer={() => void liste.refetch()} />;
-  const filtres = liste.data.filter((s) => correspond(recherche, s.nom, s.metier, s.metiers.join(" "), s.ville, s.siret));
+  const tous = liste.data ?? [];
+  const filtres = tous.filter((s) => correspond(recherche, s.nom, s.metier, s.metiers.join(" "), s.ville, s.siret));
   const docsDe = (id: string) => (documents.data ?? []).filter((d) => d.sousTraitantId === id);
   const aujourdHui = todayISO();
 
-  if (edition) {
-    return <FormulaireSousTraitant key={edition === "nouveau" ? "nouveau" : edition.id} fiche={edition === "nouveau" ? null : edition} fiches={liste.data} documents={edition === "nouveau" ? [] : docsDe(edition.id)} onFermer={() => setEdition(null)} />;
-  }
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <Input aria-label="Rechercher un sous-traitant" className="min-w-56 flex-1" placeholder="Rechercher : nom, métier, ville, SIRET…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
-        {droits.intervenants && <Button onClick={() => setEdition("nouveau")}>+ Nouveau sous-traitant</Button>}
+    <>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px" }}>
+        <span>Sous-traitants</span>
+        {droits.intervenants && (
+          <button type="button" className="btn small primary" onClick={() => setEdition("nouveau")}>
+            + Nouveau sous-traitant
+          </button>
+        )}
       </div>
-      {gerer.supprimerSousTraitant.isError && <Alert variant="erreur">{messageErreur(gerer.supprimerSousTraitant.error)}</Alert>}
-      {filtres.length === 0 ? (
-        <Vide message="Aucun sous-traitant enregistré pour cette société." />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {filtres.map((s) => {
-            const alertes = docsDe(s.id).map((d) => echeanceDocumentSousTraitant(d.dateValidite, aujourdHui, seuils.documentLegal)).filter((a) => a !== null);
-            const metiers = s.metiers.length ? s.metiers.join(", ") : s.metier;
-            return (
-              <li key={s.id} className="rounded-md border border-border p-3 text-sm">
-                <p className="flex flex-wrap items-center gap-2 font-medium">
-                  {s.nom}
-                  {alertes.some((a) => a.niveau === "expire") && <Badge variant="danger">document expiré</Badge>}
-                  {!alertes.some((a) => a.niveau === "expire") && alertes.length > 0 && <Badge variant="alerte">document à renouveler</Badge>}
-                  {!s.contactProfileId && <Badge variant="neutre" title="Sans compte relié, l'entreprise ne voit pas ses tâches au planning">sans compte</Badge>}
-                </p>
-                {(s.telephone || s.email) && <p className="text-muted-foreground">{[s.telephone, s.email].filter(Boolean).join(" · ")}</p>}
-                {metiers && <p className="text-muted-foreground">🔧 {metiers}</p>}
-                {droits.intervenants && (
-                  <span className="mt-2 flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => setEdition(s)}>Modifier</Button>
-                    <BoutonConfirme libelle="Supprimer" question={`Supprimer ${s.nom} et ses documents ?`} onConfirmer={() => gerer.supprimerSousTraitant.mutate({ id: s.id, documents: docsDe(s.id) })} />
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+      <BarreRecherche id="sousTraitant" libelle="Rechercher un sous-traitant" valeur={recherche} onChange={setRecherche} placeholder="Rechercher : nom, métier, ville, SIRET…" affiches={filtres.length} total={tous.length} />
+      <div id="formZoneSousTraitant">
+        {edition && <FormulaireSousTraitant key={edition === "nouveau" ? "nouveau" : edition.id} fiche={edition === "nouveau" ? null : edition} fiches={tous} documents={edition === "nouveau" ? [] : docsDe(edition.id)} onFermer={() => setEdition(null)} />}
+      </div>
+      <div id="liste-sousTraitant">
+        {liste.isPending && <Chargement />}
+        {liste.isError && <Erreur erreur={liste.error} reessayer={() => void liste.refetch()} />}
+        {liste.isSuccess && filtres.length === 0 && <div className="empty">{recherche.trim() ? "Aucun sous-traitant ne correspond à la recherche." : "Aucun sous-traitant enregistré pour cette société."}</div>}
+        {filtres.map((s) => {
+          const alertes = docsDe(s.id).map((d) => echeanceDocumentSousTraitant(d.dateValidite, aujourdHui, seuils.documentLegal)).filter((a) => a !== null);
+          const metiers = s.metiers.length ? s.metiers.join(", ") : s.metier;
+          const expire = alertes.some((a) => a.niveau === "expire");
+          return (
+            <div key={s.id} className="card">
+              <div className="card-row">
+                <div>
+                  <div className="card-title">
+                    {s.nom}
+                    {expire && (
+                      <span className="badge danger" style={{ marginLeft: "6px" }}>
+                        document expiré
+                      </span>
+                    )}
+                    {!expire && alertes.length > 0 && (
+                      <span className="badge warn" style={{ marginLeft: "6px" }}>
+                        document à renouveler
+                      </span>
+                    )}
+                  </div>
+                  {(s.telephone || s.email) && <div className="card-sub">{[s.telephone, s.email].filter(Boolean).join(" · ")}</div>}
+                  {metiers && <div className="card-sub">🔧 {metiers}</div>}
+                  {!s.contactProfileId && (
+                    <div className="card-sub" title="Sans compte relié, l'entreprise ne voit pas ses tâches au planning">
+                      ⚠ sans compte
+                    </div>
+                  )}
+                </div>
+              </div>
+              {droits.intervenants && (
+                <div style={{ marginTop: "8px", display: "flex", gap: "8px" }}>
+                  <button type="button" className="btn small" onClick={() => setEdition(s)}>
+                    Modifier
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small danger"
+                    onClick={() => {
+                      if (window.confirm("Supprimer définitivement cet élément ?")) gerer.supprimerSousTraitant.mutate({ id: s.id, documents: docsDe(s.id) });
+                    }}
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }

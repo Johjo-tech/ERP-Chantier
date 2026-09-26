@@ -114,8 +114,9 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   "pieces-en-commande": { bureau: { pixels: 0.17, texte: 31 } },
   planning: { bureau: { pixels: 0.55, texte: 46 } },
   rapports: { bureau: { pixels: 0.03, texte: 7 } },
-  reglages: { bureau: { pixels: 0.51, texte: 86 } },
-  rh: { bureau: { pixels: 0.08, texte: 4 } },
+  // Repris : le groupe « Accès » du rail (D-ECR-PAR-08) et la carte des jours fériés (D-ECR-PAR-10).
+  reglages: { bureau: { pixels: 0.001, texte: 10 } },
+  rh: { bureau: { pixels: 0.001, texte: 0 } },
   statistiques: { bureau: { pixels: 0.33, texte: 50 } },
   vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };

@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
+import { Erreur } from "@/components/etats/Etats";
 import { todayISO } from "@/lib/dates";
 import { conformiteRh, filtrerDossiers, resumeDossier, type FiltreDossiers } from "../domain/conformite";
 import { pastilleDocument, TYPES_DOCUMENT_RH } from "../domain/documents";
@@ -16,11 +12,13 @@ import { SectionDossier } from "./SectionDossier";
 
 const OBLIGATOIRES = TYPES_DOCUMENT_RH.filter((t) => t.obligatoire);
 const PASTILLE_VISITE = { inconnue: "manquant", depassee: "expire", bientot: "bientot", aJour: "ok" } as const;
+const TITRE_VISITE = { inconnue: "Aucune visite enregistrée", depassee: "Échéance dépassée", bientot: "Échéance proche", aJour: "Suivi à jour" } as const;
 
 /**
- * Le tableau de conformité (RH-04, RH-09) : une ligne par salarié, une colonne
- * par pièce obligatoire, la colonne 🩺 venant du registre des visites. Il
- * attend les DEUX sources : afficher « manquant » avant la lecture mentirait.
+ * Les dossiers documentaires (RH-04, RH-09), au HTML de `renderRHDocuments`
+ * (app.js l. 15990) : une ligne par salarié, une colonne par pièce
+ * obligatoire, la colonne 🩺 venant du registre des visites. Il attend les
+ * DEUX sources : afficher « manquant » avant la lecture mentirait.
  */
 export function OngletDocuments({ salarieOuvert }: { salarieOuvert: string | null }) {
   const salaries = useSalariesRh();
@@ -30,13 +28,19 @@ export function OngletDocuments({ salarieOuvert }: { salarieOuvert: string | nul
   const [filtre, setFiltre] = useState<FiltreDossiers>("");
   const [, setParams] = useSearchParams();
 
-  if (salaries.isPending || documents.isPending || visites.isPending) return <Chargement libelle="Chargement des dossiers documentaires…" />;
   const erreur = salaries.error ?? documents.error ?? visites.error;
   if (erreur) return <Erreur erreur={erreur} reessayer={() => void Promise.all([salaries.refetch(), documents.refetch(), visites.refetch()])} />;
+  if (!salaries.isSuccess || !documents.isSuccess || !visites.isSuccess) {
+    return (
+      <div className="empty" data-chargement="oui" role="status">
+        Chargement des dossiers documentaires…
+      </div>
+    );
+  }
 
   const aujourdHui = todayISO();
-  const lignes = (salaries.data ?? []).map((s) => {
-    const docs = (documents.data ?? []).filter((d) => d.salarieId === s.id);
+  const lignes = salaries.data.map((s) => {
+    const docs = documents.data.filter((d) => d.salarieId === s.id);
     return { s, docs, bilan: conformiteRh(docs, s.visiteMedicaleProchaine, aujourdHui, seuils) };
   });
   const liste = filtrerDossiers(lignes, filtre);
@@ -50,68 +54,105 @@ export function OngletDocuments({ salarieOuvert }: { salarieOuvert: string | nul
   ];
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">Contrat, DPAE, carte BTP, identité, RIB : les pièces que l'inspection du travail peut demander. Les fichiers sont rangés dans un espace privé, cloisonné par société. La colonne 🩺 vient du registre des visites médicales.</p>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer les dossiers">
+    <>
+      <div className="page-head">
+        <h1>Dossiers documentaires</h1>
+      </div>
+      <div className="card-sub" style={{ marginBottom: "14px" }}>
+        Contrat, DPAE, carte BTP, identité, RIB : les pièces que l&apos;inspection du travail peut demander. Les fichiers sont rangés dans un espace privé, cloisonné par société. La colonne 🩺 vient du registre des visites médicales.
+      </div>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "18px", flexWrap: "wrap" }} role="group" aria-label="Filtrer les dossiers">
         {filtres.map((x) => (
-          <Button key={x.f} size="sm" variant={filtre === x.f ? "default" : "outline"} aria-pressed={filtre === x.f} onClick={() => setFiltre(x.f)}>
+          <button key={x.f} type="button" className={`btn small ${filtre === x.f ? "primary" : ""}`} aria-pressed={filtre === x.f} onClick={() => setFiltre(x.f)}>
             {x.libelle}
-          </Button>
+          </button>
         ))}
       </div>
       {lignes.length === 0 ? (
-        <Vide message="Aucun salarié pour cette société." />
+        <div className="empty">Aucun salarié pour cette société.</div>
       ) : (
-        <div className="overflow-x-auto">
-          <Table>
-            <THead>
-              <Tr>
-                <Th>Salarié</Th>
+        <div className="vehicule-liste-wrap">
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left" }}>Salarié</th>
                 {OBLIGATOIRES.map((t) => (
-                  <Th key={t.code} title={t.libelle}>{t.icone} {t.libelle}</Th>
+                  <th key={t.code} className="doc-rh-colonne" title={t.libelle}>
+                    <span>{t.icone}</span>
+                    {t.libelle}
+                  </th>
                 ))}
-                <Th title="Visite médicale — vient du registre, pas du dossier">🩺 Visite médicale</Th>
-                <Th>Autres</Th>
-                <Th>Dossier</Th>
-                <Th><span className="sr-only">Ouvrir</span></Th>
-              </Tr>
-            </THead>
-            <TBody>
+                <th className="doc-rh-colonne" title="Visite médicale — vient du registre, pas du dossier">
+                  <span>🩺</span>Visite médicale
+                </th>
+                <th>Autres</th>
+                <th>Dossier</th>
+                <th>
+                  <span className="sr-only">Ouvrir</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
               {liste.length === 0 ? (
-                <Tr><Td colSpan={OBLIGATOIRES.length + 5}>Aucun salarié ne correspond à ce filtre.</Td></Tr>
+                <tr>
+                  <td colSpan={OBLIGATOIRES.length + 5} className="empty">
+                    Aucun salarié ne correspond à ce filtre.
+                  </td>
+                </tr>
               ) : (
                 liste.map(({ s, docs, bilan }) => {
                   const resume = resumeDossier(bilan);
+                  const visite = etatVisite(s.visiteMedicaleProchaine, aujourdHui, seuils.visiteMedicale).etat;
                   return (
-                    <Tr key={s.id}>
-                      <Td><strong>{nomComplet(s)}</strong>{s.poste && <span className="text-xs text-muted-foreground"> · {s.poste}</span>}</Td>
+                    <tr key={s.id}>
+                      <td style={{ textAlign: "left" }}>
+                        <strong>{nomComplet(s)}</strong>
+                        {s.poste && (
+                          <>
+                            {" "}
+                            <span className="card-sub">· {s.poste}</span>
+                          </>
+                        )}
+                      </td>
                       {OBLIGATOIRES.map((t) => (
-                        <Td key={t.code} className="text-center"><PastilleRh etat={pastilleDocument(docs, t.code, aujourdHui, seuils.documentLegal)} /></Td>
+                        <td key={t.code} style={{ textAlign: "center" }}>
+                          <PastilleRh etat={pastilleDocument(docs, t.code, aujourdHui, seuils.documentLegal)} />
+                        </td>
                       ))}
-                      <Td className="text-center"><PastilleRh etat={PASTILLE_VISITE[etatVisite(s.visiteMedicaleProchaine, aujourdHui, seuils.visiteMedicale).etat]} /></Td>
-                      <Td>{docs.filter((d) => !OBLIGATOIRES.some((t) => t.code === d.type)).length || "—"}</Td>
-                      <Td>{resume ? <Badge variant="danger">{resume}</Badge> : <Badge variant="succes">Complet</Badge>}</Td>
-                      <Td><Button size="sm" variant="outline" onClick={() => basculer(s.id)}>{salarieOuvert === s.id ? "Fermer" : "Ouvrir"}</Button></Td>
-                    </Tr>
+                      <td style={{ textAlign: "center" }}>
+                        <PastilleRh etat={PASTILLE_VISITE[visite]} titre={TITRE_VISITE[visite]} />
+                      </td>
+                      <td>{docs.filter((d) => !OBLIGATOIRES.some((t) => t.code === d.type)).length || "—"}</td>
+                      <td>{resume ? <span className="badge danger">{resume}</span> : <span className="badge">Complet</span>}</td>
+                      <td>
+                        <button type="button" className="btn small" onClick={() => basculer(s.id)}>
+                          {salarieOuvert === s.id ? "Fermer" : "Ouvrir"}
+                        </button>
+                      </td>
+                    </tr>
                   );
                 })
               )}
-            </TBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">Légende : ✓ au dossier · ~ expire bientôt · ! expiré · ? sans date de fin · ✕ manquant. La colonne 🩺 se corrige depuis l'onglet Visites médicales.</p>
+      <div className="card-sub" style={{ marginTop: "8px" }}>
+        Légende : ✓ au dossier · ~ expire bientôt · ! expiré · ? sans date de fin · ✕ manquant. La colonne 🩺 se corrige depuis l&apos;onglet Visites médicales.
+      </div>
       {ouvert && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>{nomComplet(ouvert.s)} — dossier documentaire</CardTitle>
-            <Button size="sm" variant="ghost" onClick={() => basculer(ouvert.s.id)}>Fermer</Button>
-          </CardHeader>
-          <CardContent>
+        <div className="card" style={{ marginTop: "20px" }}>
+          <div className="card-row">
+            <div className="card-title">{nomComplet(ouvert.s)} — dossier documentaire</div>
+            <button type="button" className="btn small ghost" onClick={() => basculer(ouvert.s.id)}>
+              Fermer
+            </button>
+          </div>
+          <div style={{ marginTop: "10px" }}>
             <SectionDossier salarieId={ouvert.s.id} documents={ouvert.docs} />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }

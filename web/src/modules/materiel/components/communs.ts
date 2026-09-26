@@ -21,7 +21,7 @@ const DELAI_DEFILEMENT_MS = 50;
  */
 export function useDefilerVersFormulaire(idZone: string) {
   useEffect(() => {
-    const t = setTimeout(() => document.getElementById(idZone)?.scrollIntoView({ behavior: "smooth", block: "start" }), DELAI_DEFILEMENT_MS);
+    const t = setTimeout(() => document.getElementById(idZone)?.scrollIntoView?.({ behavior: "smooth", block: "start" }), DELAI_DEFILEMENT_MS);
     return () => clearTimeout(t);
   }, [idZone]);
 }

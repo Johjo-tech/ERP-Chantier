@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { formatDateFr } from "@/lib/dates";
+import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { AVIS_APTITUDE, depasseLePlafondLegal, prochaineVisiteSuggeree, regimeSuivi, REGIMES_SUIVI, schemaSaisieVisite, TYPES_VISITE, type SaisieVisite } from "../domain/visites";
 import { ChoixFichier } from "./communs";
@@ -16,19 +16,18 @@ interface Props {
   echeanceDecidee: boolean;
   nomFichier: string | null;
   enCours: boolean;
-  erreur: string | null;
   onEnregistrer: (saisie: SaisieVisite, fichier: File | null) => void;
   onFermer: () => void;
 }
 
 /**
- * Enregistrer une visite (RH-07). L'échéance est proposée DÈS L'OUVERTURE et
- * suit la date, le type et le régime tant que personne n'y a touché ; le
- * dépassement du plafond légal s'affiche au rendu, sans bloquer : c'est le
- * médecin du travail qui arrête la date.
+ * Enregistrer une visite (RH-07), au HTML de `formVisiteRhHTML` (rh-visites.js
+ * l. 365). L'échéance est proposée DÈS L'OUVERTURE et suit la date, le type et
+ * le régime tant que personne n'y a touché ; le dépassement du plafond légal
+ * s'affiche au rendu, sans bloquer : c'est le médecin du travail qui arrête la date.
  */
-export function FormulaireVisite({ titre, initiales, echeanceDecidee, nomFichier, enCours, erreur, onEnregistrer, onFermer }: Props) {
-  const { valeurs, erreurs, changer, valider } = useFormulaire(initiales);
+export function FormulaireVisite({ titre, initiales, echeanceDecidee, nomFichier, enCours, onEnregistrer, onFermer }: Props) {
+  const { valeurs, changer } = useFormulaire(initiales);
   const [saisieMain, setSaisieMain] = useState(echeanceDecidee);
   const [fichier, setFichier] = useState<File | null>(null);
 
@@ -42,49 +41,64 @@ export function FormulaireVisite({ titre, initiales, echeanceDecidee, nomFichier
 
   function soumettre(e: FormEvent) {
     e.preventDefault();
-    const saisie = valider(schemaSaisieVisite);
-    if (saisie) onEnregistrer(saisie, fichier);
+    const r = schemaSaisieVisite.safeParse(valeurs);
+    if (!r.success) {
+      afficherToast(r.error.issues[0]?.message ?? messageErreur(r.error));
+      return;
+    }
+    onEnregistrer(r.data, fichier);
   }
 
   return (
-    <form onSubmit={soumettre} noValidate aria-label={titre} className="grid gap-3 rounded-md border border-dashed border-border p-3 sm:grid-cols-2">
-      <h4 className="font-semibold sm:col-span-2">{titre}</h4>
-      <ChampTexte libelle="Date de la visite" type="date" valeur={valeurs.dateVisite} onChange={(v) => changerCritere("dateVisite", v)} erreur={erreurs.dateVisite} requis />
-      <ChampChoix libelle="Type de visite" valeur={valeurs.type} onChange={(v) => changerCritere("type", v)} options={TYPES_VISITE.map((t) => ({ valeur: t.code, libelle: `${t.icone} ${t.libelle}` }))} />
-      <ChampChoix
-        libelle="Régime de suivi"
-        valeur={valeurs.suivi}
-        onChange={(v) => changerCritere("suivi", v)}
-        options={REGIMES_SUIVI.map((r) => ({ valeur: r.code, libelle: r.libelle }))}
-        aide={regimeSuivi(valeurs.suivi).reference}
-      />
-      <ChampChoix libelle="Avis d'aptitude" valeur={valeurs.avis} onChange={(v) => changer("avis", v)} options={[{ valeur: "", libelle: "— Non rendu —" }, ...AVIS_APTITUDE.map((a) => ({ valeur: a.code, libelle: a.libelle }))]} />
-      <ChampTexte libelle="Service de santé au travail" valeur={valeurs.organisme} onChange={(v) => changer("organisme", v)} placeholder="Ex : AIST, APST BTP…" />
-      <ChampTexte libelle="Médecin" valeur={valeurs.medecin} onChange={(v) => changer("medecin", v)} />
-      <ChampTexte
-        libelle="Prochaine visite"
-        type="date"
-        valeur={valeurs.prochaineVisite}
-        onChange={(v) => {
-          setSaisieMain(true);
-          changer("prochaineVisite", v);
-        }}
-        erreur={erreurs.prochaineVisite}
-        aide={verdict?.depasse ? <span className="text-destructive">Au-delà du délai maximal ({formatDateFr(verdict.plafond)}, {verdict.regime.reference}).</span> : undefined}
-      />
-      <div className="sm:col-span-2">
-        <ChampTexte libelle="Réserves et aménagements" valeur={valeurs.reserves} onChange={(v) => changer("reserves", v)} placeholder="Ex : pas de port de charge supérieure à 15 kg" />
+    <form className="form-panel" style={{ marginTop: "12px" }} onSubmit={soumettre} noValidate aria-label={titre}>
+      <h3>{titre}</h3>
+      <div className="field-grid">
+        <ChampTexte libelle="Date de la visite" type="date" valeur={valeurs.dateVisite} onChange={(v) => changerCritere("dateVisite", v)} />
+        <ChampChoix libelle="Type de visite" valeur={valeurs.type} onChange={(v) => changerCritere("type", v)} options={TYPES_VISITE.map((t) => ({ valeur: t.code, libelle: `${t.icone} ${t.libelle}` }))} />
+        <div className="field">
+          <label htmlFor="visRh_suivi">Régime de suivi</label>
+          <select id="visRh_suivi" value={valeurs.suivi} onChange={(e) => changerCritere("suivi", e.target.value)}>
+            {REGIMES_SUIVI.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.libelle}
+              </option>
+            ))}
+          </select>
+          <div className="card-sub" style={{ marginTop: "4px" }}>
+            {regimeSuivi(valeurs.suivi).reference}
+          </div>
+        </div>
+        <ChampChoix libelle="Avis d'aptitude" valeur={valeurs.avis} onChange={(v) => changer("avis", v)} options={[{ valeur: "", libelle: "— Non rendu —" }, ...AVIS_APTITUDE.map((a) => ({ valeur: a.code, libelle: a.libelle }))]} />
+        <ChampTexte libelle="Service de santé au travail" valeur={valeurs.organisme} onChange={(v) => changer("organisme", v)} placeholder="Ex : AIST, APST BTP…" />
+        <ChampTexte libelle="Médecin" valeur={valeurs.medecin} onChange={(v) => changer("medecin", v)} />
+        <div className="field">
+          <label htmlFor="visRh_prochaineVisite">Prochaine visite</label>
+          <input
+            type="date"
+            id="visRh_prochaineVisite"
+            value={valeurs.prochaineVisite}
+            onChange={(e) => {
+              setSaisieMain(true);
+              changer("prochaineVisite", e.target.value);
+            }}
+          />
+          <div className="card-sub" style={{ marginTop: "4px", color: verdict?.depasse ? "#a30f22" : undefined }}>
+            {verdict?.depasse ? `Au-delà du délai maximal (${formatDateFr(verdict.plafond)}, ${verdict.regime.reference}).` : ""}
+          </div>
+        </div>
+        <ChampTexte className="full" libelle="Réserves et aménagements" valeur={valeurs.reserves} onChange={(v) => changer("reserves", v)} placeholder="Ex : pas de port de charge supérieure à 15 kg" />
+        <ChampTexte className="full" libelle="Notes" valeur={valeurs.notes} onChange={(v) => changer("notes", v)} />
       </div>
-      <div className="sm:col-span-2">
-        <ChampTexte libelle="Notes" valeur={valeurs.notes} onChange={(v) => changer("notes", v)} />
-      </div>
-      <div className="sm:col-span-2">
+      <div className="achat-salarie-zone">
         <ChoixFichier libelle={nomFichier ? "Remplacer l'attestation" : "Joindre l'attestation"} onFichiers={(f) => setFichier(f[0] ?? null)} nomActuel={fichier?.name ?? nomFichier} />
       </div>
-      {erreur && <Alert variant="erreur" className="sm:col-span-2">{erreur}</Alert>}
-      <div className="flex gap-2 sm:col-span-2">
-        <Button type="submit" disabled={enCours}>{enCours ? "Enregistrement…" : "Enregistrer la visite"}</Button>
-        <Button variant="ghost" onClick={onFermer}>Annuler</Button>
+      <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
+        <button type="submit" className="btn primary" disabled={enCours}>
+          Enregistrer
+        </button>
+        <button type="button" className="btn ghost" onClick={onFermer}>
+          Annuler
+        </button>
       </div>
     </form>
   );

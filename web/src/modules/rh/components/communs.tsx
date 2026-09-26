@@ -1,71 +1,84 @@
-import { useId, useState, type ChangeEvent } from "react";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useId, type ChangeEvent } from "react";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { refusPieceJointe } from "@/modules/commandes/domain/pieceJointe";
 import type { Pastille } from "../domain/documents";
 import { useLienPiece } from "../hooks/useRh";
 
 const PASTILLES: Record<Pastille, { signe: string; titre: string; classe: string }> = {
-  ok: { signe: "✓", titre: "Au dossier", classe: "bg-success/15 text-success" },
-  bientot: { signe: "~", titre: "Expire bientôt", classe: "bg-warning/25 text-foreground" },
-  sansDate: { signe: "?", titre: "Sans date de fin de validité", classe: "bg-warning/25 text-foreground" },
-  expire: { signe: "!", titre: "Expiré", classe: "bg-destructive/15 text-destructive" },
-  manquant: { signe: "✕", titre: "Manquant", classe: "bg-destructive/15 text-destructive" },
+  ok: { signe: "✓", titre: "Au dossier", classe: "ok" },
+  bientot: { signe: "~", titre: "Expire bientôt", classe: "bientot" },
+  sansDate: { signe: "?", titre: "Sans date de fin de validité", classe: "bientot" },
+  expire: { signe: "!", titre: "Expiré", classe: "expire" },
+  manquant: { signe: "✕", titre: "Manquant", classe: "manquant" },
 };
 
-/** Une case du tableau de conformité : le signe se lit, le titre se dit (lecteur d'écran). */
+/** Une case du tableau de conformité (`.doc-rh-pastille` de l'ancien) : le signe se lit, le titre se dit. */
 export function PastilleRh({ etat, titre }: { etat: Pastille; titre?: string }) {
   const p = PASTILLES[etat];
   return (
-    <span role="img" aria-label={titre ?? p.titre} title={titre ?? p.titre} className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-bold ${p.classe}`}>
+    <span role="img" aria-label={titre ?? p.titre} title={titre ?? p.titre} className={`doc-rh-pastille ${p.classe}`}>
       {p.signe}
     </span>
   );
 }
 
 /**
- * Choisir un fichier : PDF, JPEG, PNG ou WebP (mêmes règles que toute pièce
- * jointe — un seul refus possible, les mêmes mots pour l'expliquer).
+ * Choisir un fichier, au geste de l'ancien écran : un `<label class="btn small">📎 …`
+ * qui porte l'`<input type=file>` caché, le nom retenu à côté (`.card-sub`). Les règles
+ * sont celles de toute pièce jointe (PDF, JPEG, PNG ou WebP) ; un refus se dit par la
+ * bulle, comme `verifierPieceJointe` + `showToast`.
  */
-export function ChoixFichier({ libelle, onFichiers, multiple = false, nomActuel }: { libelle: string; onFichiers: (f: File[]) => void; multiple?: boolean; nomActuel?: string | null | undefined }) {
+export function ChoixFichier({
+  libelle,
+  onFichiers,
+  multiple = false,
+  nomActuel,
+  primaire = false,
+  sansNom = false,
+}: {
+  libelle: string;
+  onFichiers: (f: File[]) => void;
+  multiple?: boolean;
+  nomActuel?: string | null | undefined;
+  primaire?: boolean;
+  /** Le bouton seul, sans le nom à côté (habilitations). */
+  sansNom?: boolean;
+}) {
   const id = useId();
-  const [refus, setRefus] = useState<string | null>(null);
   function choisir(e: ChangeEvent<HTMLInputElement>) {
     const fichiers = Array.from(e.target.files ?? []);
     e.target.value = "";
-    const motifs: string[] = [];
     const acceptes: File[] = [];
     for (const f of fichiers) {
       const motif = refusPieceJointe(f);
-      if (motif) motifs.push(`${f.name} : ${motif}`);
+      if (motif) afficherToast(motif);
       else acceptes.push(f);
     }
-    setRefus(motifs.length ? motifs.join(" ") : null);
     // En un seul appel : plusieurs appels successifs liraient chacun la liste d'avant.
     if (acceptes.length) onFichiers(acceptes);
   }
   return (
-    <span className="inline-flex flex-wrap items-center gap-2">
-      <label htmlFor={id} className="inline-flex h-8 cursor-pointer items-center rounded-md bg-secondary px-3 text-xs font-medium hover:bg-secondary/80">
+    <>
+      <label htmlFor={id} className={`btn small${primaire ? " primary" : ""}`} style={{ cursor: "pointer" }}>
         📎 {libelle}
+        <input id={id} type="file" accept=".pdf,image/*" multiple={multiple} style={{ display: "none" }} onChange={choisir} />
       </label>
-      <input id={id} type="file" accept=".pdf,image/*" multiple={multiple} className="sr-only" onChange={choisir} />
-      <span className="text-xs text-muted-foreground">{nomActuel || "PDF, JPEG, PNG ou WebP"}</span>
-      {refus && (
-        <span role="alert" className="text-xs text-destructive">
-          {refus}
-        </span>
-      )}
-    </span>
+      {!sansNom && <span className="card-sub">{nomActuel || "PDF, JPEG, PNG ou WebP"}</span>}
+    </>
   );
 }
 
-/** Ouvrir une pièce du seau privé : la fenêtre s'ouvre pendant le clic (sinon bloquée), le lien signé la remplit ensuite. */
-export function BoutonPiece({ chemin, libelle = "📎 Ouvrir" }: { chemin: string | null; libelle?: string }) {
+/** Ouvrir une pièce du seau privé (`📎 Ouvrir`, bouton fantôme de l'ancien) : la fenêtre s'ouvre pendant le clic, le lien signé la remplit ensuite. */
+export function BoutonPiece({ chemin, libelle = "📎 Ouvrir", absent = "sans fichier" }: { chemin: string | null; libelle?: string; absent?: string }) {
   const lien = useLienPiece();
-  if (!chemin) return <span className="text-xs text-muted-foreground">sans fichier</span>;
+  if (!chemin) {
+    return (
+      <span className="card-sub" title="Ligne enregistrée sans fichier joint">
+        {absent}
+      </span>
+    );
+  }
   function ouvrir() {
     if (!chemin) return;
     const fenetre = window.open("", "_blank");
@@ -77,59 +90,49 @@ export function BoutonPiece({ chemin, libelle = "📎 Ouvrir" }: { chemin: strin
       onError: (e) => {
         console.error("Pièce illisible", chemin, e);
         fenetre?.close();
+        afficherToast(`Le document n'a pas pu être ouvert : ${messageErreur(e)}`);
       },
     });
   }
   return (
-    <span className="inline-flex flex-col">
-      <Button size="sm" variant="ghost" onClick={ouvrir} disabled={lien.isPending}>
-        {libelle}
-      </Button>
-      {lien.isError && <span role="alert" className="text-xs text-destructive">Le document n'a pas pu être ouvert : {messageErreur(lien.error)}</span>}
-    </span>
+    <button type="button" className="btn small ghost" onClick={ouvrir} disabled={lien.isPending}>
+      {libelle}
+    </button>
   );
 }
 
-/** Cases à cocher des métiers du référentiel (équipes, sous-traitants), en conservant un métier retiré depuis. */
+/**
+ * Les cases des métiers (`metierCheckboxesHTML`, app.js l. 18730) : `.metier-checkbox-list`
+ * de `.metier-checkbox-item`. Un métier coché mais retiré du référentiel depuis reste
+ * proposé — le décocher sans le voir l'effacerait au premier enregistrement.
+ */
 export function CasesMetiers({ legende, referentiel, coches, onChange }: { legende: string; referentiel: readonly string[]; coches: readonly string[]; onChange: (m: string[]) => void }) {
   const tous = [...referentiel, ...coches.filter((c) => !referentiel.includes(c))];
+  if (!tous.length) return <div className="empty">Aucun métier créé pour l&apos;instant (Réglages → Métiers).</div>;
   return (
-    <fieldset className="flex flex-col gap-1">
-      <legend className="text-sm font-medium">{legende}</legend>
-      {tous.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Aucun métier au référentiel (Réglages › Listes de choix).</p>
-      ) : (
-        <div className="flex flex-wrap gap-3">
-          {tous.map((m) => (
-            <label key={m} className="inline-flex items-center gap-1 text-sm">
-              <input type="checkbox" checked={coches.includes(m)} onChange={(e) => onChange(e.target.checked ? [...coches, m] : coches.filter((c) => c !== m))} />
-              {m}
-            </label>
-          ))}
-        </div>
-      )}
-    </fieldset>
+    <div className="metier-checkbox-list" role="group" aria-label={legende}>
+      {tous.map((m) => (
+        <label key={m} className="metier-checkbox-item">
+          <input type="checkbox" value={m} checked={coches.includes(m)} onChange={(e) => onChange(e.target.checked ? [...coches, m] : coches.filter((c) => c !== m))} />
+          <span>{m}</span>
+        </label>
+      ))}
+    </div>
   );
 }
 
-/** Un bandeau d'avertissements rédigés (ce qui n'a pas suivi la fiche). */
+/** Ce qui n'a pas suivi la fiche : l'encadré d'alerte de l'ancien écran (`.wf-banner.alerte`). */
 export function Avertissements({ messages }: { messages: readonly string[] }) {
   if (!messages.length) return null;
   return (
-    <Alert variant="erreur">
-      <ul className="list-disc pl-4">
-        {messages.map((m) => (
-          <li key={m}>{m}</li>
-        ))}
-      </ul>
-    </Alert>
+    <div role="alert" className="wf-banner alerte" style={{ marginTop: "12px" }}>
+      {messages.map((m) => (
+        <div key={m}>{m}</div>
+      ))}
+    </div>
   );
 }
 
 export function BadgeEcheance({ niveau, jours, date }: { niveau: "expire" | "bientot"; jours: number; date?: string }) {
-  return niveau === "expire" ? (
-    <Badge variant="danger">Expiré{date ? ` le ${date}` : ""}</Badge>
-  ) : (
-    <Badge variant="alerte">Expire dans {jours} j</Badge>
-  );
+  return niveau === "expire" ? <span className="badge danger">Expiré{date ? ` le ${date}` : ""}</span> : <span className="badge warn">Expire dans {jours} j</span>;
 }

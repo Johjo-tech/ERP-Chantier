@@ -1,30 +1,24 @@
-import { useState, type FormEvent } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BoutonConfirme } from "@/components/ui/confirmation";
+import { useId, useState, type CSSProperties } from "react";
+import { Chargement, Erreur } from "@/components/etats/Etats";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { erreursParChamp } from "@/lib/validation";
+import { afficherToast } from "@/lib/toast";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
-import { useInfosEntreprise, useLienFichier, useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
 import { SEUILS_DEFAUT } from "@/modules/societes/domain/reglages-societe";
+import { useInfosEntreprise, useLienFichier, useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
 import type { DocumentLegal } from "../api/documentsLegaux";
-import {
-  TAILLE_MAX_PIECE,
-  TYPES_DOCUMENTS_LEGAUX,
-  documentsHerites,
-  etatEcheance,
-  libelleEcheance,
-  schemaSaisieDocumentLegal,
-  trierParEcheance,
-} from "../domain/documents-legaux";
+import { TAILLE_MAX_PIECE, TYPES_DOCUMENTS_LEGAUX, documentsHerites, etatEcheance, libelleEcheance, schemaSaisieDocumentLegal, trierParEcheance } from "../domain/documents-legaux";
 import { useAjouterDocumentLegal, useDocumentsLegaux, useSupprimerDocumentLegal } from "../hooks/useReglagesEcran";
 
-/** Kbis, assurances, attestations — avec alerte avant expiration (SOC-09). */
+/** Vert tant que la pièce vaut, orangé à l'approche, rouge une fois expirée (`renderDocumentsLegauxSection`). */
+const COULEURS = { aucune: "#5BC97A", valide: "#5BC97A", bientot: "#F0A82E", expire: "#EF5A6F" } as const;
+
+/**
+ * Kbis, assurances, attestations — avec alerte avant expiration (SOC-09), au
+ * HTML de `renderDocumentsLegauxSection` (app.js l. 13026). La date d'émission
+ * de l'ancienne ligne d'ajout n'a pas de colonne (D-SOC-14) : seule l'échéance
+ * se saisit ; le seuil est celui des réglages RH (D-RH-04).
+ */
 export function SectionDocumentsLegaux() {
   const docs = useDocumentsLegaux();
   const reglages = useReglagesSociete();
@@ -34,41 +28,32 @@ export function SectionDocumentsLegaux() {
   const herites = documentsHerites(infos.data);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Documents légaux de l'entreprise</CardTitle>
-        <p className="text-sm text-muted-foreground">Alerte à {seuil} jours de l'échéance (réglable dans Référentiels › RH).</p>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {modifiable && <FormulaireAjout />}
+    <div className="card" style={{ marginTop: "22px" }}>
+      <div className="card-title" style={{ marginBottom: "4px" }}>
+        📑 Documents légaux de l&apos;entreprise
+      </div>
+      <div className="card-sub" style={{ marginBottom: "14px" }}>
+        KBIS, assurances, attestations — avec alerte automatique avant expiration.
+      </div>
+      {modifiable && <LigneAjout />}
+      <div className="achats-list" style={{ marginTop: "10px" }}>
         {docs.isPending ? (
           <Chargement />
         ) : docs.isError ? (
           <Erreur erreur={docs.error} reessayer={() => void docs.refetch()} />
         ) : docs.data.length === 0 ? (
-          <Vide message="Aucun document légal enregistré." />
+          <div className="empty">Aucun document légal enregistré.</div>
         ) : (
-          <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-            {trierParEcheance(docs.data).map((d) => (
-              <LigneDocument key={d.id} doc={d} seuil={seuil} modifiable={modifiable} />
-            ))}
-          </ul>
+          trierParEcheance(docs.data).map((d) => <LigneDocument key={d.id} doc={d} seuil={seuil} modifiable={modifiable} />)
         )}
-        {herites.length > 0 && (
-          <div className="text-sm">
-            <p className="font-medium">Repris de l'ancienne application (à redéposer ici)</p>
-            <ul className="list-disc pl-5 text-muted-foreground">
-              {herites.map((h, i) => (
-                <li key={h.id ?? i}>
-                  {h.type ?? "Document"}
-                  {h.dateExpiration ? ` — expire le ${formatDateFr(h.dateExpiration)}` : ""}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      {herites.length > 0 && (
+        <div className="card-sub" style={{ marginTop: "10px" }}>
+          Repris de l&apos;ancienne application (à redéposer ici) :{" "}
+          {herites.map((h) => `${h.type ?? "Document"}${h.dateExpiration ? ` — expire le ${formatDateFr(h.dateExpiration)}` : ""}`).join(" · ")}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -77,76 +62,99 @@ function LigneDocument({ doc, seuil, modifiable }: { doc: DocumentLegal; seuil: 
   const lien = useLienFichier(doc.fichier_chemin);
   const etat = etatEcheance(doc.date_validite, todayISO(), seuil);
   const badge = libelleEcheance(etat);
+  const c = COULEURS[etat.niveau];
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-      <div>
-        <p className="font-medium">
+    <div className="achat-row" style={{ "--cat-color": c } as CSSProperties}>
+      <div className="achat-row-icon" style={{ background: `${c}22`, color: c }}>
+        📑
+      </div>
+      <div className="achat-row-main">
+        <div className="achat-designation">
           {doc.type ?? doc.nom}
-          {doc.nom !== doc.type && doc.type ? ` — ${doc.nom}` : ""}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {doc.date_validite ? `Valable jusqu'au ${formatDateFr(doc.date_validite)}` : "Sans date de validité"}
-          {badge && (
-            <Badge className="ml-2" variant={etat.niveau === "expire" ? "danger" : "alerte"}>
-              {badge}
-            </Badge>
+          {doc.fichier_chemin && lien.data && (
+            <>
+              {" · "}
+              <a href={lien.data} target="_blank" rel="noreferrer">
+                📎 voir
+              </a>
+            </>
           )}
-        </p>
-        {supprimer.isError && <p className="text-xs text-destructive">{messageErreur(supprimer.error)}</p>}
+        </div>
+        <div className="achat-date">
+          {doc.date_validite ? ` · expire le ${formatDateFr(doc.date_validite)}` : ""}
+          {badge && (
+            <>
+              {" "}
+              <span className={`badge ${etat.niveau === "expire" ? "danger" : "warn"}`}>{badge}</span>
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex gap-2">
-        {doc.fichier_chemin && lien.data && (
-          <Button asChild variant="outline" size="sm">
-            <a href={lien.data} target="_blank" rel="noreferrer">
-              Voir {doc.fichier_nom ?? "le fichier"}
-            </a>
-          </Button>
-        )}
-        {modifiable && <BoutonConfirme libelle="Supprimer" question="Supprimer ce document ?" enCours={supprimer.isPending} onConfirmer={() => supprimer.mutate(doc)} />}
-      </div>
-    </li>
+      {modifiable && (
+        <button
+          type="button"
+          className="btn small danger"
+          aria-label={`Supprimer ${doc.type ?? doc.nom}`}
+          disabled={supprimer.isPending}
+          onClick={() => {
+            if (window.confirm("Supprimer ce document ?")) supprimer.mutate(doc, { onError: (e) => afficherToast(messageErreur(e)) });
+          }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
   );
 }
 
-function FormulaireAjout() {
+/** La ligne `.entretien-add-row` : type, échéance, fichier, « + Ajouter ». */
+function LigneAjout() {
   const ajouter = useAjouterDocumentLegal();
-  const [valeurs, setValeurs] = useState({ type: TYPES_DOCUMENTS_LEGAUX[0] as string, nom: "", date_validite: "" });
+  const idFichier = useId();
+  const [type, setType] = useState<string>(TYPES_DOCUMENTS_LEGAUX[0]);
+  const [validite, setValidite] = useState("");
   const [fichier, setFichier] = useState<File | null>(null);
-  const [erreurs, setErreurs] = useState<Record<string, string>>({});
 
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
-    const r = schemaSaisieDocumentLegal.safeParse(valeurs);
-    if (!r.success) return setErreurs(erreursParChamp(r.error));
-    if (fichier && fichier.size > TAILLE_MAX_PIECE) return setErreurs({ fichier: "Le fichier dépasse 10 Mo." });
-    setErreurs({});
+  function envoyer() {
+    const r = schemaSaisieDocumentLegal.safeParse({ type, nom: "", date_validite: validite });
+    if (!r.success) {
+      afficherToast(r.error.issues[0]?.message ?? "Saisie invalide.");
+      return;
+    }
+    if (fichier && fichier.size > TAILLE_MAX_PIECE) {
+      afficherToast("Le fichier dépasse 10 Mo.");
+      return;
+    }
     ajouter.mutate(
       { saisie: r.data, fichier },
       {
         onSuccess: () => {
-          setValeurs((v) => ({ ...v, nom: "", date_validite: "" }));
+          setValidite("");
           setFichier(null);
+          afficherToast("Document légal enregistré.", "success");
         },
+        onError: (e) => afficherToast(messageErreur(e)),
       }
     );
   }
 
   return (
-    <form onSubmit={soumettre} noValidate className="grid gap-3 rounded-md border border-dashed border-border p-3 sm:grid-cols-2">
-      <ChampChoix libelle="Type" valeur={valeurs.type} onChange={(v) => setValeurs((x) => ({ ...x, type: v }))} options={TYPES_DOCUMENTS_LEGAUX.map((t) => ({ valeur: t, libelle: t }))} />
-      <ChampTexte libelle="Intitulé (facultatif)" valeur={valeurs.nom} onChange={(v) => setValeurs((x) => ({ ...x, nom: v }))} />
-      <ChampTexte libelle="Valable jusqu'au" type="date" valeur={valeurs.date_validite} onChange={(v) => setValeurs((x) => ({ ...x, date_validite: v }))} erreur={erreurs.date_validite} />
-      <div className="flex flex-col gap-1.5 text-sm">
-        <label htmlFor="piece-legale">Fichier (PDF ou image)</label>
-        <input id="piece-legale" type="file" accept=".pdf,image/*" onChange={(e) => setFichier(e.target.files?.[0] ?? null)} />
-        {erreurs.fichier && <p className="text-xs text-destructive">{erreurs.fichier}</p>}
-      </div>
-      {ajouter.isError && <Alert variant="erreur" className="sm:col-span-2">{messageErreur(ajouter.error)}</Alert>}
-      <div className="sm:col-span-2">
-        <Button type="submit" disabled={ajouter.isPending}>
-          {ajouter.isPending ? "Ajout…" : "Ajouter le document"}
-        </Button>
-      </div>
-    </form>
+    <div className="entretien-add-row" role="group" aria-label="Ajouter un document légal">
+      <select id="docLegalType" aria-label="Type" value={type} onChange={(e) => setType(e.target.value)}>
+        {TYPES_DOCUMENTS_LEGAUX.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+      <input type="date" id="docLegalExpiration" aria-label="Date d'expiration (si applicable)" placeholder="Date d'expiration (si applicable)" value={validite} onChange={(e) => setValidite(e.target.value)} />
+      <label className="btn small" style={{ cursor: "pointer" }} htmlFor={idFichier} title={fichier?.name}>
+        📎 Fichier
+        <input type="file" id={idFichier} accept=".pdf,image/*" style={{ display: "none" }} onChange={(e) => setFichier(e.target.files?.[0] ?? null)} />
+      </label>
+      <button type="button" className="btn primary" disabled={ajouter.isPending} onClick={envoyer}>
+        + Ajouter
+      </button>
+    </div>
   );
 }

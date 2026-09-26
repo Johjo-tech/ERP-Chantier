@@ -1,8 +1,5 @@
 import { useState } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
+import { Erreur } from "@/components/etats/Etats";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { nomComplet } from "../domain/salarie";
 import { avisAptitude, etatVisite, trierVisites, typeVisite, type EtatVisite } from "../domain/visites";
@@ -12,12 +9,15 @@ import { PastilleRh } from "./communs";
 import { SectionVisites } from "./SectionVisites";
 
 const PASTILLE = { inconnue: "manquant", depassee: "expire", bientot: "bientot", aJour: "ok" } as const;
-const COULEUR_AVIS = { ok: "text-success", warn: "text-foreground", danger: "text-destructive" } as const;
+const TITRE = { inconnue: "Aucune visite enregistrée", depassee: "Échéance dépassée", bientot: "Échéance proche", aJour: "Suivi à jour" } as const;
+/** Les couleurs de l'avis rendu (`renderRHVisites`) : inapte en rouge, réserves en orangé, apte en vert. */
+const COULEUR_AVIS = { ok: "#15803d", warn: "#a56200", danger: "#a30f22" } as const;
 
 /**
- * Le registre des visites médicales de la société (RH-07). L'échéance de la
- * dernière visite pilote l'alerte ; le seuil est celui du médical (Réglages ›
- * RH, 45 j par défaut), pas celui des documents.
+ * Le registre des visites médicales de la société (RH-07), au HTML de
+ * `renderRHVisites` (rh-visites.js l. 578). L'échéance de la dernière visite
+ * pilote l'alerte ; le seuil est celui du médical (Réglages › RH, 45 j par
+ * défaut), pas celui des documents.
  */
 export function OngletVisites() {
   const salaries = useSalariesRh();
@@ -26,14 +26,20 @@ export function OngletVisites() {
   const [filtre, setFiltre] = useState<EtatVisite | "">("");
   const [ouvert, setOuvert] = useState<string | null>(null);
 
-  if (salaries.isPending || visites.isPending) return <Chargement libelle="Chargement du registre des visites…" />;
   const erreur = salaries.error ?? visites.error;
   if (erreur) return <Erreur erreur={erreur} reessayer={() => void Promise.all([salaries.refetch(), visites.refetch()])} />;
+  if (!salaries.isSuccess || !visites.isSuccess) {
+    return (
+      <div className="empty" data-chargement="oui" role="status">
+        Chargement du registre des visites…
+      </div>
+    );
+  }
 
   const aujourdHui = todayISO();
-  const lignes = (salaries.data ?? []).map((s) => ({
+  const lignes = salaries.data.map((s) => ({
     s,
-    visites: trierVisites((visites.data ?? []).filter((v) => v.salarieId === s.id)),
+    visites: trierVisites(visites.data.filter((v) => v.salarieId === s.id)),
     etat: etatVisite(s.visiteMedicaleProchaine, aujourdHui, seuils.visiteMedicale).etat,
   }));
   const compte = (e: EtatVisite) => lignes.filter((l) => l.etat === e).length;
@@ -48,68 +54,99 @@ export function OngletVisites() {
   ];
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">Suivi en santé au travail : embauche, périodique, reprise. L'échéance de la dernière visite pilote l'alerte.</p>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer par état du suivi">
+    <>
+      <div className="page-head">
+        <h1>Visites médicales</h1>
+      </div>
+      <div className="card-sub" style={{ marginBottom: "14px" }}>
+        Suivi en santé au travail : embauche, périodique, reprise. L&apos;échéance de la dernière visite pilote l&apos;alerte, et remplace les deux dates autrefois saisies sur la fiche.
+      </div>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "18px", flexWrap: "wrap" }} role="group" aria-label="Filtrer par état du suivi">
         {filtres.map((x) => (
-          <Button key={x.f} size="sm" variant={filtre === x.f ? "default" : "outline"} aria-pressed={filtre === x.f} onClick={() => setFiltre(x.f)}>
+          <button key={x.f} type="button" className={`btn small ${filtre === x.f ? "primary" : ""}`} aria-pressed={filtre === x.f} onClick={() => setFiltre(x.f)}>
             {x.libelle}
-          </Button>
+          </button>
         ))}
       </div>
       {lignes.length === 0 ? (
-        <Vide message="Aucun salarié pour cette société." />
+        <div className="empty">Aucun salarié pour cette société.</div>
       ) : (
-        <div className="overflow-x-auto">
-          <Table>
-            <THead>
-              <Tr>
-                <Th>Salarié</Th>
-                <Th><span className="sr-only">État</span></Th>
-                <Th>Dernière visite</Th>
-                <Th>Type</Th>
-                <Th>Avis</Th>
-                <Th>Prochaine</Th>
-                <Th>Historique</Th>
-                <Th><span className="sr-only">Ouvrir</span></Th>
-              </Tr>
-            </THead>
-            <TBody>
+        <div className="vehicule-liste-wrap">
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left" }}>Salarié</th>
+                <th>
+                  <span className="sr-only">État</span>
+                </th>
+                <th>Dernière visite</th>
+                <th>Type</th>
+                <th>Avis</th>
+                <th>Prochaine</th>
+                <th>Historique</th>
+                <th>
+                  <span className="sr-only">Ouvrir</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
               {liste.length === 0 ? (
-                <Tr><Td colSpan={8}>Aucun salarié ne correspond à ce filtre.</Td></Tr>
+                <tr>
+                  <td colSpan={8} className="empty">
+                    Aucun salarié ne correspond à ce filtre.
+                  </td>
+                </tr>
               ) : (
                 liste.map(({ s, visites: vs, etat }) => {
                   const derniere = vs[0] ?? null;
                   const avis = derniere ? avisAptitude(derniere.avis) : null;
                   return (
-                    <Tr key={s.id}>
-                      <Td><strong>{nomComplet(s)}</strong>{s.poste && <span className="text-xs text-muted-foreground"> · {s.poste}</span>}</Td>
-                      <Td className="text-center"><PastilleRh etat={PASTILLE[etat]} /></Td>
-                      <Td>{derniere ? formatDateFr(derniere.dateVisite) : "—"}</Td>
-                      <Td>{derniere ? typeVisite(derniere.type).libelle : "—"}</Td>
-                      <Td className={avis ? `font-semibold ${COULEUR_AVIS[avis.gravite]}` : ""}>{avis ? avis.libelle : "—"}</Td>
-                      <Td><EcheanceVisite prochaine={s.visiteMedicaleProchaine} seuil={seuils.visiteMedicale} /></Td>
-                      <Td>{vs.length || "—"}</Td>
-                      <Td><Button size="sm" variant="outline" onClick={() => setOuvert(ouvert === s.id ? null : s.id)}>{ouvert === s.id ? "Fermer" : "Ouvrir"}</Button></Td>
-                    </Tr>
+                    <tr key={s.id}>
+                      <td style={{ textAlign: "left" }}>
+                        <strong>{nomComplet(s)}</strong>
+                        {s.poste && (
+                          <>
+                            {" "}
+                            <span className="card-sub">· {s.poste}</span>
+                          </>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <PastilleRh etat={PASTILLE[etat]} titre={TITRE[etat]} />
+                      </td>
+                      <td>{derniere ? formatDateFr(derniere.dateVisite) : "—"}</td>
+                      <td>{derniere ? typeVisite(derniere.type).libelle : "—"}</td>
+                      <td style={avis ? { color: COULEUR_AVIS[avis.gravite], fontWeight: 700 } : undefined}>{avis ? avis.libelle : "—"}</td>
+                      <td>
+                        <EcheanceVisite prochaine={s.visiteMedicaleProchaine} seuil={seuils.visiteMedicale} />
+                      </td>
+                      <td>{vs.length || "—"}</td>
+                      <td>
+                        <button type="button" className="btn small" onClick={() => setOuvert(ouvert === s.id ? null : s.id)}>
+                          {ouvert === s.id ? "Fermer" : "Ouvrir"}
+                        </button>
+                      </td>
+                    </tr>
                   );
                 })
               )}
-            </TBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       )}
       {choisi && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>{nomComplet(choisi.s)} — suivi médical</CardTitle>
-            <Button size="sm" variant="ghost" onClick={() => setOuvert(null)}>Fermer</Button>
-          </CardHeader>
-          <CardContent>
+        <div className="card" style={{ marginTop: "20px" }}>
+          <div className="card-row">
+            <div className="card-title">{nomComplet(choisi.s)} — suivi médical</div>
+            <button type="button" className="btn small ghost" onClick={() => setOuvert(null)}>
+              Fermer
+            </button>
+          </div>
+          <div style={{ marginTop: "10px" }}>
             <SectionVisites salarieId={choisi.s.id} visites={choisi.visites} prochaine={choisi.s.visiteMedicaleProchaine} />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }
