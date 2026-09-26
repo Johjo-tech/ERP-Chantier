@@ -82,9 +82,17 @@ function journeesDuBon(b: Pick<BonLu, "date_planifiee">, taches: readonly TacheD
   return [origine, ...autres.map((date) => ({ date, fait: taches.filter((t) => t.date_tache === date).every(faite) }))];
 }
 
-/** Le tentatives de contact sont un TABLEAU jsonb : l'ancien écran en lisait `parseInt`, toujours NaN (STA-20). */
+const DECIMAL = 10;
+
+/**
+ * Le nombre de tentatives TEL QUE L'ANCIEN LE LISAIT : `parseInt` du champ.
+ * Les tentatives sont un TABLEAU jsonb d'objets, que `parseInt` lit comme
+ * « [object Object] » : NaN, donc 0 — un locataire n'est jamais « injoignable ».
+ * Défaut conservé sur décision du client (D-STA-A-01, DEF-STA-12) ; la
+ * correction (compter le tableau) est dans l'historique de ce fichier.
+ */
 export function nombreDeTentatives(brut: unknown): number {
-  return Array.isArray(brut) ? brut.length : 0;
+  return parseInt(String(brut), DECIMAL) || 0;
 }
 
 export function avancementDuBon(b: BonLu, taches: readonly TacheDuBon[], factureLiee: boolean): BonConducteur {
@@ -165,7 +173,7 @@ export function statsConducteur(bons: readonly BonConducteur[], jour: string, se
   const limiteRdv = ajouterJours(jour, -seuilRdv);
   const ouverts = bons.filter((b) => !circuitTermine(b));
   const aRappeler = ouverts.filter((b) => !!b.rappel_date && b.rappel_date <= jour);
-  // Corrigé (STA-20) : le seuil se compare au NOMBRE de tentatives.
+  // Comme l'ancien (DEF-STA-12) : `nbTentatives` vaut 0 pour tout tableau, la liste reste vide.
   const injoignables = ouverts.filter((b) => !b.date_planifiee && b.nbTentatives >= CONDUCTEUR.tentativesInjoignable);
 
   // Les chiffres de la période ne portent que sur ce qui s'est TERMINÉ : une

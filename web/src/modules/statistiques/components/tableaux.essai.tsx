@@ -1,29 +1,29 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { todayISO } from "@/lib/dates";
-import { montant } from "@/lib/money";
 import { bonEssai as bonCommandes } from "@/modules/commandes/essai-fixtures";
 import { circuitDuBon } from "@/modules/commandes/domain/workflow";
-import { bonEssai as bonPlanning, EQUIPE_A, tacheEssai } from "@/modules/planning/domain/fabrique.essai-aide";
+import { bonEssai as bonPlanning, EQUIPE_A, ST_A, tacheEssai } from "@/modules/planning/domain/fabrique.essai-aide";
 import { rendreAvecSession } from "@/test/session-factice";
 import { avancementDuBon } from "../domain/conducteur";
+import type { FacturePilotage } from "../domain/ancien/pilotage";
 import { TableauDeBord } from "./TableauDeBord";
 import { PageStatistiques } from "./PageStatistiques";
 
-const stats = vi.hoisted(() => ({
-  lireIndicateurs: vi.fn(),
-  lireCaParMois: vi.fn(),
-  lireActivite: vi.fn(),
-  lireParClient: vi.fn(),
-  lireParConducteur: vi.fn(),
-  lireParMetier: vi.fn(),
-  lireCaParEquipe: vi.fn(),
+const collections = vi.hoisted(() => ({
+  lireFactures: vi.fn(),
+  lireDevis: vi.fn(),
+  lireReglements: vi.fn(),
+  lireRapports: vi.fn(),
+  lireBons: vi.fn(),
+  lireConducteurs: vi.fn(),
+  lireEquipes: vi.fn(),
 }));
 const conducteur = vi.hoisted(() => ({ maFicheConducteur: vi.fn(), bonsDuConducteur: vi.fn() }));
 const autres = vi.hoisted(() => ({ listerBons: vi.fn(), lirePlanning: vi.fn(), listerDevis: vi.fn(), totauxDesDevis: vi.fn(), soldesDesFactures: vi.fn(), listerRapports: vi.fn(), chargerReglagesSociete: vi.fn() }));
 
-vi.mock("../api/statistiques", () => stats);
+vi.mock("../api/collections", () => collections);
 vi.mock("../api/conducteur", () => conducteur);
 vi.mock("@/modules/commandes/api/bons", async (orig) => ({ ...(await orig<object>()), listerBons: autres.listerBons }));
 vi.mock("@/modules/planning/api/planning", async (orig) => ({ ...(await orig<object>()), lirePlanning: autres.lirePlanning }));
@@ -34,24 +34,31 @@ vi.mock("@/modules/societes/api/reglages", async (orig) => ({ ...(await orig<obj
 
 const AUJ = todayISO();
 const EURO = /€/;
+const ligne = (ht: number) => ({ type: "ligne", quantite: 1, prix_unitaire: ht, tva: 20 });
+const facture = (s: Partial<FacturePilotage>): FacturePilotage => ({
+  id: "f1", numero: "FAC-2026-000029", client_nom: "OPAC du Rhône", date: AUJ, echeance: null, statut: "impayée", type_document: "facture", remise_pourcentage: 0,
+  legacy_id: null, bon_commande_id: null, devis_id: null, conducteur: "Christophe Conducteur", cree_le: new Date().toISOString(), lignes: [ligne(1000)], ...s,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
-  stats.lireIndicateurs.mockResolvedValue({
-    encaisse_mois: montant(1740), nb_impayees: 3, impayes: montant(4882), ttc_emis: montant(10000), nb_echues: 2,
-    nb_devis_en_attente: 1, devis_en_attente_ht: montant(253), devis_du_mois: 4, devis_acceptes_du_mois: 1,
-  });
-  stats.lireCaParMois.mockResolvedValue([{ mois: `${AUJ.slice(0, 7)}-01`, ht: montant(1660), nb: 3 }]);
-  stats.lireActivite.mockResolvedValue([{ nature: "reglement", id: "r1", quand: new Date().toISOString(), client: "OPAC du Rhône", numero: "FAC-2026-000029", montant: montant(20), facture_id: "f1" }]);
-  stats.lireParClient.mockResolvedValue([{ client_id: "c1", client_nom: "OPAC du Rhône", ht: montant(5400), nb_factures: 4, du: montant(394), nb_devis: 2, devis_acceptes: 1 }]);
-  stats.lireParConducteur.mockResolvedValue([
-    { conducteur_id: "k1", nom: "Christophe Conducteur", ht: montant(240), bons: 16, sav: 2, en_retard: 4, devis: 3, devis_acceptes: 1, devis_transformes: 1, bons_avec_travaux: 2, travaux: 3, travaux_ht: montant(90) },
+  collections.lireFactures.mockResolvedValue([
+    facture({ id: "f1", statut: "payée" }),
+    facture({ id: "f2", numero: null, statut: "brouillon", client_nom: "Régie Sud", conducteur: "christophe", lignes: [ligne(660)] }),
+    facture({ id: "f3", echeance: "2000-01-01", lignes: [ligne(200)] }),
   ]);
-  stats.lireParMetier.mockResolvedValue([{ metier: "Peinture", bons: 5, sav: 1, en_retard: 0, ht: montant(1200) }]);
-  stats.lireCaParEquipe.mockResolvedValue([{ equipe_id: null, equipe: "Non attribué", mois: "2026-09-01", ht: montant(1660) }]);
+  collections.lireDevis.mockResolvedValue([{ id: "d1", numero: "DEV-2026-000004", client_nom: "Régie Sud", date: AUJ, statut: "envoyé", remise_pourcentage: 0, conducteur: "Christophe Conducteur", cree_le: "2026-01-01T08:00:00Z", lignes: [ligne(253)] }]);
+  collections.lireReglements.mockResolvedValue([
+    { id: "r0", facture_id: "f1", montant: 1200, cree_le: new Date().toISOString() },
+    { id: "r1", facture_id: "f3", montant: 40, cree_le: new Date().toISOString() },
+  ]);
+  collections.lireRapports.mockResolvedValue([]);
+  collections.lireBons.mockResolvedValue([{ id: "b1", cree_le: `${AUJ}T08:00:00Z`, conducteur: "Christophe Conducteur", technicien: null, bon_commande_parent_id: null, date_fin_travaux: "2000-01-01" }]);
+  collections.lireConducteurs.mockResolvedValue(["Christophe Conducteur", "Karim"]);
+  collections.lireEquipes.mockResolvedValue([]);
   autres.listerBons.mockResolvedValue([
-    bonCommandes({ id: "a", circuit: { ...circuitDuBon([], "chiffre") }, statut_workflow: "chiffre", montant: 471 }),
-    bonCommandes({ id: "b", rappel_date: AUJ }),
+    { ...bonCommandes({ id: "a", circuit: { ...circuitDuBon([], "chiffre") }, statut_workflow: "chiffre" }), lignesMontant: [{ bon_commande_id: "a", type: "ligne", quantite: 6, prix_unitaire: 78.5, tva: 10 }] },
+    { ...bonCommandes({ id: "b", rappel_date: AUJ, statut_workflow: "cloture_gratuit" }), lignesMontant: [] },
   ]);
   autres.chargerReglagesSociete.mockRejectedValue(new Error("hors ligne"));
   autres.listerDevis.mockResolvedValue([{ id: "d1", numero: "DEV-2026-000004", client_id: "c1", client_nom: "Régie Sud", chantier_id: null, date: AUJ, statut: "envoyé", conducteur: null, conducteur_id: null, logement_statut: null, interlocuteur: null, ville: "Lyon", adresse_locataire: null }]);
@@ -60,46 +67,52 @@ beforeEach(() => {
   autres.listerRapports.mockResolvedValue([]);
 });
 
-describe("tableau de bord de pilotage", () => {
-  it("admin : tuiles de la base, « À traiter », actions rapides, classement", async () => {
+describe("tableau de bord de pilotage (calculs de l'ancien)", () => {
+  it("admin : les tuiles, « À traiter », le résumé du mois, comme l'ancien les calcule", async () => {
     rendreAvecSession(<TableauDeBord />, { role: "admin" });
-    expect(await screen.findByText("Encaissé ce mois (TTC)")).toBeInTheDocument();
-    expect(screen.getByText("1 740,00 €")).toBeInTheDocument();
-    expect(screen.getByText("4 882,00 € restant dû")).toBeInTheDocument();
-    // RM-70 : 1 − 4 882 / 10 000 → 51 %.
-    expect(screen.getByRole("meter", { name: "Taux d'encaissement" })).toHaveAttribute("aria-valuenow", "51");
-    expect(screen.getByRole("meter", { name: "Taux de conversion des devis" })).toHaveAttribute("aria-valuenow", "25");
+    expect(await screen.findByText("CA encaissé ce mois (HT)")).toBeInTheDocument();
+    // HT de la seule facture au statut « payée » datée du mois.
+    expect(screen.getAllByText("1 000,00 €").length).toBeGreaterThan(0);
+    // Restant dû : 240 de f3 moins 40 réglés, PLUS les 792 du brouillon (DEF-STA-03).
+    expect(screen.getByText("992,00 € restant dû")).toBeInTheDocument();
+    expect(screen.getByText("253,00 € HT")).toBeInTheDocument();
+    // À facturer : HT des lignes du bon chiffré (6 × 78,50).
+    expect(screen.getByText("471,00 € HT")).toBeInTheDocument();
     const aTraiter = screen.getByRole("region", { name: /À traiter/ });
-    expect(within(aTraiter).getByText("Bons de commande à facturer")).toBeInTheDocument();
+    // Le bon clos avec un rappel compte (DEF-STA-05).
+    expect(within(aTraiter).getByText("Locataires à rappeler")).toBeInTheDocument();
     expect(within(aTraiter).getByText("Factures échues à relancer")).toBeInTheDocument();
+    // 1 − 992 / (1 200 + 792 + 240) → 56 %.
+    expect(screen.getByRole("meter", { name: "Taux d'encaissement" })).toHaveAttribute("aria-valuenow", "56");
+    expect(screen.getByRole("meter", { name: "Taux de conversion devis" })).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText("Chiffre d'affaires encaissé (HT)")).toBeInTheDocument();
+    expect(screen.getAllByText("Paiement reçu")).toHaveLength(2);
+    expect(screen.getByText("Régie Sud · null")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Nouvelle facture/ })).toHaveAttribute("href", "/factures/nouvelle");
-    expect(await screen.findByText("5 400,00 €")).toBeInTheDocument();
-    expect(await screen.findByText("Paiement reçu")).toBeInTheDocument();
-    expect(stats.lireIndicateurs).toHaveBeenCalledWith("alpha", AUJ);
   });
 
   it("lecture : les chiffres, mais aucune action de création", async () => {
     rendreAvecSession(<TableauDeBord />, { role: "lecture" });
-    expect(await screen.findByText("Encaissé ce mois (TTC)")).toBeInTheDocument();
+    expect(await screen.findByText("CA encaissé ce mois (HT)")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Nouvelle facture/ })).not.toBeInTheDocument();
   });
 
   it("la recherche remplace le tableau et ne charge les listes qu'à la première frappe", async () => {
     rendreAvecSession(<TableauDeBord />, { role: "admin" });
-    await screen.findByText("Encaissé ce mois (TTC)");
+    await screen.findByText("CA encaissé ce mois (HT)");
     expect(autres.listerDevis).not.toHaveBeenCalled();
     await userEvent.type(screen.getByRole("textbox", { name: /Rechercher/ }), "régie");
     expect(await screen.findByText("1 résultat")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Régie Sud/ })).toHaveAttribute("href", "/devis/d1");
-    expect(screen.queryByText("Encaissé ce mois (TTC)")).not.toBeInTheDocument();
+    expect(screen.queryByText("CA encaissé ce mois (HT)")).not.toBeInTheDocument();
   });
 
-  it("le graphique a son tableau équivalent", async () => {
+  it("le graphique compte le brouillon, et a son tableau équivalent", async () => {
     rendreAvecSession(<TableauDeBord />, { role: "secretaire" });
     expect(await screen.findByRole("img", { name: /Chiffre d'affaires HT par mois/ })).toBeInTheDocument();
-    // Le tableau équivalent est là pour les lecteurs d'écran, hors de la vue : le dessin reste celui de l'ancien.
     expect(screen.getByRole("table", { name: "Chiffre d'affaires HT par mois" })).toBeInTheDocument();
-    expect(screen.getAllByText("1 660,00 €").length).toBeGreaterThan(0);
+    // 1 000 + 660 (brouillon) + 200 : le total de la période (DEF-STA-01).
+    expect(screen.getAllByText("1 860,00 €").length).toBeGreaterThan(0);
   });
 });
 
@@ -107,69 +120,87 @@ describe("tableau de bord du conducteur", () => {
   const bon = (id: string, s: Partial<Parameters<typeof avancementDuBon>[0]> = {}) =>
     avancementDuBon({ id, conducteur_id: "k1", bon_commande_parent_id: null, statut_workflow: "en_cours", client_nom: "OPAC", date: AUJ, date_reception: "2026-01-02", date_planifiee: null, date_fin_travaux: null, date_intervention_terminee: null, rappel_date: null, tentatives_contact: [], probleme_description: null, metier: null, metiers: [], ...s }, [], false);
 
-  it("ses affaires par sa fiche, sans aucun montant", async () => {
+  it("ses affaires par sa fiche, sans aucun montant ; jamais d'injoignable (DEF-STA-12)", async () => {
     conducteur.maFicheConducteur.mockResolvedValue({ id: "k1", nom: "Christophe" });
     conducteur.bonsDuConducteur.mockResolvedValue([bon("b1", { bon_commande_parent_id: "p", probleme_description: "Fuite" }), bon("b2", { tentatives_contact: [{}, {}, {}] })]);
     const { container } = rendreAvecSession(<TableauDeBord />, { role: "conducteur" });
     expect(await screen.findAllByText("SAV ouverts")).toHaveLength(2);
     expect(conducteur.bonsDuConducteur).toHaveBeenCalledWith("alpha", "k1");
-    expect(screen.getByText(/1 injoignable après 3 tentatives/)).toBeInTheDocument();
+    expect(screen.queryByText(/injoignable/)).not.toBeInTheDocument();
     expect(container.textContent).not.toMatch(EURO);
-    expect(stats.lireIndicateurs).not.toHaveBeenCalled();
+    expect(collections.lireFactures).not.toHaveBeenCalled();
   });
 
-  it("sans fiche : toute la société, et il le dit", async () => {
+  it("sans fiche : toute la société, et il le dit avec les mots de l'ancien", async () => {
     conducteur.maFicheConducteur.mockResolvedValue(null);
     conducteur.bonsDuConducteur.mockResolvedValue([]);
     rendreAvecSession(<TableauDeBord />, { role: "conducteur" });
-    expect(await screen.findByText(/n'est rattaché à aucune fiche de conducteur/)).toBeInTheDocument();
+    expect(await screen.findByText(/Cochez « Conducteur de travaux » sur votre fiche/)).toBeInTheDocument();
     expect(conducteur.bonsDuConducteur).toHaveBeenCalledWith("alpha", null);
   });
 });
 
+const planningVide = { bons: [], taches: [], equipes: [], sousTraitants: [], metiers: [], monEquipeId: null, monSousTraitantId: null, montantsSousTraitant: {}, telephones: {}, tachesAvecTravaux: [] };
+
 describe("tableau de bord du terrain", () => {
-  it("technicien : sa journée, renvoyée vers « Ma journée », sans aucun montant", async () => {
+  it("technicien : sa journée par la colonne `technicien` du bon, sans aucun montant", async () => {
     autres.lirePlanning.mockResolvedValue({
-      bons: [bonPlanning({ id: "b1", client_nom: "OPAC du Rhône", date_planifiee: AUJ, date_planifiee_fin: AUJ, heure_planifiee: "10:00", technicien: EQUIPE_A.nom, montant: 480 })],
-      taches: [tacheEssai({ id: "t1", bon_commande_id: "b1", date_tache: AUJ, technicien_id: EQUIPE_A.id })],
-      equipes: [EQUIPE_A], sousTraitants: [], metiers: [], monEquipeId: EQUIPE_A.id, monSousTraitantId: null,
-      montantsSousTraitant: {}, telephones: {}, tachesAvecTravaux: [],
+      ...planningVide,
+      bons: [bonPlanning({ id: "b1", client_nom: "OPAC du Rhône", date_planifiee: AUJ, heure_planifiee: "10:00", technicien: EQUIPE_A.nom, montant: 480 })],
+      equipes: [EQUIPE_A],
+      monEquipeId: EQUIPE_A.id,
     });
     const { container } = rendreAvecSession(<TableauDeBord />, { role: "technicien" });
     expect(await screen.findByText("Mes interventions aujourd'hui")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /OPAC du Rhône/ })).toHaveAttribute("href", "/planning/ma-journee");
     expect(container.textContent).not.toMatch(EURO);
-    expect(stats.lireIndicateurs).not.toHaveBeenCalled();
+    expect(collections.lireFactures).not.toHaveBeenCalled();
   });
 
-  it("admin simulant le technicien : l'écran du terrain", async () => {
-    autres.lirePlanning.mockResolvedValue({ bons: [], taches: [], equipes: [], sousTraitants: [], metiers: [], monEquipeId: null, monSousTraitantId: null, montantsSousTraitant: {}, telephones: {}, tachesAvecTravaux: [] });
+  it("admin simulant le technicien : l'écran du terrain, tout faute d'équipe", async () => {
+    autres.lirePlanning.mockResolvedValue(planningVide);
     rendreAvecSession(<TableauDeBord />, { role: "admin", simule: "technicien" });
-    // Sans équipe connue, les tuiles quand même — comme l'ancien, qui montrait tout (D-VIS-09).
     expect(await screen.findByText("Mes interventions aujourd'hui")).toBeInTheDocument();
     expect(screen.getByText("🎉 Rien de planifié aujourd’hui.")).toBeInTheDocument();
   });
+
+  it("sous-traitant : son tableau à trois tuiles, comme l'ancien (DEF-STA-14)", async () => {
+    autres.lirePlanning.mockResolvedValue({
+      ...planningVide,
+      bons: [bonPlanning({ id: "b1", montant_sous_traitant: 300 })],
+      taches: [tacheEssai({ bon_commande_id: "b1", sous_traitant_id: ST_A.id, statut: "validee" })],
+      sousTraitants: [ST_A],
+      monSousTraitantId: ST_A.id,
+    });
+    rendreAvecSession(<TableauDeBord />, { role: "sous_traitant" });
+    expect(await screen.findByText(`Bonjour 👋 ${ST_A.nom}`)).toBeInTheDocument();
+    const pretes = screen.getByRole("link", { name: /Factures .* prêtes/ });
+    expect(within(pretes).getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("Mes devis")).toBeInTheDocument();
+    expect(screen.getByText("Mes factures impayées")).toBeInTheDocument();
+  });
 });
 
-describe("statistiques", () => {
-  it("par conducteur, puis par équipe ; métier et client repliés au bas de l'écran", async () => {
+describe("statistiques (calculs de l'ancien)", () => {
+  it("par étiquette de conducteur, sans ligne « Sans conducteur » ; retard sur tout bon (DEF-STA-08, 09)", async () => {
     rendreAvecSession(<PageStatistiques />, { role: "admin" });
-    const ligne = (await screen.findByRole("cell", { name: "Christophe Conducteur" })).closest("tr") as HTMLElement;
-    // 16 bons dont 4 en retard → 75 % dans les temps, 25 % en retard (pastilles de l'ancien : « 75% » puis « (12) »).
-    expect(within(ligne).getByText("75%")).toBeInTheDocument();
-    expect(within(ligne).getByText("(12)")).toBeInTheDocument();
-    expect(within(ligne).getByText("25%")).toBeInTheDocument();
-    expect(await screen.findByRole("cell", { name: "Non attribué" })).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Par métier"));
-    expect(await screen.findByRole("cell", { name: "Peinture" })).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Par client"));
-    expect(await screen.findByRole("link", { name: "OPAC du Rhône" })).toHaveAttribute("href", "/factures/reglements/dossier?client=OPAC%20du%20Rh%C3%B4ne");
+    const ligneC = (await screen.findByRole("cell", { name: "Christophe Conducteur" })).closest("tr") as HTMLElement;
+    // Un bon, fin de travaux dépassée : 0 % dans les temps, 100 % en retard.
+    expect(ligneC.querySelector(".badge.success")?.textContent).toBe("0%");
+    expect(ligneC.querySelector(".badge.danger")?.textContent).toBe("100%");
+    // Deux graphies, deux lignes ; la fiche sans pièce a sa ligne aussi.
+    expect(screen.getByRole("cell", { name: "christophe" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Karim" })).toBeInTheDocument();
+    expect(screen.queryByText("Sans conducteur")).not.toBeInTheDocument();
+    expect(screen.getByText("tout l'historique")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Non attribué" })).toBeInTheDocument();
+    expect(screen.queryByText("Par métier")).not.toBeInTheDocument();
   });
 
-  it("une plage incomplète ne lance rien et dit pourquoi", async () => {
+  it("les périodes de l'ancien, et elles seules", async () => {
     rendreAvecSession(<PageStatistiques />, { role: "admin" });
     await screen.findByRole("cell", { name: "Christophe Conducteur" });
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Période" }), "plage");
-    await waitFor(() => expect(screen.getByText("Choisissez les deux dates.")).toBeInTheDocument());
+    const options = within(screen.getByRole("combobox", { name: "Période" })).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Tout l'historique", "Cette année", "Ce mois-ci"]);
   });
 });

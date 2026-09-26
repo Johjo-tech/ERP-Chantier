@@ -28,10 +28,10 @@ export function TableauConducteur({ nom }: { nom: string }) {
     <>
       <EnTeteTableau titre={salutation(nom)} sousTitre={sousTitre} date={dateDuJourEnLettres()} />
       {/* Sans fiche, on montre tout et on le DIT : filtrer en silence ferait croire qu'il n'a rien à valider.
-          La marche à suivre n'est plus celle de l'ancien écran (D-STA-10) : c'est l'administrateur qui relie le compte. */}
+          Le texte de l'ancien, au caractère près (D-STA-A-01) : la case « Conducteur de travaux » existe dans RH. */}
       {!fiche.data && (
         <div className="card" role="status" style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", marginBottom: "16px" }}>
-          👤 Votre compte n'est rattaché à aucune fiche de conducteur : cet écran montre les affaires de <b>toute la société</b>. Demandez à un administrateur de relier votre compte à votre fiche de conducteur.
+          👤 Votre compte n'est rattaché à aucune fiche de conducteur : cet écran montre les affaires de <b>toute la société</b>. Cochez « Conducteur de travaux » sur votre fiche dans <b>RH</b>, une fois votre compte créé.
         </div>
       )}
       <div className="grid-stats grid-stats-4">

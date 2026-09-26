@@ -1,13 +1,15 @@
 import { useState, type FocusEvent, type MouseEvent } from "react";
-import { ZERO, type Montant } from "@/lib/money";
-import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import { partDuMax, type SerieCA } from "../domain/indicateurs";
+import { useModeDiscret } from "@/lib/modeDiscret";
+import type { RevenuPeriode } from "../domain/ancien/pilotage";
+import type { MoisCalendaire } from "../domain/periodes";
+import { formatEurosEcranAncien } from "./format";
 
 /**
  * Le chiffre d'affaires HT mois par mois, face à l'année précédente — le
- * dessin de l'ancien écran (`renderYearlyComparisonSVG`) à la même géométrie :
- * 960 × 300, barres de 20 px au plus, l'année précédente en gris à 32 %, la
- * légende en haut à droite. Écrit à la main, sans bibliothèque (D-STA-03).
+ * dessin de l'ancien écran (`renderYearlyComparisonSVG`) à la même géométrie
+ * et à la même hauteur de barre : `(300 − 40 − 34) × montant / max`, le max
+ * valant au moins 1, une barre non nulle au moins 2 px, une barre négative
+ * aucune. Écrit à la main, sans bibliothèque (D-STA-03).
  *
  * Ce que l'ancien n'avait pas : chaque barre se parcourt aussi au clavier, et
  * le tableau équivalent est là pour les lecteurs d'écran — hors de la vue,
@@ -42,18 +44,19 @@ interface Survol {
   left: number;
   top: number;
   libelle: string;
-  montant: Montant;
+  montant: number;
 }
 
-export function GraphiqueCA({ serie }: { serie: SerieCA }) {
+export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: readonly MoisCalendaire[] }) {
   useModeDiscret();
   const [survol, setSurvol] = useState<Survol | null>(null);
-  const { points, anneeCourante, anneePrecedente } = serie;
-  const max = points.reduce((m, p) => (p.courant.gt(m) ? p.courant : p.precedent.gt(m) ? p.precedent : m), ZERO);
-  const largeurGroupe = (L - 2 * COTE) / Math.max(1, points.length);
+  const { currentYear: anneeCourante, prevYear: anneePrecedente } = serie;
+  const points = mois.map((m, i) => ({ ...m, courant: serie.data[i]?.current ?? 0, precedent: serie.data[i]?.previous ?? 0 }));
+  const max = Math.max(1, ...points.map((p) => Math.max(p.courant, p.precedent)));
+  const largeurGroupe = (L - 2 * COTE) / points.length;
   const barre = Math.min(LARGEUR_BARRE_MAX, largeurGroupe * PART_BARRE);
   const utile = H - HAUT - BAS;
-  const hauteur = (m: Montant) => (m.gt(ZERO) ? Math.max(HAUTEUR_MIN, (utile * partDuMax(m, max)) / 100) : 0);
+  const hauteur = (m: number) => (m > 0 ? Math.max(HAUTEUR_MIN, utile * (m / max)) : 0);
 
   /** `showRevenueTooltip` : la bulle suit le pointeur dans la carte. */
   const placer = (x: number, y: number, carte: DOMRect) => {
@@ -71,8 +74,8 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
         {points.map((p, i) => {
           const centre = COTE + i * largeurGroupe + largeurGroupe / 2;
           const barres = [
-            { cle: "precedent", x: centre - barre - ECART / 2, m: p.precedent, libelle: `${p.libelleLong} ${p.annee - 1}`, couleur: COULEUR_PRECEDENTE, opacite: OPACITE_PRECEDENTE },
-            { cle: "courant", x: centre + ECART / 2, m: p.courant, libelle: `${p.libelleLong} ${p.annee}`, couleur: COULEUR_COURANTE, opacite: 1 },
+            { cle: "precedent", x: centre - barre - ECART / 2, m: p.precedent, libelle: `${p.libelleLong} ${anneePrecedente}`, couleur: COULEUR_PRECEDENTE, opacite: OPACITE_PRECEDENTE },
+            { cle: "courant", x: centre + ECART / 2, m: p.courant, libelle: `${p.libelleLong} ${anneeCourante}`, couleur: COULEUR_COURANTE, opacite: 1 },
           ];
           return (
             <g key={p.cle}>
@@ -84,7 +87,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
                     key={b.cle}
                     tabIndex={0}
                     role="button"
-                    aria-label={`${b.libelle} : ${formatEurosEcran(b.m)}`}
+                    aria-label={`${b.libelle} : ${formatEurosEcranAncien(b.m)}`}
                     onFocus={(e) => {
                       const r = e.currentTarget.getBoundingClientRect();
                       montrer(r.left + r.width / 2, r.top, carteDe(e));
@@ -118,7 +121,7 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
         <div id="revenueTooltip" role="status" style={{ display: "block", left: `${survol.left}px`, top: `${survol.top}px` }}>
           <b>{survol.libelle}</b>
           <br />
-          {formatEurosEcran(survol.montant)}
+          {formatEurosEcranAncien(survol.montant)}
         </div>
       )}
       <table className="sr-only">
@@ -134,8 +137,8 @@ export function GraphiqueCA({ serie }: { serie: SerieCA }) {
           {points.map((p) => (
             <tr key={p.cle}>
               <td>{p.libelleLong}</td>
-              <td>{formatEurosEcran(p.courant)}</td>
-              <td>{formatEurosEcran(p.precedent)}</td>
+              <td>{formatEurosEcranAncien(p.courant)}</td>
+              <td>{formatEurosEcranAncien(p.precedent)}</td>
             </tr>
           ))}
         </tbody>

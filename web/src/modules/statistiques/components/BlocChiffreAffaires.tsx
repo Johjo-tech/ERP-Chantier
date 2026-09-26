@@ -1,18 +1,16 @@
 import { useState } from "react";
-import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Button } from "@/components/ui/button";
 import { Modale } from "@/components/ui/modale";
-import { formatDateFr } from "@/lib/dates";
-import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import { serieComparee, totalDesMois } from "../domain/indicateurs";
-import { bornesComparaison, bornesDuMois, moisDeLaPeriode, refusPlage, type Bornes } from "../domain/periodes";
-import { useCaParMois } from "../hooks/useStatistiques";
+import { formatDateFr, partiesIso } from "@/lib/dates";
+import { useModeDiscret } from "@/lib/modeDiscret";
+import { revenuPeriode, revenuPlage, type FacturePilotage } from "../domain/ancien/pilotage";
+import { moisGlissants, MOIS_GRAPHIQUE, premierDuMois, refusPlage, type PeriodeGraphique } from "../domain/periodes";
 import { GraphiqueCA } from "./GraphiqueCA";
 import { Section } from "./Tuile";
+import { formatEurosEcranAncien } from "./format";
 
 /** Les choix de l'ancien sélecteur, dans son ordre (`.dash-period-select`) : « Depuis janvier » n'y figurait pas. */
-type Periode = "6m" | "12m";
-const OPTIONS: readonly [Periode | "custom", string][] = [
+const OPTIONS: readonly [PeriodeGraphique | "custom", string][] = [
   ["6m", "6 mois"],
   ["12m", "12 mois"],
   ["custom", "Sélectionner les dates"],
@@ -21,26 +19,29 @@ const OPTIONS: readonly [Periode | "custom", string][] = [
 /**
  * « Chiffre d'affaires (HT) » (`.dash-revenue-full`) : 6 ou 12 mois face à
  * N-1, et « Sélectionner les dates » qui ouvre la fenêtre du total sur une
- * plage libre (`revenueCustomModal`). La définition du chiffre (factures
- * émises, avoirs déduits, acomptes exclus — D-STA-02) est dans l'infobulle du
- * titre : l'ancien écran n'avait pas de place pour elle.
+ * plage libre (`revenueCustomModal`). Le chiffre est celui de l'ancien :
+ * toutes les factures datées, brouillons et acomptes compris, avoirs en
+ * négatif (D-STA-A-01).
  */
-export function BlocChiffreAffaires({ jour }: { jour: string }) {
+export function BlocChiffreAffaires({ factures, jour }: { factures: readonly FacturePilotage[]; jour: string }) {
   useModeDiscret();
-  const [periode, setPeriode] = useState<Periode>("6m");
+  const [periode, setPeriode] = useState<PeriodeGraphique>("6m");
   const [plage, setPlage] = useState(false);
-  const mois = moisDeLaPeriode(periode, jour);
-  const ca = useCaParMois(bornesComparaison(mois));
-  const serie = ca.isSuccess ? serieComparee(ca.data, mois) : null;
+  const mois = moisGlissants(MOIS_GRAPHIQUE[periode], jour);
+  const serie = revenuPeriode(
+    factures,
+    mois.map((m) => ({ year: m.annee, month: m.mois - 1 })),
+    partiesIso(jour).annee
+  );
   return (
     <div className="dash-revenue-full">
       <Section
-        titre={<span title="Factures émises à leur date, avoirs en déduction ; ni brouillons ni factures d'acompte (déjà comprises dans la facture de solde).">Chiffre d'affaires (HT)</span>}
+        titre="Chiffre d'affaires (HT)"
         style={{ marginTop: 0 }}
         aDroite={
           <div className="dash-revenue-controls">
             <span className="dash-revenue-total">
-              Total période : <b>{serie ? formatEurosEcran(serie.total) : "…"}</b>
+              Total période : <b>{formatEurosEcranAncien(serie.total)}</b>
             </span>
             <select
               className="dash-period-select"
@@ -61,36 +62,35 @@ export function BlocChiffreAffaires({ jour }: { jour: string }) {
         }
       >
         <div className="card dash-revenue-card">
-          {ca.isPending ? <Chargement /> : ca.isError ? <Erreur erreur={ca.error} reessayer={() => void ca.refetch()} /> : serie && <GraphiqueCA serie={serie} />}
+          <GraphiqueCA serie={serie} mois={mois} />
         </div>
       </Section>
-      {plage && <PlageLibre jour={jour} onFermer={() => setPlage(false)} />}
+      {plage && <PlageLibre factures={factures} jour={jour} onFermer={() => setPlage(false)} />}
     </div>
   );
 }
 
 /** `revenueCustomModal` / `computeCustomRevenue` : le total HT entre deux dates, et le nombre de pièces. */
-function PlageLibre({ jour, onFermer }: { jour: string; onFermer: () => void }) {
+function PlageLibre({ factures, jour, onFermer }: { factures: readonly FacturePilotage[]; jour: string; onFermer: () => void }) {
   useModeDiscret();
-  const [saisie, setSaisie] = useState<Bornes>(() => ({ du: bornesDuMois(jour).du, au: jour }));
-  const [retenue, setRetenue] = useState<Bornes | null>(null);
+  const [saisie, setSaisie] = useState({ du: premierDuMois(jour), au: jour });
+  const [retenue, setRetenue] = useState<{ du: string; au: string } | null>(null);
   const [refus, setRefus] = useState<string | null>(null);
-  const ca = useCaParMois(retenue ?? { du: null, au: null }, !!retenue);
   const calculer = () => {
-    const r = refusPlage(saisie.du ?? "", saisie.au ?? "");
+    const r = refusPlage(saisie.du, saisie.au);
     setRefus(r);
     setRetenue(r ? null : { ...saisie });
   };
-  const total = ca.isSuccess ? totalDesMois(ca.data) : null;
+  const total = retenue ? revenuPlage(factures, retenue.du, retenue.au) : null;
   return (
     <Modale titre="Chiffre d'affaires — période personnalisée" onFermer={onFermer} largeurMax="380px">
       <div className="field">
         <label htmlFor="revenue_date_from">Du</label>
-        <input type="date" id="revenue_date_from" value={saisie.du ?? ""} onChange={(e) => setSaisie((s) => ({ ...s, du: e.target.value }))} />
+        <input type="date" id="revenue_date_from" value={saisie.du} onChange={(e) => setSaisie((s) => ({ ...s, du: e.target.value }))} />
       </div>
       <div className="field" style={{ marginTop: "10px" }}>
         <label htmlFor="revenue_date_to">Au</label>
-        <input type="date" id="revenue_date_to" value={saisie.au ?? ""} onChange={(e) => setSaisie((s) => ({ ...s, au: e.target.value }))} />
+        <input type="date" id="revenue_date_to" value={saisie.au} onChange={(e) => setSaisie((s) => ({ ...s, au: e.target.value }))} />
       </div>
       <Button style={{ marginTop: "14px", width: "100%", justifyContent: "center" }} onClick={calculer}>
         Voir le chiffre d'affaires
@@ -101,8 +101,6 @@ function PlageLibre({ jour, onFermer }: { jour: string; onFermer: () => void }) 
             {refus}
           </div>
         )}
-        {retenue && ca.isPending && <Chargement />}
-        {retenue && ca.isError && <Erreur erreur={ca.error} reessayer={() => void ca.refetch()} />}
         {retenue && total && (
           <>
             <div className="summary-row" style={{ marginTop: "18px" }}>
@@ -110,9 +108,9 @@ function PlageLibre({ jour, onFermer }: { jour: string; onFermer: () => void }) 
                 Du {formatDateFr(retenue.du)} au {formatDateFr(retenue.au)}
               </span>
             </div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "var(--text)", fontFamily: "'JetBrains Mono',monospace", marginTop: "6px" }}>{formatEurosEcran(total.ht)}</div>
+            <div style={{ fontSize: "28px", fontWeight: 800, color: "var(--text)", fontFamily: "'JetBrains Mono',monospace", marginTop: "6px" }}>{formatEurosEcranAncien(total.total)}</div>
             <div className="card-sub" style={{ marginTop: "4px" }}>
-              {total.nb} facture{total.nb > 1 ? "s" : ""}
+              {total.nombre} facture{total.nombre > 1 ? "s" : ""}
             </div>
           </>
         )}

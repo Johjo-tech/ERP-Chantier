@@ -1,21 +1,27 @@
 /**
- * [proposition] Agrégats des tableaux de bord et des statistiques —
- * 20260926080000_statistiques_de_pilotage.sql.
+ * Tableaux de bord et statistiques : les collections lues comme l'ancien
+ * (`api/collections.ts`) et calculées comme l'ancien (D-STA-A-01), sous la
+ * RLS de chaque table. La proposition 20260926080000 (fonctions `stats_*`)
+ * est RETIRÉE : ces cas remplacent ceux qui l'éprouvaient.
  *
  * Les pièces sont datées de février 2012 et portent un nom de client unique :
  * la base locale est partagée, un mois que personne d'autre n'emploie rend les
- * sommes exactes. Les factures émises ne se suppriment pas (L441-9) ; les bons
- * créés ici sont retirés à la fin.
+ * sommes exactes (mesurées en écart). Les factures émises ne se suppriment pas
+ * (L441-9) ; les bons créés ici sont retirés à la fin.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lireActivite, lireCaParMois, lireIndicateurs, lireParClient, lireParConducteur, lireParMetier } from "../../src/modules/statistiques/api/statistiques";
+import { lireBons, lireFactures, lireReglements } from "../../src/modules/statistiques/api/collections";
 import { bonsDuConducteur, maFicheConducteur } from "../../src/modules/statistiques/api/conducteur";
+import { statutReglementFacture } from "../../src/modules/statistiques/domain/ancien/montants";
+import { revenuPlage } from "../../src/modules/statistiques/domain/ancien/pilotage";
+import { statsParConducteur } from "../../src/modules/statistiques/domain/ancien/statistiques";
 import { ALPHA, COMPTES, avecPropositions, connecte, type Client } from "./cible";
 
 const suffixe = `${Date.now()}`;
 const CLIENT = `Stats ${suffixe}`;
-const MOIS = { du: "2012-02-01", au: "2012-02-29" };
+const FEVRIER = { du: "2012-02-01", au: "2012-02-29" };
 const CONDUCTEUR = "a7000000-0000-0000-0000-000000000001";
+const NOM_CONDUCTEUR = "Christophe Conducteur";
 const COMPTE_CONDUCTEUR = "a1000000-0000-0000-0000-000000000003";
 
 let admin: Client;
@@ -37,10 +43,10 @@ async function piece(ht: number, o: { type?: "facture" | "avoir" | "acompte"; em
   return data.id;
 }
 
-async function bon(metiers: string[], dateFin: string | null = "2012-01-10"): Promise<string> {
+async function bon(dateFin: string | null = "2012-01-10"): Promise<string> {
   const { data, error } = await admin
     .from("bons_commande")
-    .insert({ societe_id: ALPHA, client_nom: CLIENT, conducteur_id: CONDUCTEUR, numero_bc: `STATS-${suffixe}`, sans_bc: false, en_attente_bc: false, date: "2012-02-01", date_fin_travaux: dateFin, metiers, metier: metiers[0] ?? null, adresse: "1 rue des Stats", gratuite: false })
+    .insert({ societe_id: ALPHA, client_nom: CLIENT, conducteur_id: CONDUCTEUR, numero_bc: `STATS-${suffixe}`, sans_bc: false, en_attente_bc: false, date: "2012-02-01", date_fin_travaux: dateFin, metiers: ["Peinture"], metier: "Peinture", adresse: "1 rue des Stats", gratuite: false })
     .select("id")
     .single();
   if (error) throw error;
@@ -49,21 +55,15 @@ async function bon(metiers: string[], dateFin: string | null = "2012-01-10"): Pr
 }
 
 let facture: string;
-let avoir: string;
 /** Ce que février 2012 portait déjà (passages précédents) : on mesure l'apport de CE passage. */
-let avant = { ca: 0, nb: 0, encaisse: 0 };
-
-const caDeFevrier = async (c: Client) => {
-  const f = (await lireCaParMois(ALPHA, MOIS, c)).find((l) => l.mois.startsWith("2012-02"));
-  return { ca: Number(f?.ht.toString() ?? 0), nb: f?.nb ?? 0 };
-};
-const encaisseDeFevrier = async (c: Client) => Number((await lireIndicateurs(ALPHA, "2012-02-25", c)).encaisse_mois.toString());
+let avant = { total: 0, nombre: 0 };
+const caDeFevrier = async (c: Client) => revenuPlage(await lireFactures(ALPHA, c), FEVRIER.du, FEVRIER.au);
 
 beforeAll(async () => {
   admin = await connecte(COMPTES.adminAlpha);
-  avant = { ...(await caDeFevrier(admin)), encaisse: await encaisseDeFevrier(admin) };
+  avant = await caDeFevrier(admin);
   facture = await piece(1000);
-  avoir = await piece(200, { type: "avoir" });
+  const avoir = await piece(200, { type: "avoir" });
   await piece(500, { type: "acompte" });
   await piece(700, { emise: false });
   const r = await admin.from("reglements").insert({ societe_id: ALPHA, facture_id: facture, date: "2012-02-16", montant: 300, mode: "virement", reference: null });
@@ -80,75 +80,55 @@ afterAll(async () => {
   }
 });
 
-describe("[proposition] stats : le chiffre d'affaires ne compte que des factures", () => {
-  it("émises seulement, avoir en négatif, ni brouillon ni acompte (STA-21)", async () => {
+describe("chiffre d'affaires : toutes les factures, comme l'ancien (DEF-STA-01)", () => {
+  it("brouillon et acompte compris, avoir en négatif, lignes lues avec leur facture", async () => {
     const apres = await caDeFevrier(admin);
-    // 1 000 − 200 ; l'acompte (500) et le brouillon (700) ne comptent pas.
-    expect(apres.ca - avant.ca).toBe(800);
-    expect(apres.nb - avant.nb).toBe(2);
+    // 1 000 − 200 + 500 (acompte) + 700 (brouillon).
+    expect(apres.total - avant.total).toBe(2000);
+    expect(apres.nombre - avant.nombre).toBe(4);
   });
 
-  it("par client : CA, restant dû sans les avoirs, groupé par le nom faute de fiche", async () => {
-    const lignes = await lireParClient(ALPHA, MOIS, null, admin);
-    const c = lignes.find((l) => l.client_nom === CLIENT);
-    expect(c).toBeDefined();
-    expect(Number(c?.ht.toString())).toBe(800);
-    expect(c?.nb_factures).toBe(2);
-    // 1 000 − 300 réglés − 100 lettrés ; le crédit restant de l'avoir n'est pas une dette.
-    expect(Number(c?.du.toString())).toBe(600);
+  it("restant dû : les règlements ET le lettrage de l'avoir comptent comme payé", async () => {
+    const f = (await lireFactures(ALPHA, admin)).find((x) => x.id === facture);
+    expect(f).toBeDefined();
+    const reglements = (await lireReglements(ALPHA, admin)).filter((r) => r.facture_id === facture);
+    // 1 000 − 300 réglés − 100 lettrés.
+    expect(f && statutReglementFacture(f, reglements)).toEqual({ cle: "partiellement_reglee", reste: 600 });
   });
 });
 
-describe("[proposition] stats : « encaissé » = ce qui est entré en caisse dans le mois", () => {
-  it("les règlements datés du mois, sans le lettrage d'un avoir (STA-21)", async () => {
-    expect((await encaisseDeFevrier(admin)) - avant.encaisse).toBe(300);
-  });
-
-  it("l'activité récente ne montre pas un lettrage comme un paiement", async () => {
-    const a = await lireActivite(ALPHA, 50, admin);
-    expect(a.some((x) => x.nature === "reglement" && x.facture_id === avoir)).toBe(false);
-  });
-});
-
-describe("[proposition] stats : un bon facturé n'est plus « en retard » (STA-22)", () => {
-  it("stats_bon_ouvert : ouvert, puis fermé par la facture qui le désigne", async () => {
-    const id = await bon(["Zinguerie"]);
-    const ouvert = async () => {
-      const { data, error } = await admin.rpc("stats_bon_ouvert" as never, { p_bon: id, p_statut_workflow: "en_cours" } as never);
-      if (error) throw error;
-      return data as unknown as boolean;
-    };
-    expect(await ouvert()).toBe(true);
+describe("statistiques par l'étiquette du conducteur (DEF-STA-08, 09)", () => {
+  it("un bon facturé dont la fin de travaux est passée compte « en retard »", async () => {
+    const id = await bon("2012-01-10");
     await piece(50, { bon: id, emise: false });
-    expect(await ouvert()).toBe(false);
-  });
-
-  it("par métier : un bon compte dans chacun de ses métiers", async () => {
-    const metier = `Métier ${suffixe}`;
-    await bon([metier, `${metier} bis`], "2000-01-01");
-    const jour = new Date().toISOString().slice(0, 10);
-    const lignes = await lireParMetier(ALPHA, { du: null, au: null }, jour, admin);
-    expect(lignes.find((l) => l.metier === metier)).toMatchObject({ bons: 1, sav: 0, en_retard: 1 });
-    expect(lignes.find((l) => l.metier === `${metier} bis`)).toMatchObject({ bons: 1 });
-  });
-
-  it("par conducteur : par la référence, avec le nom de sa fiche", async () => {
-    const lignes = await lireParConducteur(ALPHA, { du: null, au: null }, "2026-09-25", admin);
-    expect(lignes.find((l) => l.conducteur_id === CONDUCTEUR)?.nom).toBe("Christophe Conducteur");
+    const bons = await lireBons(ALPHA, admin);
+    const lu = bons.find((b) => b.id === id);
+    // L'étiquette est tenue par la base d'après la fiche : c'est elle qui groupe.
+    expect(lu?.conducteur).toBe(NOM_CONDUCTEUR);
+    const ligne = statsParConducteur({ bons: bons.filter((b) => b.id === id), devis: [], factures: [], conducteurs: [] }, "tout", "2026-09-25", new Date("2026-09-25T10:00:00Z"))[0];
+    expect(ligne).toMatchObject({ nom: NOM_CONDUCTEUR, bcTotal: 1, bcEnRetard: 1 });
   });
 });
 
-describe("[proposition] stats : la garde « statistiques / voir »", () => {
-  it.each([COMPTES.technicienAlpha, COMPTES.sousTraitantAlpha, COMPTES.adminBeta])("%s est refusé", async (email) => {
+describe("chacun ne lit que ce que la RLS lui ouvre", () => {
+  it.each([COMPTES.technicienAlpha, COMPTES.sousTraitantAlpha, COMPTES.adminBeta])("%s ne voit aucune facture de ce passage", async (email) => {
     const c = await connecte(email);
-    await expect(lireIndicateurs(ALPHA, "2012-02-25", c)).rejects.toMatchObject({ code: "42501" });
-    await expect(lireCaParMois(ALPHA, MOIS, c)).rejects.toMatchObject({ code: "42501" });
+    expect((await lireFactures(ALPHA, c)).filter((f) => f.client_nom === CLIENT)).toEqual([]);
   });
 
-  it.each([COMPTES.secretaireAlpha, COMPTES.lectureAlpha, COMPTES.conducteurAlpha])("%s y a accès, sous la RLS de chaque table", async (email) => {
+  it.each([COMPTES.secretaireAlpha, COMPTES.lectureAlpha])("%s lit les factures et leurs lignes", async (email) => {
     const c = await connecte(email);
-    // Le conducteur ne lit pas les règlements : rien n'est « entré en caisse » pour lui.
-    expect(await encaisseDeFevrier(c)).toBe(email === COMPTES.conducteurAlpha ? 0 : await encaisseDeFevrier(admin));
+    expect((await caDeFevrier(c)).total).toBe((await caDeFevrier(admin)).total);
+  });
+
+  it("le conducteur ouvre les statistiques : la lecture des factures ne lui est pas refusée", async () => {
+    const c = await connecte(COMPTES.conducteurAlpha);
+    await expect(lireFactures(ALPHA, c)).resolves.toBeInstanceOf(Array);
+  });
+
+  it("le conducteur ne lit pas les règlements : pour lui, rien n'est réglé", async () => {
+    const c = await connecte(COMPTES.conducteurAlpha);
+    expect((await lireReglements(ALPHA, c)).filter((r) => r.facture_id === facture)).toEqual([]);
   });
 });
 
@@ -157,7 +137,7 @@ describe("tableau du conducteur : ses affaires par sa fiche, sans montant", () =
     const cond = await connecte(COMPTES.conducteurAlpha);
     const fiche = await maFicheConducteur(ALPHA, COMPTE_CONDUCTEUR, cond);
     expect(fiche?.id).toBe(CONDUCTEUR);
-    const id = await bon(["Peinture"]);
+    const id = await bon();
     const bons = await bonsDuConducteur(ALPHA, CONDUCTEUR, cond);
     expect(bons.every((b) => b.conducteur_id === CONDUCTEUR)).toBe(true);
     const b = bons.find((x) => x.id === id);

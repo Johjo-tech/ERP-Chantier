@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { DatabaseAvecPropositions, DatabaseNotifications, DatabaseParc, DatabasePlanning, DatabaseStatistiques, DatabaseTransversal } from "./database.propositions";
+import type { DatabaseAvecPropositions, DatabaseNotifications, DatabaseParc, DatabasePlanning, DatabaseTransversal } from "./database.propositions";
 import type { Database } from "./database.types";
 import { lireConfiguration } from "./env";
 
@@ -35,11 +35,6 @@ export function supabasePropositions(): SupabaseClient<DatabaseAvecPropositions>
 /** Un client (celui de l'application, ou celui d'un test), typé avec les colonnes et fonctions proposées du planning et des rapports (2026092605*). */
 export function clientPlanning(c: Client = supabase()): SupabaseClient<DatabasePlanning> {
   return c as unknown as SupabaseClient<DatabasePlanning>;
-}
-
-/** Un client typé avec les fonctions d'agrégat proposées des statistiques (20260926080000). */
-export function clientStatistiques(c: Client = supabase()): SupabaseClient<DatabaseStatistiques> {
-  return c as unknown as SupabaseClient<DatabaseStatistiques>;
 }
 
 /** Un client (celui de l'application, ou celui d'un test), typé avec la durée des prêts proposée pour le parc (20260926070000). */

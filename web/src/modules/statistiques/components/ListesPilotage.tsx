@@ -1,15 +1,13 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Icone, type NomIcone } from "@/components/ui/icones";
 import { formatDateFr } from "@/lib/dates";
-import { ZERO } from "@/lib/money";
-import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import { partDuMax } from "../domain/indicateurs";
-import { ACTIVITE_VISIBLE, LIBELLES_ACTIVITE, lienActivite, lienClient, tempsRelatif, TOP_CLIENTS, type NatureActivite } from "../domain/pilotage";
-import { useActivite, useParClient } from "../hooks/useStatistiques";
+import { useModeDiscret } from "@/lib/modeDiscret";
+import { activiteRecente, topClients, type FacturePilotage, type NatureActivite } from "../domain/ancien/pilotage";
+import { lienActivite, lienClient, tempsRelatif } from "../domain/pilotage";
+import type { DonneesPilotage } from "../hooks/useStatistiques";
 import { Section } from "./Tuile";
-
-const TOUT = { du: null, au: null };
+import { formatEurosEcranAncien } from "./format";
 
 /** Le pictogramme et sa pastille par nature (`buildActivityFeed` : devis vert, facture bleue, rapport orangé, paiement vert). */
 const APPARENCE: Record<NatureActivite, { icone: NomIcone; couleur: "success" | "info" | "warn" }> = {
@@ -19,35 +17,44 @@ const APPARENCE: Record<NatureActivite, { icone: NomIcone; couleur: "success" | 
   reglement: { icone: "reglements", couleur: "success" },
 };
 
-/** Les dernières pièces créées et les derniers paiements reçus (`buildActivityFeed`). */
-export function ActiviteRecente() {
+/** Une ligne qui ouvre sa pièce ; un paiement dont la facture est introuvable ne s'ouvre pas (comme l'ancien). */
+function LigneActivite({ vers, children }: { vers: string | null; children: ReactNode }) {
   useModeDiscret();
-  const activite = useActivite(ACTIVITE_VISIBLE);
+  return vers ? (
+    <Link to={vers} className="activity-row" style={{ cursor: "pointer" }}>
+      {children}
+    </Link>
+  ) : (
+    <div className="activity-row">{children}</div>
+  );
+}
+
+/** Les dernières pièces créées et les derniers paiements reçus (`buildActivityFeed`). */
+export function ActiviteRecente({ d }: { d: DonneesPilotage }) {
+  useModeDiscret();
+  const lignes = activiteRecente(d.devis, d.factures, d.rapports, d.reglements);
+  const maintenant = new Date().getTime();
   return (
     <div className="dash-col">
       <Section titre="Activité récente">
         <div className="card activity-card">
-          {activite.isPending ? (
-            <Chargement />
-          ) : activite.isError ? (
-            <Erreur erreur={activite.error} reessayer={() => void activite.refetch()} />
-          ) : !activite.data.length ? (
+          {!lignes.length ? (
             <div className="empty">Aucune activité récente.</div>
           ) : (
-            activite.data.map((a) => (
-              <Link key={`${a.nature}-${a.id}`} to={lienActivite(a)} className="activity-row" style={{ cursor: "pointer" }}>
+            lignes.map((a) => (
+              <LigneActivite key={`${a.nature}-${a.id}`} vers={lienActivite(a)}>
                 <span className={`activity-icon ${APPARENCE[a.nature].couleur}`}>
                   <Icone nom={APPARENCE[a.nature].icone} />
                 </span>
                 <div className="activity-mid">
-                  <div className="activity-label">{LIBELLES_ACTIVITE[a.nature]}</div>
-                  <div className="activity-sub">{[a.client, a.numero].filter(Boolean).join(" · ")}</div>
+                  <div className="activity-label">{a.libelle}</div>
+                  <div className="activity-sub">{a.sous}</div>
                 </div>
                 <div className="activity-right">
-                  {a.montant && <div className="activity-amount">{formatEurosEcran(a.montant)}</div>}
-                  <div className="activity-time">{tempsRelatif(a.quand, activite.dataUpdatedAt, formatDateFr)}</div>
+                  {a.montant !== null && <div className="activity-amount">{formatEurosEcranAncien(a.montant)}</div>}
+                  <div className="activity-time">{tempsRelatif(a.quand, maintenant, formatDateFr)}</div>
                 </div>
-              </Link>
+              </LigneActivite>
             ))
           )}
         </div>
@@ -56,33 +63,27 @@ export function ActiviteRecente() {
   );
 }
 
-/** Les cinq premiers clients par chiffre d'affaires HT, tout l'historique (`computeTopClients`). */
-export function TopClients() {
+/** Les cinq premiers clients par chiffre d'affaires HT, toutes factures, par le nom porté sur la pièce (`computeTopClients`). */
+export function TopClients({ factures }: { factures: readonly FacturePilotage[] }) {
   useModeDiscret();
-  const clients = useParClient(TOUT, TOP_CLIENTS);
-  const lignes = (clients.data ?? []).filter((c) => c.ht.gt(ZERO));
-  const max = lignes[0]?.ht ?? ZERO;
+  const lignes = topClients(factures);
   return (
     <div className="dash-col">
       <Section titre="Top clients (HT)">
         <div className="card activity-card topclient-card">
-          {clients.isPending ? (
-            <Chargement />
-          ) : clients.isError ? (
-            <Erreur erreur={clients.error} reessayer={() => void clients.refetch()} />
-          ) : !lignes.length ? (
+          {!lignes.length ? (
             <div className="empty">Pas encore de factures.</div>
           ) : (
             lignes.map((c, i) => (
-              <Link key={c.client_id ?? c.client_nom ?? i} to={lienClient(c)} title={`Ouvrir le dossier de règlements de ${c.client_nom ?? ""}`} className="topclient-row cliquable">
+              <Link key={`${i}-${c.client}`} to={lienClient(c.client)} title={`Ouvrir le dossier de règlements de ${c.client}`} className="topclient-row cliquable">
                 <span className="topclient-rank">{i + 1}</span>
                 <div className="topclient-mid">
-                  <div className="topclient-name">{c.client_nom ?? "Client sans nom"}</div>
+                  <div className="topclient-name">{c.client}</div>
                   <div className="progress-bar" style={{ marginTop: "5px" }}>
-                    <div className="progress-fill" style={{ width: `${partDuMax(c.ht, max)}%`, background: "var(--accent)" }} />
+                    <div className="progress-fill" style={{ width: `${c.largeur}%`, background: "var(--accent)" }} />
                   </div>
                 </div>
-                <div className="topclient-amount">{formatEurosEcran(c.ht)}</div>
+                <div className="topclient-amount">{formatEurosEcranAncien(c.total)}</div>
               </Link>
             ))
           )}

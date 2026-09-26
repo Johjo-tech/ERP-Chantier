@@ -35,7 +35,7 @@ describe("garde-fous", () => {
       .filter((f) => !f.includes(".essai.") && !f.endsWith("modeDiscret.ts"))
       .flatMap((f) => {
         const texte = readFileSync(f, "utf8");
-        if (!texte.includes("formatEurosEcran(")) return [];
+        if (!/formatEurosEcran(Ancien)?\(/.test(texte)) return [];
         const composants = (texte.match(/^(export )?function [A-Z]\w*/gm) ?? []).length;
         const abonnements = (texte.match(/^ {2}useModeDiscret\(\);$/gm) ?? []).length;
         return composants === abonnements ? [] : [`${rel(f)} : ${composants} composant(s), ${abonnements} abonnement(s)`];
@@ -64,8 +64,16 @@ describe("garde-fous", () => {
     expect(fautifs.map(rel)).toEqual([]);
   });
 
+  /**
+   * Seule exception : les calculs des tableaux de bord et des statistiques
+   * reproduits À L'IDENTIQUE de l'ancien écran, flottant et `Math.round`
+   * compris, sur décision du client (D-STA-A-01). Ils ne servent qu'à
+   * l'affichage de ces écrans ; rien n'y est enregistré.
+   */
+  const CALCULS_DE_L_ANCIEN = /\/modules\/statistiques\/domain\/ancien\//;
+
   it("aucun flottant brut pour l'argent dans le domaine : pas de toFixed ni de Math.round", () => {
-    const domaine = code.filter((f) => f.includes("/domain/") && !f.includes(".essai."));
+    const domaine = code.filter((f) => f.includes("/domain/") && !f.includes(".essai.") && !CALCULS_DE_L_ANCIEN.test(f));
     const fautifs = domaine.filter((f) => /\.toFixed\(|Math\.round\(/.test(readFileSync(f, "utf8")));
     expect(fautifs.map(rel)).toEqual([]);
   });

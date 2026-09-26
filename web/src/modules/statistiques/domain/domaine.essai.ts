@@ -1,74 +1,194 @@
 import { describe, expect, it } from "vitest";
-import { formatEuros, montant } from "@/lib/money";
-import { circuitDuBon } from "@/modules/commandes/domain/workflow";
-import { construireCartes } from "@/modules/planning/domain/cartes";
-import { ANNUAIRES, bonEssai, EQUIPE_A, tacheEssai } from "@/modules/planning/domain/fabrique.essai-aide";
-import { avancementDuBon, dateFinReelle, nombreDeTentatives, type BonLu } from "./conducteur";
-import { bornesComparaison, bornesStats, libelleMois, moisGlissants, refusPlage } from "./periodes";
-import { aTraiterPilotage, genreDuTableau, lienActivite, type BonATraiter } from "./pilotage";
+import { bonEssai, EQUIPE_A, EQUIPE_B, ST_A, tacheEssai } from "@/modules/planning/domain/fabrique.essai-aide";
+import { avancementDuBon, dateFinReelle, nombreDeTentatives, statsConducteur, type BonLu } from "./conducteur";
+import { moisGlissants, premierDuMois, refusPlage } from "./periodes";
+import { genreDuTableau, lienActivite } from "./pilotage";
 import { indexSuivant, resultatsRecherche } from "./recherche";
-import { repartition, tableauEquipes, tauxConducteur } from "./statistiques";
-import { tableauTerrain } from "./terrain";
+import { statutReglementFacture, totauxPiece } from "./ancien/montants";
+import { activiteRecente, aTraiterPilotage, resumeDuMois, revenuPeriode, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage } from "./ancien/pilotage";
+import { equipesParMois, filtrerParPeriode, moisLabelCourt, periodeLabel, retardParConducteur, statsParConducteur, type BonStats } from "./ancien/statistiques";
+import { mesBonsTechnicien, tableauSousTraitant, tableauTechnicien } from "./ancien/terrain";
+
+const JOUR = "2026-09-25";
+const MAINTENANT = new Date("2026-09-25T10:00:00Z");
+const ligne = (ht: number) => ({ type: "ligne", quantite: 1, prix_unitaire: ht, tva: 20 });
+
+function facture(s: Partial<FacturePilotage> & { ht?: number } = {}): FacturePilotage {
+  const { ht = 100, ...reste } = s;
+  return {
+    id: "f1", numero: "FAC-2026-000001", client_nom: "OPAC", date: JOUR, echeance: null, statut: "impayée", type_document: "facture",
+    legacy_id: null, bon_commande_id: null, devis_id: null, conducteur: null, cree_le: "2026-09-25T08:00:00Z", remise_pourcentage: 0, lignes: [ligne(ht)], ...reste,
+  };
+}
+function devis(s: Partial<DevisPilotage> & { ht?: number } = {}): DevisPilotage {
+  const { ht = 100, ...reste } = s;
+  return { id: "d1", numero: "DEV-1", client_nom: "OPAC", date: JOUR, statut: "envoyé", conducteur: null, cree_le: "2026-09-24T08:00:00Z", remise_pourcentage: 0, lignes: [ligne(ht)], ...reste };
+}
+const sixMois = moisGlissants(6, JOUR).map((m) => ({ year: m.annee, month: m.mois - 1 }));
 
 describe("périodes", () => {
   it("les mois glissants franchissent l'année", () => {
     expect(moisGlissants(3, "2026-02-10").map((m) => m.cle)).toEqual(["2025-12", "2026-01", "2026-02"]);
   });
-  it("la comparaison lit depuis le même mois de l'année précédente jusqu'à la fin du mois courant", () => {
-    expect(bornesComparaison(moisGlissants(6, "2026-09-25"))).toEqual({ du: "2025-04-01", au: "2026-09-30" });
-    expect(bornesComparaison(moisGlissants(1, "2028-02-03"))).toEqual({ du: "2027-02-01", au: "2028-02-29" });
-  });
-  it("périodes des statistiques et plage libre", () => {
-    expect(bornesStats("tout", "2026-09-25")).toEqual({ du: null, au: null });
-    expect(bornesStats("annee", "2026-09-25")).toEqual({ du: "2026-01-01", au: "2026-12-31" });
-    expect(bornesStats("mois", "2026-09-25")).toEqual({ du: "2026-09-01", au: "2026-09-30" });
+  it("plage libre : du premier du mois à aujourd'hui, et les refus de l'ancien", () => {
+    expect(premierDuMois(JOUR)).toBe("2026-09-01");
     expect(refusPlage("", "2026-09-01")).toBe("Choisissez les deux dates.");
     expect(refusPlage("2026-09-02", "2026-09-01")).toBe("La date de début doit être avant la date de fin.");
     expect(refusPlage("2026-09-01", "2026-09-01")).toBeNull();
-    expect(libelleMois("2026-08")).toBe("août 2026");
   });
 });
 
-describe("pilotage", () => {
-  const bon = (s: Partial<BonATraiter> & { statut?: string; taches?: Parameters<typeof circuitDuBon>[0] } = {}): BonATraiter => ({
-    statut_workflow: s.statut ?? "en_cours",
-    bon_commande_parent_id: null,
-    rappel_date: null,
-    montant: 100,
-    circuit: circuitDuBon(s.taches ?? [], s.statut ?? "en_cours"),
-    factures: [],
-    ...s,
+describe("montants de l'ancien (flottant)", () => {
+  it("un avoir compte en négatif ; la remise s'applique au HT et au TTC", () => {
+    expect(totauxPiece(facture({ type_document: "avoir", ht: 50 }))).toEqual({ ht: -50, ttc: -60 });
+    expect(totauxPiece({ ...facture({ ht: 200 }), remise_pourcentage: 10 })).toEqual({ ht: 180, ttc: 216 });
   });
-  const validee = { id: "t", bon_commande_id: "b", libelle: "", metier: null, statut: "validee", date_tache: null, commentaire: null, refus_motif: null, realisee_le: null, validee_le: null, piece_a_commander: false, piece_description: null, piece_fournisseur: null, piece_date_commande: null, piece_recue_le: null };
+  it("10,005 € reste le flottant 10,004999… : l'ancien écrit « 10,00 € »", () => {
+    const t = totauxPiece({ lignes: [{ type: "ligne", quantite: 3, prix_unitaire: 3.335, tva: 0 }], remise_pourcentage: 0 });
+    expect(new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(t.ht)).toBe("10,00 €");
+  });
+  it("une pièce reprise « payée » est réglée sans règlement ; sinon ses règlements font foi", () => {
+    expect(statutReglementFacture({ ...facture(), legacy_id: "compta:FAC1", statut: "payée" }, [])).toEqual({ cle: "reglee", reste: 0 });
+    expect(statutReglementFacture(facture(), [{ facture_id: "f1", montant: 20 }])).toEqual({ cle: "partiellement_reglee", reste: 100 });
+  });
+});
 
-  it("« À traiter » : un bon clos n'attend personne, un SAV n'attend pas le conducteur", () => {
-    const t = aTraiterPilotage(
-      [
-        bon(),
-        bon({ bon_commande_parent_id: "p" }),
-        bon({ taches: [validee] }),
-        bon({ statut: "chiffre", montant: 471.5 }),
-        bon({ statut: "chiffre", montant: 20, factures: [{}] }),
-        bon({ statut: "cloture_gratuit", rappel_date: "2026-09-01" }),
-        bon({ rappel_date: "2026-09-25" }),
-      ],
-      "2026-09-25"
-    );
-    expect(t).toMatchObject({ enAttenteConducteur: 2, aValiderDirecteur: 1, aFacturer: 1, rappels: 1 });
-    expect(formatEuros(t.aFacturerMontant)).toBe("471,50\u00a0€");
+describe("pilotage (défauts de l'ancien conservés)", () => {
+  it("DEF-STA-01 : le chiffre d'affaires compte brouillons et acomptes", () => {
+    const r = revenuPeriode([facture({ statut: "brouillon", numero: null }), facture({ type_document: "acompte" })], sixMois, 2026);
+    expect(r.total).toBe(200);
   });
 
-  it("le tableau suit le rôle effectif", () => {
-    expect(genreDuTableau("technicien")).toBe("terrain");
-    expect(genreDuTableau("sous_traitant")).toBe("terrain");
+  it("DEF-STA-02 : « CA encaissé » = HT des factures au statut « payée » datées du mois", () => {
+    const r = resumeDuMois([facture({ statut: "payée", date: "2026-08-30" }), facture({ id: "f2", statut: "payée" })], [], [], JOUR, sixMois);
+    expect(r.caMois).toBe(100);
+  });
+
+  it("DEF-STA-03 : un brouillon compte comme dû ET comme facturé (restant dû, taux d'encaissement)", () => {
+    const r = resumeDuMois([facture(), facture({ id: "f2", statut: "brouillon", numero: null })], [], [], JOUR, sixMois);
+    // 240 « restant dû », dont 120 d'un brouillon qui ne doit rien à personne.
+    expect(r.impayeesMontant).toBe(240);
+    expect(r.tauxEncaisse).toBe(0);
+  });
+
+  it("DEF-STA-04 : « impayée » et « échue » se lisent sur le statut stocké, pas sur les règlements", () => {
+    const f = facture({ echeance: "2026-09-01" });
+    expect(tuilesPilotage([f], []).impayees).toBe(1);
+    expect(aTraiterPilotage([], [f, facture({ id: "f2", statut: "payée", echeance: "2026-09-01" })], JOUR).facturesEchues).toBe(1);
+  });
+
+  it("DEF-STA-05 : les rappels comptent aussi les bons clos", () => {
+    const bon = (s: Partial<BonPilotage>): BonPilotage => ({ id: "b", statut_workflow: "en_cours", bon_commande_parent_id: null, rappel_date: null, valideConducteur: false, valideDirecteur: false, lignes: [], ...s });
+    const t = aTraiterPilotage([bon({ id: "b1", statut_workflow: "cloture_gratuit", rappel_date: "2026-09-01" }), bon({ id: "b2", rappel_date: JOUR })], [], JOUR);
+    expect(t.rappelsAujourdhui).toBe(2);
+    expect(t.enAttenteConducteur).toBe(1);
+  });
+
+  it("« À facturer » : HT des lignes du bon, sans remise ; un bon désigné par une facture n'y est plus", () => {
+    const b: BonPilotage = { id: "b1", statut_workflow: "chiffre", bon_commande_parent_id: null, rappel_date: null, valideConducteur: true, valideDirecteur: true, lignes: [ligne(471.5)] };
+    expect(aTraiterPilotage([b], [], JOUR)).toMatchObject({ aFacturer: 1, aFacturerMontant: 471.5 });
+    expect(aTraiterPilotage([b], [facture({ bon_commande_id: "b1" })], JOUR).aFacturer).toBe(0);
+  });
+
+  it("DEF-STA-06 : l'activité écrit « null » pour une facture sans numéro, et montre un lettrage comme un paiement", () => {
+    const f = facture({ numero: null, cree_le: "2026-09-25T09:00:00Z" });
+    const a = activiteRecente([devis()], [f], [], [{ id: "r1", facture_id: "f1", montant: -30, cree_le: "2026-09-25T09:30:00Z" }]);
+    expect(a.map((x) => x.libelle)).toEqual(["Paiement reçu", "Facture créée", "Devis créé"]);
+    expect(a[1]?.sous).toBe("OPAC · null");
+    expect(lienActivite(a[0] ?? { nature: "reglement", id: "", factureId: null })).toBe("/factures/f1");
+  });
+
+  it("DEF-STA-07 : le classement groupe par le NOM écrit sur la facture", () => {
+    const t = topClients([facture({ client_nom: "OPAC" }), facture({ id: "f2", client_nom: "O.P.A.C.", ht: 300 })]);
+    expect(t.map((c) => [c.client, c.total, c.largeur])).toEqual([["O.P.A.C.", 300, 100], ["OPAC", 100, 33]]);
+  });
+
+  it("le tableau suit le rôle effectif ; le sous-traitant a le sien", () => {
+    expect(genreDuTableau("technicien")).toBe("technicien");
+    expect(genreDuTableau("sous_traitant")).toBe("sous_traitant");
     expect(genreDuTableau("conducteur")).toBe("conducteur");
     expect(genreDuTableau("lecture")).toBe("pilotage");
     expect(genreDuTableau(null)).toBe("pilotage");
   });
+});
 
-  it("un paiement mène à la facture qu'il règle", () => {
-    expect(lienActivite({ nature: "reglement", id: "r1", quand: "", client: null, numero: null, montant: null, facture_id: "f9" })).toBe("/factures/f9");
-    expect(lienActivite({ nature: "rapport", id: "i1", quand: "", client: null, numero: null, montant: null, facture_id: null })).toBe("/rapports/i1");
+describe("statistiques (défauts de l'ancien conservés)", () => {
+  const bon = (s: Partial<BonStats>): BonStats => ({ id: "b", cree_le: "2026-09-02T08:00:00Z", conducteur: "Christophe", technicien: null, bon_commande_parent_id: null, date_fin_travaux: null, ...s });
+
+  it("DEF-STA-08 : par étiquette — deux graphies font deux conducteurs, sans ligne « Sans conducteur »", () => {
+    const s = statsParConducteur({ bons: [bon({ id: "b1" }), bon({ id: "b2", conducteur: "christophe" }), bon({ id: "b3", conducteur: null })], devis: [], factures: [], conducteurs: ["Christophe"] }, "tout", JOUR, MAINTENANT);
+    expect(s.map((x) => [x.nom, x.bcTotal])).toEqual([["Christophe", 1], ["christophe", 1]]);
+  });
+
+  it("DEF-STA-09 : un bon facturé dont la fin de travaux est passée est « en retard »", () => {
+    const s = statsParConducteur({ bons: [bon({ date_fin_travaux: "2026-09-01" })], devis: [], factures: [facture({ bon_commande_id: "b", conducteur: "Christophe" })], conducteurs: [] }, "tout", JOUR, MAINTENANT);
+    expect(s[0]).toMatchObject({ bcEnRetard: 1, tauxDansLesTemps: 0, ca: 100 });
+  });
+
+  it("DEF-STA-10 : sans bon, la barre de retard est pleine et rouge (« 0 / 0 »)", () => {
+    const s = statsParConducteur({ bons: [bon({})], devis: [], factures: [], conducteurs: ["Karim"] }, "tout", JOUR, MAINTENANT);
+    expect(retardParConducteur(s)?.find((l) => l.stat.nom === "Karim")).toMatchObject({ pctOk: 0, pctRetard: 100 });
+  });
+
+  it("DEF-STA-11 : travaux supplémentaires toujours à 0 (aucune colonne ne les porte)", () => {
+    const s = statsParConducteur({ bons: [bon({})], devis: [], factures: [], conducteurs: [] }, "tout", JOUR, MAINTENANT);
+    expect(s[0]).toMatchObject({ nbTravSup: 0, montantTravSup: 0, tauxTravSup: 0 });
+  });
+
+  it("période : horodatage lu à l'heure de Paris, date seule à minuit UTC", () => {
+    const items = [{ d: "2026-08-31T22:30:00Z" }, { d: "2026-08-31" }, { d: null }];
+    expect(filtrerParPeriode(items, (x) => x.d, "mois", MAINTENANT)).toEqual([{ d: "2026-08-31T22:30:00Z" }]);
+    expect(periodeLabel("mois", JOUR, MAINTENANT)).toBe("Sep 2026");
+    expect(periodeLabel("tout", JOUR, MAINTENANT)).toBe("tout l'historique");
+    expect(moisLabelCourt("2026-08")).toBe("Août 2026");
+  });
+
+  it("équipes par la colonne `technicien` du bon (uuid ou libellé), « Non attribué » en dernier", () => {
+    const t = equipesParMois(
+      [facture({ bon_commande_id: "b1" }), facture({ id: "f2", bon_commande_id: "b2", date: "2026-08-10" }), facture({ id: "f3" })],
+      [bon({ id: "b1", technicien: "eqA" }), bon({ id: "b2", technicien: "Équipe Karim" })],
+      [EQUIPE_A, EQUIPE_B],
+      "tout",
+      MAINTENANT
+    );
+    expect(t.mois).toEqual(["2026-08", "2026-09"]);
+    expect(t.binomes).toEqual(["Équipe Karim", "Équipe Thomas", "Non attribué"]);
+  });
+});
+
+describe("terrain", () => {
+  const bons = [
+    bonEssai({ id: "b1", date_planifiee: JOUR, heure_planifiee: "14:00", technicien: EQUIPE_A.nom }),
+    bonEssai({ id: "b2", date_planifiee: "2026-09-28", technicien: EQUIPE_A.id }),
+    bonEssai({ id: "b3", date_planifiee: "2026-09-20", technicien: EQUIPE_A.nom }),
+    bonEssai({ id: "b4", date_planifiee: JOUR, heure_planifiee: "08:00", technicien: EQUIPE_B.nom }),
+  ];
+
+  it("mes bons par la colonne `technicien` (uuid ou libellé) ; sans équipe, tous", () => {
+    expect(mesBonsTechnicien(bons, [EQUIPE_A, EQUIPE_B], EQUIPE_A.id).map((b) => b.id)).toEqual(["b1", "b2", "b3"]);
+    expect(mesBonsTechnicien(bons, [EQUIPE_A, EQUIPE_B], null)).toHaveLength(4);
+  });
+
+  it("aujourd'hui par l'heure, six jours, à pointer par les métiers faits, pièce par la première tâche qui l'attend", () => {
+    const taches = [tacheEssai({ bon_commande_id: "b3", metier: "Plomberie", statut: "planifiee", piece_a_commander: true, piece_date_commande: null })];
+    const t = tableauTechnicien(bons, taches, JOUR, "2026-10-01");
+    expect(t.duJour.map((b) => b.id)).toEqual(["b4", "b1"]);
+    expect(t.laSemaine.map((b) => b.id)).toEqual(["b2"]);
+    expect(t.aPointer.map((b) => b.id)).toEqual(["b3"]);
+    expect(t.pieces.map((b) => b.id)).toEqual(["b3"]);
+  });
+
+  it("DEF-STA-13 : seule la date du rendez-vous compte, pas une journée supplémentaire", () => {
+    const taches = [tacheEssai({ bon_commande_id: "b3", date_tache: JOUR })];
+    expect(tableauTechnicien([bons[2] as (typeof bons)[number]], taches, JOUR, "2026-10-01").duJour).toHaveLength(0);
+  });
+
+  it("DEF-STA-14 : sous-traitant — factures prêtes par ses bons validés et chiffrés ; devis et impayés toujours à 0", () => {
+    const b = bonEssai({ id: "b1", montant_sous_traitant: 300 });
+    const taches = [tacheEssai({ bon_commande_id: "b1", sous_traitant_id: ST_A.id, statut: "validee" })];
+    const noms = new Map([[ST_A.id, ST_A.nom]]);
+    expect(tableauSousTraitant([b], taches, noms, ST_A.nom)).toEqual({ facturesPretes: 1, devis: 0, impayees: 0 });
+    expect(tableauSousTraitant([b], taches, noms, "Autre SARL").facturesPretes).toBe(0);
   });
 });
 
@@ -108,65 +228,11 @@ describe("conducteur", () => {
     const b = avancementDuBon(lu, [t({ statut: "planifiee", date_tache: "2026-09-01", piece_a_commander: true, piece_date_commande: "2026-09-02" })], false);
     expect(b.pieceEnAttente).toBe(false);
   });
-  it("STA-20 : les tentatives sont un tableau, on les compte", () => {
-    expect(nombreDeTentatives([{}, {}, {}])).toBe(3);
-    expect(nombreDeTentatives("3")).toBe(0);
+  it("DEF-STA-12 : les tentatives sont lues par `parseInt` comme l'ancien — jamais « injoignable »", () => {
+    expect(nombreDeTentatives([{}, {}, {}])).toBe(0);
+    expect(nombreDeTentatives("3")).toBe(3);
     expect(nombreDeTentatives(null)).toBe(0);
-  });
-});
-
-describe("statistiques", () => {
-  it("taux entiers, retard en complément, zéro sans dénominateur", () => {
-    const base = { conducteur_id: "k", nom: "K", ht: montant(0), sav: 1, devis: 3, devis_acceptes: 1, devis_transformes: 2, bons_avec_travaux: 0, travaux: 0, travaux_ht: montant(0) };
-    expect(tauxConducteur({ ...base, bons: 3, en_retard: 1 })).toMatchObject({ dansLesTemps: 2, tauxDansLesTemps: 67, tauxRetard: 33, tauxSav: 33, tauxDevisAcceptes: 33, tauxDevisTransformes: 67 });
-    expect(tauxConducteur({ ...base, bons: 0, en_retard: 0 })).toMatchObject({ tauxDansLesTemps: 0, tauxRetard: 0, tauxSav: 0 });
-  });
-  it("équipes par ordre alphabétique, « Non attribué » en dernier, mois triés", () => {
-    const t = tableauEquipes([
-      { equipe_id: null, equipe: "Non attribué", mois: "2026-09-01", ht: montant(10) },
-      { equipe_id: "z", equipe: "Zoé", mois: "2026-08-01", ht: montant(5) },
-      { equipe_id: "a", equipe: "Équipe Thomas", mois: "2026-09-01", ht: montant(7) },
-      { equipe_id: "a", equipe: "Équipe Thomas", mois: "2026-08-01", ht: montant(3) },
-    ]);
-    expect(t.mois).toEqual(["2026-08", "2026-09"]);
-    expect(t.equipes.map((e) => e.nom)).toEqual(["Équipe Thomas", "Zoé", "Non attribué"]);
-    expect(formatEuros(t.equipes[0]?.total ?? montant(0))).toBe("10,00\u00a0€");
-  });
-  it("la répartition ignore les montants nuls ou négatifs", () => {
-    const r = repartition([{ ht: montant(300) }, { ht: montant(-50) }, { ht: montant(100) }]);
-    expect(r.map((x) => x.part)).toEqual([75, 25]);
-  });
-});
-
-describe("terrain", () => {
-  it("aujourd'hui, les six jours suivants, à pointer, pièces — pour MON équipe seulement", () => {
-    const cartes = construireCartes(
-      [
-        bonEssai({ id: "b1", date_planifiee: "2026-09-25", date_planifiee_fin: "2026-09-25", technicien: EQUIPE_A.nom }),
-        bonEssai({ id: "b2", date_planifiee: "2026-09-28", date_planifiee_fin: "2026-09-28", technicien: EQUIPE_A.nom }),
-        bonEssai({ id: "b3", date_planifiee: "2026-09-20", date_planifiee_fin: "2026-09-20", technicien: EQUIPE_A.nom }),
-        bonEssai({ id: "b4", date_planifiee: "2026-09-25", date_planifiee_fin: "2026-09-25", technicien: "Équipe Karim" }),
-      ],
-      [tacheEssai({ id: "t3", bon_commande_id: "b3", date_tache: "2026-09-20", technicien_id: EQUIPE_A.id, piece_a_commander: true })],
-      ANNUAIRES
-    );
-    const t = tableauTerrain(cartes, { monEquipeId: EQUIPE_A.id, monSousTraitantId: null }, "2026-09-25");
-    expect(t.duJour.map((c) => c.bcId)).toEqual(["b1"]);
-    expect(t.aVenir.map((c) => c.bcId)).toEqual(["b2"]);
-    expect(t.aPointer.map((c) => c.bcId)).toEqual(["b3"]);
-    expect(t.pieces.map((c) => c.bcId)).toEqual(["b3"]);
-  });
-
-  it("sans équipe ni entreprise connue : tout, comme l'ancien (« mieux vaut tout montrer que rien », D-VIS-09)", () => {
-    const cartes = construireCartes(
-      [
-        bonEssai({ id: "b1", date_planifiee: "2026-09-25", date_planifiee_fin: "2026-09-25", heure_planifiee: "14:00", technicien: EQUIPE_A.nom }),
-        bonEssai({ id: "b4", date_planifiee: "2026-09-25", date_planifiee_fin: "2026-09-25", heure_planifiee: "08:00", technicien: "Équipe Karim" }),
-      ],
-      [],
-      ANNUAIRES
-    );
-    // L'heure d'abord : une journée de terrain se lit dans l'ordre où elle se vit.
-    expect(tableauTerrain(cartes, { monEquipeId: null, monSousTraitantId: null }, "2026-09-25").duJour.map((c) => c.bcId)).toEqual(["b4", "b1"]);
+    const b = avancementDuBon({ ...lu, date_planifiee: null, tentatives_contact: [{}, {}, {}] }, [], false);
+    expect(statsConducteur([b], JOUR, 7).injoignables).toHaveLength(0);
   });
 });
