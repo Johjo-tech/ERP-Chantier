@@ -21,7 +21,7 @@ import {
   type NouveauTravail,
   type PhotoTerrain,
 } from "../api/planning";
-import { construireCartes, type Tentative } from "../domain/cartes";
+import { construireCartes, trierCommeLAncien, type Tentative } from "../domain/cartes";
 import type { Plan } from "../domain/planification";
 
 export const clesPlanning = {
@@ -42,7 +42,7 @@ export function usePlanning() {
   const s = useSocieteActive();
   const utilisateurId = useUtilisateurId();
   const requete = useQuery({ queryKey: clesPlanning.donnees(s.id, utilisateurId), queryFn: () => lirePlanning(s.id, utilisateurId) });
-  const cartes = useMemo(() => (requete.data ? construireCartes(requete.data.bons, requete.data.taches, requete.data) : []), [requete.data]);
+  const cartes = useMemo(() => (requete.data ? trierCommeLAncien(construireCartes(requete.data.bons, requete.data.taches, requete.data)) : []), [requete.data]);
   return { ...requete, cartes };
 }
 

@@ -27,7 +27,12 @@ export interface ValeurPlanning {
   appliquer: (carte: CartePlanning, calcul: () => Plan, succes?: string) => void;
   ouvrirFiche: (carte: CartePlanning, jour: string | null) => void;
   poser: (carte: CartePlanning, jour: string, heure: string) => void;
+  /** Le champ date d'une carte non planifiée (`quickScheduleBC`) : l'heure déjà posée est gardée. */
+  dater: (carte: CartePlanning, jour: string) => void;
   demanderDate: (carte: CartePlanning) => void;
+  /** La fenêtre « Programmer un rappel » (`openRappelModal`). */
+  demanderRappel: (carte: CartePlanning) => void;
+  /** Une réussite (texte) ou un refus (erreur), dans la bulle de l'ancien écran. */
   signaler: (message: string, erreur?: unknown) => void;
 }
 

@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import * as ancienMetiers from "../../../src/api/regles-metiers";
 import * as ancienTaches from "../../../src/api/regles-taches";
 import * as cal from "../../src/modules/planning/domain/calendrier";
-import { interventionFaite, toutesLesJournees } from "../../src/modules/planning/domain/cartes";
+import { interventionFaite, toutesLesJournees, trierCommeLAncien } from "../../src/modules/planning/domain/cartes";
 import * as metiers from "../../src/modules/planning/domain/metiers";
 import * as taches from "../../src/modules/planning/domain/taches";
 import type { RoleMembre } from "../../src/modules/auth-roles/domain/permissions";
@@ -193,6 +193,21 @@ describe("regles-metiers (metierDeLaLigne lue par le planning)", () => {
       const declares = CONNUS.filter(() => g.reel() < 0.5);
       const employes = [...TITRES].filter(() => g.reel() < 0.3);
       expect(metiers.referentielMetiers(declares, employes)).toEqual(ancienMetiers.referentielMetiers(declares, employes));
+    }
+  });
+});
+
+describe("ordre des bons (COLLECTIONS_ETAT.bonCommande, trierParDate)", () => {
+  // `trierParDate` extraite de app.js, avec les champs que l'ancien écran lui passe pour les bons.
+  const trierParDate = new Function(`${sourceDe(appJs, "trierParDate")}\nreturn trierParDate;`)() as (l: Record<string, string>[], c: string[]) => Record<string, string>[];
+  it("la liste et « En attente » suivent l'ordre de l'ancien écran : 2 000 tirages", () => {
+    expect(appJs).toContain("ranger: v => trierParDate(v, ['dateReception','datePlanifiee','date'])");
+    const date = () => (g.reel() < 0.3 ? "" : `2026-0${1 + Math.floor(g.reel() * 9)}-1${Math.floor(g.reel() * 9)}`);
+    for (let i = 0; i < 2000; i++) {
+      const bons = Array.from({ length: 1 + Math.floor(g.reel() * 8) }, (_, k) => ({ id: `b${k}`, dateReception: date(), datePlanifiee: date(), date: date(), createdAt: `2026-01-0${1 + Math.floor(g.reel() * 9)}T0${k}:00:00Z` }));
+      const attendu = trierParDate(bons, ["dateReception", "datePlanifiee", "date"]).map((b) => b.id);
+      const cartes = bons.map((b) => ({ id: b.id, bon: { date_reception: b.dateReception || null, date_planifiee: b.datePlanifiee || null, date: b.date || null, cree_le: b.createdAt } }));
+      expect(trierCommeLAncien(cartes).map((c) => c.id)).toEqual(attendu);
     }
   });
 });

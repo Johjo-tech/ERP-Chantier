@@ -34,3 +34,10 @@ impression / PDF par le navigateur, envoi par courriel, annotation de photo.
   (`lireClient`, délais) et `societes` (`chargerReglages`) ; rien n'y est recopié.
 - **Non repris** : la génération par IA (appel direct au fournisseur depuis
   le navigateur, sans clé : échouait par construction — D-PLN-11).
+
+**Écran identique à l'ancien** (vague « écrans ») : liste (`renderInterventionsListHTML`), filtres
+de l'ancien (D-ECR-PLN-01), assistant (`interventionForm`, `stepIndicatorHTML`, `stepInfosHTML`,
+`stepControlesHTML`, `stepPhotosHTML`, `stepRapportHTML`, `wizardNav`) ouvert au-dessus de la liste
+sous le titre de la liste ; impression et envoi enregistrent d'abord (D-ECR-PLN-08) ; bouton IA
+(D-ECR-PLN-09). Comparaison : `tests/visuel` écrans `rapports`, `rapport-nouveau*` (0 %).
+**Non repris** : l'autocomplétion d'adresse du « Lieu d'intervention » (saisie libre).

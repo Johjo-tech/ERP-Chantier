@@ -2068,3 +2068,62 @@ L'ancien n'offrait aucun moyen de passer un devis à « envoyé », « accepté 
 Le champ « Statut » reste dans la grille « Client & contact » d'un devis
 existant (5 lignes de texte, la grille gagne une rangée : 22 % des pixels du
 formulaire décalés vers le bas).
+
+## D-ECR-PLN-01 — Rapports : l'équipe interne ne voit que les rapports internes (remplace D-PLN-21)
+L'ancien écran (`renderInterventions`) montrait à l'encadrement les seuls rapports internes, au
+sous-traitant les siens. web/ avait ajouté un filtre « Émetteur » : un sélecteur que l'ancien n'avait
+pas. Retiré ; la règle de l'ancien s'applique (la base continue de ne servir au sous-traitant que ses
+rapports, PLN-52). Le filtre des conducteurs lit l'annuaire (`conducteurFilterOptions` : actifs, plus
+celui déjà choisi), non plus les seuls noms écrits sur les rapports.
+
+## D-ECR-PLN-02 — « Ma journée » hors des sous-onglets du planning
+L'ancien planning n'a que ses quatre sous-onglets (le technicien : « Planning Technicien » seul ; le
+sous-traitant : « Mon planning <société> »). « Ma journée » (D-PLN-19) quitte les onglets et garde sa
+propre adresse, `/planning/ma-journee`, où mènent les lignes du tableau de bord du terrain ; elle
+prend les habits de l'ancien (`.card`, `.section-title`, `.empty`).
+
+## D-ECR-PLN-03 — Les réglages d'une carte restent masqués à qui ne planifie pas
+L'ancien dessinait sur chaque carte posée ✕, heure, durée, équipe, date de fin, ← et la poignée, pour
+tous — le technicien les voyait rognés par la hauteur de la carte, le rôle lecture et la secrétaire
+pouvaient cliquer et se voir refuser par la base. Conformément à la règle du dépôt (« l'interface ne
+fait que masquer ce qui serait de toute façon refusé »), ils ne sont dessinés que pour qui a
+`planning/modifier` ET `bons_commande/modifier` ; de même le champ date d'une carte à planifier.
+Écart mesuré : quelques lignes de texte rogné dans la vue du technicien (`tests/visuel`
+`planning-technicien`, 0,04 % de pixels).
+
+## D-ECR-PLN-04 — « En attente » : la carte repliée de la liste des bons, gestes vers la fiche du bon
+`renderPlanningEnAttente` réutilise `bonCommandeCardHTML(b, 'attente')`. web/ en reprend le rendu
+(repliée : identité, contacts, montant, pastilles, « BC reçu », gestes ; dépliée : le détail et l'état
+de chaque tâche). Les gestes propres au bon mènent à sa fiche (« Modifier », « Créer un SAV »,
+« 🔗 Lier un rapport ») ; « 🧾 Créer la facture » reste désactivé comme dans l'ancien tant que le
+directeur n'a pas validé ; « Supprimer » est désactivé : la suppression d'un bon n'existe pas encore
+dans web/. Ces deux boutons gardent l'habit du navigateur, comme dans l'ancien — `complements.css`
+grise `.btn:disabled`, ce que l'ancienne feuille ne faisait pas (écart commun à tous les écrans,
+signalé).
+
+## D-ECR-PLN-05 — Pièce reçue : la date lisible
+`pieceAttendueLigne` passait l'horodatage `piece_recue_le` à `fmtDate`, qui ne sait lire qu'une date :
+« reçue le 25T16:29:20.875085+00:00/09/2026 ». web/ écrit « reçue le 25/09/2026 ». Correction de
+défaut, une ligne par pièce reçue dans la colonne « Non planifiés ».
+
+## D-ECR-PLN-06 — Fiche d'intervention : « Cette date est terminée » se lit sur les tâches
+La case écrivait `dateOrigineFait`, sans colonne : perdue à l'enregistrement. Elle reste à sa place,
+cochée quand les tâches du jour sont déclarées faites, et désactivée — la journée se clôt par
+« ✓ Travaux terminés » du bandeau (D-PLN-05). « ✓ Enregistrer » enregistre les constats (commentaire,
+pièce, croquis) sur la tâche de la carte (`tache_sauvegarder_terrain`) ; les photos et les travaux en
+plus s'écrivent dès qu'on les ajoute. Le bouton 💶 de chiffrage d'un travail supplémentaire n'est pas
+repris sur la fiche : le prix se décide dans Facturation › Validation.
+
+## D-ECR-PLN-07 — Fiche du sous-traitant : la fenêtre « Valider les travaux » de l'ancien
+Remplace, pour le sous-traitant, la fiche commune de D-PLN-05 : même fenêtre que l'ancien
+(`stValidationModal`). Sa case « Travaux de cette date réalisés » déclare la tâche faite par
+`tache_marquer_realisee` (elle écrivait un champ sans colonne) ; déjà faite, elle est cochée et figée.
+
+## D-ECR-PLN-08 — Assistant de rapport : « Imprimer / PDF » et « Envoyer par email » enregistrent d'abord
+L'ancien imprimait le brouillon non enregistré. web/ enregistre puis ouvre l'aperçu du rapport (qui
+porte l'impression et l'envoi) : un rapport imprimé existe donc en base, avec son numéro.
+
+## D-ECR-PLN-09 — Le bouton « ✨ Générer / améliorer avec l'IA » reste, et le dit
+D-PLN-11 retirait la génération (appel au fournisseur depuis le navigateur, sans clé). Le bouton
+reste à sa place (l'étape « Rapport » est identique à l'ancienne) ; il répond, comme l'ancien sans
+constatations, par sa fenêtre — et sinon que la génération automatique n'est pas disponible.

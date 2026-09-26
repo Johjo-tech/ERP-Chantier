@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialogue } from "@/modules/planning/components/Dialogue";
-import { couleurAnnotation, fermerZone, OUTILS, pointeDeFleche, QUALITE_ANNOTATION, type Forme, type Outil, type Point } from "../domain/annotation";
+import { useEffect, useId, useRef, useState } from "react";
+import { couleurAnnotation, fermerZone, pointeDeFleche, QUALITE_ANNOTATION, type Forme, type Outil, type Point } from "../domain/annotation";
 import type { CategoriePhoto } from "../domain/rapport";
+
+/** Les outils et leurs libellés, tels que la fenêtre `photoAnnotationModal` les montre. */
+const BOUTONS_OUTILS: readonly [Outil, string][] = [
+  ["fleche", "➡️ Flèche"],
+  ["carre", "⬜ Carré"],
+  ["cercle", "⭕ Cercle"],
+  ["texte", "🔤 Texte"],
+  ["zone", "🟨 Zone chantier"],
+];
 
 const EPAISSEUR_RELATIVE = 0.006;
 const TAILLE_TEXTE_RELATIVE = 0.04;
@@ -70,7 +76,7 @@ interface Props {
   onFermer: () => void;
 }
 
-/** Annoter une photo sur place (PLN-10), à la souris comme au doigt. */
+/** Annoter une photo sur place (PLN-10, `photoAnnotationModal`), à la souris comme au doigt. */
 export function AnnotationPhoto({ image, categorie, onValider, onFermer }: Props) {
   const toile = useRef<HTMLCanvasElement>(null);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -78,7 +84,7 @@ export function AnnotationPhoto({ image, categorie, onValider, onFermer }: Props
   const [formes, setFormes] = useState<Forme[]>([]);
   const [zone, setZone] = useState<Point[]>([]);
   const [depart, setDepart] = useState<Point | null>(null);
-  const [texte, setTexte] = useState("");
+  const idTitre = useId();
   const couleur = couleurAnnotation(categorie);
 
   useEffect(() => {
@@ -104,50 +110,57 @@ export function AnnotationPhoto({ image, categorie, onValider, onFermer }: Props
     return { x: ((e.clientX - r.left) * e.currentTarget.width) / (r.width || 1), y: ((e.clientY - r.top) * e.currentTarget.height) / (r.height || 1) };
   };
 
+  const choisir = (o: Outil) => {
+    // Changer d'outil en plein tracé de zone l'annulerait : l'ancien le demandait d'abord.
+    if (outil === "zone" && o !== "zone" && zone.length && !window.confirm("Une zone est en cours de tracé. Changer d'outil l'annulera. Continuer ?")) return;
+    if (o !== "zone") setZone([]);
+    setOutil(o);
+  };
+  const terminerZone = () => {
+    setFormes(fermerZone(formes, zone));
+    setZone([]);
+  };
+
   return (
-    <Dialogue
-      titre="Annoter la photo"
-      large
-      onFermer={onFermer}
-      actions={
-        <>
-          <Button variant="ghost" onClick={onFermer}>Annuler</Button>
-          <Button disabled={!img} onClick={() => toile.current && onValider(toile.current.toDataURL("image/jpeg", QUALITE_ANNOTATION))}>Enregistrer l'annotation</Button>
-        </>
-      }
-    >
-      <div role="toolbar" aria-label="Outils d'annotation" className="flex flex-wrap gap-1">
-        {OUTILS.map((o) => (
-          <Button key={o.outil} size="sm" variant={o.outil === outil ? "default" : "outline"} aria-pressed={o.outil === outil} onClick={() => setOutil(o.outil)}>{o.libelle}</Button>
-        ))}
-        {outil === "zone" && <Button size="sm" variant="secondary" disabled={zone.length < 2} onClick={() => { setFormes(fermerZone(formes, zone)); setZone([]); }}>Fermer la zone</Button>}
-        <Button size="sm" variant="ghost" disabled={!formes.length} onClick={() => setFormes(formes.slice(0, -1))}>Annuler le dernier tracé</Button>
+    <div className="view-modal open" role="dialog" aria-modal="true" aria-labelledby={idTitre} style={{ display: "flex" }}>
+      <div className="view-modal-panel" style={{ maxWidth: "640px" }}>
+        <button type="button" className="view-modal-close" aria-label="Fermer" onClick={onFermer}>✕</button>
+        <h3 id={idTitre} style={{ marginTop: 0 }}>Annoter la photo</h3>
+        <p className="card-sub">Choisissez un outil, puis cliquez-glissez sur la photo pour placer une flèche ou un carré.</p>
+        <div role="toolbar" aria-label="Outils d'annotation" style={{ display: "flex", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
+          {BOUTONS_OUTILS.map(([o, libelle]) => (
+            <button key={o} type="button" className={`btn small${o === outil ? " primary" : ""}`} aria-pressed={o === outil} onClick={() => choisir(o)}>{libelle}</button>
+          ))}
+          <button type="button" className="btn small ghost" onClick={terminerZone} style={{ display: outil === "zone" && zone.length >= 2 ? "inline-flex" : "none" }}>✓ Terminer la zone</button>
+          <button type="button" className="btn small ghost" onClick={() => setFormes(formes.slice(0, -1))}>↩ Annuler le dernier</button>
+          <button type="button" className="btn small ghost" onClick={() => (setFormes([]), setZone([]))}>Tout effacer</button>
+        </div>
+        <p className="card-sub" style={{ display: outil === "zone" ? "block" : "none" }}>Cliquez pour poser chaque coin de la zone (autant que vous voulez), puis double-cliquez ou "Terminer la zone".</p>
+        <canvas
+          ref={toile}
+          role="img"
+          aria-label={categorie === "preconisation" ? "Photo à annoter (tracés en vert)" : "Photo à annoter (tracés en rouge)"}
+          style={{ width: "100%", touchAction: "none", border: "1px solid var(--border)", borderRadius: "10px", cursor: "crosshair" }}
+          onDoubleClick={() => outil === "zone" && terminerZone()}
+          onPointerDown={(e) => {
+            const p = point(e);
+            if (outil === "zone") setZone([...zone, p]);
+            else if (outil === "texte") {
+              const texte = window.prompt("Texte à afficher sur la photo :");
+              if (texte && texte.trim()) setFormes([...formes, { type: "texte", en: p, texte: texte.trim() }]);
+            } else setDepart(p);
+          }}
+          onPointerUp={(e) => {
+            if (!depart || (outil !== "fleche" && outil !== "carre" && outil !== "cercle")) return;
+            setFormes([...formes, { type: outil, de: depart, a: point(e) }]);
+            setDepart(null);
+          }}
+        />
+        <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
+          <button type="button" className="btn primary" disabled={!img} onClick={() => toile.current && onValider(toile.current.toDataURL("image/jpeg", QUALITE_ANNOTATION))}>✓ Enregistrer</button>
+          <button type="button" className="btn ghost" onClick={onFermer}>Annuler</button>
+        </div>
       </div>
-      {outil === "texte" && (
-        <label className="flex items-center gap-2 text-sm">
-          Texte à poser
-          <Input value={texte} onChange={(e) => setTexte(e.target.value)} placeholder="Puis cliquez sur la photo" />
-        </label>
-      )}
-      <p className="text-xs text-muted-foreground">{categorie === "preconisation" ? "Photo de préconisation : tracés en vert." : "Tracés en rouge (photo de constatation)."}</p>
-      <canvas
-        ref={toile}
-        role="img"
-        aria-label="Photo à annoter"
-        className="w-full touch-none rounded-md border"
-        onPointerDown={(e) => {
-          const p = point(e);
-          if (outil === "zone") setZone([...zone, p]);
-          else if (outil === "texte") {
-            if (texte.trim()) setFormes([...formes, { type: "texte", en: p, texte: texte.trim() }]);
-          } else setDepart(p);
-        }}
-        onPointerUp={(e) => {
-          if (!depart || (outil !== "fleche" && outil !== "carre" && outil !== "cercle")) return;
-          setFormes([...formes, { type: outil, de: depart, a: point(e) }]);
-          setDepart(null);
-        }}
-      />
-    </Dialogue>
+    </div>
   );
 }

@@ -1,40 +1,52 @@
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import type { CartePlanning } from "../domain/cartes";
-import { HEURE_DEFAUT } from "../domain/taches";
 import { usePlanningContexte } from "./contexte";
-import { numeroDeLaCarte } from "./format";
-import { InfosCarte, MontantCarte } from "./InfosCarte";
+import { BarreSav, LignesCarte, MontantCarte, PieceJointeCarte, TitreCarte } from "./InfosCarte";
 import { MontantSousTraitant } from "./MontantSousTraitant";
 import { ZoneContacts } from "./ZoneContacts";
 
-/** Une carte de la colonne « Non planifiés » : à glisser sur la grille, ou à dater au clavier (PLN-04). */
+/**
+ * Une carte de la colonne « Non planifiés » (`planningCardHTML`, PLN-04) : à
+ * glisser sur une case horaire, ou à dater par son champ — l'heure déjà posée
+ * reste alors celle du bon.
+ */
 export function CarteNonPlanifiee({ carte, onGlisser }: { carte: CartePlanning; onGlisser: (c: CartePlanning) => void }) {
-  const { peutPlanifier, ouvrirFiche, poser, couleurMetier } = usePlanningContexte();
+  const { peutPlanifier, ouvrirFiche, dater, couleurMetier } = usePlanningContexte();
   const couleur = couleurMetier(carte.metier);
   return (
-    <li
-      aria-label={`${carte.bon.client_nom}, ${numeroDeLaCarte(carte)}`}
+    <div
+      className={`planning-card ${carte.faite ? "planning-card-fait" : ""}`}
       draggable={peutPlanifier}
+      aria-label={`${carte.bon.client_nom} ${carte.bon.numero_bc ?? ""}`.trim()}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", carte.id);
         onGlisser(carte);
       }}
-      style={couleur ? { borderRightColor: couleur, borderRightWidth: 5 } : undefined}
-      className={cn("relative flex cursor-pointer flex-col gap-1 rounded-md border bg-card p-2 shadow-sm", carte.faite && "bg-emerald-50", carte.isSav && "border-l-4 border-l-destructive")}
-      onClick={() => ouvrirFiche(carte, null)}
+      onClick={(e) => {
+        e.stopPropagation();
+        ouvrirFiche(carte, null);
+      }}
+      style={couleur ? { borderRight: `5px solid ${couleur}` } : undefined}
     >
-      <InfosCarte carte={carte} />
+      <TitreCarte carte={carte} />
       <ZoneContacts carte={carte} />
+      <LignesCarte carte={carte} avecPiece />
       <MontantSousTraitant carte={carte} />
+      {/* Masqué à qui ne planifie pas : la base le refuserait (D-ECR-PLN-03). */}
       {peutPlanifier && (
-        <label className="flex items-center gap-1 text-xs" onClick={(e) => e.stopPropagation()}>
-          Planifier le
-          <Input type="date" className="h-7 w-36 px-1 text-xs" value="" onChange={(e) => e.target.value && poser(carte, e.target.value, carte.rdv.heurePlanifiee ?? HEURE_DEFAUT)} />
-        </label>
+        <input
+          type="date"
+          className="planning-quick-date"
+          aria-label="Planifier le"
+          value=""
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => e.target.value && dater(carte, e.target.value)}
+          title="Choisir une date (alternative au glisser-déposer)"
+        />
       )}
       <MontantCarte carte={carte} />
-    </li>
+      <PieceJointeCarte carte={carte} avecNom />
+      <BarreSav carte={carte} />
+    </div>
   );
 }

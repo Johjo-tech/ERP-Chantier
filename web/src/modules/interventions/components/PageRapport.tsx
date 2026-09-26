@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { EnTetePage } from "@/components/page/EnTetePage";
@@ -7,8 +7,12 @@ import { useClients } from "@/modules/clients/hooks/useClients";
 import { heureDeParis } from "@/modules/planning/domain/contacts";
 import type { RapportComplet } from "../api/rapports";
 import { avecLeBon, saisieInitiale, type BonSource, type PhotoEdition } from "../domain/assistant";
-import { useBonsLiables, useEnregistrerRapport, useRapport, useTransformer } from "../hooks/useRapports";
+import { useBonsLiables, useEnregistrerRapport, useRapport, useRapports, useTransformer } from "../hooks/useRapports";
+import { afficherToast } from "@/lib/toast";
 import { AssistantRapport, type ResultatAssistant } from "./AssistantRapport";
+import { ListeRapports } from "./PageRapports";
+
+const DUREE_TOAST_DEVIS_MS = 4000;
 
 function photosDe(complet: RapportComplet | undefined): PhotoEdition[] {
   return (complet?.photos ?? []).map((p) => ({ cle: p.id, id: p.id, apercu: p.url ?? "", dataUrl: null, categorie: p.categorie }));
@@ -31,10 +35,11 @@ function Formulaire({ id, complet, bon }: { id: string | undefined; complet: Rap
         onError: setErreur,
         onSuccess: async (rapportId) => {
           if (r.suite === "apercu") return void navigate(`/rapports/${rapportId}/apercu`);
-          if (r.suite === "liste") return void navigate("/rapports", { state: { message: "Rapport enregistré." } });
+          if (r.suite === "liste") return void navigate("/rapports");
           try {
             const devisId = await transformer.mutateAsync({ type: "devis", rapport: rapportId });
-            void navigate(`/devis/${devisId}`, { state: { message: "Rapport enregistré — devis pré-rempli, vérifiez puis enregistrez-le." } });
+            afficherToast("Rapport enregistré — devis pré-rempli, vérifiez puis enregistrez-le.", "success", DUREE_TOAST_DEVIS_MS);
+            void navigate(`/devis/${devisId}`);
           } catch (e) {
             setErreur(e);
           }
@@ -68,12 +73,24 @@ export function PageRapport() {
   const bonId = params.get("bon");
   const bon = (bonId && bons.data?.find((b) => b.id === bonId)) || null;
   const pret = (!id || rapport.isSuccess) && (!bonId || bons.isSuccess || bons.isError);
+  const zone = useRef<HTMLDivElement>(null);
+  // `openForm` amenait la zone du formulaire en haut de la fenêtre, une fois l'écran entier dessiné
+  // (liste comprise) : avant, la page trop courte ne défile pas.
+  const liste = useRapports();
+  const dessine = pret && !liste.isPending;
+  useEffect(() => {
+    if (dessine) zone.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [dessine]);
+  // L'ancien écran ouvrait l'assistant AU-DESSUS de la liste, sous le même titre (`renderInterventions`).
   return (
     <>
-      <EnTetePage titre={id ? `Rapport ${rapport.data?.rapport.numero ?? ""}` : "Nouveau rapport"} sousTitre="Rapport d'intervention / recherche de fuite" />
-      {id && rapport.isError && <Erreur erreur={rapport.error} reessayer={() => void rapport.refetch()} />}
-      {!pret && !rapport.isError && <Chargement />}
-      {pret && <Formulaire key={id ?? bonId ?? "nouveau"} id={id} complet={rapport.data} bon={bon} />}
+      <EnTetePage titre="Rapports / recherche de fuite" />
+      <div id="formZoneIntervention" ref={zone}>
+        {id && rapport.isError && <Erreur erreur={rapport.error} reessayer={() => void rapport.refetch()} />}
+        {!pret && !rapport.isError && <Chargement />}
+        {pret && <Formulaire key={id ?? bonId ?? "nouveau"} id={id} complet={rapport.data} bon={bon} />}
+      </div>
+      <ListeRapports />
     </>
   );
 }

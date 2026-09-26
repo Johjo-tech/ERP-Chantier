@@ -1,6 +1,5 @@
-import { useId } from "react";
+import type { CSSProperties } from "react";
 import { Erreur } from "@/components/etats/Etats";
-import { messageErreur } from "@/lib/erreurs";
 import { usePhotosDuBon } from "../hooks/usePlanning";
 import { usePlanningContexte } from "./contexte";
 import { compresserPhoto } from "./image";
@@ -10,14 +9,14 @@ const DEPOSENT = ["admin", "conducteur", "technicien", "sous_traitant"];
 const RETIRENT = ["admin", "conducteur", "technicien"];
 
 /**
- * Les photos du bon, dans le seau `terrain`. L'écran historique les gardait en
- * mémoire (`technicienPhotos`, sans colonne) : elles disparaissaient à
- * l'enregistrement. Ici elles vont dans `bon_commande_photos`.
+ * Les photos du bon (`renderTechModalPhotos`), dans le seau `terrain`. L'écran
+ * historique les gardait en mémoire (`technicienPhotos`, sans colonne) : elles
+ * disparaissaient à l'enregistrement. Ici elles vont dans
+ * `bon_commande_photos` dès qu'on les choisit (D-PLN-06).
  */
-export function PhotosTerrain({ bcId }: { bcId: string }) {
+export function PhotosTerrain({ bcId, grilleStyle }: { bcId: string; grilleStyle?: CSSProperties }) {
   const { role, signaler } = usePlanningContexte();
   const { liste, ajouter, retirer } = usePhotosDuBon(bcId);
-  const idChamp = useId();
   const photos = liste.data ?? [];
   const deposer = async (fichiers: FileList | null) => {
     for (const [i, f] of Array.from(fichiers ?? []).entries()) {
@@ -30,45 +29,29 @@ export function PhotosTerrain({ bcId }: { bcId: string }) {
         return;
       }
     }
-    signaler("Photo(s) ajoutée(s).");
   };
 
   return (
-    <section aria-label="Photos" className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold">Photos</h3>
+    <>
       {liste.isError && <Erreur erreur={liste.error} reessayer={() => void liste.refetch()} />}
-      <ul className="flex flex-wrap gap-2">
+      {role && DEPOSENT.includes(role) && (
+        <label className="btn small" style={{ cursor: "pointer" }}>
+          + Ajouter une photo
+          <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={(e) => void deposer(e.target.files).finally(() => (e.target.value = ""))} />
+        </label>
+      )}
+      <div className="tech-photos-grid" style={grilleStyle}>
         {photos.map((p) => (
-          <li key={p.id} className="relative">
-            {p.url ? (
-              <a href={p.url} target="_blank" rel="noreferrer">
-                <img src={p.url} alt="Photo du chantier" className="h-24 w-24 rounded-md border object-cover" />
-              </a>
-            ) : (
-              <span className="flex h-24 w-24 items-center justify-center rounded-md border text-xs">Photo indisponible</span>
-            )}
+          <div key={p.id} className="tech-photo-thumb">
+            {p.url && <img src={p.url} alt="Photo du chantier" onClick={() => window.open(p.url ?? "", "_blank", "noopener")} />}
             {role && RETIRENT.includes(role) && (
-              <button
-                type="button"
-                aria-label="Retirer cette photo"
-                className="absolute right-0 top-0 rounded-bl bg-background/80 px-1 text-xs"
-                onClick={() => retirer.mutate(p, { onError: (e) => signaler("", e) })}
-              >
+              <button type="button" aria-label="Retirer cette photo" onClick={() => retirer.mutate(p, { onError: (e) => signaler("", e) })}>
                 ✕
               </button>
             )}
-          </li>
+          </div>
         ))}
-        {!photos.length && liste.isSuccess && <li className="text-xs text-muted-foreground">Aucune photo.</li>}
-      </ul>
-      {role && DEPOSENT.includes(role) && (
-        <div>
-          <label htmlFor={idChamp} className="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted">📷 Ajouter des photos</label>
-          <input id={idChamp} type="file" accept="image/*" capture="environment" multiple className="sr-only" onChange={(e) => void deposer(e.target.files).finally(() => (e.target.value = ""))} />
-          {ajouter.isPending && <span className="ml-2 text-xs text-muted-foreground">Envoi…</span>}
-          {ajouter.isError && <span className="ml-2 text-xs text-destructive">{messageErreur(ajouter.error)}</span>}
-        </div>
-      )}
-    </section>
+      </div>
+    </>
   );
 }

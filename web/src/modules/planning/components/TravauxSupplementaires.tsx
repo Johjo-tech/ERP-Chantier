@@ -1,59 +1,71 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useSupprimerTravail } from "@/modules/commandes/hooks/useBons";
 import { useAjouterTravail, useTravauxSupplementaires } from "../hooks/usePlanning";
 import { usePlanningContexte } from "./contexte";
 
-const LIBELLES: Record<string, string> = { a_chiffrer: "À chiffrer", chiffre: "Chiffré", refuse: "Refusé", integre: "Repris au bon" };
 const SIGNALENT = ["admin", "conducteur", "technicien", "sous_traitant"];
+const RETIRENT = ["admin", "conducteur"];
+const COULEUR = "#9B6EF0";
 
 /**
- * Les travaux constatés en plus du bon : le terrain les signale, sans prix —
- * le chiffrage se fait dans Facturation › Validation. Lus par la vue terrain,
- * qui masque le prix à qui ne doit pas le voir.
+ * Les travaux constatés en plus du bon (`addTravailSupplementaire`,
+ * `renderTravauxSupplementairesListe`) : le terrain les signale, sans prix —
+ * le chiffrage se fait dans Facturation › Validation. `compacte` : la forme
+ * de la fiche du sous-traitant (bouton « Ajouter » discret).
  */
-export function TravauxSupplementaires({ bcId, tacheId }: { bcId: string; tacheId: string | null }) {
+export function TravauxSupplementaires({ bcId, tacheId, compacte = false }: { bcId: string; tacheId: string | null; compacte?: boolean }) {
   const { role, signaler } = usePlanningContexte();
   const travaux = useTravauxSupplementaires(bcId, true);
   const ajouter = useAjouterTravail();
+  const supprimer = useSupprimerTravail();
   const [libelle, setLibelle] = useState("");
   const origine = role === "admin" || role === "conducteur" ? "conducteur" : "technicien";
+  const consigner = () => {
+    if (!libelle.trim()) return;
+    ajouter.mutate(
+      { bcId, tacheId, libelle: libelle.trim(), origine },
+      {
+        onSuccess: () => {
+          setLibelle("");
+          signaler("Travail supplémentaire consigné — à chiffrer.");
+          void travaux.refetch();
+        },
+        onError: (err) => signaler("", err),
+      }
+    );
+  };
+  const saisie = (
+    <>
+      <input type="text" aria-label="Travail supplémentaire" placeholder="Ex : Remplacement d'un raccord non prévu…" style={{ flex: 1 }} value={libelle} onChange={(e) => setLibelle(e.target.value)} />
+      <button type="button" className={compacte ? "btn small" : "btn primary"} disabled={ajouter.isPending} onClick={consigner}>
+        {compacte ? "Ajouter" : "+ Ajouter"}
+      </button>
+    </>
+  );
+  const liste = travaux.data ?? [];
   return (
-    <section aria-label="Travaux supplémentaires" className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold">Travaux supplémentaires</h3>
-      <ul className="flex flex-col gap-1 text-sm">
-        {(travaux.data ?? []).map((t) => (
-          <li key={t.id} className="flex justify-between gap-2 rounded border px-2 py-1">
-            <span>{t.libelle}</span>
-            <span className="text-xs text-muted-foreground">{LIBELLES[t.statut] ?? t.statut}</span>
-          </li>
+    <>
+      {role && SIGNALENT.includes(role) && (compacte ? <div style={{ display: "flex", gap: "6px" }}>{saisie}</div> : <div className="entretien-add-row">{saisie}</div>)}
+      <div style={{ marginTop: "8px" }}>
+        {travaux.isError && <div className="empty">Liste indisponible.</div>}
+        {travaux.isSuccess && !liste.length && <div className="empty">Aucun travail supplémentaire.</div>}
+        {liste.map((t) => (
+          <div key={t.id} className="achat-row" style={{ "--cat-color": COULEUR } as React.CSSProperties}>
+            <div className="achat-row-icon" style={{ background: `${COULEUR}22`, color: COULEUR }}>➕</div>
+            <div className="achat-row-main">
+              <div className="achat-designation">{t.libelle}</div>
+              <div className="achat-date">
+                {t.statut === "chiffre" ? "chiffré" : "à chiffrer"} · constaté par {t.origine || "—"}
+              </div>
+            </div>
+            {role && RETIRENT.includes(role) && (
+              <button type="button" className="btn small danger" aria-label="Retirer ce travail" onClick={() => supprimer.mutate(t.id, { onSuccess: () => void travaux.refetch(), onError: (e) => signaler("", e) })}>
+                ✕
+              </button>
+            )}
+          </div>
         ))}
-        {travaux.isSuccess && !travaux.data.length && <li className="text-xs text-muted-foreground">Aucun travail supplémentaire signalé.</li>}
-      </ul>
-      {role && SIGNALENT.includes(role) && (
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!libelle.trim()) return;
-            ajouter.mutate(
-              { bcId, tacheId, libelle, origine },
-              {
-                onSuccess: () => {
-                  setLibelle("");
-                  signaler("Travail supplémentaire signalé — il sera chiffré à la validation.");
-                  void travaux.refetch();
-                },
-                onError: (err) => signaler("", err),
-              }
-            );
-          }}
-        >
-          <label className="sr-only" htmlFor={`travail-${bcId}`}>Travail supplémentaire constaté</label>
-          <Input id={`travail-${bcId}`} placeholder="Ex. : reprise de plinthes sur 4 ml" value={libelle} onChange={(e) => setLibelle(e.target.value)} />
-          <Button type="submit" size="sm" disabled={!libelle.trim() || ajouter.isPending}>Signaler</Button>
-        </form>
-      )}
-    </section>
+      </div>
+    </>
   );
 }
