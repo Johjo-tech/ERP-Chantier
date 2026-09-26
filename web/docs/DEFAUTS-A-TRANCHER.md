@@ -206,3 +206,44 @@ décrivent chaque correction.
   salutation, pas de bandeau.
 - **Correction existante** : aucune pour ce tableau (le planning de `web/` le reconnaît déjà par son
   compte : `planning.data.monSousTraitantId`, à passer à `tableauSousTraitant`).
+
+## Écrans
+
+### DEF-ECR-01 — Rapports : un rapport sans statut porte une pastille vide
+- **Écran** : Rapports / recherche de fuite › liste.
+- **Reproduction** : compte `admin.alpha@erp.local` ; données : le rapport « PDF PARITÉ — rapport »
+  (INT-2026-000001) du jeu `tests/visuel/pdf/jeu-pdf.sql`, créé sans statut (`interventions.statut` NULL,
+  la colonne n'a pas de défaut) — cas d'un rapport repris ou écrit hors de l'écran ; ouvrir le menu
+  « Rapports ».
+- **Ancienne** : à droite de la carte, après « LOGEMENT OCCUPÉ », une pastille grise VIDE (`<span class="badge
+  gray">` sans texte : `esc(i.statut)` d'un statut absent).
+- **Juste** : une pastille qui dit quelque chose — le statut par défaut d'un rapport (« en cours »), ou pas
+  de pastille du tout ; et, en base, un défaut sur la colonne pour qu'un rapport ne naisse pas sans statut.
+- **Nouvelle aujourd'hui** : identique à l'ancienne (pastille grise vide, D-VIS2-02). Elle affichait
+  « EN COURS » avant d'être alignée.
+
+### DEF-ECR-02 — Pièces en commande : « 📦 Commandé » n'enregistre pas la date de commande
+- **Écran** : Pièces en commande (bon « Sans BC » de Mme Durand, une pièce à commander).
+- **Reproduction** : compte `conducteur.alpha@erp.local` ; données : le jeu d'essai de la base locale (le bon
+  « Sans BC » porte la pièce « Mitigeur thermostatique 1/2 ») ; menu « Pièces en commande », déplier la carte
+  du bon (« ▸ »), cliquer « 📦 Commandé ».
+- **Ancienne** : la bulle annonce « 📦 Pièce commandée — classée dans le dossier … », mais la pièce ne change
+  pas de section : elle reste sous « À commander », sans date de commande — la date n'est pas enregistrée
+  (relevé en D-E2E-04). Recharger la page le confirme.
+- **Juste** : la date de commande est enregistrée (`planning_taches.piece_date_commande` des tâches du bon qui
+  portent la pièce), la pièce passe dans
+  « 🚚 Commandées — par fournisseur », dans le dossier de son fournisseur, avec « commandée le JJ/MM/AAAA »
+  et le bouton « ✓ Pièce arrivée — Renvoyer au planning ».
+- **Nouvelle aujourd'hui** : fait ce qui est juste — la date est enregistrée, la pièce est reclassée dans le
+  dossier « — Fournisseur non renseigné — », sa carte reste ouverte et dit « commandée le … » (parcours
+  `tests/e2e/commandes.e2e.ts`, « pièces : le conducteur commande… »). La nouvelle diffère donc de l'ancienne
+  sur ce point ; à confirmer par le client.
+
+### DEF-ECR-03 — Tableau de bord et Statistiques : un brouillon compte dans le chiffre d'affaires
+Même défaut que **DEF-STA-01** (reproduction et correction y sont décrites). Depuis D-STA-A-01, la
+nouvelle le reproduit à l'identique : un brouillon chiffré augmente « Total période » et la colonne du
+mois de Statistiques dans les deux applications.
+
+### DEF-ECR-04 — Tableau de bord : la création d'un brouillon s'écrit « Mme Durand · null »
+Même défaut que **DEF-STA-06** (reproduction et correction y sont décrites). Depuis D-STA-A-01, la
+nouvelle écrit elle aussi « Mme Durand · null ».

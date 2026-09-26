@@ -37,6 +37,14 @@ beforeEach(() => {
 });
 
 describe("choisir un article depuis une ligne (DEV-10, ART-10)", () => {
+  it("porte le champ de l'ancien (`art-pick`, « Code… ») : sans `type=\"text\"` l'ancienne feuille ne l'habillait pas", () => {
+    const { champ } = ouvrir();
+    expect(champ).toHaveAttribute("type", "text");
+    expect(champ).toHaveClass("art-pick");
+    expect(champ).toHaveAttribute("placeholder", "Code…");
+    expect(champ).toHaveAttribute("title", "Tapez un code ou un mot de la désignation");
+  });
+
   it("propose les articles après la frappe, une requête pour le mot", async () => {
     const { champ } = ouvrir();
     await userEvent.type(champ, "plb");

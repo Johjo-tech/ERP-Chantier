@@ -41,7 +41,8 @@ export function CarteRapport({ r, numeroBon }: { r: RapportDeLaListe; numeroBon:
   const supprimer = useSupprimerRapport();
   const [lien, setLien] = useState(false);
   const echec = (e: unknown) => afficherToast(messageErreur(e));
-  const statut = r.statut ?? "en cours";
+  // L'ancien écrit `esc(i.statut)` : un rapport sans statut (repris, ou né hors de l'écran) porte une pastille vide, pas « en cours ».
+  const statut = r.statut ?? "";
   const photos = r.nbPhotos ? `${r.nbPhotos} photo${r.nbPhotos > 1 ? "s" : ""}` : "";
 
   return (

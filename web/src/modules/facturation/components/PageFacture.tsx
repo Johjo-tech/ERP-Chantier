@@ -9,9 +9,11 @@ import { Alert } from "@/components/ui/alert";
 import { useMessageNavigation } from "@/lib/useMessageNavigation";
 import { motifRoleFacture } from "../domain/actions";
 import { useDroitsFacture } from "../hooks/useEcranFactures";
+import { useDefilementFormulaire } from "../hooks/useDefilementFormulaire";
 import { useFacture } from "../hooks/useFactures";
 import { FormulaireFacture } from "./FormulaireFacture";
 import { OngletsFacturation } from "./OngletsFacturation";
+import { useComptesFacturation } from "../hooks/useComptesFacturation";
 
 /**
  * L'écran d'une facture, tel que l'ancien l'ouvrait (`renderFactures` avec
@@ -26,6 +28,9 @@ export function PageFacture({ ChampReference }: { ChampReference?: ChampReferenc
   const reglages = useReglages();
   const droits = useDroitsFacture();
   const motifRole = motifRoleFacture(droits);
+  const comptes = useComptesFacturation();
+  // L'ancien faisait défiler jusqu'au formulaire à l'ouverture (`editItem`) — ici, une fois l'écran posé.
+  useDefilementFormulaire("formZoneFacture", comptes.pret && !reglages.isPending && !(id && facture.isPending), id ?? "nouvelle");
   const cadre = (contenu: ReactNode) => (
     <>
       <OngletsFacturation />

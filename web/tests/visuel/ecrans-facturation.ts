@@ -27,6 +27,10 @@ function onglet(id: string, etat: Record<string, unknown> = {}): Geste {
   };
 }
 
+/** Les cartes des pièces de `jeux/facturation.sql`, par l'interlocuteur que les deux applications affichent. */
+const CARTE_BROUILLON = ".card:has-text('Brouillon — non émise'):has-text('Mme Durand'):has-text('Témoin visuel') button:has-text('Modifier')";
+const CARTE_EMISE = ".card:has-text('SCI Les Tilleuls'):has-text('Témoin visuel') button:has-text('Consulter')";
+
 function cliquer(...selecteurs: string[]): Geste {
   return async (page) => {
     for (const s of selecteurs) await page.click(s, { timeout: 5_000 });
@@ -128,20 +132,22 @@ export function ecransFacturation(): Ecran[] {
       nouveau: { chemin: "/devis/nouveau" },
       seuils: seuils({ pixels: 0.003, texte: 0 }, { pixels: 0.003, texte: 0 }),
     },
+    // Les deux pièces viennent de `jeux/facturation.sql` (interlocuteur « Témoin visuel ») : elles
+    // visaient avant ce qu'un passage des e2e laissait en base, et aucune carte ne répondait sur base neuve.
     {
       id: "facture-brouillon",
       titre: "Factures › Modifier un brouillon (Mme Durand)",
       compte: "admin",
-      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer(".card:has-text('Brouillon — non émise'):has-text('Mme Durand') button:has-text('Modifier')")) },
-      nouveau: { chemin: "/factures", gestes: cliquer(".card:has-text('Brouillon — non émise'):has-text('Mme Durand') button:has-text('Modifier')") },
+      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer(CARTE_BROUILLON)) },
+      nouveau: { chemin: "/factures", gestes: cliquer(CARTE_BROUILLON) },
       seuils: seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 }),
     },
     {
       id: "facture-emise",
-      titre: "Factures › Consulter une facture émise (FAC-2026-000025)",
+      titre: "Factures › Consulter une facture émise (SCI Les Tilleuls)",
       compte: "admin",
-      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer(".card:has-text('FAC-2026-000025') button:has-text('Consulter')")) },
-      nouveau: { chemin: "/factures", gestes: cliquer(".card:has-text('FAC-2026-000025') button:has-text('Consulter')") },
+      ancien: { chemin: "/", gestes: enchainer(onglet("factures", { facturesView: "liste" }), cliquer(CARTE_EMISE)) },
+      nouveau: { chemin: "/factures", gestes: cliquer(CARTE_EMISE) },
       seuils: seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 }),
     },
     {
