@@ -42,6 +42,17 @@ export const MODES_REGLEMENT = [
   { code: "especes", libelle: "Espèces" },
 ] as const;
 
+/** Les deux clés de la liste qui ne sont pas des préréglages : le réglage de la société, et la saisie libre. */
+export const CLE_SOCIETE = "societe";
+export const CLE_AUTRE = "autre";
+
+/** La clé de liste que porte ce client : un préréglage, la société, ou « autre » (`cleDelaiDuClient`). */
+export function cleDelai(jours: string, mode: string): string {
+  if (jours.trim() === "") return CLE_SOCIETE;
+  const p = delaiPreregle({ jours: Number(jours), mode: mode === "fin_de_mois" ? "fin_de_mois" : "net" });
+  return p ? p.cle : CLE_AUTRE;
+}
+
 export function delaiPreregle(delai: DelaiPaiement | null | undefined): DelaiPreregle | null {
   if (!delai) return null;
   return DELAIS_PREREGLES.find((d) => d.jours === Number(delai.jours) && d.mode === delai.mode) ?? null;

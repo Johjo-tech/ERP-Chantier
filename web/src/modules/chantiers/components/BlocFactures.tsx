@@ -1,24 +1,30 @@
 import { Link } from "react-router";
-import { Chargement, Erreur } from "@/components/etats/Etats";
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDateFr } from "@/lib/dates";
+import { Erreur } from "@/components/etats/Etats";
 import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useFacturesDuChantier } from "../hooks/useFiche";
 
-/** Même code couleur que l'ancien badge (app.js l. 14378). */
-function variante(statut: string | null): BadgeVariant {
-  if (statut === "payée") return "succes";
+/** Même code couleur que l'ancien badge (app.js l. 14378) : payée = success, impayée = danger, sinon info. */
+function classeFacture(statut: string | null): string {
+  if (statut === "payée") return "success";
   if (statut === "impayée") return "danger";
-  return "default";
+  return "info";
 }
 
 /**
- * Les factures du chantier (CHA-12) : numéro, TTC (vue `v_facture_totaux`),
- * statut, et l'aperçu imprimable (PDF). Rien pour qui ne voit pas les factures.
+ * Un avoir se lit en négatif, comme l'ancien (`computeDocTotals` d'un avoir) :
+ * la vue le rend en valeur absolue, et « 300,00 € » laisserait croire à une vente.
+ */
+function ttcSigne(typeDocument: string, ttc: number) {
+  const m = montant(ttc);
+  return typeDocument === "avoir" ? m.abs().neg() : m;
+}
+
+/**
+ * « 🧾 Factures » (`chantierFacturesHTML`, CHA-12) : numéro, TTC (vue
+ * `v_facture_totaux`), statut. Imprimer et envoyer ne sont proposés qu'à une
+ * pièce émise — sans numéro elle ne sort pas (`regles-actions-facture`, D-CHA-12).
  */
 export function BlocFactures({ chantierId }: { chantierId: string }) {
   useModeDiscret();
@@ -26,30 +32,30 @@ export function BlocFactures({ chantierId }: { chantierId: string }) {
   const factures = useFacturesDuChantier(chantierId);
   if (!autorise) return null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Factures</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {factures.isPending && <Chargement />}
-        {factures.isError && <Erreur erreur={factures.error} reessayer={() => void factures.refetch()} />}
-        {factures.isSuccess && factures.data.length === 0 && <p className="text-sm text-muted-foreground">Aucune facture pour l'instant.</p>}
-        <ul className="divide-y divide-border">
-          {factures.data?.map((f) => (
-            <li key={f.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
-              <Link to={`/factures/${f.id}`} className="font-medium text-primary hover:underline">
-                {f.numero ?? "Brouillon"}
+    <div className="chantier-section">
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>🧾 Factures</span>
+      </div>
+      {factures.isError && <Erreur erreur={factures.error} reessayer={() => void factures.refetch()} />}
+      {factures.isSuccess && factures.data.length === 0 && <div className="empty">Aucune facture pour l'instant.</div>}
+      {factures.data?.map((f) => (
+        <div key={f.id} className="chantier-file-row" style={{ flexWrap: "wrap" }}>
+          <Link to={`/factures/${f.id}`}>
+            🧾 {f.numero ? f.numero : "Brouillon — non émise"} — {f.ttc == null ? "—" : formatEurosEcran(ttcSigne(f.type_document, f.ttc))} TTC
+          </Link>
+          <span className={`badge ${classeFacture(f.statut)}`}>{f.statut || "brouillon"}</span>
+          {f.numero && (
+            <>
+              <Link className="btn small" to={`/factures/${f.id}/apercu`}>
+                Imprimer / PDF
               </Link>
-              <span className="text-muted-foreground">{formatDateFr(f.date)}</span>
-              <span className="tabular-nums">{f.ttc == null ? "—" : `${formatEurosEcran(montant(f.ttc))} TTC`}</span>
-              <Badge variant={variante(f.statut)}>{f.statut ?? "brouillon"}</Badge>
-              <Button asChild size="sm" variant="outline" className="ml-auto">
-                <Link to={`/factures/${f.id}/apercu`}>Imprimer / PDF</Link>
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+              <Link className="btn small" to={`/factures/${f.id}`}>
+                Envoyer par email
+              </Link>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -32,8 +32,12 @@ export interface AvancementChantier {
 export function avancementChantier(lignes: readonly LigneDpgf[]): AvancementChantier {
   const total = somme(lignes.map(montantLigneDpgf));
   const facture = somme(lignes.map((l) => montantLigneDpgf(l).times(montant(l.avancement_cumule)).div(CENT)));
-  const pourcentage = total.gt(0) ? Number(facture.div(total).times(CENT).round(0, Big.roundHalfUp)) : 0;
-  return { total, facture, reste: total.minus(facture), pourcentage };
+  return { total, facture, reste: total.minus(facture), pourcentage: pourcentageFacture(total, facture) };
+}
+
+/** La part facturée, arrondie à l'unité à l'unité la plus proche, comme l'ancien écran ; 0 sans total. */
+export function pourcentageFacture(total: Montant, facture: Montant): number {
+  return total.gt(0) ? Number(facture.div(total).times(CENT).round(0, Big.roundHalfUp)) : 0;
 }
 
 /**

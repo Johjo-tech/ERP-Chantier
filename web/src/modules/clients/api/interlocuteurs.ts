@@ -26,6 +26,13 @@ export async function creerInterlocuteur(clientId: string, s: SaisieInterlocuteu
   if (error) throw error;
 }
 
+/** `select` : un refus RLS sur un UPDATE ne lève rien, il ne modifie simplement aucune ligne. */
+export async function modifierInterlocuteur(id: string, s: SaisieInterlocuteur): Promise<void> {
+  const { data, error } = await supabase().from("interlocuteurs").update(s).eq("id", id).select("id");
+  if (error) throw error;
+  if (!data?.length) throw { code: "42501", message: "Modification refusée" };
+}
+
 export async function supprimerInterlocuteur(id: string): Promise<void> {
   const { data, error } = await supabase().from("interlocuteurs").delete().eq("id", id).select("id");
   if (error) throw error;

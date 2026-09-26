@@ -1,70 +1,95 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo, useState, type ChangeEvent } from "react";
+import { Link } from "react-router";
+import { Erreur } from "@/components/etats/Etats";
 import { messageErreur } from "@/lib/erreurs";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
+import { afficherToast } from "@/lib/toast";
+import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneDpgfBase } from "../api/dpgf";
 import type { Chantier } from "../domain/chantier";
 import { avancementChantier, estFactureeEntierement, lignesFigees } from "../domain/dpgf";
-import { validerLignesDpgf, type BrouillonLigneDpgf } from "../domain/saisie-dpgf";
-import { useDpgf, useEnregistrerLignesDpgf, useSupprimerLigneDpgf, useTachesPlanifiees } from "../hooks/useChantiers";
+import { schemaNouvelleLigneDpgf, validerLignesDpgf, type BrouillonLigneDpgf } from "../domain/saisie-dpgf";
+import { useAjouterLigneDpgf, useDpgf, useEnregistrerLignesDpgf, useSupprimerLigneDpgf, useTachesPlanifiees } from "../hooks/useChantiers";
 import { useDevisAvecLignes, useMetiers } from "../hooks/useFiche";
-import { BoutonDepot } from "./Fichiers";
 import { DialoguePlanifier } from "./DialoguePlanifier";
-import { FormulaireAjoutDpgf } from "./FormulaireAjoutDpgf";
 import { ImportDpgf } from "./ImportDpgf";
 import { RepriseDevis } from "./RepriseDevis";
-import { TableDpgf } from "./TableDpgf";
+import { TableDpgf, type LigneAffichee } from "./TableDpgf";
 
 interface Props {
   chantier: Chantier;
-  /** Actions apportées par d'autres modules (situation de travaux), composées dans app/. */
-  actions?: ReactNode;
-  actionsSelection?: (ids: string[]) => ReactNode;
   fichierAImporter: File | null;
   importer: (f: File | null) => void;
 }
 
+const enTexte = (n: number) => String(n).replace(".", ",");
 const depuisServeur = (l: LigneDpgfBase, figee: boolean): BrouillonLigneDpgf => ({
   id: l.id,
   type: l.type,
   designation: l.designation,
-  quantite: String(l.quantite).replace(".", ","),
-  prix_unitaire: String(l.prix_unitaire).replace(".", ","),
+  quantite: enTexte(l.quantite),
+  prix_unitaire: enTexte(l.prix_unitaire),
   metier: l.metier ?? "",
   figee,
 });
 
-/** « DPGF chiffré — suivi d'avancement » (CHA-06 à CHA-09, CHA-15), repliable. */
-export function BlocDpgf({ chantier, actions, actionsSelection, fichierAImporter, importer }: Props) {
+/** Les lignes ajoutées par « + Ligne » / « + Chapitre » n'ont pas d'identifiant de base : un préfixe les distingue. */
+const PREFIXE_NOUVELLE = "nouvelle-";
+const MESSAGE_SANS_SELECTION = "Cochez d'abord au moins une ligne à facturer dans le tableau ci-dessus.";
+
+/**
+ * « 📈 DPGF chiffré — suivi d'avancement » (`chantierDpgfLignesHTML`, CHA-06 à
+ * CHA-09) : replier, importer un fichier, modifier en place, « + Ligne »,
+ * « + Chapitre », « Enregistrer les lignes », « Facturer la sélection », totaux.
+ * Comme l'ancien, rien ne part en base avant « Enregistrer les lignes » — ajouts
+ * et retraits compris ; mais les saisies en cours survivent à un ajout (CHA-53).
+ */
+export function BlocDpgf({ chantier, fichierAImporter, importer }: Props) {
   useModeDiscret();
   const dpgf = useDpgf(chantier.id);
   const taches = useTachesPlanifiees(chantier.id);
   const metiers = useMetiers();
   const devis = useDevisAvecLignes(chantier.id);
   const enregistrer = useEnregistrerLignesDpgf(chantier.id);
+  const ajouter = useAjouterLigneDpgf(chantier.id);
   const supprimer = useSupprimerLigneDpgf(chantier.id);
+  const factureCree = usePermission("factures", "creer");
   const [replie, setReplie] = useState(false);
   const [modifiees, setModifiees] = useState<Record<string, BrouillonLigneDpgf>>({});
+  const [nouvelles, setNouvelles] = useState<BrouillonLigneDpgf[]>([]);
+  const [retirees, setRetirees] = useState<Set<string>>(new Set());
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [aPlanifier, setAPlanifier] = useState<LigneDpgfBase | null>(null);
+  const [enCours, setEnCours] = useState(false);
   const figees = useMemo(() => lignesFigees(dpgf.data ?? [], taches.data ?? []), [dpgf.data, taches.data]);
   const devisSource = useMemo(() => new Map((devis.data ?? []).map((d) => [d.id, d.numero ?? "brouillon"])), [devis.data]);
 
-  if (dpgf.isPending) return <Chargement libelle="Chargement du DPGF…" />;
-  if (dpgf.isError) return <Erreur erreur={dpgf.error} reessayer={() => void dpgf.refetch()} />;
-  const lignes = dpgf.data;
-  const a = avancementChantier(lignes);
-  const positionSuivante = lignes.reduce((max, x) => Math.max(max, x.position), -1) + 1;
-  const brouillon = (l: LigneDpgfBase) => modifiees[l.id] ?? depuisServeur(l, figees.has(l.id));
-  const nbModifiees = Object.keys(modifiees).length;
-  const selectionnees = lignes.filter((l) => selection.has(l.id) && !estFactureeEntierement(l)).map((l) => l.id);
+  const enBase = (dpgf.data ?? []).filter((l) => !retirees.has(l.id));
+  const a = avancementChantier(enBase);
+  const affichees: LigneAffichee[] = [
+    ...enBase.map((l) => ({ brouillon: modifiees[l.id] ?? depuisServeur(l, figees.has(l.id)), enBase: l })),
+    ...nouvelles.map((b) => ({ brouillon: b, enBase: null })),
+  ];
+  const selectionnees = enBase.filter((l) => selection.has(l.id) && !estFactureeEntierement(l)).map((l) => l.id);
 
-  function changer(l: LigneDpgfBase, champ: "designation" | "quantite" | "prix_unitaire" | "metier", valeur: string) {
-    setModifiees((m) => ({ ...m, [l.id]: { ...brouillon(l), [champ]: valeur } }));
+  function changer(id: string, champ: "designation" | "quantite" | "prix_unitaire" | "metier", valeur: string) {
+    if (id.startsWith(PREFIXE_NOUVELLE)) return setNouvelles((ns) => ns.map((n) => (n.id === id ? { ...n, [champ]: valeur } : n)));
+    const l = enBase.find((x) => x.id === id);
+    if (l) setModifiees((m) => ({ ...m, [id]: { ...(m[id] ?? depuisServeur(l, figees.has(id))), [champ]: valeur } }));
+  }
+  function ajouterBrouillon(type: "ligne" | "chapitre") {
+    const id = `${PREFIXE_NOUVELLE}${Date.now()}-${nouvelles.length}`;
+    setNouvelles((ns) => [...ns, { id, type, designation: "", quantite: type === "ligne" ? "1" : "0", prix_unitaire: "0", metier: "", figee: false }]);
+  }
+  function retirer(id: string) {
+    if (id.startsWith(PREFIXE_NOUVELLE)) return setNouvelles((ns) => ns.filter((n) => n.id !== id));
+    setRetirees((r) => new Set(r).add(id));
+    setSelection((s) => {
+      const n = new Set(s);
+      n.delete(id);
+      return n;
+    });
   }
   function basculer(id: string) {
     setSelection((s) => {
@@ -74,75 +99,150 @@ export function BlocDpgf({ chantier, actions, actionsSelection, fichierAImporter
       return n;
     });
   }
-  function toutEnregistrer() {
-    const v = validerLignesDpgf(Object.values(modifiees));
-    if (!v.ok) return setErreurs(v.erreurs);
-    setErreurs({});
-    enregistrer.mutate(v.lignes, { onSuccess: () => setModifiees({}) });
+
+  /** Valide tout avant d'écrire quoi que ce soit : une erreur désigne sa ligne, et rien n'est parti. */
+  function preparer() {
+    const existantes = validerLignesDpgf(Object.values(modifiees).filter((m) => !retirees.has(m.id)));
+    const erreursNouvelles: Record<string, string> = {};
+    const aInserer = nouvelles.flatMap((n) => {
+      const r = schemaNouvelleLigneDpgf.safeParse({ type: n.type === "chapitre" ? "chapitre" : "ligne", designation: n.designation, quantite: n.quantite, prix_unitaire: n.prix_unitaire, unite: "" });
+      if (r.success) return [{ ...r.data, metier: n.metier || null }];
+      for (const i of r.error.issues) erreursNouvelles[`${n.id}.${String(i.path[0] ?? "designation")}`] = i.message;
+      return [];
+    });
+    const tout = { ...(existantes.ok ? {} : existantes.erreurs), ...erreursNouvelles };
+    return { ok: Object.keys(tout).length === 0, erreurs: tout, existantes: existantes.ok ? existantes.lignes : [], aInserer };
+  }
+
+  async function toutEnregistrer() {
+    const p = preparer();
+    setErreurs(p.erreurs);
+    if (!p.ok) return afficherToast(Object.values(p.erreurs)[0] ?? "Lignes invalides.");
+    setEnCours(true);
+    try {
+      for (const id of retirees) await supprimer.mutateAsync(id);
+      if (p.existantes.length) await enregistrer.mutateAsync(p.existantes);
+      const depuis = (dpgf.data ?? []).reduce((max, l) => Math.max(max, l.position), -1) + 1;
+      for (const [i, l] of p.aInserer.entries()) await ajouter.mutateAsync({ position: depuis + i, ligne: l });
+      setModifiees({});
+      setNouvelles([]);
+      setRetirees(new Set());
+      afficherToast("Lignes DPGF enregistrées.", "success");
+    } catch (err) {
+      console.error("Enregistrement du DPGF refusé :", err);
+      afficherToast(messageErreur(err));
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  function demanderPlanification(id: string) {
+    const l = enBase.find((x) => x.id === id);
+    if (!l) return;
+    // Le bon reprend le métier ENREGISTRÉ : une saisie en attente doit d'abord partir.
+    if (modifiees[id]) return afficherToast("Enregistrez d'abord les modifications de cette ligne.");
+    if (!l.metier) return afficherToast("Choisissez d'abord un métier pour cette ligne avant de la planifier.");
+    setAPlanifier(l);
   }
 
   return (
-    <Card>
-      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button size="icon" variant="outline" aria-expanded={!replie} aria-controls={`dpgf-${chantier.id}`} onClick={() => setReplie(!replie)} title={replie ? "Déplier" : "Replier"}>
+    <div className="chantier-section" style={{ gridColumn: "1/-1" }}>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            className="btn small dpgf-toggle-btn"
+            title={replie ? "Déplier" : "Replier"}
+            aria-expanded={!replie}
+            aria-controls={`dpgfCollapsibleBody_${chantier.id}`}
+            onClick={() => setReplie(!replie)}
+          >
             {replie ? "+" : "−"}
-          </Button>
-          <CardTitle>DPGF chiffré — suivi d'avancement</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {replie ? `${lignes.filter((l) => l.type === "ligne").length} ligne(s) — ${formatEurosEcran(a.total)} HT` : "Cochez les lignes à facturer, puis validez ci-dessous"}
-        </p>
-        {actions}
-      </CardHeader>
-      {!replie && (
-        <CardContent id={`dpgf-${chantier.id}`} className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border p-2">
-            <span className="text-sm">
-              <strong>Importer un DPGF existant</strong> — fichier Excel (.xlsx) ou CSV, lignes extraites automatiquement
-            </span>
-            <BoutonDepot libelle="Analyser un fichier" accepte=".xlsx,.xls,.csv" onFichier={importer} />
+          </button>
+          📈 DPGF chiffré — suivi d'avancement
+        </span>
+        {replie ? (
+          <span className="card-sub">
+            {enBase.filter((l) => l.type === "ligne").length} ligne(s) — {formatEurosEcran(a.total)} HT
+          </span>
+        ) : (
+          <span className="card-sub">Cochez les lignes à facturer, puis validez ci-dessous</span>
+        )}
+      </div>
+      <div id={`dpgfCollapsibleBody_${chantier.id}`} style={replie ? { display: "none" } : undefined}>
+        <div className="dpgf-import-banner">
+          <div>
+            <strong>Importer un DPGF existant</strong>
+            <div className="card-sub">Fichier Excel (.xlsx) ou CSV — les lignes sont extraites automatiquement</div>
           </div>
-          {fichierAImporter && <ImportDpgf key={`${fichierAImporter.name}-${fichierAImporter.lastModified}`} chantierId={chantier.id} fichier={fichierAImporter} lignes={lignes} figees={figees} fermer={() => importer(null)} />}
-          <RepriseDevis chantierId={chantier.id} devis={devis.data ?? []} lignes={lignes} figees={figees} />
-          {(enregistrer.isError || supprimer.isError) && <Alert variant="erreur">{messageErreur(enregistrer.error ?? supprimer.error)}</Alert>}
-          {taches.isError && <Erreur erreur={taches.error} reessayer={() => void taches.refetch()} />}
-          {lignes.length === 0 ? (
-            <Vide message="Aucune ligne pour l'instant." />
-          ) : (
-            <TableDpgf
-              lignes={lignes}
-              brouillon={brouillon}
-              changer={changer}
-              erreurs={erreurs}
-              selection={selection}
-              basculer={basculer}
-              taches={taches.data ?? []}
-              metiers={metiers.data ?? []}
-              devisSource={devisSource}
-              // Le bon reprend le métier ENREGISTRÉ : une saisie en attente doit d'abord partir.
-              onPlanifier={(l) => (modifiees[l.id] ? setErreurs({ [`${l.id}.designation`]: "Enregistrez d'abord les modifications de cette ligne." }) : setAPlanifier(l))}
-              onSupprimer={(id) => supprimer.mutate(id)}
+          <label className="btn primary" style={{ cursor: "pointer" }}>
+            📥 Analyser un fichier
+            <input
+              type="file"
+              className="sr-only"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                const f = e.target.files?.[0] ?? null;
+                e.target.value = "";
+                importer(f);
+              }}
             />
-          )}
-          {aPlanifier && (
-            <DialoguePlanifier key={aPlanifier.id} chantier={chantier} ligne={aPlanifier} taches={taches.data ?? []} fermer={() => setAPlanifier(null)} planifiee={() => setAPlanifier(null)} />
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={toutEnregistrer} disabled={!nbModifiees || enregistrer.isPending}>
-              {enregistrer.isPending ? "Enregistrement…" : `Enregistrer les lignes${nbModifiees ? ` (${nbModifiees})` : ""}`}
-            </Button>
-            {nbModifiees > 0 && <Button size="sm" variant="ghost" onClick={() => setModifiees({})}>Annuler les modifications</Button>}
-            <span className="ml-auto">{actionsSelection?.(selectionnees)}</span>
+          </label>
+        </div>
+        <RepriseDevis chantierId={chantier.id} devis={devis.data ?? []} lignes={dpgf.data ?? []} figees={figees} />
+        {dpgf.isError && <Erreur erreur={dpgf.error} reessayer={() => void dpgf.refetch()} />}
+        {taches.isError && <Erreur erreur={taches.error} reessayer={() => void taches.refetch()} />}
+        <TableDpgf
+          id={`dpgfLignesTable_${chantier.id}`}
+          lignes={affichees}
+          changer={changer}
+          erreurs={erreurs}
+          selection={selection}
+          basculer={basculer}
+          taches={taches.data ?? []}
+          metiers={metiers.data ?? []}
+          devisSource={devisSource}
+          onPlanifier={demanderPlanification}
+          onRetirer={retirer}
+        />
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+          <button type="button" className="btn small" onClick={() => ajouterBrouillon("ligne")}>
+            + Ligne
+          </button>
+          <button type="button" className="btn small" onClick={() => ajouterBrouillon("chapitre")}>
+            + Chapitre
+          </button>
+          <button type="button" className="btn small primary" disabled={enCours} onClick={() => void toutEnregistrer()}>
+            Enregistrer les lignes
+          </button>
+          {/* La situation de travaux vit dans le module facturation : on y va par son adresse, les lignes cochées en paramètre. */}
+          {factureCree &&
+            (selectionnees.length ? (
+              <Link className="btn small primary" style={{ marginLeft: "auto" }} to={`/chantiers/${chantier.id}/situation?lignes=${selectionnees.join(",")}`}>
+                Facturer la sélection
+              </Link>
+            ) : (
+              <button type="button" className="btn small primary" style={{ marginLeft: "auto" }} onClick={() => afficherToast(MESSAGE_SANS_SELECTION)}>
+                Facturer la sélection
+              </button>
+            ))}
+        </div>
+        <div className="dpgf-totals">
+          <div>
+            Total DPGF (HT) : <strong>{formatEurosEcran(a.total)}</strong>
           </div>
-          <dl className="grid gap-1 text-sm sm:grid-cols-3">
-            <div><dt className="inline text-muted-foreground">Total DPGF (HT) : </dt><dd className="inline font-semibold tabular-nums">{formatEurosEcran(a.total)}</dd></div>
-            <div><dt className="inline text-muted-foreground">Déjà facturé : </dt><dd className="inline font-semibold tabular-nums">{formatEurosEcran(a.facture)} ({a.pourcentage} %)</dd></div>
-            <div><dt className="inline text-muted-foreground">Reste à facturer : </dt><dd className="inline font-semibold tabular-nums">{formatEurosEcran(a.reste)}</dd></div>
-          </dl>
-          <FormulaireAjoutDpgf chantierId={chantier.id} positionSuivante={positionSuivante} />
-        </CardContent>
+          <div>
+            Déjà facturé : <strong>{formatEurosEcran(a.facture)}</strong>
+          </div>
+          <div>
+            Reste à facturer : <strong>{formatEurosEcran(a.reste)}</strong>
+          </div>
+        </div>
+      </div>
+      {fichierAImporter && (
+        <ImportDpgf key={`${fichierAImporter.name}-${fichierAImporter.lastModified}`} chantierId={chantier.id} fichier={fichierAImporter} lignes={dpgf.data ?? []} figees={figees} fermer={() => importer(null)} />
       )}
-    </Card>
+      {aPlanifier && <DialoguePlanifier key={aPlanifier.id} chantier={chantier} ligne={aPlanifier} taches={taches.data ?? []} fermer={() => setAPlanifier(null)} />}
+    </div>
   );
 }

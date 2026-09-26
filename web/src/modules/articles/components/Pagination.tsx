@@ -1,5 +1,3 @@
-import { Button } from "@/components/ui/button";
-
 interface Props {
   page: number;
   pages: number;
@@ -7,20 +5,20 @@ interface Props {
   onPage: (page: number) => void;
 }
 
-/** Précédent / suivant, annoncé aux lecteurs d'écran ; rien à montrer sur une seule page. */
+/** La pagination de l'ancien catalogue ; rien à montrer sur une seule page. */
 export function Pagination({ page, pages, libelle, onPage }: Props) {
   if (pages <= 1) return null;
   return (
-    <nav aria-label={libelle} className="mt-3 flex items-center justify-center gap-3">
-      <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        ← Précédente
-      </Button>
-      <span aria-live="polite" className="text-sm text-muted-foreground">
+    <nav aria-label={libelle} style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "center", marginTop: "14px" }}>
+      <button type="button" className="btn small" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        ← Précédent
+      </button>
+      <span aria-live="polite" className="card-sub">
         Page {page} sur {pages}
       </span>
-      <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        Suivante →
-      </Button>
+      <button type="button" className="btn small" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+        Suivant →
+      </button>
     </nav>
   );
 }

@@ -1,8 +1,5 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Chargement } from "@/components/etats/Etats";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
 import { rapportRejetsCsv } from "@/modules/articles/domain/import";
 import { telechargerTexte } from "@/modules/articles/components/telechargement";
@@ -14,34 +11,112 @@ import { ApercuClients } from "./ApercuClients";
 /** Les premiers noms d'un échec suffisent à le retrouver ; le rapport CSV les donne tous. */
 const NOMS_CITES = 4;
 
+const pluriel = (n: number) => (n > 1 ? "s" : "");
+
 /**
- * Import de clients (CLI-08, IMP-10 à IMP-14) : choisir un fichier, VOIR ce
- * qui sera écrit, puis accepter. Rien n'atteint la base avant le clic final.
+ * Import de clients (CLI-08, IMP-10 à IMP-14), au HTML de l'ancien
+ * (`importClientsHTML`) : l'import prend l'écran entier, choisir un fichier,
+ * VOIR ce qui sera écrit, puis accepter. Rien n'atteint la base avant le clic
+ * final.
  */
 export function PageImportClients() {
   const autorise = usePermission("clients", "modifier");
   const apercu = useApercuClients();
   const ecrire = useEcrireClients();
-  const titre = <EnTetePage titre="Importer des clients" actions={<Button variant="ghost" asChild><Link to="/clients">Retour aux clients</Link></Button>} />;
-  if (!autorise) return <>{titre}<Alert variant="erreur">L'import crée ET met à jour des fiches : il faut pouvoir modifier les clients.</Alert></>;
+  const retour = (
+    <Link className="btn" to="/clients">
+      Retour
+    </Link>
+  );
+  const cadre = (contenu: ReactNode) => (
+    <>
+      <div className="page-head">
+        <h1>Importer des clients</h1>
+      </div>
+      {contenu}
+    </>
+  );
+  if (!autorise) {
+    return cadre(
+      <div className="form-panel">
+        <div role="alert" className="wf-banner alerte">
+          L'import crée ET met à jour des fiches : il faut pouvoir modifier les clients.
+        </div>
+        <div style={{ marginTop: "14px" }}>{retour}</div>
+      </div>
+    );
+  }
 
   const lecture = apercu.data;
   const rapport = () => lecture && telechargerTexte("import-clients-rapport.csv", `\uFEFF${rapportRejetsCsv(lignesRapportClients(lecture.rapport))}`);
+  const erreur = apercu.error ?? ecrire.error;
 
-  return (
-    <div className="flex max-w-5xl flex-col gap-4">
-      {titre}
-      <p className="text-sm text-muted-foreground">
-        Fichier exporté d'un logiciel de gestion, colonnes séparées par des points-virgules et reconnues par leur nom — un export partiel
-        passe. Chaque SIRET est vérifié par sa clé de contrôle. Rien n'est écrit avant votre accord.
+  if (erreur) {
+    return cadre(
+      <div className="form-panel">
+        <div role="alert" className="wf-banner alerte">
+          <b>Import impossible</b> — {messageErreur(erreur)}
+        </div>
+        <div style={{ marginTop: "14px" }}>{retour}</div>
+      </div>
+    );
+  }
+  if (apercu.isPending || ecrire.isPending) {
+    return cadre(
+      <div className="form-panel">
+        <div className="empty" role="status">
+          {apercu.variables?.nom ?? "votre fichier"}
+          <br />
+          <span>{ecrire.isPending ? "Écriture…" : "Traitement…"}</span>
+        </div>
+      </div>
+    );
+  }
+  if (ecrire.isSuccess) {
+    const { crees, misAJour, echecs } = ecrire.data;
+    return cadre(
+      <div className="form-panel">
+        <div role="status" className="wf-banner ok">
+          <b>Import terminé</b> — {crees} créé{pluriel(crees)}, {misAJour} mis à jour.
+        </div>
+        {echecs.length > 0 && (
+          <div role="alert" className="wf-banner alerte" style={{ marginTop: "10px" }}>
+            <div style={{ fontWeight: 700 }}>{echecs.length} refus</div>
+            <ul style={{ margin: 0, paddingLeft: "18px" }}>
+              {echecs.map((e, i) => (
+                <li key={i}>
+                  {e.noms.slice(0, NOMS_CITES).join(", ")}
+                  {e.noms.length > NOMS_CITES ? "…" : ""} — {e.motif}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+          <button type="button" className="btn" onClick={rapport}>
+            📄 Rapport
+          </button>
+          {retour}
+        </div>
+      </div>
+    );
+  }
+  if (lecture) {
+    return cadre(<ApercuClients nom={lecture.nom} rapport={lecture.rapport} apercu={lecture.apercu} onImporter={() => ecrire.mutate(lecture.apercu)} onRapport={rapport} retour={retour} />);
+  }
+  return cadre(
+    <div className="form-panel">
+      <h3>Importer des clients</h3>
+      {/* La phrase de l'ancien, sans l'annuaire que l'import n'interroge pas (D-EFA-06). */}
+      <p className="card-sub">
+        Fichier exporté d'un logiciel de gestion, colonnes séparées par des points-virgules. L'encodage est reconnu tout seul et les colonnes le sont par leur nom — un
+        export partiel passe. Chaque SIRET est vérifié par sa clé de contrôle. Rien n'est écrit avant votre accord.
       </p>
-      <div>
-        <label htmlFor="fichier-clients" className="mb-1 block text-sm font-medium">Fichier à importer</label>
+      <div style={{ margin: "16px 0" }}>
         <input
-          id="fichier-clients"
           type="file"
+          aria-label="Fichier à importer"
           accept=".csv,.txt,text/csv"
-          disabled={apercu.isPending || ecrire.isPending}
           onChange={(e) => {
             const f = e.target.files?.[0];
             ecrire.reset();
@@ -49,35 +124,7 @@ export function PageImportClients() {
           }}
         />
       </div>
-      {apercu.isPending && <Chargement libelle="Lecture du fichier…" />}
-      {apercu.isError && <Alert variant="erreur">Le fichier n'a pas pu être lu : {messageErreur(apercu.error)}</Alert>}
-      {lecture && !ecrire.isSuccess && (
-        <ApercuClients nom={lecture.nom} rapport={lecture.rapport} apercu={lecture.apercu} enCours={ecrire.isPending} onImporter={() => ecrire.mutate(lecture.apercu)} onRapport={rapport} />
-      )}
-      {ecrire.isError && <Alert variant="erreur">{messageErreur(ecrire.error)}</Alert>}
-      {ecrire.isSuccess && (
-        <>
-          <Alert variant="succes">
-            Import terminé — {ecrire.data.crees} créé(s), {ecrire.data.misAJour} mis à jour.
-          </Alert>
-          {ecrire.data.echecs.length > 0 && (
-            <Alert variant="erreur">
-              <p className="font-semibold">{ecrire.data.echecs.length} refus</p>
-              <ul className="list-disc pl-5">
-                {ecrire.data.echecs.map((e, i) => (
-                  <li key={i}>
-                    {e.noms.slice(0, NOMS_CITES).join(", ")}
-                    {e.noms.length > NOMS_CITES ? "…" : ""} — {e.motif}
-                  </li>
-                ))}
-              </ul>
-            </Alert>
-          )}
-          <div>
-            <Button variant="outline" onClick={rapport}>Télécharger le rapport</Button>
-          </div>
-        </>
-      )}
+      {retour}
     </div>
   );
 }

@@ -37,11 +37,13 @@ export interface NouvelleLigneDpgf {
   quantite: number;
   prix_unitaire: number;
   unite: string | null;
+  /** Le métier choisi sur une ligne ajoutée à la main, avant son premier enregistrement. */
+  metier?: string | null;
 }
 
 export async function ajouterLigneDpgf(chantierId: string, position: number, l: NouvelleLigneDpgf): Promise<void> {
   // Toutes les colonnes sont données : une colonne absente d'un INSERT vaut NULL, pas son défaut.
-  const { error } = await dpgf().insert({ ...l, chantier_id: chantierId, position, avancement_cumule: 0, devis_source_id: null, metier: null });
+  const { error } = await dpgf().insert({ ...l, chantier_id: chantierId, position, avancement_cumule: 0, devis_source_id: null, metier: l.metier ?? null });
   if (error) throw error;
 }
 

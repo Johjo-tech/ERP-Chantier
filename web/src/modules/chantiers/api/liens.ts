@@ -34,6 +34,26 @@ export async function listerFacturesDuChantier(chantierId: string): Promise<Fact
   return factures.map((f) => ({ ...f, ttc: ttc.get(f.id) ?? null }));
 }
 
+export const schemaDevisDuChantier = z.object({
+  id: z.string(),
+  numero: z.string().nullable(),
+  statut: z.string().nullable(),
+  ht: z.number().nullable(),
+});
+export type DevisDuChantier = z.infer<typeof schemaDevisDuChantier>;
+
+/** Les devis du chantier et leur HT, lu dans la vue `v_devis_totaux` : aucun total recalculé ici. */
+export async function listerDevisDuChantier(chantierId: string): Promise<DevisDuChantier[]> {
+  const { data, error } = await supabase().from("devis").select("id, numero, statut").eq("chantier_id", chantierId).order("date", { ascending: false });
+  if (error) throw error;
+  const devis = analyser(z.array(schemaDevisDuChantier.omit({ ht: true })), data, "devis du chantier");
+  if (!devis.length) return [];
+  const totaux = await supabase().from("v_devis_totaux").select("devis_id, ht").in("devis_id", devis.map((d) => d.id));
+  if (totaux.error) throw totaux.error;
+  const ht = new Map(analyser(z.array(z.object({ devis_id: z.string().nullable(), ht: z.number().nullable() })), totaux.data, "totaux des devis").map((t) => [t.devis_id, t.ht]));
+  return devis.map((d) => ({ ...d, ht: ht.get(d.id) ?? null }));
+}
+
 export const schemaDevisAvecLignes = z.object({
   id: z.string(),
   numero: z.string().nullable(),

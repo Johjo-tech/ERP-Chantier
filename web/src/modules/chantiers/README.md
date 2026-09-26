@@ -7,15 +7,18 @@ devis complémentaires, factures, chiffres du chantier.
 
 ## Écrans
 
-- `PageChantiers` : tableau filtrable (recherche, conducteur, type) — statut,
-  DPGF HT et % facturé (qui voit les prix), nombres de CR / devis / factures.
-- `PageFormulaireChantier` : identité, statut, notes, champs PPSPS.
-- `PageFicheChantier` : bandeau de chiffres (`StatistiquesChantier`) puis onglets
-  (`Onglets`, `?onglet=`) : **Synthèse** (informations diverses au blur,
-  intervenants), **Documents** (comptes-rendus « non lus », pièces du marché,
-  sécurité + PPSPS Word), **DPGF** (édition en place, sélection → situation,
-  import Excel/CSV, reprise d'un devis, « Planifier »), **To-do** (kanban),
-  **Achats**, **Devis et factures**.
+Au HTML de l'ancien écran (`renderChantiers`, `renderChantierDetail`), comparé par
+`tests/visuel/ecrans-chantiers.ts` (D-ECR-CHA-01 à 12).
+
+- `PageChantiers` : cartes A4 filtrables (recherche, conducteur, type), formulaire
+  `FormulaireChantier` ouvert en place (`/chantiers/nouveau` y arrive ouvert).
+- `PageFicheChantier` : « ← Retour aux chantiers », bandeau sombre, puis les
+  sections empilées de l'ancien : comptes-rendus, informations diverses + sécurité
+  (inspections, PPSPS Word, DOE), pièces du marché, to-do (kanban, ← → au
+  clavier), devis complémentaires, factures, achats, DPGF chiffré (import,
+  « + Ligne », « Enregistrer les lignes », « Facturer la sélection », « 📅
+  Planifier »), puis Intervenants (web/ seulement). « Modifier les infos » remplace
+  le bandeau par le formulaire (`/chantiers/:id/modifier`).
 
 ## Tables, vues, stockage
 

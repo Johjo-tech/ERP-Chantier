@@ -1,12 +1,10 @@
 import { Link } from "react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
-import { formatTaux, montant } from "@/lib/money";
+import { montant } from "@/lib/money";
 import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
-import { Can } from "@/modules/auth-roles/components/Can";
+import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { libelleType, type Article } from "../domain/article";
 import { BoutonActifArticle } from "./BoutonActifArticle";
+import { libelleTaux } from "./taux";
 
 /** Longueur d'aperçu d'une description : assez pour la reconnaître, sans noyer la liste. */
 const APERCU_DESCRIPTION = 120;
@@ -15,51 +13,64 @@ function apercu(texte: string): string {
   return texte.length > APERCU_DESCRIPTION ? `${texte.slice(0, APERCU_DESCRIPTION)}…` : texte;
 }
 
+/** La table de l'ancien catalogue (`.lignes-table` sur fond blanc) ; un article retiré s'y voit estompé. */
 export function TableArticles({ articles }: { articles: readonly Article[] }) {
   useModeDiscret();
+  const peutEcrire = usePermission("articles", "modifier");
   return (
-    <Table>
-      <THead>
-        <Tr>
-          <Th>Code</Th>
-          <Th>Désignation</Th>
-          <Th>Famille</Th>
-          <Th>Type</Th>
-          <Th>Unité</Th>
-          <Th className="text-right">Prix HT</Th>
-          <Th className="text-right">TVA</Th>
-          <Can module="articles" action="modifier">
-            <Th><span className="sr-only">Actions</span></Th>
-          </Can>
-        </Tr>
-      </THead>
-      <TBody>
+    <table className="lignes-table" style={{ background: "#fff" }}>
+      <thead>
+        <tr>
+          <th style={{ width: "14%" }}>Code</th>
+          <th>Désignation</th>
+          <th style={{ width: "12%" }}>Famille</th>
+          <th style={{ width: "10%" }}>Type</th>
+          <th className="num" style={{ width: "8%" }}>
+            Unité
+          </th>
+          <th className="num" style={{ width: "10%" }}>
+            Prix HT
+          </th>
+          <th className="num" style={{ width: "7%" }}>
+            TVA
+          </th>
+          <th style={{ width: "14%" }}>
+            <span className="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
         {articles.map((a) => (
-          <Tr key={a.id} className={a.actif ? "" : "opacity-60"}>
-            <Td className="font-mono text-xs">
-              {a.code}
-              {!a.actif && <Badge variant="neutre" className="ml-2">Retiré</Badge>}
-            </Td>
-            <Td>
+          <tr key={a.id} style={a.actif ? undefined : { opacity: 0.55 }}>
+            <td>
+              <span className="numref">{a.code}</span>
+            </td>
+            <td>
               {a.designation}
-              {a.description && <span className="block whitespace-pre-wrap text-xs text-muted-foreground">{apercu(a.description)}</span>}
-            </Td>
-            <Td>{a.famille ?? "—"}</Td>
-            <Td>{libelleType(a.type_article)}</Td>
-            <Td>{a.unite ?? "—"}</Td>
-            <Td className="text-right tabular-nums">{formatEurosEcran(montant(a.prix_unitaire))}</Td>
-            <Td className="text-right tabular-nums">{formatTaux(montant(a.tva))}</Td>
-            <Can module="articles" action="modifier">
-              <Td className="whitespace-nowrap text-right">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to={`/articles/${a.id}/modifier`} aria-label={`Modifier ${a.code}`}>Modifier</Link>
-                </Button>
-                <BoutonActifArticle article={a} />
-              </Td>
-            </Can>
-          </Tr>
+              {a.description && (
+                <div className="card-sub" style={{ whiteSpace: "pre-wrap" }}>
+                  {apercu(a.description)}
+                </div>
+              )}
+            </td>
+            <td>{a.famille ?? ""}</td>
+            <td>{libelleType(a.type_article)}</td>
+            <td className="num">{a.unite ?? ""}</td>
+            <td className="num">{formatEurosEcran(montant(a.prix_unitaire))}</td>
+            <td className="num">{libelleTaux(a.tva)}</td>
+            <td style={{ whiteSpace: "nowrap" }}>
+              {peutEcrire && (
+                <>
+                  <Link className="btn small" to={`/articles/${a.id}/modifier`} aria-label={`Modifier ${a.code}`}>
+                    Modifier
+                  </Link>{" "}
+                  <BoutonActifArticle article={a} />
+                </>
+              )}
+            </td>
+          </tr>
         ))}
-      </TBody>
-    </Table>
+      </tbody>
+    </table>
   );
 }

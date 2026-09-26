@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { ecransChantiersClientsCatalogue } from "./ecrans-chantiers";
 
 /**
  * La table de correspondance « écran ancien ↔ route nouvelle ».
@@ -56,7 +57,7 @@ export interface Ecran {
 }
 
 /** Un onglet de l'ancienne application, avec l'état qu'il lit (sous-vue, filtre). */
-function onglet(id: string, etat: Record<string, unknown> = {}): Geste {
+export function onglet(id: string, etat: Record<string, unknown> = {}): Geste {
   return async (page) => {
     await page.evaluate(
       ([o, e]) => {
@@ -79,14 +80,14 @@ const ouvrirMenu: Geste = async (page) => {
 };
 
 /** Un clic sur ce que désigne le sélecteur, le même des deux côtés : c'est tout l'intérêt d'avoir repris le HTML. */
-function cliquer(...selecteurs: string[]): Geste {
+export function cliquer(...selecteurs: string[]): Geste {
   return async (page) => {
     for (const s of selecteurs) await page.click(s, { timeout: 5_000 });
   };
 }
 
 /** Les deux tailles, avec le même seuil : la plupart des écrans. */
-function partout(pixels: number, texte: number): Partial<Record<Taille, Seuils>> {
+export function partout(pixels: number, texte: number): Partial<Record<Taille, Seuils>> {
   return { bureau: { pixels, texte }, mobile: { pixels, texte } };
 }
 
@@ -98,9 +99,6 @@ function partout(pixels: number, texte: number): Partial<Record<Taille, Seuils>>
  * les ramène vers zéro, écran par écran.
  */
 const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
-  catalogue: { bureau: { pixels: 0.11, texte: 21 } },
-  chantiers: { bureau: { pixels: 0.16, texte: 33 } },
-  clients: { bureau: { pixels: 0.3, texte: 29 } },
   devis: { bureau: { pixels: 0.27, texte: 41 } },
   factures: { bureau: { pixels: 0.44, texte: 76 } },
   "factures-a-facturer": { bureau: { pixels: 0.09, texte: 40 } },
@@ -196,8 +194,7 @@ export const ECRANS: readonly Ecran[] = [
     compte: "admin",
     ancien: { chemin: "/", gestes: onglet("plus", { plusTab: "clients" }) },
     nouveau: { chemin: "/plus" },
-    seuils: { mobile: { pixels: 0.43, texte: 29 } },
-    aFaire: "Le cadre est repris ; la liste des clients dessous est un écran de module.",
+    seuils: { mobile: { pixels: 0.001, texte: 0 } },
   },
   // ── Les trois tableaux de bord ───────────────────────────────────────────
   {
@@ -228,6 +225,8 @@ export const ECRANS: readonly Ecran[] = [
   },
   // ── Bons de commande et pièces (vague « écrans identiques », D-ECR-BC) ──
   ...ecransCommandes(),
+  // ── Chantiers, clients, catalogue (repris : ecrans-chantiers.ts) ────────
+  ...ecransChantiersClientsCatalogue(),
   // ── Les écrans des modules (vague suivante) ─────────────────────────────
   ...ecransModules(),
 ];
@@ -251,9 +250,6 @@ function ecransModules(): Ecran[] {
     { id: "factures-reglements", titre: "Factures › Règlements", onglet: "factures", etat: { facturesView: "reglements" }, route: "/factures/reglements" },
     { id: "rapports", titre: "Rapports", onglet: "interventions", route: "/rapports" },
     { id: "planning", titre: "Planning", onglet: "planning", route: "/planning" },
-    { id: "chantiers", titre: "Chantiers", onglet: "chantiers", route: "/chantiers" },
-    { id: "clients", titre: "Clients", onglet: "clients", route: "/clients" },
-    { id: "catalogue", titre: "Catalogue", onglet: "catalogue", route: "/articles" },
     { id: "rh", titre: "RH", onglet: "rh", route: "/rh" },
     { id: "vehicules", titre: "Véhicules", onglet: "vehicules", route: "/vehicules" },
     { id: "materiel", titre: "Matériel", onglet: "materiel", route: "/materiel" },

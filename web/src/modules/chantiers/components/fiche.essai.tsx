@@ -57,6 +57,7 @@ vi.mock("../api/affectations", () => ({ listerAffectations: vi.fn(async () => []
 vi.mock("../api/liens", () => ({
   listerFacturesDuChantier: vi.fn(async () => []),
   listerDevisAvecLignes: vi.fn(async () => []),
+  listerDevisDuChantier: vi.fn(async () => []),
   listerMetiers: vi.fn(async () => ["Peinture", "Sol"]),
   identitePourPpsps: vi.fn(),
 }));
@@ -75,50 +76,55 @@ beforeEach(() => {
   api.todos.listerTodos.mockResolvedValue([{ id: "t1", texte: "Bâcher la toiture", statut: "a_faire", position: 0, date_prevue: "2020-01-01", salarie_id: null, notes: null }]);
 });
 
-function ouvrir(role: RoleMembre, chemin = "/chantiers/ch1", actionsSelection?: (c: Chantier, ids: string[]) => React.ReactNode) {
+function ouvrir(role: RoleMembre, chemin = "/chantiers/ch1") {
   return rendreAvecSession(
     <Routes>
       <Route path="/chantiers" element={<PageChantiers />} />
-      <Route path="/chantiers/:id" element={<PageFicheChantier actionsSelection={actionsSelection} />} />
+      <Route path="/chantiers/:id" element={<PageFicheChantier />} />
+      <Route path="/chantiers/:id/situation" element={<p>situation ouverte</p>} />
     </Routes>,
     { role, chemin }
   );
 }
 
-describe("liste des chantiers (CHA-01)", () => {
+describe("liste des chantiers (CHA-01) — les cartes de l'ancien", () => {
   it("filtre par type et compte comptes-rendus, devis, factures", async () => {
     ouvrir("admin", "/chantiers");
-    expect(await screen.findByRole("link", { name: "Résidence Les Tilleuls" })).toBeInTheDocument();
-    const ligne = screen.getByRole("row", { name: /Tilleuls/ });
-    await waitFor(() => expect(within(ligne).getByText("3")).toBeInTheDocument());
-    expect(within(ligne).getByText("En cours")).toBeInTheDocument();
+    const carte = await screen.findByRole("link", { name: "Résidence Les Tilleuls" });
+    await waitFor(() => expect(within(carte).getByText("🧾 3")).toBeInTheDocument());
+    expect(within(carte).getByText("📋 2")).toBeInTheDocument();
+    expect(within(carte).getByText("en cours")).toHaveClass("badge", "warn");
+    expect(within(carte).getByText("Chantier neuf")).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Filtrer par type"), "rehabilitation");
     expect(screen.queryByRole("link", { name: "Résidence Les Tilleuls" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Salle de bains Durand" })).toBeInTheDocument();
   });
+
+  it("« + Nouveau chantier » ouvre le formulaire en place et masque les filtres", async () => {
+    ouvrir("admin", "/chantiers");
+    await userEvent.click(await screen.findByRole("button", { name: "+ Nouveau chantier" }));
+    expect(screen.getByRole("heading", { name: "Nouveau chantier" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Filtrer par type")).not.toBeInTheDocument();
+  });
 });
 
-describe("fiche chantier — onglets selon le rôle (CHA-03, CHA-24, CHA-25)", () => {
-  it("l'admin voit DPGF et achats ; le technicien, ni l'un ni l'autre", async () => {
+describe("fiche chantier — sections selon le rôle (CHA-03, CHA-24, CHA-25)", () => {
+  it("l'admin voit DPGF chiffré et achats ; le technicien, ni l'un ni l'autre", async () => {
     const { unmount } = ouvrir("admin");
-    expect(await screen.findByRole("tab", { name: "DPGF" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Achats" })).toBeInTheDocument();
+    expect(await screen.findByText("📈 DPGF chiffré — suivi d'avancement")).toBeInTheDocument();
+    expect(screen.getByText("💰 Achats")).toBeInTheDocument();
     unmount();
     api.dpgf.listerDpgf.mockClear();
     ouvrir("technicien");
-    expect(await screen.findByRole("tab", { name: "To-do" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "DPGF" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Achats" })).not.toBeInTheDocument();
+    expect(await screen.findByText("🗂️ To do liste")).toBeInTheDocument();
+    expect(screen.queryByText("📈 DPGF chiffré — suivi d'avancement")).not.toBeInTheDocument();
+    expect(screen.queryByText("💰 Achats")).not.toBeInTheDocument();
     expect(api.dpgf.listerDpgf).not.toHaveBeenCalled();
   });
 
-  it("les onglets se parcourent au clavier", async () => {
+  it("un compte-rendu non lu porte sa pastille", async () => {
     ouvrir("admin");
-    const synthese = await screen.findByRole("tab", { name: "Synthèse" });
-    synthese.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
-    expect(await screen.findByText("CR semaine 38.pdf")).toBeInTheDocument();
+    expect(await screen.findByText(/CR semaine 38\.pdf/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Non lu" })).toBeInTheDocument();
   });
 
@@ -135,62 +141,66 @@ describe("fiche chantier — onglets selon le rôle (CHA-03, CHA-24, CHA-25)", (
 });
 
 describe("DPGF (CHA-06, CHA-07, CHA-53)", () => {
-  it("une saisie en place survit à l'ajout d'une ligne, puis part avec « Enregistrer les lignes »", async () => {
-    ouvrir("admin", "/chantiers/ch1?onglet=dpgf");
-    const tableau = await screen.findByRole("table");
-    const murs = within(tableau).getAllByLabelText("Désignation")[0] as HTMLElement;
+  const tableau = async () => {
+    await screen.findByDisplayValue("Murs");
+    return document.getElementById("dpgfLignesTable_ch1") as HTMLElement;
+  };
+
+  it("une saisie en place survit à « + Ligne », et tout part avec « Enregistrer les lignes »", async () => {
+    ouvrir("admin");
+    await screen.findByDisplayValue("Murs");
+    const t = await tableau();
+    const murs = within(t).getAllByLabelText("Désignation")[0] as HTMLElement;
     await userEvent.clear(murs);
     await userEvent.type(murs, "Murs séjour");
-    const ajout = screen.getByRole("form", { name: "Ajouter au DPGF" });
-    await userEvent.type(within(ajout).getByLabelText("Désignation"), "Sols");
-    await userEvent.type(within(ajout).getByLabelText("PU HT"), "20");
-    await userEvent.click(within(ajout).getByRole("button", { name: "+ Ligne" }));
-    await waitFor(() => expect(api.dpgf.ajouterLigneDpgf).toHaveBeenCalled());
-    expect(within(screen.getByRole("table")).getAllByLabelText("Désignation")[0]).toHaveValue("Murs séjour");
-    await userEvent.click(screen.getByRole("button", { name: "Enregistrer les lignes (1)" }));
+    await userEvent.click(screen.getByRole("button", { name: "+ Ligne" }));
+    expect(within(t).getAllByLabelText("Désignation")[0]).toHaveValue("Murs séjour");
+    const nouvelle = within(t).getAllByLabelText("Désignation")[2] as HTMLElement;
+    await userEvent.type(nouvelle, "Sols");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer les lignes" }));
     await waitFor(() => expect(api.dpgf.enregistrerLignesDpgf).toHaveBeenCalledWith([{ id: "l1", designation: "Murs séjour", quantite: 10, prix_unitaire: 45.5, metier: null }]));
+    await waitFor(() => expect(api.dpgf.ajouterLigneDpgf).toHaveBeenCalledWith("ch1", 2, expect.objectContaining({ type: "ligne", designation: "Sols", quantite: 1 })));
   });
 
   it("une ligne facturée à 100 % ne se coche pas ; la sélection part vers la situation", async () => {
-    const actions = vi.fn((_c: Chantier, ids: string[]) => <span>sélection : {ids.join(",") || "aucune"}</span>);
-    ouvrir("admin", "/chantiers/ch1?onglet=dpgf", actions);
+    ouvrir("admin");
     expect(await screen.findByLabelText("Sélectionner Plafonds pour facturer")).toBeDisabled();
-    expect(screen.getByText("sélection : aucune")).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText("Sélectionner Murs pour facturer"));
-    expect(screen.getByText("sélection : l1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Facturer la sélection" }));
+    expect(await screen.findByText("situation ouverte")).toBeInTheDocument();
   });
 
-  it("planifier sans métier enregistré est refusé avec le message de l'ancien écran", async () => {
-    ouvrir("admin", "/chantiers/ch1?onglet=dpgf");
-    await userEvent.click((await screen.findAllByRole("button", { name: "Planifier" }))[0] as HTMLElement);
-    await userEvent.type(screen.getByLabelText("Quantité à planifier"), "4");
-    await userEvent.click(screen.getByRole("button", { name: "Créer le bon" }));
-    expect(await screen.findByText("Choisissez d'abord un métier pour cette ligne avant de la planifier.")).toBeInTheDocument();
+  it("planifier sans métier enregistré est refusé avant même d'ouvrir la modale", async () => {
+    ouvrir("admin");
+    await userEvent.click((await screen.findAllByRole("button", { name: "📅 Planifier" }))[0] as HTMLElement);
+    expect(screen.queryByRole("dialog", { name: "Planifier une quantité" })).not.toBeInTheDocument();
     expect(api.planification.planifierQuantite).not.toHaveBeenCalled();
   });
 });
 
 describe("to-do (CHA-14)", () => {
   it("retard signalé ; déplacement au clavier ; ajout", async () => {
-    ouvrir("technicien", "/chantiers/ch1?onglet=todo");
-    expect(await screen.findByText(/En retard/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Passer « Bâcher la toiture » en En cours" }));
+    ouvrir("technicien");
+    const carte = (await screen.findByText("Bâcher la toiture")).closest(".todo-kanban-card") as HTMLElement;
+    expect(within(carte).getByText("📅 01/01/2020")).toHaveClass("is-late");
+    carte.focus();
+    await userEvent.keyboard("{ArrowRight}");
     await waitFor(() => expect(api.todos.changerStatutTodo).toHaveBeenCalledWith("t1", "en_cours"));
     await userEvent.type(screen.getByLabelText("Nouvelle tâche"), "Commander la benne{Enter}");
     await waitFor(() => expect(api.todos.ajouterTodo).toHaveBeenCalledWith("ch1", "Commander la benne", 1));
   });
 
   it("le rôle lecture ne modifie rien", async () => {
-    ouvrir("lecture", "/chantiers/ch1?onglet=todo");
+    ouvrir("lecture");
     expect(await screen.findByText("Bâcher la toiture")).toBeInTheDocument();
     expect(screen.queryByLabelText("Nouvelle tâche")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Passer/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Supprimer « Bâcher/ })).not.toBeInTheDocument();
   });
 });
 
 describe("achats (CHA-11, CHA-22)", () => {
   it("main-d'œuvre : salarié et heures remplissent montant et désignation, qui partent sous date_achat", async () => {
-    ouvrir("admin", "/chantiers/ch1?onglet=achats");
+    ouvrir("admin");
     const form = await screen.findByRole("form", { name: "Ajouter un achat" });
     await userEvent.selectOptions(within(form).getByLabelText("Catégorie"), "salarie");
     await waitFor(() => expect(within(form).getByRole("option", { name: "Jean Dupont" })).toBeInTheDocument());

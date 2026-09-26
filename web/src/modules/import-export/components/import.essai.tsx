@@ -49,7 +49,7 @@ describe("import de clients", () => {
     expect(api.clients.importerClients).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "Importer 3 clients" }));
-    await waitFor(() => expect(screen.getByText("Import terminé — 2 créé(s), 1 mis à jour.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Import terminé — 2 créés, 1 mis à jour."));
     const [, aCreer, aMettreAJour] = api.clients.importerClients.mock.calls[0] as [string, Record<string, unknown>[], { id: string; valeurs: Record<string, unknown> }[]];
     expect(aCreer.map((c) => [c.nom, c.cadre_facturation, c.delai_paiement_jours])).toEqual([["M. Martin", "B2C", 0], ["Ste Belge", "B2B_international", null]]);
     // La mise à jour ne touche ni le nom, ni le type (B2G) d'un client existant.

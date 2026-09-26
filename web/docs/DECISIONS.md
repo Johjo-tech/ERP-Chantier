@@ -1952,3 +1952,60 @@ date décroissante, numéro interne décroissant, puis identifiant (la paginatio
 l'exige). Sur une base où des bons de même date ont été créés dans le désordre, les
 cartes du haut peuvent s'échanger : même texte, pixels décalés (seuil de l'écran
 `bons-de-commande` : 5 % au bureau, 0,5 % au téléphone).
+
+
+## D-ECR-CHA-01 — Chantiers, clients, catalogue : les formulaires s'ouvrent en place (remplace D-CHA-01, D-CHA-02)
+L'ancien n'avait pas d'écran de formulaire : la fiche client, le chantier, l'article s'ouvraient au-dessus
+de la liste (ou à la place de la zone du catalogue, du bandeau de la fiche chantier), sans quitter l'écran —
+sous « Plus » sur téléphone aussi. C'est repris : `/clients/nouveau`, `/clients/:id/modifier`,
+`/chantiers/nouveau`, `/chantiers/:id/modifier`, `/articles/nouveau`, `/articles/:id/modifier`, `/articles/import`
+restent des adresses (liens, retour arrière) mais montrent l'écran de l'ancien, formulaire ouvert. La liste des
+chantiers redevient les cartes A4, la fiche redevient les sections empilées (plus d'onglets). La fiche client
+`/clients/:id` (web seulement, citée par d'autres écrans) est gardée telle quelle.
+
+## D-ECR-CHA-02 — Taux de TVA du catalogue écrits comme l'ancien
+`${tva}%` : « 20% », « 5.5% » (le point du nombre JavaScript), dans la liste et le sélecteur de la fiche.
+
+## D-ECR-CHA-03 — Catalogue : « Retirés » vide n'est pas un catalogue vide
+Le filtre « Retirés » sans résultat dit « Aucun article ne correspond. » ; l'ancien disait « Le catalogue est vide ».
+
+## D-ECR-CHA-04 — Imports (catalogue, clients) : l'aperçu de l'ancien
+Même `.form-panel`, mêmes compteurs et bandeaux, « 📄 Rapport », « Retour ». Le tableau des premiers articles lus
+et l'encodage constaté, ajoutés par web/, sont retirés. L'import de clients garde sa phrase d'aide sans l'annuaire,
+qu'il n'interroge pas (D-EFA-06) : 1 ligne d'écart mesurée.
+
+## D-ECR-CHA-05 — La recherche garde le focus
+L'ancien redessinait la zone après la frappe et perdait le focus du champ ; web/ le garde. La comparaison
+visuelle ôte le focus avant de capturer.
+
+## D-ECR-CHA-06 — Les boutons que la base refuserait sont masqués
+Clients en lecture seule : l'ancien montrait « + Nouveau client », « Modifier le client », « Supprimer le client »…
+que la RLS refuse. Masqués (règle du projet : l'écran masque ce qui serait refusé). 10 lignes d'écart mesurées.
+
+## D-ECR-CHA-07 — Le nom du client des chantiers est affiché
+L'ancien lit un champ texte `client` que la base ne remplit pas : la carte, le bandeau et le formulaire du
+chantier restaient vides. web/ affiche `client_nom` (et présélectionne le client). 2 lignes par écran.
+
+## D-ECR-CHA-08 — Confirmations par la boîte du navigateur
+Retirer un article, supprimer un client ou un interlocuteur, retirer un fichier ou un intervenant : `confirm()`
+comme l'ancien. Supprimer un client dit d'abord les pièces qui le citent (CLI-51) ; retirer un fichier de chantier
+se confirme, ce que l'ancien ne faisait pas (le fichier est désormais dans le seau, pas dans le JSON).
+
+## D-ECR-CHA-09 — Fiche chantier : section « 👥 Intervenants »
+Absente de l'ancien ; nécessaire à la RLS du terrain (affectation). Dans les habits de l'ancien, en dernier.
+
+## D-ECR-CHA-10 — Ordre des devis et factures de la fiche chantier
+L'ancien les listait sans tri (ordre physique de la base) ; web/ par date décroissante. Un avoir s'affiche en
+négatif, comme l'ancien.
+
+## D-ECR-CHA-11 — DPGF chiffré : le geste de l'ancien, et un écart d'environnement
+« + Ligne » / « + Chapitre » ajoutent une ligne au tableau ; ajouts, retraits et modifications partent ensemble
+par « Enregistrer les lignes » (les saisies en cours survivent à un ajout, CHA-53). L'import écrit dès la
+confirmation (D-CHA-07). « Facturer la sélection » ouvre la situation de travaux (page du module facturation)
+plutôt que la modale. Sur la base locale, l'ancien ne lit AUCUNE fille de chantier (sa lecture groupée tombe sur
+`chantier_achats`) : la fiche « Salle de bains Durand » y montre 0,00 € et aucune ligne là où web/ lit la ligne de
+DPGF — écart chiffré dans les seuils, pas un défaut de rendu.
+
+## D-ECR-CHA-12 — Compléments CSS : un lien habillé en bouton se comporte comme un bouton
+`a.btn` centre son texte, ignore la casse de son titre ; `a.plus-subnav-btn` centre en largeur et en hauteur
+(`complements.css`). Commun à tous les écrans qui font d'un bouton de l'ancien un lien.

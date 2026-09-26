@@ -1,124 +1,180 @@
-import { useState, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { useState } from "react";
+import { useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { formatDateFr } from "@/lib/dates";
-import { Can } from "@/modules/auth-roles/components/Can";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
+import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
-import { adresseComplete, libelleStatutChantier, libelleTypeChantier, varianteStatutChantier, type Chantier } from "../domain/chantier";
-import { useChantier } from "../hooks/useChantiers";
+import { adresseComplete, libelleTypeChantier, type Chantier } from "../domain/chantier";
+import { statistiquesChantier } from "../domain/statistiques";
+import { useChantier, useDpgf } from "../hooks/useChantiers";
 import { useDroitsChantier } from "../hooks/useDroitsChantier";
+import { useAchats, useComptesRendus, useDevisDuChantier, useFacturesDuChantier } from "../hooks/useFiche";
 import { BlocAchats } from "./BlocAchats";
 import { BlocAffectations } from "./BlocAffectations";
 import { BlocComptesRendus } from "./BlocComptesRendus";
 import { BlocDevisComplementaires } from "./BlocDevisComplementaires";
-import { BlocPiecesMarche, BlocSecurite } from "./BlocDocuments";
+import { BlocPiecesMarche } from "./BlocDocuments";
 import { BlocDpgf } from "./BlocDpgf";
 import { BlocFactures } from "./BlocFactures";
 import { BlocInfosDiverses } from "./BlocInfosDiverses";
 import { BlocTodo } from "./BlocTodo";
-import { Onglets, type Onglet } from "./Onglets";
-import { StatistiquesChantier } from "./StatistiquesChantier";
+import { FormulaireChantierEnPlace } from "./FormulaireChantier";
+import { classeStatut } from "./statut";
 
-interface Props {
-  /** Sections apportées par d'autres modules (devis du chantier…), composées dans app/. */
-  complements?: (c: Chantier) => ReactNode;
-  actionsDpgf?: (c: Chantier) => ReactNode;
-  /** « Facturer la sélection » : fourni par app/ (module facturation) avec les lignes cochées. */
-  actionsSelection?: (c: Chantier, lignes: string[]) => ReactNode;
-}
-
-export function PageFicheChantier(props: Props) {
+/**
+ * La fiche d'un chantier (`renderChantierDetail`). `edition` : la route
+ * `/chantiers/:id/modifier` arrive formulaire ouvert, à la place du bandeau et
+ * des sections — comme « Modifier les infos » dans l'ancien.
+ */
+export function PageFicheChantier({ edition = false }: { edition?: boolean }) {
+  useModeDiscret();
   const { id } = useParams();
   const chantier = useChantier(id);
   if (chantier.isPending) return <Chargement />;
   if (chantier.isError) return <Erreur erreur={chantier.error} reessayer={() => void chantier.refetch()} />;
   return (
     <GardeSociete societeId={chantier.data.societe_id} retour="/chantiers">
-      <Fiche key={chantier.data.id} c={chantier.data} {...props} />
+      <Fiche key={chantier.data.id} c={chantier.data} edition={edition} />
     </GardeSociete>
   );
 }
 
-function Fiche({ c, complements, actionsDpgf, actionsSelection }: Props & { c: Chantier }) {
+function Fiche({ c, edition }: { c: Chantier; edition: boolean }) {
+  useModeDiscret();
   const droits = useDroitsChantier();
-  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const peutModifier = usePermission("chantiers", "modifier");
+  const [modifie, setModifie] = useState(edition);
   const [aImporter, setAImporter] = useState<File | null>(null);
-  const onglets: Onglet[] = [
-    { cle: "synthese", libelle: "Synthèse" },
-    { cle: "documents", libelle: "Documents" },
-    ...(droits.gere ? [{ cle: "dpgf", libelle: "DPGF" }] : []),
-    { cle: "todo", libelle: "To-do" },
-    ...(droits.gere ? [{ cle: "achats", libelle: "Achats" }] : []),
-    { cle: "devis-factures", libelle: "Devis et factures" },
-  ];
-  const demande = params.get("onglet");
-  const actif = onglets.some((o) => o.cle === demande) ? (demande as string) : "synthese";
-  const ouvrir = (cle: string) => setParams((p) => ({ ...Object.fromEntries(p), onglet: cle }), { replace: true });
-  const analyser = (f: File | null) => {
-    setAImporter(f);
-    if (f) ouvrir("dpgf");
-  };
+
+  function fermer() {
+    setModifie(false);
+    if (edition) void navigate(`/chantiers/${c.id}`, { replace: true });
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-      <EnTetePage
-        titre={c.nom}
-        sousTitre={
-          <>
-            {c.client_id ? (
-              <Link to={`/clients/${c.client_id}`} className="text-primary hover:underline">{c.client_nom}</Link>
-            ) : (
-              c.client_nom || "Sans client"
-            )}
-            {` · ${libelleTypeChantier(c.type)} `}
-            <Badge variant={varianteStatutChantier(c.statut)}>{libelleStatutChantier(c.statut)}</Badge>
-          </>
-        }
-        actions={
-          <Can module="chantiers" action="modifier">
-            <Button asChild variant="outline"><Link to={`/chantiers/${c.id}/modifier`}>Modifier les infos</Link></Button>
-          </Can>
-        }
-      />
-      <Card>
-        <CardContent className="grid gap-3 pt-4 sm:grid-cols-3">
-          <div><p className="text-xs text-muted-foreground">Adresse</p><p className="text-sm">{adresseComplete(c) || "—"}</p></div>
-          <div><p className="text-xs text-muted-foreground">Période</p><p className="text-sm">{formatDateFr(c.date_debut)} → {formatDateFr(c.date_fin)}</p></div>
-          <div><p className="text-xs text-muted-foreground">Conducteur</p><p className="text-sm">{c.conducteur || "—"}</p></div>
-          {c.notes && <p className="whitespace-pre-line text-sm text-muted-foreground sm:col-span-3">{c.notes}</p>}
-        </CardContent>
-      </Card>
-      <StatistiquesChantier chantierId={c.id} />
-      <Onglets onglets={onglets} actif={actif} choisir={ouvrir} id={`fiche-${c.id}`}>
-        {actif === "synthese" && (
-          <div className="grid gap-4 lg:grid-cols-2">
+    <>
+      <div className="page-head">
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <button type="button" className="btn small" onClick={() => void navigate("/chantiers")}>
+            ← Retour aux chantiers
+          </button>
+          <h1 style={{ margin: 0 }}>{c.nom}</h1>
+        </div>
+        {!modifie && peutModifier && (
+          <button type="button" className="btn" onClick={() => setModifie(true)}>
+            Modifier les infos
+          </button>
+        )}
+      </div>
+      {modifie ? (
+        <FormulaireChantierEnPlace id={c.id} onFermer={fermer} defiler={false} />
+      ) : (
+        <>
+          <Bandeau c={c} />
+          <div className="chantier-sections">
+            <BlocComptesRendus chantierId={c.id} />
             <BlocInfosDiverses chantier={c} modifiable={droits.modifie} />
+            <BlocPiecesMarche chantierId={c.id} onAnalyserDpgf={droits.gere ? setAImporter : undefined} />
+            <BlocTodo chantierId={c.id} />
+            <BlocDevisComplementaires chantier={c} />
+            <BlocFactures chantierId={c.id} />
+            {droits.gere && <BlocAchats chantierId={c.id} />}
+            {droits.gere && <BlocDpgf chantier={c} fichierAImporter={aImporter} importer={setAImporter} />}
+            {/* Absents de l'ancien : l'affectation ouvre le chantier au terrain (RLS), D-ECR-CHA-09. */}
             <BlocAffectations chantierId={c.id} />
           </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Le bandeau sombre de l'ancienne fiche (`chantier-hero`) : type · client,
+ * adresse, période, statut, puis les chiffres. Chaque chiffre n'apparaît qu'à
+ * qui peut lire sa source — un zéro mentirait à qui ne voit pas les prix.
+ */
+function Bandeau({ c }: { c: Chantier }) {
+  useModeDiscret();
+  const droits = useDroitsChantier();
+  const voitDevis = usePermission("devis", "voir");
+  const voitFactures = usePermission("factures", "voir");
+  const dpgf = useDpgf(c.id);
+  const achats = useAchats(c.id);
+  const cr = useComptesRendus(c.id);
+  const devis = useDevisDuChantier(c.id);
+  const factures = useFacturesDuChantier(c.id);
+  const s = statistiquesChantier({
+    dpgf: droits.gere ? (dpgf.data ?? []) : null,
+    achats: droits.gere ? (achats.data ?? []) : null,
+    nbDevis: voitDevis ? (devis.data?.length ?? 0) : null,
+    nbFactures: voitFactures ? (factures.data?.length ?? 0) : null,
+    nbComptesRendus: cr.data?.length ?? 0,
+    todo: { faits: 0, total: 0 },
+  });
+  const pct = s.avancement?.pourcentage ?? 0;
+  const pluriel = (n: number) => (n > 1 ? "s" : "");
+
+  return (
+    <div className="chantier-hero">
+      <div className="chantier-hero-top">
+        <div>
+          <div className="card-sub">
+            {libelleTypeChantier(c.type)} · {c.client_nom ?? ""}
+          </div>
+          <div className="card-sub">{adresseComplete(c)}</div>
+          <div className="card-sub">
+            {c.date_debut ? formatDateFr(c.date_debut) : "?"} → {c.date_fin ? formatDateFr(c.date_fin) : "?"}
+          </div>
+        </div>
+        <span className={`badge ${classeStatut(c.statut)}`}>{c.statut || "en préparation"}</span>
+      </div>
+      <div className="chantier-hero-stats">
+        {s.avancement && (
+          <>
+            <div className="hero-stat">
+              <div className="hero-ring" style={{ "--pct": pct } as React.CSSProperties} role="img" aria-label={`Avancement facturé ${pct} %`}>
+                <span aria-hidden="true">{pct}%</span>
+              </div>
+              <div className="hero-stat-label">
+                Avancement
+                <br />
+                facturé
+              </div>
+            </div>
+            <div className="hero-stat-block">
+              <div className="hero-stat-value">{formatEurosEcran(s.avancement.total)}</div>
+              <div className="hero-stat-label">Total DPGF (HT)</div>
+            </div>
+          </>
         )}
-        {actif === "documents" && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="lg:col-span-2"><BlocComptesRendus chantierId={c.id} /></div>
-            <BlocPiecesMarche chantierId={c.id} onAnalyserDpgf={droits.gere ? analyser : undefined} />
-            <BlocSecurite chantier={c} />
+        {s.nbDevis !== null && (
+          <div className="hero-stat-block">
+            <div className="hero-stat-value">{s.nbDevis}</div>
+            <div className="hero-stat-label">Devis</div>
           </div>
         )}
-        {actif === "dpgf" && droits.gere && (
-          <BlocDpgf chantier={c} actions={actionsDpgf?.(c)} actionsSelection={actionsSelection ? (ids) => actionsSelection(c, ids) : undefined} fichierAImporter={aImporter} importer={setAImporter} />
-        )}
-        {actif === "todo" && <BlocTodo chantierId={c.id} />}
-        {actif === "achats" && droits.gere && <BlocAchats chantierId={c.id} />}
-        {actif === "devis-factures" && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <BlocDevisComplementaires chantierId={c.id} devisDuChantier={complements?.(c)} />
-            <BlocFactures chantierId={c.id} />
+        <div className="hero-stat-block">
+          <div className="hero-stat-value">{s.nbComptesRendus}</div>
+          <div className="hero-stat-label">
+            Compte{pluriel(s.nbComptesRendus)}-rendu{pluriel(s.nbComptesRendus)}
+          </div>
+        </div>
+        {s.totalAchats && (
+          <div className="hero-stat-block">
+            <div className="hero-stat-value">{formatEurosEcran(s.totalAchats)}</div>
+            <div className="hero-stat-label">Achats</div>
           </div>
         )}
-      </Onglets>
+        {s.nbFactures !== null && (
+          <div className="hero-stat-block">
+            <div className="hero-stat-value">{s.nbFactures}</div>
+            <div className="hero-stat-label">Facture{pluriel(s.nbFactures)}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

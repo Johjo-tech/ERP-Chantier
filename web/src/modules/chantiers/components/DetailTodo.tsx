@@ -1,14 +1,12 @@
 import { useId, type FormEvent } from "react";
-import { ChampChoix, ChampTexte, ChampZone } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
+import { Modale, PiedModale } from "@/components/ui/modale";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
 import type { Salarie } from "../api/achats";
 import type { Todo } from "../api/todos";
 import { schemaDetailTodo } from "../domain/todo";
-import { useEnregistrerDetailTodo, useSupprimerTodo } from "../hooks/useFiche";
+import { useEnregistrerDetailTodo } from "../hooks/useFiche";
 
 interface Props {
   chantierId: string;
@@ -18,12 +16,11 @@ interface Props {
   fermer: () => void;
 }
 
-/** Le détail d'un point de to-do : texte, date prévue, salarié, notes ; ou sa suppression. */
+/** « Détail de la tâche », la modale de l'ancien (`#todoDetailModal`) : texte, date prévue, salarié, notes. */
 export function DetailTodo({ chantierId, todo, salaries, modifiable, fermer }: Props) {
-  const titre = useId();
+  const ids = { texte: useId(), date: useId(), salarie: useId(), notes: useId() };
   const enregistrer = useEnregistrerDetailTodo(chantierId);
-  const supprimer = useSupprimerTodo(chantierId);
-  const { valeurs, erreurs, changer, valider } = useFormulaire({
+  const { valeurs, changer, valider } = useFormulaire({
     texte: todo.texte,
     date_prevue: todo.date_prevue ?? "",
     salarie_id: todo.salarie_id ?? "",
@@ -32,40 +29,52 @@ export function DetailTodo({ chantierId, todo, salaries, modifiable, fermer }: P
 
   function soumettre(e: FormEvent) {
     e.preventDefault();
+    if (!valeurs.texte.trim()) return afficherToast("La tâche ne peut pas être vide.");
     const d = valider(schemaDetailTodo);
-    if (d) enregistrer.mutate({ id: todo.id, detail: d }, { onSuccess: fermer });
+    if (d) enregistrer.mutate({ id: todo.id, detail: d }, { onSuccess: fermer, onError: (err) => afficherToast(messageErreur(err)) });
   }
 
   return (
-    <form onSubmit={soumettre} noValidate role="dialog" aria-labelledby={titre} className="flex flex-col gap-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-      <h3 id={titre} className="text-sm font-semibold">Détail de la tâche</h3>
-      <ChampTexte libelle="Tâche" valeur={valeurs.texte} onChange={(v) => changer("texte", v)} erreur={erreurs.texte} desactive={!modifiable} requis />
-      <div className="grid gap-2 sm:grid-cols-2">
-        <ChampTexte libelle="Date prévue" type="date" valeur={valeurs.date_prevue} onChange={(v) => changer("date_prevue", v)} erreur={erreurs.date_prevue} desactive={!modifiable} />
-        <ChampChoix
-          libelle="Salarié"
-          valeur={valeurs.salarie_id}
-          onChange={(v) => changer("salarie_id", v)}
-          desactive={!modifiable}
-          options={[
-            { valeur: "", libelle: "— Non renseigné —" },
-            ...salaries.map((s) => ({ valeur: s.id, libelle: [s.prenom, s.nom].filter(Boolean).join(" ") })),
-            // Un salarié devenu illisible (sorti, autre rôle) reste affiché plutôt que perdu.
-            ...(todo.salarie_id && !salaries.some((s) => s.id === todo.salarie_id) ? [{ valeur: todo.salarie_id, libelle: "Salarié non listé" }] : []),
-          ]}
-        />
-      </div>
-      <ChampZone libelle="Notes" valeur={valeurs.notes} onChange={(v) => changer("notes", v)} desactive={!modifiable} />
-      {(enregistrer.isError || supprimer.isError) && <Alert variant="erreur">{messageErreur(enregistrer.error ?? supprimer.error)}</Alert>}
-      <div className="flex flex-wrap gap-2">
-        {modifiable && <Button type="submit" size="sm" disabled={enregistrer.isPending}>Enregistrer</Button>}
-        <Button type="button" size="sm" variant="ghost" onClick={fermer}>Fermer</Button>
-        {modifiable && (
-          <span className="ml-auto">
-            <BoutonConfirme libelle="Supprimer" question="Supprimer cette tâche ?" onConfirmer={() => supprimer.mutate(todo.id, { onSuccess: fermer })} />
-          </span>
-        )}
-      </div>
-    </form>
+    <Modale titre="Détail de la tâche" onFermer={fermer} largeurMax="480px">
+      <form onSubmit={soumettre} noValidate>
+        <div className="field">
+          <label htmlFor={ids.texte}>Tâche</label>
+          <input type="text" id={ids.texte} value={valeurs.texte} readOnly={!modifiable} onChange={(e) => changer("texte", e.target.value)} />
+        </div>
+        <div className="field-grid">
+          <div className="field">
+            <label htmlFor={ids.date}>Date de réalisation prévue</label>
+            <input type="date" id={ids.date} value={valeurs.date_prevue} readOnly={!modifiable} onChange={(e) => changer("date_prevue", e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor={ids.salarie}>Assigné à</label>
+            <select id={ids.salarie} value={valeurs.salarie_id} disabled={!modifiable} onChange={(e) => changer("salarie_id", e.target.value)}>
+              <option value="">— Sans conducteur / non renseigné —</option>
+              {salaries.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.prenom ?? ""} {s.nom ?? ""}
+                </option>
+              ))}
+              {/* Un salarié devenu illisible (sorti, autre rôle) reste affiché plutôt que perdu. */}
+              {todo.salarie_id && !salaries.some((s) => s.id === todo.salarie_id) && <option value={todo.salarie_id}>Salarié non listé</option>}
+            </select>
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor={ids.notes}>Notes / commentaires</label>
+          <textarea id={ids.notes} rows={4} style={{ width: "100%" }} value={valeurs.notes} readOnly={!modifiable} onChange={(e) => changer("notes", e.target.value)} />
+        </div>
+        <PiedModale>
+          {modifiable && (
+            <button type="submit" className="btn primary" disabled={enregistrer.isPending}>
+              Enregistrer
+            </button>
+          )}
+          <button type="button" className="btn ghost" onClick={fermer}>
+            Annuler
+          </button>
+        </PiedModale>
+      </form>
+    </Modale>
   );
 }

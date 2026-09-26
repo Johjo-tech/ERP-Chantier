@@ -19,6 +19,16 @@ a.summary-row,
 a.reglages-lien,
 a.notif-item{ text-decoration:none; }
 a.btn, a.quick-action{ cursor:pointer; }
+/* Un <button> centre son texte ; un lien non. Sur téléphone, un bouton qui
+   passe sur deux lignes le montrait : « Importer un / fichier » centré dans
+   l'ancien, calé à gauche ici. */
+a.btn{ text-align:center; justify-content:center; }
+/* …et ne prend pas la casse de son titre : un <button> ignore le `text-transform`
+   de la `.section-title` qui le porte (« + Nouveau devis » dans la fiche chantier). */
+a.btn{ text-transform:none; letter-spacing:normal; }
+/* Même chose pour un sous-onglet, qui s'étire à la hauteur du plus haut
+   (« Bons de commande » sur deux lignes) : le <button> centre aussi en hauteur. */
+a.plus-subnav-btn{ text-align:center; display:flex; align-items:center; justify-content:center; }
 a.traiter-row, a.activity-row, a.topclient-row, a.summary-row{ color:inherit; }
 a.stat-card{ display:block; color:inherit; }
 /* L'action rapide était un <button> sans couleur de texte : elle prenait celle

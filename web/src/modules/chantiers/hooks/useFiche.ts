@@ -17,7 +17,7 @@ import {
   retirer,
   type TableDatee,
 } from "../api/documents";
-import { identitePourPpsps, listerDevisAvecLignes, listerFacturesDuChantier, listerMetiers } from "../api/liens";
+import { identitePourPpsps, listerDevisAvecLignes, listerDevisDuChantier, listerFacturesDuChantier, listerMetiers } from "../api/liens";
 import { urlFichier } from "../api/stockage";
 import { ajouterTodo, changerStatutTodo, enregistrerDetailTodo, listerTodos, supprimerTodo } from "../api/todos";
 import type { SaisieAchat } from "../domain/achats";
@@ -164,6 +164,11 @@ export function useFacturesDuChantier(chantierId: string) {
 export function useDevisAvecLignes(chantierId: string) {
   const autorise = usePermission("devis", "voir");
   return useQuery({ queryKey: clesFiche.devis(chantierId), queryFn: () => listerDevisAvecLignes(chantierId), enabled: autorise });
+}
+
+export function useDevisDuChantier(chantierId: string) {
+  const autorise = usePermission("devis", "voir");
+  return useQuery({ queryKey: [...clesFiche.devis(chantierId), "totaux"], queryFn: () => listerDevisDuChantier(chantierId), enabled: autorise });
 }
 
 export function useMetiers() {

@@ -1,17 +1,15 @@
 import { useEffect, useId, useState } from "react";
-import { Chargement } from "@/components/etats/Etats";
-import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
-import { Table, TBody, Td, THead, Tr } from "@/components/ui/table";
+import { Modale, PiedModale } from "@/components/ui/modale";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import type { LigneDpgfBase } from "../api/dpgf";
 import { devinerLignesAIgnorer, lignesDepuisCorrespondance, nombreDeColonnes, rolesPour, type RoleColonne } from "../domain/import-dpgf";
 import { lireFichierDpgf, type FichierDpgfLu } from "../fichiers/lecture-dpgf";
 import { useImporterDpgf } from "../hooks/useChantiers";
+import { BULLE_CONSIGNE_MS, BULLE_FUGACE_MS } from "./durees";
 
-const LIBELLES: Record<RoleColonne, string> = { designation: "Désignation", qte: "Quantité", prix: "Prix unitaire", ignore: "Ignorer" };
+const LIBELLES: Record<RoleColonne, string> = { designation: "Désignation", qte: "Quantité", prix: "Prix Unitaire", ignore: "Ignorer" };
+const ORDRE: readonly RoleColonne[] = ["designation", "qte", "prix", "ignore"];
 const APERCU = 8;
 
 interface Props {
@@ -23,18 +21,19 @@ interface Props {
 }
 
 /**
- * Correspondance des colonnes d'un DPGF importé (CHA-08) : feuille, lignes
- * d'en-tête à ignorer, rôle de chaque colonne, aperçu. Les rôles sont devinés
- * comme l'ancien écran, puis corrigeables un par un.
+ * « Importer le DPGF — indiquez les colonnes » (CHA-08), la modale de l'ancien
+ * (`#dpgfMappingModal`) : feuille, lignes à ignorer, rôle de chaque colonne,
+ * aperçu. Les rôles sont devinés comme l'ancien, puis corrigeables. Les lignes
+ * partent en base à la confirmation — l'ancien attendait « Enregistrer les
+ * lignes » (D-CHA-07) — et les lignes figées restent.
  */
 export function ImportDpgf({ chantierId, fichier, lignes, figees, fermer }: Props) {
-  const titre = useId();
+  const idIgnorer = useId();
+  const idFeuille = useId();
   const [lu, setLu] = useState<FichierDpgfLu | null>(null);
-  const [erreurLecture, setErreurLecture] = useState<unknown>(null);
   const [feuille, setFeuille] = useState("");
   const [aIgnorer, setAIgnorer] = useState("0");
   const [roles, setRoles] = useState<RoleColonne[]>([]);
-  const [refus, setRefus] = useState<string | null>(null);
   const importer = useImporterDpgf(chantierId);
 
   function choisirFeuille(l: FichierDpgfLu, nom: string) {
@@ -47,25 +46,35 @@ export function ImportDpgf({ chantierId, fichier, lignes, figees, fermer }: Prop
 
   useEffect(() => {
     let actif = true;
+    afficherToast("Lecture du fichier…", "success", BULLE_FUGACE_MS);
     lireFichierDpgf(fichier).then(
       (l) => {
         if (!actif) return;
+        if (!l.noms.length) {
+          afficherToast("Ce fichier semble vide.");
+          return fermer();
+        }
         setLu(l);
         choisirFeuille(l, l.courante);
       },
-      (e: unknown) => actif && setErreurLecture(e)
+      (e: unknown) => {
+        if (!actif) return;
+        console.error("DPGF illisible :", e);
+        afficherToast("Impossible de lire ce fichier. Formats acceptés : Excel (.xlsx, .xls) ou CSV.");
+        fermer();
+      }
     );
     return () => {
       actif = false;
     };
+    // `fermer` change à chaque rendu du parent : seul le fichier relance la lecture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fichier]);
 
-  if (erreurLecture) return <Alert variant="erreur">Impossible de lire ce fichier : {messageErreur(erreurLecture)} <Button size="sm" variant="ghost" onClick={fermer}>Fermer</Button></Alert>;
-  if (!lu) return <Chargement libelle="Lecture du fichier…" />;
+  if (!lu) return null;
   const rangees = lu.feuilles[feuille] ?? [];
   const n = Math.max(0, Number.parseInt(aIgnorer, 10) || 0);
   const nbColonnes = nombreDeColonnes(rangees);
-  const aRemplacer = lignes.filter((l) => !figees.has(l.id)).map((l) => l.id);
 
   function changerIgnorees(v: string) {
     setAIgnorer(v);
@@ -74,48 +83,85 @@ export function ImportDpgf({ chantierId, fichier, lignes, figees, fermer }: Prop
 
   function confirmer() {
     const r = lignesDepuisCorrespondance(rangees, n, roles);
-    if (!r.ok) return setRefus(r.motif);
-    setRefus(null);
+    if (!r.ok) return afficherToast(r.motif);
+    const aRemplacer = lignes.filter((l) => !figees.has(l.id)).map((l) => l.id);
     const suivante = lignes.reduce((max, l) => (figees.has(l.id) ? Math.max(max, l.position) : max), -1) + 1;
-    importer.mutate({ lignes: r.lignes, aRemplacer, positionSuivante: suivante }, { onSuccess: fermer });
+    importer.mutate(
+      { lignes: r.lignes, aRemplacer, positionSuivante: suivante },
+      {
+        onSuccess: () => {
+          fermer();
+          afficherToast(`${r.lignes.length} ligne(s) importée(s).`, "success", BULLE_CONSIGNE_MS);
+        },
+        onError: (err) => afficherToast(messageErreur(err)),
+      }
+    );
   }
 
   return (
-    <section role="dialog" aria-labelledby={titre} className="flex flex-col gap-3 rounded-md border border-primary/40 bg-primary/5 p-3">
-      <h3 id={titre} className="text-sm font-semibold">Importer « {fichier.name} »</h3>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {lu.noms.length > 1 && <ChampChoix libelle="Feuille du classeur" valeur={feuille} onChange={(v) => choisirFeuille(lu, v)} options={lu.noms.map((x) => ({ valeur: x, libelle: x }))} />}
-        <ChampTexte libelle="Lignes d'en-tête à ignorer" inputMode="numeric" valeur={aIgnorer} onChange={changerIgnorees} />
+    <Modale titre="Importer le DPGF — indiquez les colonnes" onFermer={fermer} largeurMax="920px">
+      <p className="card-sub">
+        Pour chaque colonne de votre fichier, indiquez ce qu'elle représente. Ajustez le nombre de lignes à ignorer si le tableau ne commence pas tout en haut.
+      </p>
+      {lu.noms.length > 1 && (
+        <div className="field" style={{ maxWidth: "320px", marginBottom: "10px" }}>
+          <label htmlFor={idFeuille}>Feuille du classeur</label>
+          <select id={idFeuille} value={feuille} onChange={(e) => choisirFeuille(lu, e.target.value)}>
+            {lu.noms.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div className="field" style={{ maxWidth: "280px", marginBottom: "10px" }}>
+        <label htmlFor={idIgnorer}>Ignorer les premières lignes (titres, en-têtes de document…)</label>
+        <input type="number" id={idIgnorer} min={0} value={aIgnorer} onChange={(e) => changerIgnorees(e.target.value)} />
       </div>
-      <div className="overflow-x-auto">
-        <Table>
-          <THead>
-            <Tr>
+      <div style={{ overflow: "auto", maxHeight: "50vh", border: "1px solid var(--border)", borderRadius: "8px" }}>
+        <table className="lignes-table" style={{ minWidth: "600px" }}>
+          <thead>
+            <tr>
               {Array.from({ length: nbColonnes }, (_, c) => (
-                <th key={c} className="p-1">
-                  <Select aria-label={`Rôle de la colonne ${c + 1}`} className="text-xs" value={roles[c] ?? "ignore"} onChange={(e) => setRoles(roles.map((r, i) => (i === c ? (e.target.value as RoleColonne) : r)))}>
-                    {(Object.keys(LIBELLES) as RoleColonne[]).map((r) => <option key={r} value={r}>{LIBELLES[r]}</option>)}
-                  </Select>
+                <th key={c}>
+                  <select
+                    aria-label={`Rôle de la colonne ${c + 1}`}
+                    style={{ fontSize: "11px", padding: "3px" }}
+                    value={roles[c] ?? "ignore"}
+                    onChange={(e) => setRoles(roles.map((r, i) => (i === c ? (e.target.value as RoleColonne) : r)))}
+                  >
+                    {ORDRE.map((r) => (
+                      <option key={r} value={r}>
+                        {LIBELLES[r]}
+                      </option>
+                    ))}
+                  </select>
                 </th>
               ))}
-            </Tr>
-          </THead>
-          <TBody>
+            </tr>
+          </thead>
+          <tbody>
             {rangees.slice(n, n + APERCU).map((r, i) => (
-              <Tr key={i}>{Array.from({ length: nbColonnes }, (_, c) => <Td key={c} className="text-xs">{String(r[c] ?? "")}</Td>)}</Tr>
+              <tr key={i}>
+                {Array.from({ length: nbColonnes }, (_, c) => (
+                  <td key={c} style={{ fontSize: "12px" }}>
+                    {String(r[c] ?? "")}
+                  </td>
+                ))}
+              </tr>
             ))}
-          </TBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
-      <p className="text-xs text-muted-foreground">
-        L'import remplace les {aRemplacer.length} ligne(s) actuelle(s) du DPGF{figees.size ? ` ; ${figees.size} ligne(s) déjà facturée(s) ou planifiée(s) sont conservées` : ""}.
-      </p>
-      {refus && <Alert variant="erreur">{refus}</Alert>}
-      {importer.isError && <Alert variant="erreur">{messageErreur(importer.error)}</Alert>}
-      <div className="flex gap-2">
-        <Button size="sm" onClick={confirmer} disabled={importer.isPending}>{importer.isPending ? "Import…" : "Importer les lignes"}</Button>
-        <Button size="sm" variant="ghost" onClick={fermer}>Annuler</Button>
-      </div>
-    </section>
+      <PiedModale>
+        <button type="button" className="btn primary" onClick={confirmer} disabled={importer.isPending}>
+          Importer ces lignes
+        </button>
+        <button type="button" className="btn ghost" onClick={fermer}>
+          Annuler
+        </button>
+      </PiedModale>
+    </Modale>
   );
 }
