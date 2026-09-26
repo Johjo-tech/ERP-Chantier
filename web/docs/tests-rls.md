@@ -1,0 +1,91 @@
+# Tests RLS
+
+Les tests de politiques tournent contre la base **locale** de `web/`
+(`npm run base:locale` puis `npm run test:rls`). `tests/rls/cible.ts` refuse
+toute cible qui n'est pas une boucle locale — le projet historique a laissé
+ses tests écrire neuf jours en production.
+
+## Jeu d'essai (`supabase/seed-web.sql`)
+
+| Compte | Société | Rôle |
+|---|---|---|
+| admin.alpha@erp.local | ALPHA | admin |
+| secretaire.alpha@erp.local | ALPHA | secrétaire |
+| conducteur.alpha@erp.local | ALPHA | conducteur |
+| technicien.alpha@erp.local | ALPHA | technicien (affecté au chantier « Réhabilitation bât. C ») |
+| lecture.alpha@erp.local | ALPHA | lecture |
+| soustraitant.alpha@erp.local | ALPHA | sous-traitant (affecté à « Salle de bains Durand ») |
+| admin.beta@erp.local | BETA | admin |
+| client.opac@erp.local | — (accès client à « OPAC du Rhône ») | espace client (proposition) |
+
+Mot de passe de tous : `motdepasse-local`.
+
+## Scénarios automatisés
+
+| Fichier | Scénario | Dépend d'une proposition |
+|---|---|---|
+| `isolement.essai.ts` | La matrice figée des tests d'interface = `role_permissions` en base | non |
+| | Chaque compte d'ALPHA : aucune ligne de BETA (clients, chantiers, devis, articles) ; ne voit que la société ALPHA | non |
+| | L'admin de BETA ne voit que BETA ; un compte d'ALPHA ne peut pas écrire dans BETA (42501) | non |
+| | L'anonyme ne voit rien | non |
+| | Technicien et sous-traitant : ni devis, ni lignes, ni articles, ni factures | non |
+| | Le terrain ne voit que les chantiers où il est affecté | non |
+| | Lecture lit mais n'écrit ni ne modifie ; le conducteur ne supprime pas un devis | non |
+| `filles.essai.ts` | Secrétaire ajoute un interlocuteur ; lecture n'en supprime pas ; technicien n'en ajoute pas | **oui** (20260925010000) |
+| | DPGF : conducteur lit/écrit ; technicien, secrétaire, lecture ne lisent pas les prix ; technicien n'écrit pas | en partie |
+| | Numérotation : secrétaire obtient un numéro de devis ; lecture non ; personne n'obtient un numéro de facture à la demande | en partie (20260925020000) |
+| `numerotation.essai.ts` | Un admin d'une autre société, un client : aucun numéro d'ALPHA | **oui** (20260925015000) — **échoue contre la production actuelle** |
+| `lignes.essai.ts` | Synchronisation des lignes : nouvelles écrites, gardées modifiées, retirées supprimées, lecture refusée | non |
+| `articles.essai.ts` | Terrain sans accès au catalogue, conducteur lit sans écrire, secrétaire écrit, BETA invisible | non |
+| `espace-client.essai.ts` | Le client ne voit que SON client, SES chantiers, ses devis envoyés (pas les brouillons), ses factures émises ; rien de BETA ni d'interne ; n'écrit rien ; n'est membre de rien ; les membres ne voient pas plus qu'avant | **oui** (20260925030000) |
+| `commandes.essai.ts` | Vues terrain sans prix, isolement, droits d'écriture, circuit par RPC, facture née du bon, pièces | non |
+| `chantiers.essai.ts` | Statut / notes / PPSPS, compte-rendu « non lu », métier d'une ligne de DPGF ; to-do du technicien sur SON chantier seulement ; lecture ne supprime ni to-do ni document ; achats et affectations sous « chantiers / modifier » (l'affectation ouvre et ferme la vue du chantier au terrain) ; bucket `terrain` (dépôt, URL signée, BETA refusée, lecture ne dépose pas) ; bon + tâche liée à la ligne de DPGF | **oui** (20260926020000, 20260926021000) pour les cas marqués |
+| `statistiques.essai.ts` | Collections des tableaux de bord et des statistiques lues comme l'ancien (`api/collections.ts`), sous la RLS de chaque table (proposition 20260926080000 RETIRÉE, D-STA-A-01) : chiffre d'affaires de février 2012 mesuré en écart, brouillon et acompte compris, avoir en négatif (DEF-STA-01) ; restant dû d'une facture avec règlement et lettrage d'avoir ; un bon facturé en retard compté par l'étiquette du conducteur tenue par la base (DEF-STA-08, 09) ; technicien, sous-traitant et admin BETA ne voient aucune facture du passage ; secrétaire et lecture lisent factures et lignes ; le conducteur lit les factures mais aucun règlement ; tableau du conducteur par sa fiche, sans colonne de prix | oui (20260926041000 : `imputer_avoir`) |
+| `chantiers-api.essai.ts` | Les fonctions `chantiers/api/*` elles-mêmes (client remplacé par un compte connecté) : chaque lecture passe son schéma Zod ; import de DPGF, planification d'une part, dépôt et retrait d'un compte-rendu (fichier compris) ; le technicien lit la fiche mais reçoit un DPGF et des achats vides | oui (colonnes proposées) |
+| | Un bon inséré « chiffré » naît `en_cours` ; les lignes d'un bon à facture émise sont figées (brouillon : non) | **oui** (20260925050000, 20260925060000) |
+| `comptes.essai.ts` | Compte jetable (inscription) : l'admin change un rôle, un non-admin non (zéro ligne) ; l'admin ne se retire pas son propre rôle (42501) ; accès désactivé = société invisible, réactivé = rendue ; invitation appliquée à l'inscription (membre, rôle, « acceptée ») ; une invitation par adresse et société (casse comprise) ; seul l'admin invite ; chacun renomme son profil, pas celui d'un autre | non |
+| | Un compte ne modifie ni son `actif` ni son adresse | **oui** (20260926010000) |
+| `reglages.essai.ts` | `societes` : admin seul (secrétaire et conducteur : zéro ligne), pas BETA ; `societe_settings` et `compteurs` suivent `reglages/modifier` ; documents légaux : pièce déposée sous `<societe>/…`, illisible et invisible pour BETA, refusée au rôle lecture ; listes et fournisseurs : admin oui, secrétaire non | non |
+| `circuit.essai.ts` | Tâches par métier, déclarées faites, arbitrées, refus motivé, validée non rouverte ; le technicien sans équipe refusé avec le motif de la base ; la secrétaire n'arbitre pas | non |
+| | Validation conducteur refusée (métier sans tâche, tâche non pointée), puis acceptée | non |
+| | Travaux supplémentaires : ajout « à chiffrer » (TVA 10), chiffrage prix + quantité + unité ; secrétaire refusée ; terrain sans prix | non |
+| | Pré-facture dans le circuit (le travail rejoint le chapitre de son métier, « intégré », chiffré ; conducteur refusé ; `bc_chiffrage_valide` refuse un travail à chiffrer) et hors circuit (journal, travaux intégrés) | non |
+| | Clôture gratuite (admin seul, travaux « refusé », motif au journal) ; SAV (`SAV-AAAA-NNNNNN`, en-tête recopié, photo au bucket ; secrétaire refusée) | non |
+| | Pièce jointe au bucket `terrain` (`<société>/bons-commande/<bon>/…`), URL signée lisible, refusée à la secrétaire et à BETA, retrait | non |
+| | Contacts (secrétaire oui, lecture non) ; métiers déclarés (BETA ne voit pas ceux d'ALPHA) | non |
+| | Un bon créé reçoit un numéro « BC- » sans ligne de compteur de l'année | **oui** (20260926030000) |
+| `facturation.essai.ts` | `v_facture_solde` : avoir jamais dû, facture à 0 € réglée, acomptes et retenue (la retenue non levée n'est pas un retard), reprise historique, accord avec `etatPiece` | oui (20260926040000) |
+| | Statut stocké recalé par le déclencheur ; règlement groupé : imputation = `imputer` de l'ancien, trop-perçu refusé avec son message, un avoir dans la sélection fait tout refuser, le rôle lecture n'écrit rien | oui (20260926041000) |
+| | `imputer_avoir` : deux règlements liés, refus dans l'ordre et avec les mots de `refusImputationAvoir` ; note de frais « NDF- » | oui (20260926041000, 20260926043000) |
+| `espace-client-bons.essai.ts` | Le client suit ses bons (jamais ceux d'un autre client ni de BETA), aucune colonne interne dans la vue ; lit les règlements et le solde de SES factures, n'écrit aucun règlement ; accès nominatif restreint à l'interlocuteur, qu'il ne peut pas élargir lui-même | oui (20260926042000) |
+| `planning.essai.ts` | Le conducteur pose une carte (rendez-vous sur le bon, tâche avec équipe et créneau) et ajoute une journée ; le technicien lit sans aucun montant, connaît son équipe, ne planifie pas ; BETA ne voit rien | non |
+| | Circuit : l'équipe consigne puis déclare faite ; l'état ne s'écrit pas en direct ; une autre équipe est refusée en toutes lettres ; refus sans motif refusé, avec motif renvoyé | non |
+| | Sous-traitant : pointe ses tâches et pas celles d'un confrère, lit SON montant seul, signale un travail sur SON bon ; photos déposées et lues par le terrain, pas effacées par le rôle lecture ; téléphone de l'occupant | **oui** (20260926050000, 051000, 053000) |
+| `interventions.essai.ts` | Rapport du technicien : numéro INT par la base, contrôles, photo et signatures ; vacant : pas de signature client ; le sous-traitant rédige au nom de son entreprise et ne voit que ses rapports ; lecture ne supprime rien ; un rapport par bon | **oui** (20260926052000) |
+| `vehicules.essai.ts` | Conducteur ne crée pas de véhicule ; plaque unique par société ; CT dans `date_controle_technique` ; BETA ne voit rien. Secrétaire prête (durée), second prêt en cours refusé, durée ≤ 0 refusée, technicien ne note pas d'entretien, lecture ne supprime ni entretien ni prêt de matériel, secrétaire ne prête pas de matériel, technicien prête et rend ; secrétaire dépose sous `vehicules/`, lecture non | **oui** (20260926070000) |
+| `vehicules-api.essai.ts` | Les `api/` du parc telles quelles : fiche, plaque en double en clair, entretien avec facture (compteur qui monte, jamais ne descend), prêt avec schéma et retour, document à échéance vu par les alertes, vente → facture `FAC-` émise une seule fois, prêts de matériel | **oui** (20260926070000) |
+| `transversal.essai.ts` | D-CHA-04 : le bon né du DPGF, posé au planning, garde UNE tâche, datée, liée à sa ligne | non |
+| `notifications.essai.ts` | La cloche : « fait » posé par un technicien et vu de toute la société, auteur posé par la base, pas de doublon, étanchéité entre sociétés, le rôle lecture ne remet rien « à faire » | **oui** (20260926120000) |
+| `clients-api.essai.ts` | Les `api/` des clients et de la facture : liste lue par pages jusqu'au compte exact, lecture de rapprochement, identité de l'acheteur recopiée à la création et suivie au changement de client (CLI-26, CLI-32, TRV-10) | non |
+| `transformations.essai.ts` | Rapport → devis / facture par la voie unique : lien posé dès l'INSERT, lignes « x3,5 m² », logement nettoyé, « déjà transformé », rapport lié à un bon (D-CLI-09) | non |
+| | Seau `terrain` : chantier affecté ou non, dossier RH d'un collègue, photos du bon d'un confrère sous-traitant, logo, domaine inconnu ; suppression des filles restantes refusée à la lecture ; tâches d'un confrère invisibles au sous-traitant ; journal du circuit non inscriptible ; Alsace-Moselle ; accès clients (admin seul, issues, fermer / rouvrir / retirer) | **oui** (2026092610*) |
+| `auth-roles.essai.ts` | Fonctions de droits appelées par chacun des six rôles (`mon_role`, `mes_societes`, `peut_ecrire`, `voit_les_prix`, `a_permission`…) = ce que croit l'écran ; relevé `pg_policy` (lecture seule, conteneur local) : aucune suppression sous `est_membre()` ; secrétaire : équipes, sous-traitants, fiche conducteur, contrôle fournisseurs, cycle de vie, consommations véhicule ; technicien et conducteur n'effacent plus fiche conducteur ni métier ; filles du chantier lues par affectation ; l'admin relit le chantier qu'il crée (`insert … select`) | en partie (20260926110000) — **le dernier échoue contre la base actuelle (vérifié)** |
+| `politiques.essai.ts` | Relecture 4 des propositions, un cas par constat : vues de l'espace client non inscriptibles (B1) ; le terrain ne pose ni prix, ni statut, ni auteur à un travail supplémentaire, et n'accroche pas la tâche d'un autre bon (B2) ; un `legacy_id` base 36 n'est pas une reprise (B3) ; « compta: » réservé à l'admin, reprise sans ligne refusée (I1) ; avoir à lignes négatives « Disponible » (I2) ; dépôt au seau et photos par domaine et par bon (I3) ; téléphones, bons, lignes, photos et fiches du sous-traitant limités aux siens (I4, I5) ; aucune vue de production refaite sans garde (I6, lecture des fichiers) ; bon facturé : en-tête et lignes à l'identique passent (I8) ; `societe_du_bon` fermée à `anon` (M1) ; rapport sur le bon d'une autre société (M3) ; « envoyée » gardée (M6). D-SQL-01 à 08 | **oui** — 14 des 17 échouent contre les propositions d'avant la relecture 4 (vérifié) |
+| `transactions-facturation.essai.ts` | Relecture 4 : supprimer un brouillon de situation (la secrétaire rend le DPGF qu'elle ne voit pas ; émise entre-temps, situation plus récente ou conducteur : refus ET DPGF inchangé) ; avoir émis d'un seul geste, second avoir total refusé, rien créé sur refus ; imputation annulée entière, conducteur refusé ; un bon ne se facture qu'une fois (déjà facturé, deux appels simultanés) | **oui** (20260926130000 à 133000) — **le cas « déjà facturé » échoue contre la fonction actuelle (vérifié)** |
+| `notifications.essai.ts` (suite) | Le filtre de la cloche est compris par PostgREST et ne rend que les bons qui peuvent sonner (relecture 4, I4) | non |
+| `inviter-salarie.essai.ts` | La fonction de bord `inviter-salarie` (code historique tel quel) sert le `functions.invoke` de l'écran : invitée, renvoi < 10 min (429), secrétaire (403), déjà relié (409), rôle hors liste (400) — clé de service LOCALE lue par `scripts/test-rls.sh` (D-AUTH-09) | non |
+
+## Scénarios à exécuter plus tard (non automatisés cette nuit)
+
+- Bons de commande : le terrain lit `v_bons_commande_terrain` sans montant ;
+  `statut_workflow` ne change que par RPC ; un bon facturé est figé.
+- Facture émise : ni l'admin ni la secrétaire ne modifient une ligne ou
+  l'en-tête hors liste blanche (déclencheurs) ; une facture numérotée ne se
+  supprime pas.
+- Règlements : le conducteur (`reglements` absent de sa matrice) ne lit ni
+  n'écrit aucun règlement.
+- *(Tables filles : plus aucune suppression sous `est_membre()` une fois les
+  propositions appliquées — relevé automatisé par `auth-roles.essai.ts`.)*
+- Storage (bucket `terrain`) : un compte d'ALPHA ne lit pas `beta/…` (l'inverse est couvert par `circuit.essai.ts`).
+- Edge Functions PDP : elles vérifient l'appartenance mais pas le rôle — un
+  compte `lecture` pourrait déclencher une émission.

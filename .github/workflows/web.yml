@@ -1,0 +1,36 @@
+# CI de la réécriture React (web/) — seul fichier hors de web/ (DECISIONS D-005).
+# Ne se déclenche que si web/ change, et ne touche pas à la CI de l'app historique.
+name: web
+
+on:
+  push:
+    paths: ["web/**", ".github/workflows/web.yml"]
+  pull_request:
+    paths: ["web/**", ".github/workflows/web.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    # Valeurs factices : le build a besoin qu'elles existent, jamais d'une vraie base.
+    env:
+      VITE_SUPABASE_URL: http://127.0.0.1:55421
+      VITE_SUPABASE_ANON_KEY: cle-factice-ci-sans-valeur
+    steps:
+      # Épinglés au SHA, comme la CI existante.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Contrôles (types, lint, tests unitaires et de parité)
+        run: npm run check
+      - name: Build
+        run: npm run build

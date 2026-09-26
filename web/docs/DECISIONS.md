@@ -1,0 +1,2442 @@
+# Décisions
+
+Chaque choix ambigu tranché pendant la réécriture, avec sa raison. Quand une
+décision s'écarte de l'application historique, elle le dit et renvoie au test
+qui la fixe. Format : contexte → décision → conséquence.
+
+## D-001 — Branche de travail
+La consigne demandait `feat/react-rewrite` ; la session est configurée pour
+pousser sur `claude/erp-chantier-react-rewrite-zvhro4`, seule branche autorisée
+en écriture. **Décision** : tout est sur cette branche, la PR (brouillon) part
+de là vers `main`. Renommer la branche au moment de reprendre le travail est
+sans effet sur le contenu.
+
+## D-002 — Supabase local, reconstruit depuis le dépôt
+Docker et le CLI Supabase étaient disponibles ; les registres ECR/GHCR étaient
+bloqués par le réseau, Docker Hub non (images récupérées là puis réétiquetées —
+sans objet sur un Mac). `supabase db reset` ne sait pas rejouer ce dépôt (88
+migrations passées par le tableau de bord). **Décision** : un projet Supabase
+PROPRE À `web/` (ports 554xx, pour cohabiter avec celui de la racine), et
+`scripts/rejouer-migrations.sh` qui rejoue les 63 migrations du dépôt une par
+une, comble les colonnes connues de la production d'après `database.types.ts`
+(`rattraper-colonnes.mjs`), puis applique `supabase/rattrapage/`. Résultat :
+62/63 migrations appliquées, la 63ᵉ compensée ; tables, vues et fonctions
+identiques aux types de production (vérifié par script). Aucune connexion à la
+production, à aucun moment.
+
+## D-003 — Types de base : ceux de la production
+`web/src/lib/database.types.ts` est la **copie** du fichier généré depuis la
+production (`src/api/database.types.ts`), pas une génération locale : la base
+locale est une reconstruction, la production est la vérité. Régénérer :
+`cp ../src/api/database.types.ts src/lib/` après un `npm run db:types` racine.
+
+## D-004 — Suffixe des tests : `.essai.ts(x)`
+Le Vitest de l'application historique (racine du dépôt) ramasse tout `*.test.*`
+et `*.spec.*` de l'arborescence, `web/` compris, et sa CI casserait faute de
+React. Modifier sa configuration aurait touché hors de `web/`. **Décision** :
+les tests de `web/` s'appellent `*.essai.ts(x)` ; un test (`garde-fous.essai.ts`)
+refuse tout `*.test.*` / `*.spec.*` sous `web/src` et `web/tests`.
+
+## D-005 — Seule exception au périmètre `web/` : la CI
+Une CI GitHub Actions ne peut vivre que dans `.github/workflows/` à la racine.
+**Décision** : un fichier NOUVEAU, `.github/workflows/web.yml`, limité aux
+chemins `web/**`. Aucun fichier existant hors de `web/` n'est modifié.
+
+## D-006 — Montants : décimal exact, arrondi au bord
+L'ancien code calcule en flottant et n'arrondit **jamais** les totaux : il
+arrondit seulement à l'affichage (`Intl`, deux décimales). **Décision** :
+`big.js` partout (`lib/money.ts`), aucun arrondi dans les calculs, arrondi au
+centime « demi s'éloignant de zéro » (celui de `round(numeric, 2)` en Postgres)
+au moment d'afficher ou d'enregistrer un total. Écart assumé : sur un
+demi-centime pile, le flottant de l'ancien code peut tomber du mauvais côté
+(`1,005 €` s'affichait `1,00 €`) ; `web/` affiche `1,01 €`. Les tests de parité
+comparent au centime et listent ces cas.
+
+## D-007 — Données en `snake_case`
+Les composants manipulent les lignes de la base telles quelles (`client_nom`,
+`prix_unitaire`), validées par Zod à la lecture. L'ancien code passait par un
+adaptateur camelCase de 2 400 lignes (`html-adapter.ts`) dont plusieurs pièges
+documentés venaient. Pas de couche de traduction.
+
+## D-008 — Espace client : table d'accès dédiée, pas un rôle de membre
+Il n'existe aucun rôle `client` en base ; le portail de `app.js`
+(`currentRole==='client'`) est mort. Ajouter `client` à `role_membre` ferait du
+client un **membre** de la société, et `est_membre()` ouvre la lecture de
+presque toutes les tables : il verrait tout. **Décision** : table
+`acces_clients (profile_id, client_id, societe_id)` et fonction
+`mes_clients()`, avec des politiques de LECTURE seule dédiées sur chantiers,
+devis, factures et bons. Migration **proposée, non appliquée** en production
+(`docs/migrations-proposees.md`), appliquée seulement en local pour tester.
+
+## D-009 — Niveaux d'abonnement : tout ouvert par défaut
+Aucune colonne ne porte le niveau d'abonnement. **Décision** : 5 niveaux
+définis côté front (`societes/domain/abonnement.ts`) ; une société sans niveau
+connu a le niveau 5 (tout). Lu par `select *` : la colonne proposée
+(`societes.niveau_abonnement`) sera prise en compte dès qu'elle existera, sans
+changer le code. C'est un masquage d'affichage ; un niveau opposable devra être
+vérifié en base.
+
+## D-010 — « Voir en tant que » : repris à l'identique, et signalé
+Réservé à l'admin, mémorisé dans le navigateur, sans effet sur la RLS — comme
+l'ancien. Ajout : un bandeau permanent pendant la simulation, parce que les
+données affichées restent celles de l'admin. Une simulation mémorisée n'a cours
+que si le compte est admin DE LA SOCIÉTÉ ACTIVE (test `selection.essai.ts`).
+
+## D-011 — Jeu d'essai et `amorcer_premier_admin`
+Le déclencheur d'amorçage fait du premier profil créé l'admin de toutes les
+sociétés. Dans le jeu d'essai, cela rattachait `admin.alpha` à BETA et rendait
+l'isolement improuvable ; les tests RLS l'ont révélé. Le seed retire ce
+rattachement. En production le déclencheur ne joue plus (des membres existent).
+
+## D-012 — Pays vide = France dans la vérification des identifiants
+L'ancien `verifierEntite` comparait le pays du n° de TVA à `paysCode ?? "FR"` :
+un pays **vide** (`""`) produisait « …alors que le pays est . ». `web/` traite
+le vide comme la France. Fixé par `tests/parite/identifiants.essai.ts`.
+
+## D-013 — Saisie des nombres : la virgule française est un séparateur décimal
+L'ancien écran lisait `parseFloat("1,5")` = 1. `web/` lit 1,5. Les données en
+base ne sont pas concernées (elles sont numériques) ; seul le comportement de
+saisie change, dans le sens attendu par un utilisateur français.
+
+## D-014 — Navigation mobile filtrée par les droits
+L'ancienne barre mobile (`MOBILE_NAV`) n'était pas filtrée par rôle. Dans
+`web/`, un seul menu, filtré par la matrice et l'abonnement, sur tous les écrans.
+
+## D-015 — Un module `documents` partagé
+Le découpage demandé plaçait les lignes et les calculs dans `devis/`. L'ancienne
+app avait UN éditeur de lignes et UN calcul pour devis, factures et bons ; les
+recopier par module ferait diverger ce qui doit rester identique.
+**Décision** : `modules/documents/` porte lignes, totaux, TVA, remise, net à
+payer et lieu d'intervention ; `devis`, `facturation` et `commandes` s'en servent.
+
+## D-016 — Pas de suppression de chantier
+L'ancienne app n'en offrait pas ; la base supprimerait en cascade comptes rendus,
+documents, achats, planning et DPGF (et le conducteur en a le droit dans la
+matrice). **Décision** : aucun bouton dans `web/` (relecture I-5).
+
+## D-017 — Types de chantier : les codes de l'ancienne app
+Les deux applications partagent la base : `web/` écrit `rehabilitation` / `neuf`
+(défaut `rehabilitation`) et affiche « Réhabilitation » / « Chantier neuf »,
+comme `app.js` (relecture I-3). Un type historique hors liste reste affiché.
+
+## D-018 — Migrations proposées : prérequis de la mise en service
+Certaines politiques actuelles contredisent la matrice (la secrétaire ne peut
+pas ajouter un interlocuteur ni numéroter un devis ; le rôle lecture peut
+supprimer un interlocuteur). `web/` affiche selon la MATRICE, et les
+migrations de `supabase/propositions/` alignent la base sur elle. Elles sont
+appliquées en local (tests RLS marqués « [proposition] ») et **doivent l'être en
+production avant que `web/` y serve** — sinon la secrétaire verra un refus
+explicite là où l'ancienne app ne lui proposait rien (relecture I-6).
+
+## D-019 — Le cache ne survit pas à un changement de compte
+Au-delà de la déconnexion explicite, tout changement d'utilisateur (session
+expirée, autre onglet) vide le cache métier (relecture I-1, test
+`SessionProvider.essai.tsx`).
+
+## D-020 — Une fiche d'une autre société renvoie à la liste
+Changer de société garde l'URL ; une fiche (ou un lien fabriqué) d'une autre
+société renvoie à la liste au lieu de s'afficher sous les droits de la société
+active (`GardeSociete`, relecture M-1).
+
+## D-021 — Statut du devis modifiable dans le formulaire
+L'ancien écran n'offrait aucun geste pour passer un devis en envoyé / accepté /
+refusé (défaut DEV-51). `web/` propose le statut dans l'en-tête, sous le droit
+`devis / modifier`.
+
+## D-022 — Import d'articles : parité stricte, bizarreries comprises
+Le port (`articles/domain/import.ts`) rend exactement ce que rend
+`regles-import-articles.ts` (600 fichiers tirés, `tests/parite/import-articles.essai.ts`).
+Cela inclut une lecture des prix par `Number` : `1e3` vaut 1000, `0x10` vaut 16,
+`1 200,00` est illisible (prix à 0 et signalement). **Décision** : reproduit à
+l'identique tant que les deux applications importent le même fichier ; resserrer
+plus tard (refuser exposant et hexadécimal) se fera des deux côtés ou par un
+écart consigné ici.
+
+## D-023 — Recherche au catalogue : la saisie ne casse plus la requête
+L'ancien filtre `or=(code.ilike.%x%,designation.ilike.%x%)` n'entourait pas la
+valeur de guillemets : une virgule ou une parenthèse tapée (« Tube 1/2, cuivre »)
+rendait la requête invalide et la liste tombait en erreur. **Décision** : valeur
+entre guillemets, `\` et `"` échappés ; `%`, `_` et `\` restent des caractères
+(`tests/rls/articles.essai.ts`). Limite connue : PostgREST lit `*` comme un joker
+dans `ilike`, sans échappement possible — chercher « * » liste tout.
+
+## D-024 — Catalogue : familles complètes, page disparue, liste « Retirés »
+Trois écarts mineurs, tous dans le sens de l'exactitude : les familles du filtre
+se lisent par pages de 1 000 (l'ancien code n'en lisait qu'une, `max_rows`) ;
+une page qui n'existe plus (dernier article de la dernière page retiré) sert la
+dernière page au lieu d'une erreur 416 ; une liste « Retirés » vide dit « Aucun
+article ne correspond » et non « Le catalogue est vide ».
+
+## D-025 — `articles.metier` ni saisi ni recopié (ART-50)
+Comme l'ancien écran. L'import (`upsert`) n'envoie pas la colonne : une valeur
+posée ailleurs n'est donc pas effacée par un nouvel import. Toutes les colonnes
+NOT NULL (`prix_unitaire`, `tva`, `type_article`, `actif`, `gere_en_stock`) sont
+toujours données, à la création comme à l'import.
+
+## D-026 — Choisir un article : le commentaire écrit à la main l'emporte
+`appliquerArticle` suit `applyArticleObjectToLigne` : la description de
+l'article devient le commentaire de ligne **sauf** si un commentaire a déjà été
+saisi. La quantité et l'identifiant de ligne ne sont jamais touchés ; l'article
+est copié, pas lié (`articles/domain/article.essai.ts`).
+
+## D-027 — Situation de travaux : au centime, avancement à 2 décimales, concurrence gardée
+L'ancien écran facturait `montant × Δ% / 100` en flottant brut (4074.0710999999997)
+et acceptait tout pourcentage. `web/` arrondit le montant de chaque ligne au
+centime, ramène l'avancement aux 2 décimales que garde la base (sinon 3 situations
+à 33,333 % facturaient 10 000,30 € pour 10 000 €), écrit le cumul SOUS CONDITION
+de l'avancement lu (deux onglets ne facturent pas deux fois), défait tout si une
+ligne a bougé, et rend l'avancement quand on supprime le brouillon (relecture 2,
+I-1 à I-3). Tests : `tests/parite/facturation.essai.ts`.
+
+## D-028 — « Émettre » émet ce qui est à l'écran
+Émettre enregistre d'abord la saisie en cours, puis émet cette version : une
+modification non enregistrée ne peut plus être perdue sous un numéro définitif
+(relecture 2, I-4).
+
+## D-029 — Espace client : vues restreintes, pas de politique sur les fiches
+Des politiques de lecture sur `clients` et `chantiers` ouvraient la ligne entière
+(notes internes, informations diverses). La proposition sert au client deux vues
+réduites aux colonnes publiques (`v_mes_acces_clients`, `v_espace_client_chantiers`)
+et n'ajoute de politique que sur les devis envoyés et factures émises, avec une
+cohérence de société obligatoire (`est_mon_client(client, societe)`) (relecture 2, I-6, M-2, M-3).
+
+## D-030 — Les parcours e2e ne visent que la base locale
+Ils émettent des factures, qui ne se suppriment pas : `tests/e2e/preparation.ts`
+refuse toute autre cible, et Playwright ne réutilise jamais un serveur déjà lancé
+(l'application historique écoute aussi sur 5173) (relecture 2, I-7).
+## D-040 — Bons de commande : lus par les vues terrain, écrits dans les tables
+La table `bons_commande` n'est lisible qu'à qui voit les prix ; les vues
+`v_bons_commande_terrain` / `v_bon_commande_lignes_terrain` servent tout membre,
+prix à NULL pour le technicien et le sous-traitant. **Décision** : `web/` lit
+TOUJOURS par les vues (un seul chemin, quel que soit le rôle) et écrit dans les
+tables. La matrice ne donne pas `bons_commande/voir` au technicien : la route lui
+reste fermée, comme dans l'ancienne app ; si elle s'ouvrait, la liste n'a pas de
+colonne montant et la fiche montre les travaux sans prix, en consultation
+(`commandes.essai.tsx`, `tests/rls/commandes.essai.ts`). Conséquence connue : le
+technicien ne lit pas `factures` ; l'étape d'un bon facturé lui apparaîtrait
+« À facturer » — sans objet tant que l'écran lui est fermé.
+
+## D-041 — Le lieu d'un bon vit dans `adresse` ; le téléphone du locataire n'est pas géré
+Le formulaire historique saisit le lieu des travaux dans `bons_commande.adresse`
+(c'est elle que `bc_generer_facture` reporte en `adresse_locataire` de la
+facture). **Décision** : le champ « Adresse du lieu » de `SectionLieu` est écrit
+dans `adresse` ; `adresse_locataire` du bon n'est ni lu ni écrit. La vue n'expose
+pas `telephone_locataire` (BC-93) : le champ est masqué et la colonne n'est
+JAMAIS envoyée — l'écrire vide effacerait une valeur qu'on ne peut pas relire.
+Corriger la vue (ajout EN FIN, depuis `pg_get_viewdef`) est une migration à proposer.
+
+## D-042 — La secrétaire modifie les bons mais n'en crée pas
+La consigne disait « secrétaire / conducteur écrivent ». En base
+(`role_permissions`), la secrétaire a `bons_commande/modifier` mais pas `creer`,
+et l'insertion lui est refusée (42501). **Décision** : `web/` suit la base — pas
+de bouton « Nouveau bon de commande » pour elle ; elle modifie, pose « BC reçu »
+et crée la facture du bon (`factures/creer`). Si elle doit créer, c'est une
+migration de `role_permissions` à proposer, pas un contournement d'écran.
+
+## D-043 — Pièces : « commandée » par écriture directe, trois onglets
+Aucune RPC ne pose la commande d'une pièce ; la politique `planning_taches_update`
+(`peut_ecrire` : admin, conducteur, technicien) permet l'écriture directe de
+`piece_date_commande` / `piece_fournisseur`. **Décision** : écriture directe sur
+TOUTES les tâches du bon qui portent le drapeau (l'ancien pont visait une seule
+tâche, et la date se relisait parfois sur une autre) ; boutons sous
+`planning/modifier` (admin, conducteur), comme `bc_piece_recue`. Date et
+fournisseur se saisissent ensemble (l'ancien posait « aujourd'hui » au clic). Un
+échec d'écriture remonte (BC-97). Un onglet « Reçues » s'ajoute aux deux anciens :
+l'historique de la pièce survit à sa réception (`etatPieceDuBon`). Les refus métier
+de `bc_piece_recue` (`check_violation`) sont affichés tels que la base les rédige.
+
+## D-044 — Montant d'un bon : décimal exact, arrondi au centime à l'écriture
+L'ancien écran envoyait le HT flottant brut, arrondi en silence par
+`numeric(14,2)` (BC-98). **Décision** : HT des lignes en décimal exact, arrondi au
+centime (demi s'éloignant de zéro, comme `numeric`) au moment d'écrire ; même
+valeur stockée, sans flottant. Parité au 1e-6 près sur 3 000 bons tirés
+(`tests/parite/commandes.essai.ts`).
+
+## D-045 — Parité contre `app.js` : la source extraite, pas recopiée
+`etapeWorkflow`, `bcTachesTerminees` et `bcLignesOntDuContenu` vivent dans le
+monolithe, qu'on ne peut pas importer. **Décision** : le test de parité extrait
+leur SOURCE du fichier et l'évalue ; une modification de l'ancien écran casse
+donc le test. Seule la branche « tâches relues » de `bcTachesTerminees` est
+portée : son repli sur les cases par métier servait aux bons jamais rechargés,
+ce qui n'arrive pas dans `web/` (le circuit est dérivé des tâches à chaque lecture).
+
+## D-046 — Jeu d'essai : numéros internes fixes, préfixe local « BON- »
+La base locale n'a pas de ligne `compteurs` qui fixe le préfixe « BC » : un bon
+créé localement reçoit `BON-2026-…` (même cause que BC-94 en 2027). **Décision** :
+le jeu d'essai pose des numéros fixes `BC-2026-9000xx` ; les tests n'exigent que
+la forme `XXX-AAAA-NNNNNN` d'un numéro posé par la base.
+
+## D-047 — Lignes réordonnées au clavier, pas par glisser-déposer
+L'ancien éditeur déplaçait les lignes à la souris (DEV-03). `web/` propose ↑ / ↓
+sur chaque ligne : même effet, utilisable au clavier et sur téléphone. Le
+glisser-déposer pourra s'ajouter par-dessus.
+
+## D-048 — Taux de TVA proposés par défaut : la liste des réglages
+Sans taux réglés, l'ancien écran ne proposait que le taux par défaut (DEV-09) ;
+`web/` lit la liste `tauxTva` des réglages, qui vaut par défaut 0 / 2,1 / 5,5 /
+10 / 20 % (`fusionnerReglages` de l'ancienne app) — un taux enregistré hors liste
+reste proposé.
+
+## D-049 — Une lecture automatique mal formée est refusée, pas « incertaine »
+L'Edge Function signale déjà ses propres écarts par un avertissement. Côté
+écran, une réponse qui ne respecte pas le contrat Zod (OCR-31) est refusée avec
+un message : mieux vaut ressaisir que préremplir de travers.
+
+## D-050 — Soldes affichés : TTC de la base, règlements additionnés à l'écran
+Le TTC vient de `v_facture_totaux` ; le reste dû est calculé à l'écran avec les
+règles portées (arrondi au centime, avoirs, reprise historique), parce que la
+vue `v_facture_solde` ignore le signe des avoirs, les acomptes et la retenue
+(FAC-93). À basculer sur une vue corrigée (migration à écrire) — écart assumé
+avec la règle « pas de solde recalculé côté client » du dépôt. **Remplacée par
+D-FAC-01** : la vue est corrigée (proposition 20260926040000) et les écrans la lisent.
+
+## D-051 — Un bon inséré hors du début du circuit y est ramené, pas refusé
+Proposition `20260925060000` (relecture 3, I4). Refuser un INSERT portant
+`statut_workflow` casserait l'écran historique, qui envoie toutes les clés du
+bon (une clé absente d'une ligne devient NULL). Le ramener à `en_cours` ferme
+le raccourci sans rien casser ; les rôles techniques (reprise, jeu d'essai)
+gardent la main, comme pour `circuit_etat_reserve`.
+
+## D-052 — « BC reçu » reporte le numéro dans la saisie en cours
+Le geste écrit tout de suite en base, hors du formulaire. Plutôt que de
+remonter le formulaire (et perdre ce qui est en cours de saisie), le numéro
+reçu et le mode « normal » y sont reportés : le prochain « Enregistrer »
+n'écrase plus le numéro par la sentinelle d'attente (relecture 3, B1). Les
+actions de l'en-tête vivent hors du `<form>` du bon (I1).
+
+## D-SOC-01 — Réglages : lecture ouverte, écriture au seul administrateur
+La matrice donne `reglages/voir` à la secrétaire, au conducteur et au rôle lecture,
+`reglages/modifier` au seul administrateur. L'écran s'ouvre donc à eux en lecture
+seule, champs grisés. Pour les listes, métiers, conducteurs, fournisseurs et
+documents légaux, la base est plus large (`peut_ecrire` : admin, conducteur,
+technicien) : l'écran reste au plus étroit, celui de la matrice. Aucune migration.
+
+## D-SOC-02 — Documents légaux dans leur table et le bucket, plus dans le JSON
+L'ancien écran rangeait les documents légaux en data-URL dans
+`infos_entreprise.documentsLegaux` (SOC-51) alors que la table `documents_legaux`
+existe. `web/` écrit dans la table et dépose le fichier dans le bucket `terrain` sous
+`<societe>/documents-legaux/`. Les pièces héritées du JSON sont listées en lecture
+seule (« à redéposer ») : rien ne disparaît, rien n'est migré en silence.
+
+## D-SOC-03 — La palette hors de `domain/`
+`regles-theme.ts` arrondit des canaux de couleur (0-255) par `Math.round`. Le
+garde-fou « pas de Math.round dans le domaine » vise l'argent : le portage vit dans
+`societes/theme/palette.ts`, à l'identique (parité : `tests/parite/reglages.essai.ts`).
+
+## D-SOC-04 — Couleur : le ton foncé sert de primaire ; aperçu par pastilles
+La couleur primaire de l'interface est `accentFonce` (lisible à 4,5:1 sous son
+encre, et sur le blanc), pas l'accent brut. Sans réglage, c'est l'orange historique
+(`#C24E00`) : l'écran de `web/` quitte son bleu neutre pour la couleur de la
+société, comme l'ancien. L'ancien réglage repeignait tout l'écran pendant qu'on
+choisissait ; `web/` montre la palette en pastilles et l'applique à l'enregistrement
+— un aperçu global non enregistré se défaisait mal au changement de rubrique.
+Les variables `--color-accent-societe*` / `--color-secondaire-societe*` sont posées
+pour que les documents imprimés s'y branchent (module documents).
+
+## D-SOC-05 — Logo dans le bucket, chemin dans `societes.logo_url`
+La colonne `logo_url` existe ; le logo va dans `terrain` sous `<societe>/societe/`,
+lu par lien signé (bucket privé). Tant qu'aucun logo n'est déposé, la data-URL de
+l'ancienne app (`infos_entreprise.logo`) est montrée. Image PNG/JPEG/SVG/WebP,
+2 Mo au plus.
+
+## D-SOC-06 — « Mon compte » hors des Réglages, ouvert à tous
+Le technicien et le sous-traitant n'ont pas `reglages/voir` : l'ancien onglet
+« Mon nom » leur était donc inaccessible. `/mon-compte` (lien dans le menu
+utilisateur) porte le nom affiché et le changement de mot de passe, pour tous.
+
+## D-SOC-07 — Comptes et invitations regroupés dans Réglages › Comptes
+L'ancienne app invitait depuis la fiche RH du salarié et ne changeait un rôle qu'en
+cochant « Conducteur ». `web/` réunit, pour l'administrateur (`utilisateurs`) :
+membres (rôle, accès actif/désactivé), salariés sans compte (inviter, renvoyer,
+annuler — même fonction de bord, mêmes règles), historique des invitations. Donner
+le rôle administrateur se confirme, à l'invitation comme au changement de rôle.
+Le bloc de la fiche RH pourra réutiliser `comptes/api` et `BlocInvitations`.
+
+## D-SOC-08 — Sous-traitant : pas d'invitation (reproduit)
+AUTH-79 : la fonction de bord refuse `sous_traitant` et exige un salarié. On
+reproduit (rôle absent des rôles invitables) ; ouvrir un compte à un sous-traitant
+demande une décision produit et une évolution de la fonction de bord
+(`invitations.sous_traitant_id` existe déjà).
+
+## D-SOC-09 — Profil : seul le nom se modifie (proposition 20260926010000)
+`profiles_update_self` n'avait pas de restriction de colonne : un compte coupé de
+toutes ses sociétés (`profiles.actif = false`) se réactivait lui-même, et chacun
+pouvait s'attribuer l'adresse d'un autre dans l'annuaire. Proposition : droit
+UPDATE de `authenticated` restreint à `nom` ; suppression de la politique SELECT
+en double (AUTH-74). Constaté puis corrigé en local (`tests/rls/comptes.essai.ts`).
+
+## D-SOC-10 — Numérotation : préfixe « lettres, chiffres, _ », une confirmation groupée
+L'ancien écran acceptait tout préfixe de 8 caractères ; un tiret y rendrait le
+numéro ambigu avec le séparateur d'année (`DEV-2026-000001`). `web/` le refuse. Les
+baisses de compteur se confirment en une fois (la liste des séries concernées)
+au lieu d'un `confirm` par série.
+
+## D-SOC-11 — Taux de TVA séparés par « ; »
+L'ancien champ séparait les taux par des virgules (« 0, 5.5, 10 ») ; `web/` affiche
+« 0 ; 5,5 ; 10 » (virgule décimale française) et accepte les deux écritures.
+Délai compté (net / fin de mois) et mode de règlement par défaut, présents dans le
+document mais absents de l'ancien écran, y sont exposés.
+
+## D-SOC-12 — Ce qui reste tenu par la base, sans écran
+Création d'une société (SOC-25 : service seulement, métiers et référentiels posés
+par déclencheur), premier administrateur (AUTH-41 : `amorcer_premier_admin`), liste
+des sociétés de production (SOC-31 : une donnée, aucune liste en dur dans `web/`).
+`web/` n'a rien à reprendre ; `amorcer_premier_admin` n'est pas testable sur une
+base locale partagée (il n'agit que si `membres_societe` est vide).
+
+## D-SOC-13 — Fonction de bord `inviter-salarie` inchangée
+Elle vit hors de `web/` (lecture seule). Son défaut AUTH-77 (`listUsers()` sur une
+seule page de 50 comptes) est à corriger côté fonction (pagination ou recherche par
+adresse) ; `web/` l'appelle telle quelle, valide sa réponse (Zod) et relaie ses
+motifs de refus. Elle n'est pas servie par la base locale (edge-runtime exclu) :
+le contrat est testé en unitaire, pas de bout en bout.
+
+## D-SOC-14 — Aucun champ sans colonne
+PAR-20 : l'ancien écran perdait `sousTraitant.documents` et `document.notes`, faute
+de colonne. `web/` n'offre que des champs qui ont leur colonne (Zod aux frontières,
+colonnes explicites) : un document légal n'a pas de notes. Les documents des
+sous-traitants relèvent de l'écran RH.
+
+## D-CHA-01 — Liste des chantiers en tableau, pas en cartes A4
+L'ancienne liste affichait des cartes (type, dates, statut, anneau d'avancement,
+compteurs). `web/` garde le tableau déjà en place et y porte les mêmes
+informations : type et statut en badges, DPGF HT et % facturé (qui voit les
+prix), nombres de comptes-rendus, devis et factures (colonnes masquées à qui ne
+lit pas la table). Même contenu, lisible au clavier et sur téléphone.
+
+## D-CHA-02 — Fiche chantier en onglets, chiffres en tête
+L'ancienne fiche empilait une dizaine de sections. `web/` les range en onglets
+accessibles (Synthèse, Documents, DPGF, To-do, Achats, Devis et factures ;
+l'onglet actif dans l'URL `?onglet=`) sous un bandeau de chiffres (avancement
+facturé, total DPGF, devis, comptes-rendus, achats, factures, facturé − achats,
+to-do). DPGF et Achats n'apparaissent qu'à qui gère le chantier (RLS).
+
+## D-CHA-03 — « Planifier une quantité » lit la virgule française
+L'ancien écran lisait la saisie par `parseFloat` : « 2,5 » devenait 2. `web/`
+lit 2,5 (`montant()`). Seul écart avec `confirmPlanifierQte`, exclu des tirages
+de `tests/parite/chantiers.essai.ts`.
+
+## D-CHA-04 — Le lien DPGF → bon de commande vit dans `planning_taches`
+L'ancien écran posait `chantierId`, `dpgfLigneId`, `qtePlanifiee` sur le bon —
+sans colonne, donc perdus — et un conducteur vide (CHA-51). `web/` crée le bon
+(libellé, métier, montant au centime, lieu, `conducteur_id` du chantier,
+`reference_chantier`), puis une tâche « planifiee » SANS date qui porte
+`chantier_id`, `dpgf_ligne_id`, `quantite_planifiee` : la seule table qui a ces
+colonnes. Si la tâche échoue, le bon est retiré. Comme l'ancien, le bon n'a pas
+de ligne. **Risque noté** : l'ancien planning, en datant ce bon, cherche une
+tâche du même jour et du même métier ; il n'adopte pas la tâche sans date et en
+crée une seconde. Le module planning de `web/` devra dater la tâche existante.
+
+## D-CHA-05 — Une ligne de DPGF facturée ou planifiée est figée
+Une ligne dont l'avancement est > 0 ou dont une part est planifiée ne se retire
+pas, n'est pas remplacée par un import ni par la reprise d'un devis, et garde sa
+quantité et son prix (désignation et métier restent modifiables). L'ancien écran
+permettait de changer la quantité d'une ligne déjà facturée à 50 %, ce qui
+réécrivait après coup le montant d'une situation émise.
+
+## D-CHA-06 — Reprise d'un devis dans le DPGF : un geste, depuis le DPGF
+L'ancien écran recopiait les lignes du devis dans le DPGF à chaque
+enregistrement du devis, en retirant d'abord celles déjà venues du même devis —
+facturées comprises. `web/` ne touche pas à l'enregistrement du devis :
+« Reprendre un devis » dans le DPGF fait la même copie (hors commentaires et
+lignes sans désignation, avancement 0, `devis_source_id`), et refuse tout si une
+ligne venue de ce devis est déjà facturée ou planifiée.
+
+## D-CHA-07 — L'import d'un DPGF remplace les lignes non figées
+Comme l'ancien écran, l'import remplace le DPGF ; les lignes figées (D-CHA-05)
+restent, en tête. L'écran annonce combien de lignes seront remplacées et
+combien sont conservées.
+
+## D-CHA-08 — Excel et Word sans bibliothèque externe
+L'ancien écran chargeait SheetJS et docx depuis un CDN (rien hors connexion).
+`web/` lit l'.xlsx et écrit le .docx lui-même (`chantiers/fichiers/` : archive
+ZIP, `DecompressionStream`, XML). Écarts : les cellules numériques sont lues
+brutes (« 1234.5 » et non « 1 234,50 € » — la lecture des montants accepte les
+deux) ; le vieux format binaire .xls est refusé avec la consigne de
+l'enregistrer en .xlsx ou CSV ; le PPSPS n'embarque pas le logo de la société.
+
+## D-CHA-09 — Statut du chantier : les valeurs de l'ancien écran
+Colonne proposée (`20260926020000`) avec les valeurs que l'ancien écran écrit
+déjà, accents compris : `en préparation` (défaut), `en cours`, `terminé`. Les
+champs PPSPS et `notes` suivent le nommage `toSnake` de l'ancien pont, sauf
+`ppsps_coordinateur_sps` (il faudra une entrée `SNAKE_OVERRIDES` côté historique).
+
+## D-CHA-10 — Fichiers du chantier dans le bucket `terrain`
+Chemin `<société>/chantiers/<chantier>/<horodatage>_<nom assaini>` (le premier
+segment est lu par les politiques Storage), nom d'origine gardé en base, URL
+signée à l'ouverture, plafond de 8 Mo et types acceptés par famille repris de
+l'ancien écran. Un fichier dont la ligne n'a pas pu s'écrire est retiré ; un
+retrait de fichier raté après suppression de la ligne est tracé (orphelin sans
+effet visible).
+
+## D-CHA-11 — Qui écrit quoi sur la fiche
+Miroirs d'affichage de la base (proposition `20260926021000`) : to-do, documents,
+inspections = `peut_ecrire()` (admin, conducteur, technicien — le terrain note et
+dépose) ; DPGF, achats, devis reçus en fichier, affectations = « chantiers /
+modifier » ; comptes-rendus = matrice « rapports » ; informations diverses =
+« chantiers / modifier ». La suppression suit désormais l'écriture, plus
+l'appartenance.
+
+## D-CHA-12 — « Ouvrir la tâche dans le planning » ouvre le bon de commande
+Le planning n'existe pas encore dans `web/`. Chaque part planifiée d'une ligne
+(« ✓ q ») ouvre son bon (`/commandes/:id`), d'où il se place au planning. À
+rebrancher sur le planning de `web/` quand il existera.
+
+## D-CHA-13 — Factures du chantier : aperçu imprimable, pas d'envoi ici
+La fiche liste les factures (numéro, date, TTC de `v_facture_totaux`, statut)
+avec « Imprimer / PDF » (aperçu). L'envoi par e-mail appartient au module
+facturation, qui ne l'offre pas encore : pas de bouton factice.
+
+## D-CHA-14 — Coût horaire illisible : on le dit, on saisit à la main
+Pour un conducteur, `v_salaries_annuaire` masque `cout_horaire_charge` (CHA-55).
+Plutôt que d'élargir la vue (données de paie), l'écran affiche « Coût horaire non
+disponible pour votre rôle : saisissez le montant ».
+
+## D-BC-01 — Bons de commande : un tableau, pas des cartes dépliables
+L'ancienne liste repliait chaque carte et n'en ouvrait qu'une (BC-02). `web/`
+garde le tableau des autres listes : une ligne par bon, la fiche s'ouvre au
+clic. Les trois gestes de contact sont repris sur la ligne (📞 et 💬 notent une
+tentative dans `tentatives_contact`, 📅 programme `rappel_date`), avec le
+compteur des tentatives. L'identifiant d'une tentative est un uuid du
+navigateur : c'est une entrée de jsonb, pas une clé primaire.
+
+## D-BC-02 — La pré-facture est une page, et les travaux se placent seuls
+La modale « Validation directeur » devient `/commandes/:id/prefacture`
+(`PagePrefacture`). Le glisser-déposer d'un travail dans une ligne n'est pas
+repris : chaque travail rejoint le chapitre de son métier (règle de
+`prefacture.ts#placerTravauxDansChapitres`, parité), le reste va sous « Travaux
+supplémentaires constatés sur le chantier ». Les lignes du bon se réordonnent
+au clavier (D-047). Le document affiché est celui qui sera enregistré.
+
+## D-BC-03 — Le circuit se mène depuis la fiche du bon ; le planning n'est pas repris
+Tâches, validation conducteur et travaux supplémentaires vivent dans le panneau
+« Circuit du bon », sous le formulaire, au lieu de modales ouvertes depuis la
+carte. Le planning (section 11) n'existe pas encore dans `web/` : pas de
+bascule vers Planning › technicien après une pièce reçue (BC-21), pas de saisie
+terrain (`tache_sauvegarder_terrain`), et les colonnes de planification du bon
+ne sont jamais envoyées par `enteteAEnregistrer` (elles ne peuvent donc pas
+être écrasées). Le conducteur peut déclarer une tâche faite (la RPC le permet).
+
+## D-BC-04 — Les tâches manquantes se créent par métier, sans date
+« Tâches par métier » : un métier du bon sans tâche en reçoit une depuis la
+fiche (« Créer les tâches manquantes »), `planifiee`, sans `date_tache` — le
+planning la datera. Écriture directe de `planning_taches` (politique
+`peut_ecrire`), la naissance étant gardée par `planning_taches_naissance`. La
+comparaison de métiers est `memeMetier` (une autre rendrait la tâche introuvable).
+
+## D-BC-05 — Hors circuit, les travaux chiffrés rejoignent aussi les lignes
+L'ancien « hors circuit » n'intégrait pas les travaux chiffrés : ils tombaient
+en fin de facture, sans chapitre (BC-91). Les deux chemins de `web/`
+enregistrent les prix, intègrent les travaux chiffrés aux lignes (à la place de
+leur métier) puis passent par la base.
+
+## D-BC-06 — Ce que la base réserve à `peut_ecrire`, l'écran ne le propose pas à la secrétaire
+Travaux supplémentaires, tâches, photos et bucket `terrain` suivent
+`peut_ecrire()` (admin, conducteur, technicien). L'ancien écran laissait la
+secrétaire chiffrer les travaux dans la pré-facture — la base le refusait. Dans
+`web/`, elle modifie les lignes du bon et enregistre, mais les champs de prix
+des travaux et le dépôt de pièce jointe lui sont présentés en lecture, avec la
+raison. Si elle doit les écrire, c'est une migration de droits à proposer.
+
+## D-BC-07 — « Clôturer sans facturation » sur un SAV seulement
+Comme l'ancien écran : le geste est proposé sur un SAV non clos, à
+l'administrateur. `bc_cloturer_gratuit` accepterait tout bon non facturé ; un
+bon ordinaire qui ne se facture pas passe par un SAV ou reste ouvert.
+
+## D-BC-08 — Pas de case « Métiers réalisés »
+`toggleBCMetierFait` écrivait `metiersFait`, sans colonne : rien ne persistait
+(BC-90). L'état par métier se lit sur les tâches (panneau du circuit) et se
+dérive au chargement ; aucune case qui n'écrirait rien n'est proposée.
+
+## D-BC-09 — Une seule préparation pour la lecture et la pièce jointe
+`ocr/api/preparer.ts` (port de `integrations/ocr.ts#preparer`) sert aux deux :
+image hors format ou > 3 Mo → JPEG 0,85 et 2 200 px ; un HEIC est converti
+quand le navigateur sait le décoder (Safari), refusé en le disant sinon.
+
+## D-BC-10 — Lecture automatique : la lecture avant le formulaire, des alertes persistantes
+L'ancien bouton ouvrait un formulaire vierge puis lançait la lecture. `web/`
+lit d'abord (`/commandes/lecture`), montre ce qui est lu, puis ouvre le
+formulaire prérempli avec le document retenu. `web/` n'a pas de toasts : chaque
+issue (annulée, délai, échec) a son alerte persistante avec « Réessayer » et
+« Saisir à la main ».
+
+## D-BC-11 — La file « Validation » ne montre pas un circuit clos
+`etapeValidation` ignore `cloture_gratuit` : un SAV clos gratuitement avec une
+tâche pointée restait « en cours ». `fileValidation` écarte les circuits clos
+(`circuitTermine`, BC-79), et le compteur de chaque filtre est celui de sa
+liste (BC-96).
+
+## D-BC-12 — Une lecture partiellement hors contrat est gardée, champ douteux vidé (remplace D-049)
+Plutôt que refuser en bloc (D-049), `analyserReponse` relit l'extraction champ
+par champ : un champ hors contrat vaut « non lu », une ligne illisible est
+écartée, et l'avertissement « Lecture partiellement incertaine : … » les nomme
+(OCR-31, comme `ecartsDeForme`). Une réponse sans extraction exploitable reste
+refusée.
+
+## D-BC-13 — `statut` libre : posé, jamais réécrit ni affiché
+Deux statuts pour un bon (BC-99) : `web/` écrit « en attente » à la création
+(comme l'ancien), ne le réécrit jamais et ne l'affiche pas. Seul
+`statut_workflow`, tenu par les RPC, dit où en est le bon.
+
+## D-BC-14 — `bc_generer_facture` : correction à écrire avec la facturation
+Mode de paiement forcé à « virement », `conducteur_id` non recopié, TVA 10 du
+forfait (BC-95) : la fonction vient d'être reprise par la chaîne de facturation
+(émetteur figé). Sa correction est listée dans `migrations-proposees.md`
+(« à écrire ») pour ne pas croiser deux réécritures de la même fonction.
+
+## D-BC-15 — `extraire-bc` hors de `web/`
+L'Edge Function ne vérifie ni l'utilisateur ni la société (OCR-40). Elle vit
+dans `supabase/functions/`, hors du périmètre modifiable : le contrôle est un
+prérequis de mise en service (listé dans `migrations-proposees.md`). Côté
+`web/`, la page exige `bons_commande/creer` ET la fonctionnalité `ocr`.
+
+## D-FAC-01 — Le solde se lit dans `v_facture_solde`, corrigée (remplace D-050)
+La vue ignorait le signe des avoirs (un crédit y était « Impayée » et
+s'additionnait aux dettes), testait « Impayée » avant le reste (une facture à
+0 € restait due à vie), ignorait acomptes et retenue, faisait redevenir dues
+les pièces historiques « payées » et comptait le retard en UTC sur la seule
+échéance. **Décision** : proposition `20260926040000` qui la refait depuis sa
+définition vivante (colonnes existantes inchangées de nom, de type et d'ordre,
+nouvelles en fin) ; `reste` = TTC − acomptes − payé (la retenue de garantie
+reste due, mais n'est pas un retard : `reste_exigible`) ; `du` et `credit`
+séparent ce qui s'additionne aux créances de ce qui s'additionne aux crédits.
+Liste, fiche, dossiers et espace client lisent la vue ; l'écran ne recalcule
+plus de solde. Tests : `tests/rls/facturation.essai.ts`, `domain/solde.essai.ts`.
+
+## D-FAC-02 — Les gestes de règlement s'écrivent en base, tout ou rien
+Le statut stocké (payée / impayée) était recalé par l'écran après chaque
+règlement ; le règlement groupé était découpé à l'écran puis inséré facture
+par facture ; le lettrage n'était contrôlé qu'à l'écran. **Décision** :
+proposition `20260926041000` — déclencheur `reglements_recalent_statut`, RPC
+`enregistrer_reglement_groupe` (de la plus ancienne à la plus récente, jamais
+au-delà du dû, trop-perçu refusé, verrou par facture) et `imputer_avoir` (les
+contrôles et messages de `refusImputationAvoir`, dans le même ordre). L'écran
+montre la répartition AVANT de valider avec la règle portée (`imputer`, parité)
+mais c'est la base qui impute. L'écran n'écrit plus le statut.
+
+## D-FAC-03 — PDF en vrai texte, un seul modèle pour l'aperçu et le fichier (remplacé par D-PDF-01)
+L'ancien photographiait l'écran (html2pdf / html2canvas) et ne gardait en texte
+que le pied. **Décision** : `documents/domain/modele.ts` (port pur de
+`renderPrintDoc`) décide du contenu ; jsPDF + jspdf-autotable (bibliothèques
+libres, sans clé, chargées au premier PDF) le posent en texte sélectionnable ;
+l'aperçu à l'écran (`ApercuModele`) rend le même modèle. Pied légal et « n / N »
+sur chaque page, police 7 → 4,5 pt, recomposition serrée si la dernière page
+est sous 12 % et que cela fait gagner une page, caractères ramenés au jeu
+WinAnsi (« → » des situations). Écart assumé : un avoir s'imprime en NÉGATIF,
+comme à l'écran (l'ancien PDF l'imprimait positif sous le titre AVOIR). La pièce
+Factur-X (PDP) reste à la facturation électronique (section 16).
+
+## D-FAC-04 — L'e-mail passe par la messagerie de l'utilisateur
+L'ancienne app n'envoyait aucun courriel elle-même (aucune Edge Function) :
+elle préparait le texte, ouvrait `mailto:` et faisait télécharger le PDF à
+joindre, avec une copie pour webmail. Repris tel quel (`PanneauEmail`), texte
+en parité (`envoyerDocumentEmail`). Rien n'est déployé.
+
+## D-FAC-05 — Le cadenas se pose quand le brouillon part
+Télécharger le PDF, préparer l'e-mail ou imprimer une facture NON numérotée
+pose `verrouillee` et fige l'identité de l'émetteur et du client (FAC-12) ; le
+document partirait sinon sans cadenas. Une facture émise est déjà figée par la
+base : rien à poser (c'était le 23001 de l'ancien). « Déverrouiller » demande
+confirmation (FAC-09). Émettre une facture sous cadenas émet ce qui a été
+envoyé, sans réenregistrer la saisie.
+
+## D-FAC-06 — Une seule définition de l'avoir
+`estAvoir` (`includes`) et `estAvoirDocument` (égalité stricte) coexistaient
+(FAC-94). Sur l'énumération de la base (`facture | avoir | acompte |
+note_frais`), elles disent la même chose : `web/` n'en garde qu'une
+(`documents/domain/totaux#estAvoir`), le verrou compris.
+
+## D-FAC-07 — Préfixes de numérotation : NDF et BC
+Une note de frais sortait « NOT-… » (FAC-98). Proposition `20260926043000` :
+`note_frais` → NDF, `bon_commande` → BC. Elle refait la même fonction que
+`20260926030000` (commandes, BC seul) et en garde l'union : à la fusion, garder
+la plus complète.
+
+## D-FAC-08 — Devis → bon, rapport → devis ou facture : la pièce est créée puis ouverte
+L'ancien ouvrait un formulaire prérempli, non enregistré. Le préremplissage du
+module commandes ne porte ni le devis d'origine ni le logement : le bon
+naîtrait sans son lien, et le refus « déjà lié » ne tiendrait plus.
+**Décision** : la pièce est créée (bon « en attente de BC » au montant HT de
+`v_devis_totaux` ; devis ou facture brouillon aux lignes de préconisation) puis
+ouverte pour relecture. Un devis abandonné laisse un trou dans sa série
+(toléré, RM-40) ; une facture brouillon ne consomme aucun numéro.
+
+## D-FAC-09 — Factures de sous-traitant (FST) : non reprises
+`factures` n'a ni émetteur sous-traitant ni lien aux bons couverts (les champs
+`sousTraitantEmetteur`, `bonCommandeKTAId(s)` de l'ancien étaient filtrés à
+l'écriture) ; les numéros `FST-…` étaient calculés à l'écran, hors série
+légale, et « Marquer payée » écrivait `payée` sans règlement (FAC-90, FAC-91).
+Surtout, la facture d'un sous-traitant à la société est une facture d'ACHAT :
+elle relève de la réception (PDP, section 16), pas de la série de vente.
+**Décision** : ni vues « Mes factures / Factures <société> » ni FST dans
+`web/` (FAC-01 pour sa part sous-traitant, FAC-16, FAC-55, FAC-90, FAC-91).
+
+## D-FAC-10 — Espace client : bons, interlocuteur, solde, en-tête
+Proposition `20260926042000` : vue `v_espace_client_bons` (ni montant, ni
+note, ni conducteur ; avancement dérivé des tâches), accès nominatif
+(`acces_clients.interlocuteur` : NULL = tout le client) appliqué aux devis,
+factures, bons ; lecture des règlements de SES factures émises (et donc du
+solde) ; identité légale et mentions de l'émetteur ajoutées EN FIN de
+`v_mes_acces_clients`. Le client ne lit ni l'IBAN du jour (celui de la facture
+est figé), ni les réglages de la société : la date de validité d'un devis ne
+lui est pas imprimée plutôt que d'en afficher une fausse.
+
+## D-FAC-11 — Vente de véhicule (FAC-96) : dans le module véhicules
+La vente émettait une facture d'emblée, client en texte libre, TVA 20 ou 0.
+Le module véhicules (section 13) n'existe pas encore dans `web/`. Règle
+retenue pour lui : `creerFacture` (brouillon) puis `emettreFacture` (numéro par
+la base), fiche client obligatoire, taux de la liste des réglages.
+
+## D-FAC-12 — Historique comptable : hors code
+FAC-99 (7 factures d'ALPES ISERE HABITAT restées dans `kv_store`) se répare
+par une reprise en production, par un humain, avec le préfixe `compta:` de
+`legacy_id` que la base accepte (proposition `20260925040000`). `web/`
+n'écrit jamais `legacy_id` (FAC-89) : son unicité est l'affaire de l'import
+(section 17).
+
+## D-FAC-13 — Situation de travaux : échéance calculée, pas de note
+L'ancien posait une échéance vide et une note « Situation de travaux — <nom> »
+(FAC-62). L'échéance est une mention obligatoire (L441-9) : `web/` la calcule
+depuis le délai du client. `factures` n'a pas de colonne de notes : le chantier
+est désigné par `chantier_id` et la désignation des lignes.
+
+## D-FAC-14 — Pas de devis de sous-traitant
+`devis` n'a pas de colonne d'émetteur sous-traitant, et la RLS refuse tout
+devis au sous-traitant (matrice : aucun droit `devis`). DEV-18 est sans objet.
+
+## D-FAC-15 — Unités des lignes : le référentiel, sinon la liste de l'ancien
+`uniteOptions` lisait le référentiel `unite` de la société, sinon
+`u, pièce, h, forfait, m, m², m³, ml, mm, jour` ; la liste des réglages était
+« une liste qui mentait ». `web/` fait de même pour devis, factures et bons
+(`useUnitesLignes`), parité `entreesDuDomaine`.
+
+## D-FAC-16 — Créer l'article depuis la ligne : on prévient avant de partir
+La fiche article s'ouvre préremplie et revient au document ; la saisie non
+enregistrée du document ne survit pas au changement d'écran — une
+confirmation le dit. Réservé au droit `articles/modifier` (ART-06).
+
+## D-FAC-17 — Listes de règlement : ni brouillons, ni actions en double
+« Par facture » et les dossiers ne listent pas les brouillons (ils ne doivent
+rien ; l'ancien les montrait à 0). Les gestes du devis (PDF, e-mail, dupliquer,
+facturer, bon de commande, supprimer) vivent sur sa fiche, à un clic de la
+liste (DEV-01). Un règlement « avoir » / « imputation » se retire mais ne se
+corrige pas : ses deux moitiés doivent rester égales.
+
+## D-PLN-01 — Le planning écrit le rendez-vous sur le bon ET les journées dans les tâches
+L'écran historique, qui partage la base, place ses cartes d'après les colonnes
+du bon (`date_planifiee`…, `technicien`) ou `schedule_par_metier[métier]`, et
+dérive les journées supplémentaires des tâches. **Décision** : `web/` lit et
+écrit les deux, de la même façon (clés camelCase du jsonb, autres clés
+conservées), pour que les deux écrans montrent le même planning pendant la
+coexistence. Les gestes sont calculés par le domaine (`planification.ts`, un
+`Plan`) et appliqués bon d'abord, tâches ensuite ; l'état ne passe que par les
+RPC `tache_*`.
+
+## D-PLN-02 — La tâche naît à la planification
+L'ancien écran créait la tâche au premier pointage ou à l'ouverture de la
+fiche. Or le terrain retrouve sa journée par ses tâches, et une tâche créée
+sans équipe n'en recevait plus. **Décision** : poser une carte (ou une journée
+supplémentaire) crée la tâche du jour avec son équipe et son créneau ; une
+carte posée par l'ancien écran propose « Préparer la fiche de ce jour ». Sans
+effet sur le circuit : `bc_passer_pret_a_chiffrer` exige déjà tous les métiers
+du bon.
+
+## D-PLN-03 — Un bon mono-métier dont seul `metiers` est rempli garde son métier
+`planningItems` prenait `b.metier` ; un bon qui ne portait que `metiers: ["Sol"]`
+sortait sans métier et échappait au filtre. **Décision** : le métier de la carte
+est le métier de la clé, sinon `metier`, sinon le premier de `metiers`.
+
+## D-PLN-04 — « Non planifiés » ne liste plus les bons au circuit clos
+Chiffré, facturé ou clôturé : la base refuse de replanifier (`bc_piece_recue`),
+l'ancien écran laissait ces bons dans la colonne indéfiniment. Ils restent
+visibles au calendrier s'ils sont datés.
+
+## D-PLN-05 — Le sous-traitant pointe ses tâches (proposition 20260926050000)
+`est_de_l_equipe` ne connaissait que compte → salarié → équipe : un
+sous-traitant, qui n'est pas salarié, ne pouvait déclarer faite aucune tâche,
+alors que l'écran lui proposait « Valider les travaux ». La proposition ajoute
+la chaîne tâche → `sous_traitant_id` → `contact_profile_id`, le montant du
+sous-traitant (`mes_montants_sous_traitant`, sans ouvrir la vue) et
+l'insertion de travaux supplémentaires sur SES bons. La fiche du sous-traitant
+est la même que celle du technicien : « Travaux terminés » remplace la case
+« date faite » (qui écrivait un champ sans colonne).
+
+## D-PLN-06 — Photos du terrain persistées (proposition 20260926051000)
+Les photos de la fiche (`technicienPhotos`) n'avaient aucune colonne : elles
+disparaissaient à l'enregistrement. Et `bon_commande_photos` vérifiait la
+société par une sous-requête sur `bons_commande`, illisible au terrain.
+**Décision** : photos dans le seau `terrain` + `bon_commande_photos` ; la
+proposition lit la société par une fonction SECURITY DEFINER, ouvre le dépôt au
+sous-traitant, et réserve la suppression à `peut_ecrire` (le rôle lecture
+pouvait effacer).
+
+## D-PLN-07 — Rapports complets (proposition 20260926052000), avec repli
+Lien au bon, entreprise émettrice et signature du technicien n'avaient pas de
+colonne ; le sous-traitant lisait tous les rapports (PLN-52). **Décision** :
+colonnes ajoutées (index unique : un rapport par bon), émetteur et numéro posés
+par la base, visibilité restreinte au sous-traitant, tables filles alignées
+sur la matrice « rapports ». Tant que la production n'a pas la proposition,
+`web/` lit sans ces colonnes, numérote par `prochain_numero`, et refuse le lien
+au bon en le disant.
+
+## D-PLN-08 — Déplacer une carte déplace sa journée
+L'ancien écran changeait la date du bon mais laissait la tâche à l'ancienne
+date, qui réapparaissait en « Suppl. ». **Décision** : la tâche de l'ancienne
+date (si elle n'est pas pointée) prend la nouvelle.
+
+## D-PLN-09 — Fériés triés ; Alsace-Moselle en attente d'un réglage
+La liste est triée (PLN-53). Vendredi saint et 26 décembre existent au domaine
+(`alsaceMoselle`) mais ne sont pas activés : aucune colonne ne dit qu'une
+société est en Alsace-Moselle. À brancher sur un réglage de société.
+
+## D-PLN-10 — Téléphone de l'occupant par une fonction (proposition 20260926053000)
+La vue terrain ne sert pas `telephone_locataire` (D-041) : le lien `tel:` de la
+carte ne s'affichait jamais. Plutôt que de refaire une vue du module des bons,
+`telephones_locataires(societe)` le rend aux membres.
+
+## D-PLN-11 — Pas de génération de rapport par IA (PLN-51)
+L'ancien écran appelait le fournisseur depuis le navigateur, sans clé : échec
+par construction, et une clé côté navigateur serait publique. Non reprise ; à
+refaire, si besoin, derrière une Edge Function.
+
+## D-PLN-12 — Planning et rapports ouverts à tous les niveaux d'abonnement
+Aucun niveau ne les porte dans `FONCTIONNALITES` (module `societes`) : les
+entrées de menu n'ont pas de fonctionnalité, comme le tableau de bord.
+
+## D-PLN-13 — Contacts réservés à qui modifie le bon
+Tentatives et rappel s'écrivent sur `bons_commande` ; la RLS le refusait au
+technicien, à qui l'ancien écran montrait pourtant les boutons. Ils sont
+proposés sous `bons_commande/modifier` ; le terrain voit la trace.
+
+## D-PLN-14 — « Terminée le » dérivée des tâches (PLN-54)
+Plus d'écriture de `date_intervention_terminee` : la date affichée est la
+dernière réalisation quand toutes les tâches de la carte sont faites. Un refus
+du conducteur l'efface donc de lui-même.
+
+## D-PLN-15 — Journée supplémentaire d'un bon multi-métiers : par métier
+Chaque métier a sa carte et son équipe ; « + Autre date » sur une carte crée la
+journée de CE métier (l'ancien la créait pour tous les métiers du bon).
+
+## D-PLN-16 — L'équipe n'est pas redemandée à chaque déplacement
+Déposer une carte sans filtre d'équipe redemandait l'équipe même quand la
+carte en avait une. On reprend l'affectation connue ; la modale (obligatoire)
+reste pour une carte qui n'en a pas.
+
+## D-PLN-17 — La poignée compte la case de midi une seule fois
+`dureeDesCases` est l'inverse exact de `calculerSpanRows` ; l'ancien calcul
+pouvait ajouter l'heure de midi deux fois.
+
+## D-PLN-18 — Historique d'une tâche sans le nom des auteurs
+`realisee_par` / `validee_par` désignent des profils que les membres ne lisent
+pas : la fiche dit « Déclarés faits le … », sans nom.
+
+## D-PLN-19 — Un écran « Ma journée » pour le terrain
+Ajout : les interventions du jour de l'équipe (ou de l'entreprise
+sous-traitante), dans l'ordre des heures, et les tâches renvoyées « À
+reprendre ». Première vue du technicien et du sous-traitant.
+
+## D-PLN-20 — Rapport rédigé depuis le planning, photos catégorisées
+« Rédiger le rapport » ouvre l'assistant avec `?bon=` : client, lieu, logement
+et conducteur repris du bon sans écraser la saisie. La catégorie d'une photo
+(constatation / préconisation) est rangée dans `intervention_photos.legende` ;
+les signatures sont des PNG du seau. Un rapport lié à un bon ne se facture pas
+à côté : « Facturer le bon lié » renvoie au bon.
+
+## D-PLN-21 — Liste des rapports : émetteur au choix de l'encadrement
+L'ancien écran cachait entièrement aux internes les rapports des
+sous-traitants. `web/` montre les internes par défaut et un filtre
+« Émetteur » ; le sous-traitant n'a que les siens (RLS).
+
+## D-PLN-22 — Transformer un rapport exige un client du répertoire
+Devis et facture exigent `client_id` (délais, cadre, adresse). Un rapport
+rédigé sur un nom libre doit d'abord recevoir son client ; les lignes partent
+sans prix (préconisations « x2 m² » → quantité et unité).
+
+## D-STA-01 — Les agrégats des tableaux de bord sont calculés par la base (proposition 20260926080000)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+L'ancien écran chargeait toutes les collections et additionnait dans le
+navigateur des totaux recalculés pièce par pièce. `web/` appelle des fonctions
+d'agrégat (`stats_indicateurs`, `stats_ca_par_mois`, `stats_activite_recente`,
+`stats_par_client`, `stats_par_conducteur`, `stats_par_metier`,
+`stats_ca_par_equipe`) qui lisent `v_facture_totaux`, `v_facture_solde` et
+`v_devis_totaux`. SECURITY INVOKER (la RLS de chaque table s'applique) et une
+garde « statistiques / voir » (42501) : le module, qu'aucune politique
+n'invoquait, devient opposable. L'écran n'en tire que des taux et des parts.
+
+## D-STA-02 — Le chiffre d'affaires ne compte que des factures émises (STA-21, P-19)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+CA HT = pièces émises (ni brouillon sans numéro, même définition que
+`v_facture_solde`), avoirs en négatif quel que soit le signe de leurs lignes,
+**factures d'acompte exclues** : leur montant est repris en entier par la
+facture de solde (les acomptes n'y sont déduits que du net à payer), les
+compter aurait doublé ce chiffre d'affaires. Changement d'indicateur à annoncer.
+
+## D-STA-03 — Graphiques en SVG écrits à la main, sans bibliothèque
+Un graphique à barres groupées et des barres horizontales ne justifient pas une
+dépendance (poids, surface d'attaque, suivi des versions) — et `node_modules`
+est partagé entre les worktrees. Chaque graphique a sa légende, un survol
+parcourable au clavier et un tableau équivalent ; l'année en cours et les
+barres prennent `--color-accent-societe` s'il est posé (repli : couleur
+primaire), l'identité d'une série est toujours écrite, jamais portée par la
+seule couleur.
+
+## D-STA-04 — « Encaissé ce mois » = règlements datés du mois, en TTC (STA-21, P-19)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+L'ancien « CA encaissé (HT) » additionnait le HT des factures au statut stocké
+« payée » datées du mois de la FACTURE. La tuile dit désormais ce qui est entré
+en caisse : Σ des règlements datés du mois, hors lettrage d'avoir (modes
+`avoir` / `imputation`) et hors règlement porté par un avoir. C'est un montant
+TTC — la tuile l'écrit. Une pièce historique réglée par reprise, sans
+règlement, n'y apparaît pas.
+
+## D-STA-05 — Statistiques par la référence du conducteur ; retard sur un bon ouvert (STA-22)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+Groupement par `conducteur_id` (le nom de sa fiche, « Sans conducteur » à
+défaut), jamais par l'étiquette `conducteur`. « En retard » = fin de travaux
+dépassée sur un bon **ouvert** (ni chiffré, ni facturé, ni clos, aucune
+facture ne le désigne, et le terrain n'a pas tout pointé) — l'ancien comptait
+un bon facturé. Travaux supplémentaires lus dans `tache_travaux_supplementaires`
+(nombre hors refusés ; montant des chiffrés et intégrés) au lieu d'un tableau
+sans colonne. Dates à l'heure de Paris (plus de `new Date()` local).
+Par métier : un bon compte dans chacun de ses métiers, mais son chiffre
+d'affaires ne va qu'à un bon mono-métier (« Plusieurs métiers » sinon,
+« Hors bon de commande » pour une facture sans bon) : pas de double compte.
+Par client : groupé par la fiche, par le nom à défaut. Écran enrichi d'une
+plage de dates libre.
+
+## D-STA-06 — « Locataires à rappeler » : seulement sur un bon encore ouvert
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+Le pilotage historique relançait aussi des affaires chiffrées ou closes ; le
+tableau du conducteur, lui, ne regardait que les bons ouverts. Les deux suivent
+désormais la même règle.
+
+## D-STA-07 — Tuiles vers les écrans, sans filtre dans l'adresse quand l'écran n'en lit pas
+**Remplacée par D-CLI-10** : devis, bons et planning lisent désormais leurs filtres dans l'adresse.
+Liste des devis, des bons et planning ne lisent aucun filtre dans l'URL :
+« Devis en attente », « SAV », « À valider » y ouvrent l'écran entier (le
+libellé de la tuile dit ce qu'on y cherche). Impayés → règlements par facture
+triés par reste dû ; échues → même vue filtrée « en retard » ; un client du
+classement → son dossier de règlements. À brancher quand ces écrans liront
+leurs filtres dans l'adresse.
+
+## D-STA-08 — Statistiques sans niveau d'abonnement
+Aucun niveau de `FONCTIONNALITES` ne les porte : l'entrée de menu suit la
+matrice seule (« statistiques / voir » : admin, secrétaire, conducteur,
+lecture), comme le planning (D-PLN-12).
+
+## D-STA-09 — Le sous-traitant reçoit le tableau du terrain
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+Son ancien tableau comptait ses factures « KTA » prêtes, ses devis et ses
+factures impayées : factures et devis de sous-traitant ne sont pas repris
+(D-FAC-09, D-FAC-14). Il reçoit donc, comme le technicien, sa journée (par son
+entreprise, `monSousTraitantId`) et rien d'autre ; aucun montant.
+
+## D-STA-10 — Tableau du conducteur : sa fiche par son compte, aucun montant
+**Remplacée en partie par D-STA-A-01** : le bandeau « aucune fiche » reprend le texte de l'ancien (« Cochez « Conducteur de travaux » sur votre fiche dans RH… ») ; le reste tient.
+Les affaires se filtrent par `conducteurs.profile_id` = compte connecté ; sans
+fiche, toute la société, avec un bandeau qui le dit. L'API ne demande à la vue
+terrain aucune colonne de prix. Un administrateur qui « voit en tant que »
+conducteur n'a pas de fiche : il voit toute la société, bandeau compris.
+
+## D-STA-11 — Factures échues et taux d'encaissement lus sur le solde calculé par la base
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
+« Factures échues » = pièces qui doivent encore (`du` > 0, avoirs exclus) avec
+une échéance dépassée — plus le statut stocké, qu'une facture partiellement
+réglée pouvait contredire. Taux d'encaissement (RM-70, formule inchangée) :
+impayés = Σ `du`, dénominateur = Σ TTC des pièces émises (avoirs négatifs),
+brouillons exclus (P-19). Le résumé du mois ne répète plus « CA encaissé » :
+la tuile le porte déjà.
+
+## D-STA-A-01 — Décision du client : calculs identiques à l'ancienne, défauts compris
+Le client exige que les tableaux de bord (pilotage administrateur/secrétaire/lecture, conducteur,
+technicien, sous-traitant) et l'écran Statistiques calculent EXACTEMENT comme `app.js` : mêmes
+définitions, mêmes filtres, mêmes arrondis, même groupement, mêmes libellés, mêmes tuiles. Elle
+remplace D-STA-01, 02, 04, 05, 06, 09, 11 (et en partie D-STA-10, D-VIS-07, D-VIS-08,
+D-ECR-PAR-13, D-CLI-10). Chaque défaut ainsi gardé est décrit, avec sa reproduction et la
+correction à remettre, dans `docs/DEFAUTS-A-TRANCHER.md` (DEF-STA-01 à 19), pour que le client
+tranche un par un.
+
+**Comment** : les collections que l'ancien chargeait sont lues entières (`api/collections.ts` :
+factures et devis avec leurs lignes, règlements, rapports, bons par la vue terrain, fiches de
+conducteur, équipes ; « À traiter » reprend `useBons`, le technicien et le sous-traitant le
+planning) et calculées dans `domain/ancien/` en **virgule flottante, `Math.round` compris** —
+seule exception au décimal exact du domaine (D-006), consignée dans le garde-fou
+(`tests/garde-fous.essai.ts`, `CALCULS_DE_L_ANCIEN`) : une somme décimale et une somme flottante
+s'affichent différemment sur un demi-centime, et seul le flottant rend l'affichage de l'ancien. Les
+montants s'écrivent comme `moneyDisplay` (`formatEurosEcranAncien` : `Intl` sur le nombre, mode
+discret compris). Aucun calcul n'est enregistré. La proposition 20260926080000 (`stats_*`) est
+retirée (docs/migrations-proposees.md). Parité : `tests/parite/statistiques.essai.ts` évalue la
+source de `app.js` et compare au flottant près, à l'heure de Paris.
+
+**Défauts de l'ancien conservés** (détail dans DEFAUTS-A-TRANCHER.md) :
+1. Chiffre d'affaires = toutes les factures datées : brouillons, acomptes et situations compris,
+   avoirs en négatif (graphique, total, plage libre, top clients, statistiques) — DEF-STA-01.
+2. « CA encaissé ce mois (HT) » = HT des factures au statut stocké « payée » datées du mois de la
+   facture, pas les règlements du mois — DEF-STA-02.
+3. Restant dû et taux d'encaissement comptent les brouillons (dus et facturés) ; une facture
+   « payée » sans règlement est due — DEF-STA-03.
+4. « Factures impayées » (nombre) et « Factures échues » lues sur le statut stocké — DEF-STA-04.
+5. « Locataires à rappeler » compte les bons clos, chiffrés, facturés — DEF-STA-05.
+6. Activité récente : « Client · null » pour une facture sans numéro ; lettrages d'avoir montrés
+   comme « Paiement reçu » — DEF-STA-06.
+7. Top clients par le nom écrit sur la facture — DEF-STA-07.
+8. Statistiques par l'étiquette `conducteur` (graphies distinctes = lignes distinctes, aucune ligne
+   « Sans conducteur », fiches sans pièce à zéro) — DEF-STA-08.
+9. « En retard » = fin de travaux dépassée, même sur un bon facturé ou clos — DEF-STA-09.
+10. Barre rouge pleine « 0 / 0 » pour un conducteur sans bon — DEF-STA-10.
+11. Travaux supplémentaires toujours à 0 (champ sans colonne) — DEF-STA-11.
+12. Jamais d'« injoignable » (`parseInt` d'un tableau) — DEF-STA-12.
+13. Technicien : seul le jour du rendez-vous compte, ses bons par la colonne `technicien` — DEF-STA-13.
+14. Sous-traitant : son tableau à trois tuiles, « Mes devis » et « Mes factures impayées » toujours à
+    0 — DEF-STA-14. Les tuiles ouvrent le planning : les écrans de factures et devis de
+    sous-traitant n'existent pas (D-FAC-09, D-FAC-14). Comme à chaque ouverture de l'ancien, aucun
+    sous-traitant « actuel » : « Bonjour 👋 Sous-traitant » et le bandeau « Sélectionnez votre nom
+    dans Réglages » — DEF-STA-19.
+15. Infobulle du graphique sur 12 mois : l'année de la dernière barre pour toutes — DEF-STA-15.
+16. Part du chiffre d'affaires négative ou au-delà de 100 % avec des avoirs — DEF-STA-17.
+17. Bons rangés dans la période par leur date de saisie — DEF-STA-18.
+
+**Non reproduit, à trancher** : l'infobulle de l'ancien écrit le montant même en mode discret
+(DEF-STA-16) ; `web/` le masque, comme tout montant d'écran (TRV-05).
+
+**Retiré de l'écran Statistiques** (absent de l'ancien) : plage de dates libre, vues par métier et
+par client. **Inchangé** : recherche globale du tableau de bord (hors calculs), mesures du
+conducteur (déjà identiques), graphiques en SVG écrits à la main (D-STA-03).
+
+## D-VEH-01 — Les prêts du parc ont leur table et leur durée (proposition 20260926070000)
+L'ancien écran rangeait prêts et entretiens dans le JSON de la fiche, sans
+colonne : tout disparaissait au rechargement (VEH-20). **Décision** :
+`vehicule_prets`, `materiel_prets`, `vehicule_entretiens` sont écrites ;
+`date_debut` = prêt, `duree_jours` (proposée) = durée prévue, `date_fin` =
+retour RÉEL. Un index partiel interdit deux prêts en cours pour un même objet.
+Prêts, entretiens et documents d'un véhicule suivent « véhicules / modifier »,
+les prêts de matériel « matériel / modifier » : la secrétaire (véhicules :
+tout) prête enfin un véhicule, le technicien (véhicules : voir) ne note plus
+d'entretien, le rôle lecture ne supprime plus rien. Contrôles périodiques,
+cartes et consommations (sans écran) : seule la suppression s'aligne sur
+l'écriture.
+
+## D-VEH-02 — Schéma d'état dans le jsonb du prêt
+`etat_depart` = `{ etat, marques }`, `etat_retour` = `{ marques }` (repère
+220 × 420 de l'ancien SVG), lus avec tolérance (texte seul, tableau nu). Les
+marques se posent aussi au clavier (zones nommées).
+
+## D-VEH-03 — Fichiers du parc au seau `terrain`
+Facture d'achat (l'ancien `factureAchatFiles`, sans colonne), carte grise,
+assurance, photos : `vehicule_documents` + `<société>/vehicules/<véhicule>/…`.
+Facture d'entretien : `vehicule_entretiens.fichier_chemin` (l'ancien data-URL
+était perdu). Politiques Storage AJOUTÉES pour ce chemin (« véhicules /
+modifier ») : sans elles la secrétaire ne déposait rien.
+
+## D-VEH-04 — Échéances aux seuils des réglages
+L'ancienne liste codait « 30 » pour le CT. Retenu : CT et documents qui
+expirent → `seuils.vehiculeControle`, cartes carburant et télépéage →
+`seuils.vehiculeCarte` (défauts 30, donc inchangé sans réglage). Le bloc
+« Échéances à surveiller » de la liste ajoute le CT, que l'ancienne cloche ne
+voyait pas, et nomme le véhicule par sa plaque (l'ancienne lisait `nom`,
+vide). Pas encore de cloche globale dans `web/` : `alertesVehicule` est prête.
+
+## D-VEH-05 — La validité de la carte carburant est une date
+Le champ texte « Validité / code PIN » écrivait dans une colonne `date` : tout
+l'enregistrement était refusé dès qu'on y tapait un code. Champ date ; un code
+PIN n'a rien à faire dans l'application.
+
+## D-VEH-06 — Vente d'un véhicule (VEH-04, FAC-96 renvoyé par la facturation)
+Suit D-FAC-11 : acheteur = fiche du répertoire (l'ancien : texte libre), taux
+choisi dans la liste des réglages (20 ou 0 proposé selon « TVA sur ce
+véhicule »), désignation mot pour mot celle de l'ancien écran, facture émise
+aussitôt comme avant. Ordre sans double : brouillon → véhicule « vendu » (si et
+seulement s'il ne l'était pas, sinon le brouillon est retiré) → émission ; si
+l'émission échoue, le véhicule est vendu et sa facture attend en brouillon.
+Droits : « véhicules / modifier » ET « factures / créer » (le conducteur ne
+vend pas). La note « Vente de véhicule » n'est pas reprise : `factures` n'a pas
+de colonne de notes (l'ancien la perdait déjà). `conditions()` de
+`facturation/api/operations.ts` est désormais exportée pour cela.
+
+## D-VEH-07 — Hors périmètre : sinistres, amendes, cartes multiples
+L'ancienne app ne gère ni sinistres ni amendes ; `vehicule_controles_periodiques`,
+`vehicule_cartes_carburant`, `vehicule_consommations` n'ont aucun écran
+historique. Non repris. Ajouté : suppression d'un véhicule (droit
+« supprimer »), montants masqués à qui ne voit pas les prix, confirmation
+avant de supprimer un prêt.
+
+## D-VEH-08 — Parc ouvert à tous les niveaux d'abonnement
+Aucun niveau ne porte véhicules ni matériel : entrées de menu sans
+fonctionnalité, comme le planning (D-PLN-12).
+
+## D-EFA-01 — Facture électronique : un module `efacture`, le XML fabriqué dans le navigateur
+Comme l'ancien (`regles-en16931.ts` + `regles-cii.ts`), la charge EN 16931 et
+le CII sont produits côté navigateur, sous tests de parité (`tests/parite/efacture.essai.ts`,
+sortie CII identique octet pour octet) et un test de structure
+(`efacture/domain/cii.essai.ts` : séquences XSD, obligatoires, BR-CO-10 à 16,
+BR-S-08). L'Edge Function recontrôle numéro et total contre la base.
+
+## D-EFA-02 — Arrondis EN 16931 et reprise : décimal exact
+La charge (remise → déductions BG-20, ventilation BG-23, totaux) et les
+contrôles de la reprise d'historique calculent en `Big` (`@/lib/money`) là où
+l'ancien arrondissait des flottants. Seul un demi-centime exact peut différer
+(ex. 2,90 × 5 % : l'ancien donne 0,14, web/ 0,15) — cas nommé dans la parité ;
+sur 800 tirages quelconques, l'écart reste ≤ 0,01 €.
+
+## D-EFA-03 — Factur-X sans pdf-lib : mise à jour incrémentale du PDF jsPDF (remplacé par D-PDF-05)
+L'ancien embarquait le XML avec pdf-lib. web/ n'ajoute pas de dépendance :
+`efacture/pdf/facturx.ts` appose une mise à jour incrémentale (pièce jointe
+`factur-x.xml` `/AFRelationship /Data`, `/AF`, `/EmbeddedFiles`, XMP Factur-X
+EN 16931, intention de sortie sRGB — même profil que l'ancien), sans toucher un
+octet du PDF rendu. Comme l'ancien, pas de PDF/A-3 strict (polices standard non
+embarquées). Un manque ne prive jamais du PDF : le PDF simple part, le motif est
+dit si la pièce relève de la facture électronique.
+
+## D-EFA-04 — Plateforme : l'Edge Function historique, inchangée, non redéployée
+Le dépôt appelle `pdp-emit-invoice` telle qu'elle existe (`../supabase/functions`).
+web/ ne crée, ne modifie ni ne déploie aucune fonction et ne manipule aucune clé.
+Les autres fonctions `pdp-*` (OAuth, réception, e-reporting, cycle de vie,
+webhook) n'avaient aucun écran dans l'ancienne app : pas d'écran non plus ici
+(EFA-06). Les tables PDP existent déjà en production (EFA-07) : rien à proposer.
+
+## D-EFA-05 — Rôle vérifié à l'écran seulement ; défauts des fonctions PDP signalés
+`pdp-emit-invoice` ne vérifie que l'appartenance (EFA-20) et `pdp-webhook`
+compare son secret avec `!==` sans `verify_jwt=false` déclaré (EFA-21). Les
+corriger impose de modifier des fonctions hors de web/, interdit ici. web/ masque
+« Transmettre » à qui n'a pas `factures / modifier` ; la correction serveur
+(`a_permission('factures','modifier')` dans la fonction, comparaison à temps
+constant, `verify_jwt` déclaré) reste à faire par un humain avant la bascule.
+
+## D-EFA-06 — Import de clients : pas d'annuaire des entreprises
+L'ancien interrogeait l'annuaire à l'aperçu (corrections, B2G par catégorie
+juridique). web/ n'a pas encore d'intégration annuaire (CLI-23, hors périmètre) :
+l'import écrit ce que le fichier dit ; type déduit = particulier sans
+immatriculation, international hors de France, sinon entreprise française —
+l'aperçu invite à vérifier un acheteur public. Aucune correction d'annuaire.
+
+## D-EFA-07 — Import de clients : une mise à jour n'efface rien
+L'ancien réécrivait toute la fiche d'un client rapproché, cases vides et
+colonnes absentes comprises (un export partiel effaçait e-mail, adresse…), et
+le type déduit. Sans annuaire, ce type rétrograderait un B2G. web/ n'envoie en
+mise à jour que les valeurs renseignées (pays seulement s'il est lu dans le
+fichier — `paysExplicite`), jamais le nom, le type ni `eligibilite_*`. Les
+créations suivent l'ancien, clés uniformisées. `tests/rls/import-export.essai.ts`.
+
+## D-EFA-08 — Sauvegarde : export seulement
+L'export JSON (`version: 2`, `terrain-sauvegarde-AAAA-MM-JJ.json` — le nom que
+l'écran demandait ; l'adaptateur servait en fait « terrain-export-… ») reprend
+les collections de `loadAllData` avec les droits de l'utilisateur. La
+restauration par écrasement n'est pas reprise : elle réécrivait sans garde de
+rôle des pièces numérotées et figées que la base refuse désormais de modifier.
+
+## D-EFA-09 — DPGF : l'import de `chantiers` fait foi, défauts reproduits
+IMP-30 est CHA-08 (même port, même parité). Les bizarreries d'IMP-31 (« 1.234 »
+lu 1,234, `;` retenu seulement sans virgule en 1re ligne, prix jamais deviné par
+le contenu) sont gardées à l'identique, faute de quoi des fichiers préparés
+pour l'ancien liraient autrement ; le remplacement sans confirmation est
+tempéré par D-CHA-07 (l'écran annonce ce qui sera remplacé, lignes figées gardées).
+
+
+## D-RH-01 — Les données RH restent aux RH (proposition 20260926060000)
+`v_salaries_annuaire` masquait salaires, coûts, naissance, IBAN… mais montrait à
+tout membre (technicien, sous-traitant, lecture) les deux dates du suivi médical
+et les notes de la fiche — des données de santé (RGPD art. 9) que la table des
+visites, elle, réserve à `rh / modifier`. Et le seau `terrain` laissait tout
+membre lire `<société>/salaries/…` (contrats, pièces d'identité, RIB,
+attestations médicales), tandis que la secrétaire (`rh / modifier`) ne pouvait
+ni y déposer ni y retirer une pièce (`peut_ecrire`). Proposition : trois
+expressions de la vue masquées (définition vivante, colonnes inchangées) ; une
+politique RESTRICTIVE sur le sous-dossier `salaries` et trois politiques
+permissives pour qui tient les dossiers — les politiques existantes du seau (et
+celles d'autres propositions) ne sont pas refaites. Impact sur l'ancien écran :
+le conducteur n'y voit plus le badge de visite (c'est voulu).
+
+## D-RH-02 — Absences dans `salarie_absences`, actées
+L'ancien écran posait `absences` sur la fiche, sans colonne : perdues au
+rechargement, solde faux (RH-20). `web/` écrit une ligne par absence (jours
+ouvrés calculés, justificatif au seau). Saisie par qui tient les dossiers,
+l'absence est ACTÉE : `statut = 'approuvee'`, `date_approbation` = jour de
+saisie (le défaut `en_attente` dirait le contraire). Types = libellés de
+l'ancien écran (« Congé payé »…). L'acquis de CP s'enregistre avec la fiche,
+plus à chaque frappe. Contrainte `fin >= début` proposée (NOT VALID).
+
+## D-RH-03 — Habilitations au dossier, pas dans `salarie_habilitations`
+Comme l'ancien écran corrigé : une habilitation est un `salarie_documents` de
+type `habilitation` (fichier au seau). `salarie_habilitations` reste inutilisée ;
+y migrer demanderait de reprendre les alertes de l'ancien écran en même temps.
+
+## D-RH-04 — Seuils réglables partout
+La liste codait 30 jours en dur pour la carte BTP et les habilitations alors que
+`carteBtp` et `habilitation` (60 j par défaut) sont réglables et servent aux
+alertes : `web/` applique les seuils de Réglages › RH (documents 30 j, visites
+45 j, carte BTP 60 j, habilitations 60 j). Les documents de sous-traitant
+(30 j en dur) suivent le seuil `documentLegal`.
+
+## D-RH-05 — Équipes, sous-traitants et fiche conducteur : l'administrateur
+La matrice range ces écrans sous `rh` (admin, secrétaire en écriture) ; la base
+exige `peut_ecrire()` (admin, conducteur, technicien) sur `techniciens`,
+`sous_traitants`, `sous_traitant_documents` et `conducteurs`. L'écran demande
+les deux, soit l'administrateur : il ne propose pas à la secrétaire un geste
+voué au refus, ni au conducteur un geste que la matrice ne lui donne pas. La
+secrétaire rattache toutefois un salarié à une équipe (c'est la fiche du
+salarié qui porte le lien). À trancher par le métier ; migration à écrire si
+la secrétaire doit gérer équipes et sous-traitants.
+
+## D-RH-06 — Équipe : nom, métiers, couleur ; membres = salariés (RH-21)
+`nom2`, `nom3` et la composition « binôme » n'avaient pas de colonne ; l'ancien
+écran les a déjà retirés. Les membres sont les salariés actifs dont
+`technicien_id` désigne l'équipe. Aucune migration.
+
+## D-RH-07 — L'onglet RH sans `rh / modifier`
+Conducteur, technicien, lecture ont `rh / voir` : ils voient la liste par
+l'annuaire (sans coût, sans badges de dossier ni de visite — les lire serait
+un refus, et « dossier incomplet » partout mentirait), les équipes et les
+sous-traitants. Dossiers, visites, registre et fiche exigent `rh / modifier`.
+
+## D-RH-08 — Documents de sous-traitant dans `sous_traitant_documents`
+L'ancien écran posait `documents` (data-URL) sur la fiche du sous-traitant,
+sans colonne : décennales et attestations se perdaient. `web/` écrit la table
+(nom = type) et range le fichier sous `<société>/sous-traitants/<id>/`.
+
+## D-RH-09 — Une fiche conducteur retirée n'est pas cochée
+L'ancien écran cochait la case dès qu'une fiche existait, même retirée, et
+l'enregistrement suivant la réactivait sans qu'on l'ait demandé. `web/` coche
+selon `actif` (test : `rh.essai.tsx`).
+
+## D-RH-10 — Le rôle conducteur se propose au passage à « coché »
+L'ancien écran redemandait à chaque enregistrement tant que le compte n'était
+pas conducteur. `web/` propose une fois, quand la case passe de décochée à
+cochée ; hors administrateur, il dit que le rôle n'a pas changé sans poser la
+question. Un refus garde la fiche enregistrée.
+
+## D-TRV-01 — D-CHA-04 vérifié : le planning date la tâche du bon né du DPGF
+`planPoser` adopte déjà une tâche sans date du même métier avant d'en créer
+une (« tâche dé-datée »). Le risque noté en D-CHA-04 ne se produit pas dans
+`web/` : prouvé de bout en bout contre la base locale (bon et tâche écrits
+comme `planifierQuantite`, puis `lirePlanning` → `planPoser` →
+`appliquerPlan` : une seule tâche, datée, `dpgf_ligne_id` et
+`quantite_planifiee` gardés — `tests/rls/transversal.essai.ts`) et au domaine
+(`planning.essai.ts`). L'écran historique, lui, en crée toujours une seconde.
+
+## D-TRV-02 — Seau `terrain` : la lecture suit la ligne qui porte le chemin (proposition 20260926100000)
+L'encadrement (admin, conducteur, secrétaire, lecture) lit toute la société,
+comme avant. Le terrain : `chantiers/<id>` si affecté, `salaries/<id>` son
+dossier seul, `bons`/`bons-commande` (technicien : tous, la vue terrain les
+lui montre ; sous-traitant : ceux où il a une tâche), `interventions/<id>`
+par `rapport_visible`, `vehicules`/`materiels` technicien seul, `societe` et
+`documents-legaux` pour tous, tout autre domaine refusé. Les politiques
+restrictives d'autres modules (RH : `terrain_rh_restreint`) s'y ajoutent ;
+un module qui ouvre un nouveau domaine de chemins doit y ajouter sa règle.
+
+## D-TRV-03 — Suppression des filles restantes : trois tables ici, le reste à leurs modules
+Relevé `pg_policy` : 11 tables filles suppriment sous `est_membre()`. Les
+véhicules (6), `materiel_prets` et `sous_traitant_documents` (intervenants,
+écran RH) sont laissés aux agents véhicules/matériel et RH ; la proposition
+20260926101000 aligne `facture_cycle_vie`, `facture_entrante_lignes`,
+`fournisseur_controle_lignes` sur l'écriture (`peut_ecrire`).
+
+## D-TRV-04 — `planning_taches` : le sous-traitant seul est restreint (AUTH-72)
+Le sous-traitant — entreprise extérieure — ne lit plus que les tâches où il
+est désigné (proposition 20260926102000, `tache_lisible`). Le technicien
+garde la lecture de toute la société : la « vue technicien » imposée (PLN-01)
+montre le planning de toutes les équipes. Les tables `chantier_*` suivent
+déjà l'affectation depuis 20260926021000 et les politiques de lecture de
+chantier.
+
+## D-TRV-05 — Journal du circuit : plus aucune écriture directe (AUTH-73)
+Toutes les écritures légitimes passent par les RPC SECURITY DEFINER du
+circuit ; la proposition 20260926103000 retire la politique INSERT et les
+droits d'écriture des rôles d'API. `tests/rls/circuit.essai.ts` prouve que
+les RPC écrivent toujours.
+
+## D-TRV-06 — Déclencheurs sans EXECUTE public ; annuaire en barrière (AUTH-75, AUTH-76)
+Les privilèges PAR DÉFAUT du schéma ne sont pas changés (les RPC en
+dépendent) : la proposition 20260926104000 retire le droit à toutes les
+fonctions de déclencheur existantes, et se rejoue après toute nouvelle.
+`v_salaries_annuaire` avait bien perdu `security_barrier` (constaté en base) :
+remis par `alter view … set`. **Si une proposition RH refait cette vue, elle
+doit porter `with (security_barrier = true)`** — constaté : elle a été refaite
+pendant cette vague et l'option perdue, puis remise en rejouant 104000.
+
+## D-TRV-07 — Alsace-Moselle : une colonne de société, lue à part (PLN-53)
+`societes.feries_alsace_moselle` (proposition 20260926105000), case dans
+Réglages › Organisation › Jours fériés, enregistrée au clic. Lue par une
+requête à part (`societes/api/feries.ts`) : tant que la colonne n'existe pas
+en production, la fiche société se lit toujours et le planning retombe sur
+les fériés nationaux (trace en console).
+
+## D-TRV-08 — Accès clients gérés par l'administrateur (proposition 20260926106000)
+Deux fonctions réservées à `est_admin` : lister les accès avec le compte,
+ouvrir un accès par l'adresse du compte. Un compte membre de la société est
+refusé (il voit déjà tout). La création du COMPTE d'un client (auth) demande
+la clé de service : non couverte — le client crée son compte, l'admin ouvre
+l'accès ensuite. L'ouverture révèle à l'admin si une adresse a un compte :
+accepté, l'admin est un utilisateur de confiance de sa société.
+
+## D-TRV-09 — Fiche du rapport : les boutons des modules devis et facturation
+**Résorbée par D-CLI-09** : une seule voie, `interventions/api/transformations.ts`.
+Montés sur l'aperçu du rapport (`PageApercuRapport`) ; un rapport lié à un
+bon affiche « Facturer par le bon lié » au lieu de « Créer la facture »
+(`factureDepuisIntervention` du module facturation ne connaît pas encore le
+lien au bon de la proposition 20260926052000). **Doublon à résorber** : la
+carte de la liste utilise `interventions/api/transformations.ts`, qui fait la
+même chose avec des gardes de plus ; à la fusion, garder une seule voie.
+
+## D-TRV-10 — Couleurs des pièces : la palette de l'écran, lue avec l'identité (SOC-04)
+`lireIdentiteDocument` décline `paletteSociete(couleurAccent, couleurSecondaire)`
+(défauts de l'ancien écran `#FF6A1A` / `#182233`, parité `fusionnerReglages`) :
+titre et total au ton foncé de l'accent (4,5:1 sur blanc), filet d'accent sous
+l'en-tête, bandeau du tableau à la seconde couleur. L'aperçu HTML prend les
+couleurs du modèle, sinon les variables `--color-*-societe*`. Le logo du seau
+est téléchargé et passé en data-URL (PNG/JPEG, chemin de SA société seulement) ;
+introuvable, la pièce part sans logo.
+
+## D-TRV-11 — Fiche client : les colonnes e-facture, marché, livraison et comptabilité
+Blocs affichés par `sectionsEfactureVisibles` (parité) ; l'adresse électronique
+proposée depuis le SIRET est écrite à l'enregistrement si le champ est resté
+vide (l'ancien la proposait en placeholder et l'annuaire la posait) ; bandeau
+de complétude informatif. Les libellés de l'adresse de facturation sont
+distincts (« Adresse de facturation »…) : trois champs « Adresse » identiques
+étaient indiscernables au lecteur d'écran.
+
+## D-TRV-12 — Capteur axe-core dans les tests de composants
+`src/test/accessibilite.ts` (WCAG 2.1 A/AA ; contraste et régions coupés sous
+jsdom). Installé par `npm install --package-lock-only` puis copie du paquet
+dans `node_modules` partagé (un `npm install` complet aurait élagué les
+paquets d'autres agents). Première prise : `CartePosee` était un
+`role="button"` contenant des contrôles → groupe libellé et bouton
+« Ouvrir la fiche ».
+
+## D-AUTH-01 — Démarrage ordonné ; l'annuaire des comptes n'est plus un préalable (AUTH-07, AUTH-33)
+`chargerSession` lit, dans l'ordre de l'ancien démarrage et SÉQUENTIELLEMENT :
+la matrice (`count: "exact"` ; vide ou tronquée → `DemarrageImpossible`, rien
+d'autre n'est lu), le profil, les sociétés où le compte est membre actif avec
+son rôle dans chacune, puis les accès « espace client ». L'annuaire des
+intervenants que l'ancien écran chargeait avant le rendu (`chargerIntervenants`)
+n'est pas repris comme étape : chaque écran qui nomme un compte le lit par sa
+propre requête indexée par société (chantiers, comptes, planning), ce qui
+évite l'annuaire vide « toute la session » quand il échouait en silence.
+`peut()` ne lève pas faute de matrice : la matrice fait partie du type
+`Session`, une session sans matrice ne peut pas exister (le cas « matrice non
+installée » de l'ancien code est impossible par construction).
+
+## D-AUTH-02 — Délai de 15 s et session expirée (AUTH-09, AUTH-10)
+La lecture du jeton et celle de la session sont bornées à 15 s
+(`avecDelai`) ; au-delà, le message de l'ancien écran (« La couche de données
+n'a pas répondu… VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY… ») s'affiche
+avec « Réessayer ». Un délai dépassé ou une matrice illisible ne sont PAS
+réessayés automatiquement (trois fois 15 s pour le même message).
+Une erreur d'expiration (`PGRST301/302/303`, statut 401, mention « JWT ») reçue
+par N'IMPORTE QUELLE lecture ou écriture ferme la session **localement**
+(`signOut({ scope: "local" })` : le serveur refuserait le jeton pour la fermer),
+vide le cache métier et renvoie à la connexion, qui dit « Votre session a
+expiré ». Une déconnexion voulue n'affiche aucun motif.
+
+## D-AUTH-03 — Onglet devenu interdit : bascule après un changement, refus sur un lien (AUTH-16)
+Après un changement de rôle simulé ou de société, une page que le nouveau
+contexte interdit bascule sur le premier onglet autorisé (comme `app.js`).
+Un accès DIRECT par l'URL à une page interdite garde « Accès refusé » : un
+lien partagé qui ne s'ouvre pas doit dire pourquoi. Le `Layout` retient sous
+quel contexte (société|rôle effectif) la page a été atteinte
+(`useRepliOnglet`) ; `RouteModule` ne redirige que si ce contexte a changé
+depuis.
+
+## D-AUTH-04 — Le motif d'un refus de la base s'affiche s'il est rédigé (AUTH-39)
+Ordre de l'ancien `dernierRefus` : `details`, puis `hint`, puis `message`. N'est
+retenu qu'un texte rédigé en FRANÇAIS par nos fonctions et déclencheurs, dans
+une réponse PostgREST (qui porte toujours `details` et `hint`) : les messages
+natifs de Postgres (« new row violates row-level security policy… »,
+« duplicate key… »), en anglais et techniques, gardent leur traduction
+générique ; les refus fabriqués par nos modules `api/` (« Suppression
+refusée ») aussi ; une erreur Zod n'est jamais montrée brute.
+
+## D-AUTH-05 — La secrétaire tient ce que la matrice lui donne (AUTH-70, tranche D-RH-05)
+Proposition 20260926110000 : l'écriture des tables jugées par
+`peut_ecrire()` devient « `peut_ecrire()` OU la matrice du module » — `rh`
+(équipes, sous-traitants et leurs documents, fiche conducteur), `reglages`
+(référentiels, métiers, documents légaux, fournisseurs, fiche conducteur),
+`controle_fournisseurs` (contrôles, factures reçues et leurs lignes),
+`factures` (cycle de vie). On AJOUTE ceux que la matrice désigne, on ne retire
+l'écriture à personne : l'écran historique, en production sur la même base,
+continue de fonctionner. L'écran RH suit désormais `rh / modifier` seul
+(`droitsRh`), comme la matrice. Les trois filles de véhicule sans écran
+(cartes, consommations, contrôles périodiques) suivent « véhicules / modifier »
+comme leurs sœurs (D-VEH-01) : aucun écran ne les écrit au terrain.
+Restent à `peut_ecrire()`, à dessein, les gestes du terrain : tâches, travaux
+supplémentaires, photos de bon, to-do / documents / inspections de chantier,
+seau `terrain` générique (D-BC-06) ; les chemins du seau propres à un module
+(salariés, véhicules) ont leurs politiques.
+
+## D-AUTH-06 — Suppression = « module / supprimer » (AUTH-71)
+Relevé automatisé (`tests/rls/auth-roles.essai.ts`, lecture de `pg_policy`) :
+plus AUCUNE politique DELETE sous `est_membre()`. Celles qui restaient trop
+larges sous `peut_ecrire()` (un technicien effaçait une fiche conducteur, un
+fournisseur, un métier, une ligne de contrôle fournisseur) suivent le droit
+« supprimer » du module — exactement ce que les deux écrans proposent, qui
+masquent le bouton selon la même matrice. Remplace, pour trois tables, la
+suppression posée par 20260926101000. Non tranché : l'INSERTION reste ouverte
+à `peut_ecrire()` (un technicien peut créer une fiche conducteur par l'API) —
+la retirer demande de vérifier qu'aucun geste de l'écran historique n'en
+dépend ; noté dans « Migrations à écrire ensuite ».
+
+## D-AUTH-07 — Filles du chantier et chantier créé (AUTH-72)
+La lecture de `chantier_documents|inspections|todos|comptes_rendus` ne suivait
+l'affectation que par ricochet (la sous-requête sur `chantiers` subit la RLS
+de `chantiers`) : `est_affecte_au_chantier()` y est écrit en toutes lettres.
+En l'éprouvant, défaut trouvé : `chantiers_select` appelait
+`est_affecte_au_chantier(id)`, qui RELIT la ligne pour connaître sa société ;
+pendant un `insert … returning`, la ligne neuve est invisible à cette
+relecture, et l'administrateur se voyait refuser (42501) le chantier qu'il
+venait de créer — or `web/` enregistre un chantier par `insert(...).select()`.
+La politique lit désormais le rôle sur `societe_id` de la ligne et ne consulte
+l'affectation que pour le terrain (même verdict pour toute ligne existante).
+Test qui reproduit le défaut : « l'administrateur relit le chantier qu'il crée ».
+
+## D-AUTH-08 — La matrice de production n'est pas lue d'ici (AUTH-90)
+Règle absolue du chantier : aucune connexion à la production. La fixture
+`src/test/fixtures/role_permissions.json` est relevée sur la base LOCALE, bâtie
+depuis les migrations du dépôt (celles qui ont écrit la matrice en production)
+et comparée à elle par `tests/rls/isolement.essai.ts`. `tests/matrice-miroir.essai.ts`
+échoue si la fixture, le tableau §1.6 de l'inventaire, la liste `MODULES` ou
+celle de l'ancien écran divergent. Relecture de la production par un humain :
+exporter `select role, module, action from role_permissions` puis
+`node scripts/comparer-matrice.mjs export.csv` (sortie en erreur à la moindre
+différence).
+
+## D-AUTH-09 — `inviter-salarie` éprouvée dans le processus de test (AUTH-52)
+`npx supabase functions serve` exige l'image `edge-runtime` : le registre ECR
+est refusé par le réseau de l'agent et Docker Hub répond 429 ; la fonction
+importe en outre depuis deno.land et esm.sh, eux aussi fermés. Retenu : le test
+charge la fonction de l'application historique TELLE QUELLE, en ne réécrivant
+que ses spécificateurs d'import (doublure de `serve`, supabase-js du dépôt) et
+en posant `Deno.env` ; `functions.invoke` de l'écran est servi par elle, contre
+la base locale (GoTrue local fabrique l'identité). Couvre : invitée (200,
+`invitee`, invitation datée), renvoi < 10 min (429, délai relayé), secrétaire
+(403), salarié déjà relié (409), rôle hors liste (400). Ne couvre pas : la
+passerelle (`verify_jwt`) et le runtime Deno eux-mêmes. La clé de service LOCALE
+est lue par `scripts/test-rls.sh` depuis `supabase status`.
+
+## D-AUTH-10 — Garde-fous par l'arbre syntaxique (TRV-14)
+`tests/garde-fous-syntaxe.essai.ts` (compilateur TypeScript, pas d'expression
+régulière) : (1) aucun `catch` vide — un commentaire n'est pas une instruction —
+ni `.catch(cb)` dont le rappel ignore l'erreur sans la tracer ni la relever, dans
+`src/` et `tests/` ; (2) aucun littéral numérique sans nom dans `src/`. Admis :
+initialisation d'une constante en CAPITALES, neutres 0/1/2/100, base de
+numération, indice de tableau, type, attribut JSX (géométrie SVG = mise en
+page), et six familles de fichiers de FORMAT où les nombres sont la norme
+(géométrie PDF, PDF/A-3, ZIP/DOCX/XLSX, gabarit PPSPS, colorimétrie sRGB/WCAG,
+calcul de Pâques). Les 130 littéraux trouvés sont nommés : `lib/durees`
+(fraîcheurs de requête, jour, mois), `lib/dates` (`jourIso`, `moisIso`,
+`partiesIso`, `anneeIso`), seuils d'affichage des soldes, BOM, clé de Luhn,
+bornes d'un créneau, limites d'affichage des imports. `entierLePlusProche`
+(`lib/nombres`) remplace `Math.floor(x + 0.5)` dans le domaine, pour des comptes
+seulement.
+
+## D-AUTH-11 — Une seule règle pour `actionsTache` et `actionsFacturation` (AUTH-36, AUTH-37)
+Portées dans `auth-roles/domain/actions.ts`, réexportées par
+`planning/domain/taches.ts` et `commandes/domain/circuit.ts`, qui en avaient
+chacun leur copie. Parité : `tests/parite/actions.essai.ts` (ancien
+`regles-taches.ts` importé tel quel, `actionsFacturation` extraite de
+`integrations/session.ts`) et identité des réexports.
+
+## D-AUTH-12 — Version construite (AUTH-12)
+`vite.config.ts` pose `<meta name="version-construite">` (commit Vercel ou git,
+7 caractères, et l'heure de construction À PARIS) ; le menu utilisateur
+l'affiche avec « Copier ». Sans marqueur (serveur de développement) : « inconnue ».
+
+## D-CLI-01 — Annuaire des entreprises : l'API publique, depuis le navigateur, sous le quota
+Même service que l'ancien écran (recherche-entreprises.api.gouv.fr, sans clé,
+CORS ouvert) : aucune donnée sensible ne part, seule la saisie du nom ou du
+numéro. Une file UNIQUE (6 appels/s, 3 en vol, 3 tentatives, `Retry-After`
+lu, succès gardés 5 min) : le quota est par IP. Réponse validée par Zod ;
+règle pure (`interpreterReponse`) séparée de l'appel. Parité : la SOURCE de
+`src/integrations/entreprise.ts` est évaluée avec un `fetch` factice.
+Les services publics (annuaire, BAN, communes) ne sont interrogés qu'après
+une frappe de l'utilisateur, jamais à l'ouverture d'une fiche existante.
+
+## D-CLI-02 — Remplissage depuis l'annuaire : l'identité s'écrase, le reste complète
+Parité `appliquerEtablissement` : nom, adresse, CP, ville, SIRET, SIREN
+écrasés ; TVA et adresse électronique seulement si vides. La fiche client n'a
+ni NAF, ni forme juridique, ni gérant : ces trois-là ne concernent que la
+fiche société (non touchée ici). Entreprise radiée : avertissement qui
+REMPLACE « Champs remplis », jamais de blocage. Personne publique (catégorie
+juridique 4/7) : le type « administration » est PROPOSÉ par un bouton
+(`cadreSuggere`), jamais appliqué seul.
+
+## D-CLI-03 — Identité de l'acheteur recopiée à l'écriture, pas seulement au cadenas
+`rattacherClient` de l'ancien pont posait SIRET, SIREN, TVA, pays, code
+service, code de routage et cadre à CHAQUE écriture de facture, par le NOM.
+Ici par `client_id`, à la création et à chaque modification d'un brouillon
+(`identiteDuClient`), avec la règle du cadenas (SIREN déduit du SIRET, pays
+FR par défaut, cadre NOT NULL jamais effacé). À la création, ce que
+l'appelant fournit l'emporte (un avoir garde l'identité de sa facture) ; à la
+modification, la fiche l'emporte (changer de client change l'acheteur). Une
+valeur vide de la fiche EFFACE l'ancienne (l'ancien `poser` la gardait :
+le SIRET d'un autre client pouvait survivre à un changement de client).
+Devis, bons et rapports n'ont que `client_id` / `client_nom` : rien de plus
+à recopier.
+
+## D-CLI-04 — Mode discret : préférence de session, l'écran se remontait (remplacé par D-R4-01 : il ne remonte plus)
+Comme l'ancien `state.ghostMode` : non mémorisé (un rechargement le quitte).
+`formatEurosEcran` lit l'état au rendu ; basculer remonte le contenu de la
+page (clé de l'`Outlet`) pour que chaque montant se reformate — une saisie en
+cours dans un formulaire est perdue, comme au `renderTab()` de l'ancien.
+Les pièces (aperçu imprimable, pré-facture, PDF, courriel, domaines) gardent
+`formatEuros` : le document envoyé au client porte ses montants.
+
+## D-CLI-05 — « Fait » de la cloche : une table par société (proposition 20260926120000)
+L'ancien rangeait `notifsTraitees` dans les réglages de la société : écrit
+seulement avec « réglages / modifier », il échouait pour un conducteur ou un
+technicien, et réécrivait tout le JSON des réglages à chaque coche.
+`notifications_traitees` (société, clé) : lecture et ajout par tout membre,
+auteur posé par la base, suppression par `peut_ecrire`. Les clés sont celles
+de l'ancien écran : une reprise de `notifsTraitees` est un simple INSERT.
+
+## D-CLI-06 — La cloche : familles filtrées par le rôle, trois écarts à l'ancien
+Chaque famille n'est lue que si le rôle ouvre l'écran où elle se traite
+(véhicules, RH, dossier RH sous `rh / modifier`, réglages pour les documents
+légaux, bons) : ni requête vouée au refus, ni lien vers une page fermée.
+Écarts assumés, vérifiés par la parité : (1) une habilitation n'est annoncée
+qu'une fois (l'ancien la comptait aussi comme document RH, deux lignes pour
+la même échéance) ; (2) un bon n'est « en retard » que si ses travaux sont
+encore à faire (`statut_workflow` nul ou `en_cours`) — l'ancien sonnait pour
+tout bon à date de fin passée, facturés compris ; (3) les seuils des
+Réglages s'appliquent partout (l'ancien appelait `alertesSalarie` sans eux).
+Libellé des véhicules par la plaque (D-VEH-04).
+
+## D-CLI-07 — Liste tronquée : lecture par pages jusqu'au compte exact
+`lireTout` demande `count: "exact"` et lit par pages (ordre départagé par
+l'id). Un serveur qui plafonne plus bas que la page ne coupe rien : on repart
+de ce qui a été lu. Une lecture qui n'atteint pas le compte (lignes disparues
+pendant la lecture, plafond inattendu) est une ERREUR (`ListeTronquee`),
+dite en français, jamais une liste partielle. Appliqué aux clients,
+chantiers, devis, factures et à la lecture de rapprochement ; les bons
+(`parPages`) et les soldes paginaient déjà. Une table en échec garde ses
+données précédentes et s'annonce (TanStack + `<Erreur>`) ; la cloche nomme
+la famille illisible.
+
+## D-CLI-08 — Recherche : montants et croisement, sans les lignes
+Montants cherchables sous leurs deux écritures (« 1 234,50 € », « 1234.50 ») :
+HT et TTC des devis (`v_devis_totaux`), TTC des factures (`v_facture_solde` ;
+la liste ne porte pas le HT), montant des bons. Le croisement facture ↔ bon
+suit la clé puis la référence client normalisée (parité
+`regles-liens-facture-bc`) et ne sert qu'à CHERCHER ; « 🔎 d'où vient la
+correspondance » est calculé au rendu. Les désignations des lignes ne sont
+pas cherchées depuis les listes (elles n'y sont pas chargées). Entrée fait
+défiler les résultats ; une frappe en attente est d'abord appliquée.
+
+## D-CLI-09 — Rapport → devis / facture : une seule voie (résorbe D-TRV-09)
+`interventions/api/transformations.ts` est gardé (gardes « client du
+répertoire », « rapport lié à un bon », message « déjà transformé ») et
+repris pour l'aperçu : `ActionsTransformation` sert la carte ET l'aperçu,
+libellés unifiés (« Transformer en devis / en facture », « Facturer le bon
+lié »). Il emprunte au module devis `lignesDevisDuRapport` (parité
+`parsePreconisationsEnLignes` : métier brut en repli, comme l'ancien) et
+`nettoyerLogement` ; le lien `intervention_id` part avec l'INSERT (plus
+d'UPDATE séparé). `devisDepuisIntervention`, `factureDepuisIntervention`,
+leurs hooks et `Bouton*DepuisRapport` sont supprimés.
+
+## D-CLI-10 — Filtres dans l'adresse (remplace D-STA-07)
+**Remplacée en partie par D-STA-A-01** : « Devis en attente » compte les devis « envoyé » calculés à l'écran, plus par `stats_indicateurs` (retirée).
+Devis, bons de commande et planning lisent et écrivent leurs filtres dans
+l'URL (`useFiltresAdresse`, `replace` : une frappe n'empile pas l'historique).
+Tuiles : « Devis en attente » → `/devis?statut=envoyé` (la définition de
+`stats_indicateurs`), « SAV » → `/commandes?type=sav` ; sur le tableau d'un
+conducteur rattaché à sa fiche, SAV et « à valider » portent son conducteur
+(`conducteurId` sur les bons, le NOM sur le planning, qui filtre ainsi).
+« À valider » du pilotage ouvre le planning entier : aucun filtre de l'écran
+ne dit « réalisée non validée ».
+
+## D-CLI-11 — Menu épinglé : la clé de l'ancien écran, le planning replie
+`erp.menu.epingle` (même clé, même valeur « 1 ») dans le stockage du
+navigateur, par `lib/stockage.ts` (stockage refusé → comportement
+d'origine). Non épinglé, le menu se replie de lui-même sur le planning (qui
+reprend la largeur) ; un geste manuel vaut jusqu'au prochain écran. Sur
+mobile, le menu reste un tiroir.
+
+## D-CLI-12 — Formats monétaires exacts
+`formatEuros` rend l'ancien `money()` à l'octet près (U+202F entre milliers,
+U+00A0 avant « € ») : un montant ne se coupe plus en fin de ligne. Le PDF, dont
+la police ne connaît pas U+202F, les convertit déjà (`texteWinAnsi`). L'arrondi
+reste décimal exact avant formatage (1,005 € → 1,01 € ; l'ancien affichait
+1,00 € : seul écart, au demi-centime, déjà admis par D-006).
+
+## D-SQL-01 — Les vues de l'espace client sont en lecture seule, par les droits
+Relecture 4, B1. Une vue aux droits de son propriétaire qui ne lit qu'une table
+est modifiable, et la RLS de la table n'y joue pas. Plutôt qu'un déclencheur
+`instead of`, les propositions 20260925030000 et 20260926042000 retirent TOUS
+les droits (`public`, `anon`, `authenticated`) puis rendent `select` : c'est la
+correction de `20260921144700_les_vues_ne_s_ecrivent_pas`, qu'on ne réinvente
+pas. Test : `politiques.essai.ts` (B1).
+
+## D-SQL-02 — La reprise « compta: » est réservée à l'administrateur
+Relecture 4, I1. L'import se fait depuis le navigateur (pas de `service_role`)
+et une RPC dédiée demanderait de réécrire l'import de l'écran historique (hors
+`web/`). Retenu : `facture_attribuer_numero` refuse à tout autre que l'admin de
+la société de poser, d'ajouter ou de retirer le marqueur, et de fournir un
+numéro sous lui ; une reprise ne reçoit son numéro qu'avec des lignes. Une
+session sans JWT (maintenance) n'est pas concernée. Conséquence assumée :
+dans l'écran historique, « Reprendre un historique » échoue pour la secrétaire
+(motif de la base affiché) ; la reprise est un geste unique d'administration.
+Côté `web/` : `BoutonImport adminSeul` et `PageImportFactures` n'ouvrent la
+reprise qu'à l'admin. Tests : `numerotation`, `import-export`, `politiques` (I1),
+`import.essai.tsx`.
+
+## D-SQL-03 — Ce qui signe une reprise : « compta: », payée, aucun règlement
+Relecture 4, B3. `legacy_id` porte aussi l'identifiant base 36 de chaque pièce
+créée par l'écran historique : il ne signe rien à lui seul. Une colonne
+`reprise_reglee` posée à l'import aurait été plus juste, mais elle demande une
+colonne nouvelle, que l'écran historique relirait et renverrait (types
+régénérés) ; le marqueur, désormais réservé à l'admin (D-SQL-02), suffit.
+Cas limite accepté : une reprise sur laquelle on saisit par erreur un règlement
+partiel, puis qu'on le supprime, repasse « impayée » (le recalage a suivi le
+règlement) — l'admin la remet « payée » à la main (liste blanche de l'en-tête
+figé). Tests : `politiques` (B3), `facturation` (reprise).
+
+## D-SQL-04 — Le crédit d'un avoir se compte en valeur absolue
+Relecture 4, I2. Le TTC d'un avoir arrive signé de l'écran historique
+(`regles-avoir.ts`), positif du nouvel écran : `v_facture_solde` calcule
+`reste`, `net_a_payer` et `credit` sur `abs(ttc)` pour un avoir, et expose
+`ttc` tel quel (colonnes existantes inchangées). Test : `politiques` (I2).
+
+## D-SQL-05 — Le terrain signale, il ne chiffre pas : valeurs forcées, pas refusées
+Relecture 4, B2. Pour qui ne voit pas les prix (technicien, sous-traitant),
+`travail_supplementaire_du_terrain` force à l'INSERT statut « à chiffrer »,
+prix NULL, origine « technicien », auteur = le compte connecté, et garde à
+l'UPDATE les valeurs d'avant. Forcer plutôt que refuser : l'écran historique
+envoie ces champs à leurs valeurs par défaut, un refus casserait le geste
+légitime. Une tâche citée doit être une tâche du bon (pour tous les rôles ;
+pour le sous-traitant, l'une des siennes). Les RPC du circuit (admin,
+secrétaire) voient les prix et ne sont pas touchées. Test : `politiques` (B2).
+
+## D-SQL-06 — « Le sous-traitant : ses bons » en une seule fonction
+Relecture 4, I3 à I5. `bon_lisible(société, bon)` (20260926050000) : membre,
+et pour le sous-traitant une tâche sur le bon. Elle filtre photos (lecture et
+dépôt), téléphones des occupants, vues terrain des bons et de leurs lignes, et
+l'écriture au seau (`peut_ecrire_terrain`, 20260926100000 : `societe` et
+`documents-legaux` sous « réglages / modifier », technicien selon le domaine,
+modifier et retirer gardent `peut_ecrire`). `sous_traitants` : le sous-traitant
+ne lit que sa fiche. Le technicien et l'encadrement ne perdent rien, sauf le
+dépôt du logo et des documents légaux, réservé aux réglages. Tests adaptés :
+`planning` (le sous-traitant dépose sur un bon où il a une tâche), `rh` (le
+technicien dépose sous un bon), `commandes` (le sous-traitant ne lit pas un bon
+qui ne lui est pas confié).
+
+## D-SQL-07 — Verrous du bon facturé : SECURITY DEFINER, pas de tolérance à la réinsertion
+Relecture 4, I8. Les deux verrous (lignes, et en-tête par `ALTER FUNCTION` sans
+toucher à son corps) cherchent la facture hors de la RLS de l'appelant.
+L'écran historique réécrit les lignes par suppression PUIS insertion, en deux
+requêtes : aucun déclencheur ne peut reconnaître une réécriture « identique »
+à travers deux transactions. Mais `remplacerEnfants` compare avant d'écrire
+(`enfantsIdentiques`) : un bon facturé enregistré sans toucher aux lignes ne
+les réécrit pas. La mise à jour à l'identique traverse déjà. Le contrôle à
+faire en production avant d'appliquer (positions non contiguës) est dans
+`migrations-proposees.md`, n° 6. Test : `politiques` (I8).
+
+## D-SQL-08 — Une vue de production ne se refait que sous garde ; tout se rejoue sur base neuve
+Relecture 4, I6. `v_facture_solde` et `v_salaries_annuaire` ne sont refaites
+que si `pg_get_viewdef` en place égale la définition attendue avant la
+proposition (ou celle qu'elle pose), comparées par le même serveur (vues
+temporaires) ; les vues terrain ne changent que leur filtre, sur la définition
+vivante. Une révision antérieure de 20260926040000, reconnue à son commentaire,
+n'existe que sur les bases locales et est remplacée. `scripts/essai-base-neuve.sh`
+rejoue migrations, rattrapage et propositions (deux passes) sur une base
+temporaire du conteneur local ; `rejouer-migrations.sh` et
+`rattraper-colonnes.mjs` acceptent `BASE_LOCALE` pour cela.
+
+## D-R4-01 — Mode discret : les montants se redessinent, l'écran ne remonte plus (remplace la fin de D-CLI-04)
+Basculer le mode démontait la page (clé de l'`Outlet`) : une saisie en cours
+était perdue, et les `onSuccess` d'un écran démonté ne partaient plus
+(relecture 4, B4). La clé ne porte plus que la société. Tout composant qui
+appelle `formatEurosEcran` appelle aussi `useModeDiscret()` — son abonnement,
+même sans lire la valeur — et se redessine seul ; ses enfants suivent (aucun
+`memo` dans l'application). Un garde-fou (`tests/garde-fous.essai.ts`) compte,
+fichier par fichier, composants et abonnements. Le reste de D-CLI-04 tient.
+
+## D-R4-02 — Une seule file Validation, une seule À facturer
+La fusion avait laissé deux paires d'écrans, de règles différentes (relecture 4,
+B3). Restent `PageValidation` / `PageAFacturer` (`commandes/domain/files.ts`,
+qui écarte les circuits clos), sous les onglets de Facturation ;
+`/factures/validation` et `/factures/a-facturer` redirigent. Les dossiers
+repliables par client de `PageFilesBons` deviennent un tableau trié par client,
+avec recherche : aucun bon ne se cache derrière un dossier fermé.
+
+## D-R4-03 — Supprimer un brouillon de facture : un appel à la base (proposition 20260926130000)
+Situation comprise : l'avancement est rendu au DPGF et la facture supprimée
+dans la même transaction, ou rien (B2). La fonction est SECURITY DEFINER pour
+que la secrétaire, qui a « factures / supprimer » sans « chantiers / modifier »,
+puisse supprimer son brouillon : rétablir le DPGF n'est pas un droit sur le
+chantier mais la conséquence de la suppression (I2). Le bouton reste donc
+visible pour elle — la matrice l'y autorise. La vente de véhicule garde
+`supprimerBrouillon` (brouillon sans situation, créé dans le même geste).
+`facturerSituation` distingue désormais « ligne du DPGF invisible » (droit
+manquant) de « facturée entre-temps ».
+
+## D-R4-04 — L'avoir s'établit par la base (proposition 20260926131000)
+Un seul appel crée, copie et émet l'avoir ; la liste est invalidée même sur
+échec. La copie reprend TOUTE l'identité de la facture rectifiée (émetteur,
+acheteur, adresses de facturation et de livraison) au lieu de relire la fiche
+client du jour : l'avoir corrige CE document. Un second avoir total sur la
+même facture est refusé (un reste de brouillon d'avoir se supprime d'abord).
+Les avoirs partiels n'existent pas à l'écran (parité) : la borne est donc
+« aucun avoir non nul déjà établi ».
+
+## D-R4-05 — Une imputation s'annule entière (proposition 20260926132000)
+« Annuler l'imputation » remplace « Retirer » sur les écritures de mode
+`avoir` / `imputation` : la base supprime les deux moitiés, ou aucune. Elles
+ne se corrigent toujours pas (✎ masqué).
+
+## D-R4-06 — `bc_generer_facture` verrouille le bon (proposition 20260926133000)
+`FOR UPDATE` et refus si une facture porte déjà le bon. La course HTTP ne se
+reproduit pas de façon fiable en test ; le cas déterministe (facture déjà là)
+échoue contre l'ancienne fonction et passe contre la nouvelle.
+
+## D-R4-07 — Gardes d'écriture côté client (en attendant mieux)
+- `emettreFacture` n'agit que sur un brouillon (`numero is null`, statut
+  « brouillon ») ; zéro ligne touchée est relu et expliqué (émise entre-temps,
+  supprimée, refus) — I3.
+- `modifierBrouillon` exige `verrouillee = false` et une ligne touchée avant
+  d'écrire les lignes ; le cadenas posé par un autre onglet est dit comme tel — I5.
+- `bonDepuisDevis` : un échec des lignes lève `EnregistrementPartiel(bonId)` et
+  l'écran ouvre le bon créé, au lieu de le perdre derrière « déjà lié » — I7.
+  La course entre deux onglets reste (migration à écrire, voir la liste).
+
+## D-R4-08 — Listes lues en entier (TRV-10 étendu)
+Règlements de la société, totaux des devis, compteurs des chantiers, salariés,
+bons de la cloche passent par `lireTout` (compte exact, ordre départagé par
+`id`) : au-delà du plafond du serveur, refus plutôt que liste coupée (I1).
+Les comptes-rendus, sans `societe_id`, se filtrent par leur chantier
+(`chantiers!inner`). La cloche ne demande plus que les bons qui peuvent sonner
+(travaux en cours en retard, ou rappel dû), la règle même de l'écran (I4).
+
+## D-R4-09 — `RouteModule` vérifie aussi l'abonnement
+Une URL tapée ouvrait un module que le menu masque au niveau souscrit
+(relecture 4, M4). `RouteModule` exige désormais le niveau que le menu exige,
+d'après la même correspondance module → fonctionnalité (clients, chantiers,
+devis, articles, factures, bons de commande). Un module qu'aucun niveau ne
+porte (planning, RH, parc, statistiques) reste ouvert selon la matrice seule.
+Reste un masquage d'affichage : le jour où un niveau devra être opposable, il
+se vérifiera en base.
+
+## D-R4-10 — « Voir en tant que » appartient au compte qui l'a choisi
+La simulation était gardée dans le navigateur jusqu'à une déconnexion voulue :
+après une expiration, l'administrateur suivant sur le même poste démarrait
+dans le rôle simulé (relecture 4, M5). Le compte propriétaire est gardé à côté
+du rôle ; une simulation d'un autre compte est ignorée et effacée, une session
+expirée l'efface. Un rechargement du même compte la garde (comme avant).
+
+## D-R4-11 — Ce qui reste de la relecture 4
+- **M6** (PDF d'un brouillon bâti sur la fiche enregistrée, pas sur l'écran) :
+  non traité — il faut l'état « modifié non enregistré » du formulaire de
+  facture pour prévenir ou enregistrer avant ; à reprendre avec lui.
+- **M7** (second dépôt sur la plateforme après expiration du délai) : non
+  traité — la garde vit dans la fonction Edge (`pdp_identifiant` relu avant
+  dépôt), hors de ce périmètre.
+- **Course « bon depuis devis »** (I7) : l'écran rattrape l'échec des lignes,
+  deux onglets peuvent encore créer deux bons (migration à écrire, listée).
+- **Course de `bc_generer_facture`** : corrigée par `FOR UPDATE`, mais la
+  preuve automatisée ne porte que sur le cas déterministe (D-R4-06).
+
+
+## D-VIS-01 — La comparaison visuelle mesure, écran par écran, contre l'ancienne application
+Exigence du client : `web/` identique à l'ancien écran. `tests/visuel/` (`npm run test:visuel`,
+hors de `npm run check`) connecte les deux applications au même compte, atteint le même écran
+(route d'un côté, gestes `setTab`/état de l'autre), capture en 1400 × 900 et 390 × 844, et mesure
+l'écart de pixels (pixelmatch, seuil de couleur 0,02 : le seuil par défaut 0,1 confondait le gris
+de fond `#F3F5F8` avec du blanc et donnait 4 % à deux écrans sans rapport) et l'écart de texte
+visible (lignes d'`innerText`, en multi-ensembles). Chaque écran a un seuil par taille — un
+**cliquet** : on l'abaisse, on ne le relève pas. Neutralisés : le bandeau « Certaines données
+n'ont pas pu être chargées (chantier_achats) » de l'ancien (la base locale n'a pas cette table ;
+défaut d'environnement, il recouvrait le bouton ☰), les animations, et le texte `.sr-only`
+(réservé aux lecteurs d'écran, invisible). Rapport HTML (ancien / nouveau / différence) dans
+`tests/visuel/rapport/`, ignoré par git.
+
+## D-VIS-02 — L'ancienne feuille, recopiée telle quelle ; Tailwind sans remise à zéro, et perdant
+`src/styles/ancien.css` est la copie verbatim du `<style>` de `src/pages/index.html` (en-tête :
+chemin et commit ; `scripts/copier-css-ancien.py` la refait). Idem pour les deux pages autonomes
+(`connexion.css`, `nouveau-mot-de-passe.css`). Garde-fou `tests/garde-fous-style.essai.ts` : le
+corps de chaque copie doit rester égal à sa source. Ce qui manque à l'ancienne feuille (un lien là
+où l'ancien avait un bouton, l'état « chargement », les messages de champ) va dans
+`complements.css`, chaque règle justifiée par une différence de structure.
+Tailwind ne charge plus son preflight (thème et utilitaires seulement, en `@layer`) : une règle hors
+couche — toutes celles de l'ancienne feuille — l'emporte sur un utilitaire quelle que soit sa
+spécificité. Les jetons façon shadcn (`bg-primary`, `text-muted-foreground`…) pointent sur les
+variables de l'ancienne feuille. La palette de société pose aussi `--accent`, `--accent-2`,
+`--accent-soft`, `--accent-rgb`, `--secondaire*` (comme `appliquerPalette` d'app.js). Même lien
+Google Fonts, même titre d'onglet (« Terrain — Gestion chantier »).
+
+## D-VIS-03 — Connexion et nouveau mot de passe : les pages autonomes de l'ancien, au HTML près
+Feuille de plan, façade qui se trace, cartouche daté (« 25.09.26 »), libellés « Identifiant »,
+« Entrer », « Connexion en cours... », « Saisissez votre email, puis cliquez à nouveau. ». La
+feuille de la page est posée au montage et retirée au démontage (elle vise `body`, `label`,
+`input` sans détour) ; `#root` y prend `display:contents`. Restent de la nouvelle application,
+parce que décidés : les messages d'erreur de connexion en français (D-AUTH-04 — l'ancien affichait
+le message anglais de Supabase), le motif d'une session expirée, la validation de l'adresse du
+« mot de passe oublié ». La page « nouveau mot de passe » reproduit aussi le défaut de l'ancienne
+(`login-card` que sa feuille ne stylait pas). Le formulaire de « Mon compte » garde les composants
+de base.
+
+## D-VIS-04 — Le cadre : le HTML d'index.html, piloté par les classes de <body>
+`#app`, `.planning-menu-toggle` (☰), `#sidebar` (menu du nom, `#navDesktop`, « Garder le menu
+ouvert », pied), `#deskTopStrip` (cloche, interrupteur du mode discret, société), `#topbar`,
+`#content.content-wide`, `#bottomnav` : mêmes identifiants (l'ancienne feuille en vise plusieurs),
+mêmes classes. Comportement de l'ancien : menu replié d'office sauf épinglé ; ☰ l'ouvre/le ferme ;
+ouvrir un formulaire (adresse « nouveau », « modifier » ou fiche désignée par son uuid) le referme
+sauf épinglé ; le planning le masque (`is-planning-view`) et ☰ l'y force (`sidebar-forced`).
+« Voir en tant que » : les six boutons de l'ancien menu du nom (l'ancien `<select>` du nouveau
+écran disparaît). Le bouton ☰ est nommé « Afficher le menu » / « Replier le menu » pour les
+lecteurs d'écran. Les annonces de l'ancien passent par `#toastBox` (`lib/toast.ts`) : mode discret,
+épinglage, version copiée, changement de société, alertes marquées faites. Ajouts assumés, dans
+le style de l'ancien : « Mon compte » dans le menu du nom (AUTH-17, D-SOC-06), le bandeau
+« Aperçu en tant que » en `.bandeau-alerte` (D-010), le bandeau d'échec de lecture alimenté par
+les requêtes en erreur (`BandeauEchecLecture`, l'équivalent de `signalerEchecsDeChargement`).
+Le texte de pied « Données partagées avec toute personne ayant ce lien. », périmé, est repris tel
+quel : identique d'abord.
+
+## D-VIS-05 — La navigation de l'ancien : son menu, ses sous-onglets
+Menu dans l'ordre et sous les libellés de `NAV` : Tableau de bord, Bons de commande, Devis,
+Factures, Rapports, Planning, Chantiers, Clients, **Catalogue** (ex-« Articles »), RH, Véhicules,
+Matériel, **Pièces en commande** (ex-« Pièces »), Statistiques, Réglages ; pictogrammes recopiés
+(`components/ui/icones-traces.ts`). Validation, À facturer, Avoirs et Règlements quittent le menu :
+ce sont les sous-onglets de Factures (`OngletsFacturation`, `.plus-subnav` centré), qui allument
+l'entrée « Factures ». L'import/export quitte le menu : l'ancien le rangeait dans les Réglages
+(« Importer une sauvegarde ») — **reste à y poser le lien** (écran Réglages, vague suivante) ; la
+route `/import-export` reste et allume « Réglages ». Sur téléphone, la barre du bas de l'ancien
+(Tableau, Devis, Factures, Rapports, Plus) et la page « Plus » (`/plus`, `/plus/:onglet` :
+Clients, Bons de commande, Planning, Réglages). Les ROUTES ne changent pas.
+
+## D-VIS-06 — Les composants de base produisent les classes de l'ancien, sans changer d'API
+`Button` → `.btn` (`primary`, `ghost`, `danger`, `small`), `Card` → `.card` (+ `.card-title`,
+`.card-sub`), `Badge` → `.badge` (`gray`, `info`, `success`, `warn`, `yellow`, `danger` ; variantes
+`info` et `jaune` ajoutées), `Alert` → `.wf-banner.ok|alerte` (info : l'encadré orangé), `Input` /
+`Select` / `Textarea` / `Label` → éléments nus (l'ancienne feuille les habille), `Table` →
+`.stats-table` dans `.stats-table-wrap`, champs (`formulaire/Champ`) → `.field` (libellé PUIS
+saisie, pour le libellé flottant de l'ancien), `EnTetePage` → `.page-head`, `Vide` → `.empty`,
+`Erreur` → `.wf-banner.alerte`, `Chargement` → `.chargement` (pas d'équivalent dans l'ancien, qui
+attendait tout avant de dessiner ; `data-chargement` permet à la comparaison d'attendre). Nouveaux :
+`Onglets` / `OngletsLocaux` (`.plus-subnav`), `Modale` / `PiedModale` (`.view-modal`), `ToastBox`.
+Les écrans de modules héritent de ce rendu ; leur HTML propre (grilles Tailwind, listes) reste à
+reprendre écran par écran.
+
+## D-VIS-07 — Le graphique du chiffre d'affaires : la géométrie de l'ancien, le tableau pour les lecteurs d'écran
+**Remplacée en partie par D-STA-A-01** : plus d'infobulle de définition sur le titre ; hauteur des barres et année de l'infobulle calculées comme l'ancien (DEF-STA-15).
+Même dessin que `renderYearlyComparisonSVG` (960 × 300, barres ≤ 20 px, N-1 à 32 %, légende en
+haut à droite, bulle `#revenueTooltip` qui suit le pointeur). D-STA-03 voulait un tableau
+équivalent : il reste, mais en `.sr-only` — visible, il ajoutait un « Voir en tableau » que l'ancien
+n'avait pas. Les barres restent parcourables au clavier. Le sélecteur n'offre que les choix de
+l'ancien (6 mois, 12 mois, « Sélectionner les dates » → la fenêtre `revenueCustomModal`) :
+« Depuis janvier » n'y figurait pas. La définition du chiffre (D-STA-02) passe en infobulle du titre.
+
+## D-VIS-08 — Tableau de bord : ce qui reste différent est décidé
+**Remplacée en partie par D-STA-A-01** : tuile « CA encaissé ce mois (HT) », restant dû et résumé du mois (avec « Chiffre d'affaires encaissé (HT) ») de l'ancien, classement par nom ; le sous-traitant retrouve son tableau.
+Les trois variantes reprennent le HTML de l'ancien (`.dash-greetrow` et sa main levée,
+`.grid-stats-4`, `.stat-card`, `.traiter-row` et leurs pastilles, `.dash-columns3`, `.progress-bar`,
+`.mesure-conducteur`). Écarts restants, tous décidés : tuile « Encaissé ce mois (TTC) »
+(D-STA-04) ; restant dû lu sur le solde de la base (D-STA-11) ; résumé du mois sans « CA encaissé »
+(D-STA-11) ; classement des clients par fiche (D-STA-05). Les détails que le nouvel écran avait
+ajoutés (« règlements reçus depuis le 1er », « 0 accepté(s) sur 2 devis… », « Part des factures
+émises… ») passent en infobulle ; « Ouvrir Ma journée », le métier des lignes du terrain et les
+sous-titres des tuiles du terrain disparaissent (absents de l'ancien) ; le verdict d'une mesure du
+conducteur est dit aux lecteurs d'écran (`.sr-only`). L'encadré « aucune fiche de conducteur » garde
+la marche à suivre du nouvel écran (D-STA-10), dans l'habit de l'ancien.
+
+## D-VIS-09 — Tableau du terrain sans équipe : tout, comme l'ancien
+L'ancien tableau du technicien sans équipe connue montrait TOUS les bons (`mesBonsTechnicien` :
+« mieux vaut tout montrer que rien ») ; la réécriture n'en montrait aucun, avec un encadré — un
+changement de règle qu'aucune décision ne portait. Le client veut les mêmes règles : on revient à
+l'ancienne (`domain/terrain.ts`, test « sans équipe ni entreprise connue »). Ce n'est pas une
+ouverture de droits : la base ne sert que ce que le rôle peut lire (le sous-traitant, ses seules
+tâches — D-TRV-04). « Ma journée », au planning, garde sa règle propre (rien sans affectation).
+
+## D-PDF-01 — Les pièces imprimées sont celles de l'ancien : même HTML, même html2pdf (remplace D-FAC-03)
+Le client a vu que « le PDF n'est pas bon » : web/ recomposait les pièces avec
+jsPDF + autotable. **Décision** : on reprend la chaîne de l'ancien telle quelle.
+`documents/impression/gabarit.ts` porte littéralement `renderPrintDoc` et ses
+auxiliaires (mêmes balises, classes, libellés), en TypeScript strict, données
+en paramètre (`ContexteImpression`) au lieu de `state`/`window` ; les gabarits
+propres à un domaine vivent dans leur module (`interventions/domain/gabarit-rapport.ts`,
+`planning/domain/impression.ts`, `rh/domain/impression.ts`). `impression.css`
+recopie la feuille `.p-*` de `src/pages/index.html` (régénérable :
+`tests/visuel/pdf/generer-css.mjs`). `impression/pdf.ts` porte
+`lancerGenerationPdf`, `decoupagePdf`, `resserrerSiPageDeTrop`,
+`dessinerPiedDePage` : html2pdf.js **0.14.0** (dépendance de web/, chargée au
+premier PDF), mêmes options (A4, marge basse 12 mm, html2canvas échelle 2,
+JPEG 0,98, découpe `css`+`legacy`), même nom de fichier (`numero`, sinon
+`devis`/`facture`/`bon-de-commande`/`rapport`), même geste (« Imprimer » ouvre
+un onglet, « Enregistrer » télécharge), mêmes avis (`#toastBox`). Les aperçus
+sont la fenêtre `.view-modal` de l'ancien. Le correctif 4f129c7 de l'ancien
+(un brouillon imprime « État : Brouillon — non émis » au lieu d'un « Numéro »
+vide) est intégré. Parité : `tests/parite/impression.essai.ts` évalue la
+source d'app.js sur les mêmes données (HTML identique) ; mesure :
+`tests/visuel/pdf/comparer-pdf.ts` (PDF des deux applications rastérisés).
+jsPDF et jspdf-autotable ne sont plus des dépendances directes.
+
+## D-PDF-02 — La feuille verbatim est isolée du preflight de Tailwind
+Le preflight (marges à 0, `img` en bloc, interligne 1,5 hérité de `<html>`)
+changeait la mise en page du gabarit. `impression.css` commence par un
+`all: revert` à spécificité nulle sur `#printArea`, `.view-modal`,
+`.print-preview`, `#toastBox`, puis rétablit ce que l'ancienne feuille pose sur
+tout le document (`box-sizing`, titres en Manrope), l'interligne `normal` et le
+`padding: 1px` implicite des cellules (attribut `cellpadding`, effacé lui aussi
+par `revert`). Les polices de l'ancien squelette (Google Fonts, Inter / Manrope
+/ JetBrains Mono) sont chargées par `web/index.html` et attendues avant toute
+capture (5 s au plus, puis repli comme l'ancien hors ligne).
+
+## D-PDF-03 — Rendu de l'ancien gardé là où une correction l'avait changé
+Là où web/ avait « corrigé » le rendu, c'est l'ancien qui fait foi : un avoir
+s'imprime avec ses montants POSITIFS sous le titre AVOIR (écart de D-FAC-03
+abandonné) ; la colonne TVA s'écrit « 5.5% » et la quantité « 2.5 » tels que
+stockés (DEV-52 écarté) ; « ☎ » devant le téléphone du locataire ; l'échéance
+d'un avoir s'imprime si elle existe ; un bon s'intitule toujours « BON DE
+COMMANDE » (SAV compris). **Restent**, parce que ce sont des règles et non de
+la mise en page : les montants CALCULÉS en décimal exact arrondis au bord
+(D-006 — un centime d'écart possible aux demi-centimes, mesuré par la parité) ;
+le texte des mentions de facture de web/ (« 40,00 € » et non « 40.00 € »,
+D-CLI-12) — seul écart de pixels restant sur les factures ; le cadenas d'un
+brouillon avant tout PDF (FAC-12) ; la raison sociale avant le nom d'usage,
+l'identité figée à l'émission, celle du client figée.
+
+## D-PDF-04 — Capture html2canvas dans une page Tailwind
+html2canvas lit le fond de `<html>`/`<body>`, et le calque de html2pdf hérite
+de `<body>` sa couleur : or ce sont des `oklch()` (jetons de web/), qu'il ne
+sait pas lire — toute la capture échouait. Il mesure aussi la ligne de base
+des polices avec une `<img>` que le preflight met en bloc : tout le texte du
+PDF glissait de 4 px. Le temps de la capture, `zone.ts` rend au corps de page
+les valeurs de l'ancien squelette (`--bg`, `--text`, `--police-texte`) et pose
+`body.capture-pdf` (l'image de mesure redevient en ligne). Rien de ce qui est
+photographié ne change.
+
+## D-PDF-05 — Factur-X : le même assemblage pdf-lib que l'ancien (remplace D-EFA-03)
+`efacture/pdf/facturx.ts` est le port littéral de `src/integrations/facturx.ts`
+(pdf-lib 1.17.1 : pièce jointe `factur-x.xml` en `AFRelationship Data`, XMP
+Factur-X EN 16931, intention de sortie sRGB, auteur = vendeur), appliqué au PDF
+de html2pdf. Comme l'ancien, pdf-lib réécrit le producteur à l'enregistrement,
+et le PDF n'est pas validement PDF/A-3 (page en image, polices du pied).
+
+## D-PDF-06 — Aperçus : la fenêtre de l'ancien, sans gestes ajoutés sauf au rapport
+`/devis/:id/apercu`, `/factures/:id/apercu`, `/commandes/:id/apercu` et
+l'espace client montrent la fenêtre `.view-modal` de l'ancien (« Imprimer »,
+« Enregistrer », ✕ ; clic sur le voile = fermer). L'e-mail et la plateforme
+d'une facture restent sur sa fiche (`VueFactureEmise`), comme sur les cartes de
+l'ancien. Le rapport d'intervention garde l'envoi et la transformation en
+devis/facture, que web/ ne porte qu'à cet endroit (PLN-20, D-CLI-09) : sur une
+rangée à part, AU-DESSUS de la barre de l'ancien, qui reste intacte (ces
+boutons échappent à l'isolation de la feuille : `.actions-web`). Le bon n'a pas d'aperçu dans l'ancien (il ne se lit que dans le
+panneau de la pré-facture) : on lui donne la même fenêtre et son PDF
+(`printDocument('bonCommande')` existe dans l'ancien), montants « ••• » sans
+le droit de voir les prix (`renderPrintDoc(…, !avecPrix)`).
+
+## D-PDF-07 — Impressions par le navigateur : la zone et la feuille de l'ancien
+Le planning de la semaine et le registre du personnel s'impriment comme dans
+l'ancien : HTML de `printPlanning` / `imprimerRegistrePersonnel` porté
+(`planning/domain/impression.ts`, `rh/domain/impression.ts`), posé dans
+`#printArea` en paysage (`is-landscape`, `@page{size:landscape;margin:10mm}`),
+`window.print()`, zone vidée 500 ms après. L'écran de web/ vit dans `#root`
+(et non `#app`) : `body.impression-zone` l'efface de l'impression. Parité :
+`tests/parite/impression-zones.essai.ts`. Les rapports de rejets d'import
+restent des `.csv` : l'ancien les nommait `.pdf` (`telechargerBlob` ajoute
+l'extension à tout), un défaut qu'on ne recopie pas.
+
+## D-PDF-08 — Le PPSPS reste sur le générateur Word de web/
+L'ancien fabrique le PPSPS avec la bibliothèque `docx` 8.5.0 ; web/ l'écrit
+sans bibliothèque (D-CHA-08), contenu mot pour mot mais sans le logo. Le
+porter sur `docx` 8.5.0, pour un fichier comparable à l'ancien, reste à faire.
+
+## D-PDF-09 — Le rapport imprimé porte ses contrôles, même rechargé
+Dans l'ancien, les contrôles cochés ne s'impriment que juste après la saisie :
+rechargé depuis la base, un rapport n'a plus ni `controles` (l'adaptateur ne
+relit pas `intervention_controles`) ni `typePanne` (la colonne est `metier`),
+et « Contrôles réalisés » disparaît du PDF. web/ imprime ce qui est enregistré,
+comme l'ancien l'imprimait à la saisie : c'est le seul écart mesuré sur le
+rapport (1 % des pixels, la section en plus) — `tests/visuel/pdf/`.
+
+## D-ECR-BC-01 — Bons de commande : les cartes de l'ancien (remplace D-BC-01)
+L'exigence « identique à l'ancienne » l'emporte sur le tableau : la liste reprend
+`bonCommandeCardHTML` (`CarteBon`) — carte repliée (client, n° du client, conducteur,
+adresse), contacts à droite, montant et pastilles (logement, étape, `statut`), zone
+« 📄 Le bon de commande est arrivé ? », puis la rangée d'actions ; une seule carte
+dépliée à la fois, avec le même identifiant DOM que l'ancien (`bonCommande-card-<id>`).
+Les huit filtres, leurs libellés et leurs options sont ceux de l'ancien, lus dans les
+annuaires (conducteurs actifs, métiers déclarés, clients, interlocuteurs). Le total
+TTC du bouton de pré-facture est calculé sur les lignes, lues avec la liste. Le
+`statut` libre (« en attente ») s'affiche en pastille grise comme dans l'ancien
+(remplace la partie « ne l'affiche pas » de D-BC-13, qui reste : jamais réécrit).
+Les boutons que la base refuserait sont masqués selon le rôle : « 🧾 Créer la
+facture » (factures/creer), « Créer un SAV » (bons_commande/creer), « Supprimer »
+(bons_commande/supprimer, rétabli : RLS `bons_commande_delete`).
+Écart mesuré : 0,04 % de pixels (anticrénelage), 0 ligne de texte.
+
+## D-ECR-BC-02 — Les boutons désactivés à demeure de la carte gardent l'aspect de l'ancien
+`complements.css` grise tout `.btn:disabled` ; l'ancien ne grisait pas « 🧾 Créer la
+facture » avant la pré-facture ni « Supprimer » sous verrou. Règle limitée à
+`.bc-actions-bas .btn:disabled` (fichier partagé, modification localisée).
+
+## D-ECR-BC-03 — « Pièces en commande » : deux temps et des dossiers (remplace l'onglet « Reçues » de D-043)
+Comme `renderPiecesCommande` : « 📦 À commander », puis « 🚚 Commandées — par
+fournisseur » en dossiers 📁/📂 (un ouvert à la fois), cartes de bon en contexte
+`pieceCommande` ; la barre `barreRecherche` et son compteur « n sur N ». Une pièce
+reçue quitte l'écran (l'ancien n'avait pas « Reçues »). Date et fournisseur
+s'écrivent chacun à son changement (`updatePieceCommandeChamp`), « 📦 Commandé » pose
+la date du jour, « ✓ Pièce arrivée — Renvoyer au planning » appelle `bc_piece_recue`
+puis ouvre le planning. Fournisseurs proposés : annuaire actif puis noms déjà écrits
+sur des commandes ; ceux des achats de chantier (`fournisseursEmployes`) ne sont pas
+lus. Gestes réservés à planning/modifier (D-043 inchangé). Le « Aucun pièce … » de
+`listeVide` est recopié tel quel.
+
+## D-ECR-BC-04 — Le formulaire du bon : le panneau de l'ancien, la page reste une route
+`/commandes/nouveau`, `/commandes/:id` et `/commandes/:id/sav` rendent l'en-tête « Bons
+de commande » sans boutons puis `form-panel form-panel-v2` (`bonCommandeForm`) : zone
+de lecture, trois modes, sections « Client & contact », « Bon de commande » / « SAV »,
+« Lieu & locataire », « Organisation », « Chiffrage », barre collante ; la page défile
+jusqu'au formulaire comme `openForm`. Comportements repris : alerte native pour le
+client manquant et la liste des manques, retour à la liste avec « Bon de commande
+créé. / modifié. », brouillon qui reste ouvert avec « Brouillon enregistré à HH:MM ».
+Le SAV se crée dans ce même formulaire (« Nouveau SAV », photos), par `creerSav`
+(numéro de notre série). Non repris : annotation et catégorie des photos du SAV
+(vignette simple). Le téléphone du locataire s'affiche mais n'est toujours pas écrit
+(D-041). « BC reçu », « Créer la facture » et le lien vers la facture ne sont plus
+dans la fiche : ils sont sur la carte, comme dans l'ancien.
+
+## D-ECR-BC-05 — L'éditeur de lignes reste le composant partagé
+Le tableau des lignes (`documents/EditeurLignes`) et ses 16 à 23 lignes de texte
+d'écart (poignée, « Code… », « Prix U. HT », « 10% ») sont repris avec les devis, qui
+le partagent ; le seuil des écrans du formulaire le chiffre (`LIGNES_PARTAGEES`).
+
+## D-ECR-BC-06 — Le panneau « Circuit du bon » reste sous le formulaire, dans l'habit de l'ancien (révisé)
+L'ancien menait le circuit depuis la carte dépliée (contexte « attente »), le planning et ses
+fenêtres ; son formulaire n'en portait rien. Le panneau reste sous le formulaire d'un bon
+enregistré (D-BC-03 : le planning n'est pas repris, il faut bien un endroit pour ces gestes),
+mais il est désormais fait des pièces de l'ancien, sans Tailwind : `.card`, `section-title`,
+le stepper `bc-stepper` de `bcWorkflowStepperHTML` (même règle « en cours », même
+« ✓ Valider (conducteur) » ou même message d'attente dans `.bc-step-actions`), le
+`bc-attente-message` de la carte, les tâches en `achat-row` aux couleurs d'`ETAT_TACHE`
+avec les boutons de la fiche d'intervention (« ✓ Travaux terminés », « ✓ Valider »,
+« ✕ Refuser » et son `prompt` de motif), les travaux supplémentaires de
+`renderTravauxSupplementairesListe` (💶 par `prompt`, ✕) sous leur `entretien-add-row`, puis
+les boutons de la carte (« 🧾 Ouvrir la pré-facture » qui ouvre la fenêtre de D-ECR-BC-11,
+« ✓ Clôturer sans facturation » par `prompt`, « Créer un SAV », « Imprimer / PDF »).
+Les résultats se disent par toast, comme dans l'ancien ; la validation conducteur s'ouvre dans
+la fenêtre `#validationConducteurModal` recopiée (`ModaleValidationConducteur`). Seuls ajouts :
+le titre « Circuit du bon », le motif de refus et le commentaire d'une tâche sous sa ligne, et
+le bouton « Créer les tâches manquantes » (BC-37, sans planning). Son texte (22 lignes) est
+chiffré dans le seuil des écrans « modifier / consulter ».
+
+## D-ECR-BC-10 — La lecture automatique vit dans le formulaire du bon, comme dans l'ancien
+« Importer un bon » ouvre le formulaire vierge et y lance la lecture (`ocrEcranHTML` dans
+`#formZoneBonCommande`) : pastille, étape, fichier, chronomètre, « Annuler la lecture » ; à
+l'échec, le titre coloré de l'issue, l'alerte, « ↻ Réessayer » et « Saisir à la main ». Le
+fichier choisi par le bouton d'import est celui qui est lu — il voyage dans l'état de
+navigation, on ne le redemande pas. Le compte rendu (`#ocrStatut`) et les « Clients les plus
+proches » s'affichent au-dessus du formulaire prérempli. `/commandes/lecture` n'est plus
+qu'une redirection vers ce formulaire. Écarts : le message d'échec est en français
+(« Lecture impossible : le service a refusé le document. ») là où l'ancien laissait passer
+« Edge Function returned a non-2xx status code » (4 lignes, seuil de l'écran) ; une lecture
+relancée depuis un formulaire déjà saisi repart du prérempli, sans fusion avec la saisie.
+
+## D-ECR-BC-11 — La pré-facture est une fenêtre (`openValidationDirecteurModal`)
+La pré-facture s'ouvre par-dessus la liste (ou la fiche), au format de l'ancien : colonne des
+prix (`pf-table` : métier des chapitres, code, désignation, qté/unité, PU HT, travaux placés
+dans leur chapitre puis « Travaux supplémentaires constatés sur le chantier », sous-totaux par
+métier, boîte des totaux), comptes rendus du terrain, pièce de référence à droite (fiche
+interne ou bon du client, « 🔎 Agrandir »), pied collant avec les blocages et les quatre
+boutons ; confirmations par la boîte du navigateur, textes recopiés. L'adresse
+`/commandes/:id/prefacture` ouvre la liste avec la fenêtre ouverte ; la fermer rend la liste.
+Écarts : les comptes rendus ne montrent ni heures ni validateur (pas de colonne lue) ; la
+`pf-table` n'a ni glisser-déposer ni recherche d'article ; les montants de la fenêtre suivent
+`money()` (hors mode discret), comme l'ancien.
+
+## D-ECR-BC-07 — « 🧾 Créer la facture » garde la base (`bc_generer_facture`)
+L'ancien ouvrait un formulaire de facture prérempli côté écran ; web/ laisse la base
+créer le brouillon (D-BC-14) puis l'ouvre. Même libellé, même place, même garde
+(pré-facture validée).
+
+## D-ECR-BC-08 — Ce que la carte ne montre pas faute de donnée
+Photos et dessin du technicien, « Planifiée une première fois le… », « Intervention
+terminée le… » : sans colonne en base (dérivés vides dans l'ancien aussi), non repris.
+La « Fiche d'intervention du technicien » montre le commentaire de tâche et la pièce.
+
+## D-ECR-BC-09 — L'ordre des cartes reste déterminé (date, puis numéro)
+L'ancien lit `v_bons_commande_terrain` sans `order` : les bons arrivent dans l'ordre
+physique de la vue, qui change au gré des mises à jour. web/ garde un ordre stable —
+date décroissante, numéro interne décroissant, puis identifiant (la pagination
+l'exige). Sur une base où des bons de même date ont été créés dans le désordre, les
+cartes du haut peuvent s'échanger : même texte, pixels décalés (seuil de l'écran
+`bons-de-commande` : 5 % au bureau, 0,5 % au téléphone).
+
+
+## D-ECR-CHA-01 — Chantiers, clients, catalogue : les formulaires s'ouvrent en place (remplace D-CHA-01, D-CHA-02)
+L'ancien n'avait pas d'écran de formulaire : la fiche client, le chantier, l'article s'ouvraient au-dessus
+de la liste (ou à la place de la zone du catalogue, du bandeau de la fiche chantier), sans quitter l'écran —
+sous « Plus » sur téléphone aussi. C'est repris : `/clients/nouveau`, `/clients/:id/modifier`,
+`/chantiers/nouveau`, `/chantiers/:id/modifier`, `/articles/nouveau`, `/articles/:id/modifier`, `/articles/import`
+restent des adresses (liens, retour arrière) mais montrent l'écran de l'ancien, formulaire ouvert. La liste des
+chantiers redevient les cartes A4, la fiche redevient les sections empilées (plus d'onglets). La fiche client
+`/clients/:id` (web seulement, citée par d'autres écrans) est gardée telle quelle.
+
+## D-ECR-CHA-02 — Taux de TVA du catalogue écrits comme l'ancien
+`${tva}%` : « 20% », « 5.5% » (le point du nombre JavaScript), dans la liste et le sélecteur de la fiche.
+
+## D-ECR-CHA-03 — Catalogue : « Retirés » vide n'est pas un catalogue vide
+Le filtre « Retirés » sans résultat dit « Aucun article ne correspond. » ; l'ancien disait « Le catalogue est vide ».
+
+## D-ECR-CHA-04 — Imports (catalogue, clients) : l'aperçu de l'ancien
+Même `.form-panel`, mêmes compteurs et bandeaux, « 📄 Rapport », « Retour ». Le tableau des premiers articles lus
+et l'encodage constaté, ajoutés par web/, sont retirés. L'import de clients garde sa phrase d'aide sans l'annuaire,
+qu'il n'interroge pas (D-EFA-06) : 1 ligne d'écart mesurée.
+
+## D-ECR-CHA-05 — La recherche garde le focus
+L'ancien redessinait la zone après la frappe et perdait le focus du champ ; web/ le garde. La comparaison
+visuelle ôte le focus avant de capturer.
+
+## D-ECR-CHA-06 — Les boutons que la base refuserait sont masqués
+Clients en lecture seule : l'ancien montrait « + Nouveau client », « Modifier le client », « Supprimer le client »…
+que la RLS refuse. Masqués (règle du projet : l'écran masque ce qui serait refusé). 10 lignes d'écart mesurées.
+
+## D-ECR-CHA-07 — Le nom du client des chantiers n'est pas affiché, comme l'ancien (révisée)
+L'ancien lit un champ texte `client` que la base ne remplit pas : la carte et le bandeau du chantier le
+laissent vide. Un premier passage l'affichait (`client_nom`) ; c'était une correction non décidée, qui
+faisait passer une ligne de plus sur téléphone (10 à 15 % d'écart sur la liste et la fiche). Retirée :
+l'écran est identique (< 1 %). Le formulaire « Modifier les infos » garde le client présélectionné — sans
+quoi l'enregistrer détacherait le chantier de sa fiche client. L'afficher reste une correction à décider.
+
+## D-ECR-CHA-08 — Confirmations par la boîte du navigateur
+Retirer un article, supprimer un client ou un interlocuteur, retirer un fichier ou un intervenant : `confirm()`
+comme l'ancien. Supprimer un client dit d'abord les pièces qui le citent (CLI-51) ; retirer un fichier de chantier
+se confirme, ce que l'ancien ne faisait pas (le fichier est désormais dans le seau, pas dans le JSON).
+
+## D-ECR-CHA-09 — Fiche chantier : section « 👥 Intervenants »
+Absente de l'ancien ; nécessaire à la RLS du terrain (affectation). Dans les habits de l'ancien, en dernier.
+
+## D-ECR-CHA-10 — Ordre des devis et factures de la fiche chantier
+L'ancien les listait sans tri (ordre physique de la base) ; web/ par date décroissante. Un avoir s'affiche en
+négatif, comme l'ancien.
+
+## D-ECR-CHA-11 — DPGF chiffré : le geste de l'ancien ; et un défaut de lecture de l'ancien
+« + Ligne » / « + Chapitre » ajoutent une ligne au tableau ; ajouts, retraits et modifications partent ensemble
+par « Enregistrer les lignes » (les saisies en cours survivent à un ajout, CHA-53). L'import écrit dès la
+confirmation (D-CHA-07). « Facturer la sélection » ouvre la situation de travaux (page du module facturation)
+plutôt que la modale. L'ancien ne lit AUCUNE fille de chantier (DPGF, to-do, documents, achats,
+inspections) : sa lecture groupée trie `chantier_achats` sur une colonne `position` qui n'existe pas — en
+production non plus (`database.types.ts`) — et la requête entière tombe (42703, relevé par la sonde
+`tests/visuel/sonde.visuel.ts`). web/ les lit : là où une fille existe (DPGF de « Salle de bains Durand »),
+l'écart est chiffré dans les seuils. Pour comparer quand même la fiche remplie et ses modales (« Planifier une
+quantité », « Détail de la tâche »), `tests/visuel/jeux/chantiers.sql` pose un chantier « VIS-CHA Modales »,
+et la comparaison donne à l'ancien, dans son état, les mêmes lignes : 0 % d'écart.
+
+## D-ECR-CHA-12 — Compléments CSS : un lien habillé en bouton se comporte comme un bouton
+`a.btn` centre son texte, ignore la casse de son titre ; `a.plus-subnav-btn` centre en largeur et en hauteur
+(`complements.css`). Commun à tous les écrans qui font d'un bouton de l'ancien un lien.
+
+## D-ECR-FAC-01 — Les sous-onglets de Facturation suivent les droits
+L'ancien montrait Factures, Avoirs, Validation, À facturer et Règlements à tout
+rôle qui ouvre Facturation. web/ n'affiche Validation et À facturer qu'avec
+`bons_commande/voir`, Règlements qu'avec `reglements/voir` : la base refuserait
+leur contenu (CLAUDE.md, « masquer ce qui serait refusé »). Pour l'administrateur
+et la secrétaire, l'écran est celui de l'ancien.
+
+## D-ECR-FAC-02 — Le reste d'une facture à acomptes est celui de la base
+Suite de D-FAC-01 : « réglé X · reste Y », le dû d'un dossier et le « reste à
+encaisser » se lisent dans `v_facture_solde`, acomptes déduits. L'ancien disait
+« reste 450,00 € » sur une facture de 1 000 € avec 400 € d'acompte et 550 € réglés ;
+web/ dit « reste 50,00 € ». C'est le seul écart de texte des listes (2 lignes).
+
+## D-ECR-FAC-03 — Des boutons, pas des liens, pour les sous-onglets
+`OngletsFacturation` rend de vrais `<button class="plus-subnav-btn">`, comme
+l'ancien : un lien ne centre pas son libellé sur deux lignes (« À facturer » se
+lisait en haut à gauche sur téléphone). `aria-current` dit l'onglet ouvert. Le
+composant partagé `components/ui/onglets.tsx` (NavLink) a le même défaut pour
+les autres écrans : signalé, non modifié.
+
+## D-ECR-FAC-04 — Dans un dossier Validation / À facturer, la carte du bon est repliée
+L'ancien réutilise `bonCommandeCardHTML`, dépliable sur place. web/ montre la
+carte REPLIÉE de l'ancien (identité, montant, pastilles, pré-facture, Modifier,
+Créer la facture) ; le détail et les autres gestes (SAV, lien rapport,
+suppression) sont sur la fiche du bon, où mène le chevron. Les dossiers étant
+fermés par défaut, l'écran de départ est identique (0 %).
+
+## D-ECR-FAC-05 — « ✎ Modifier » dans « Tous les règlements » ouvre sa saisie
+L'ancien posait `formOpen.reglement` sans zone pour l'afficher dans cette vue :
+le bouton ne faisait rien. web/ ouvre le formulaire de l'ancien au-dessus de la
+liste.
+
+## D-ECR-FAC-06 — Deux règlements nés au même instant
+Les deux moitiés d'une imputation d'avoir ont la même date et la même heure de
+création. L'ancien les rendait dans l'ordre physique de la table ; web/ les
+départage par identifiant. Deux cartes permutées (0,35 % des pixels sur
+« Tous les règlements »), aucun texte différent.
+
+## D-ECR-FAC-07 — « ✕ Effacer » paraît dès qu'un filtre est posé
+L'ancien ne redessinait que la liste au choix d'un filtre : le bouton
+n'apparaissait qu'au rendu suivant. web/ le montre tout de suite (1 ligne).
+
+## D-ECR-FAC-08 — Dupliquer, Transformer en facture, Créer un bon : la pièce naît en base
+Depuis la carte d'un devis, l'ancien ouvrait un formulaire prérempli non
+enregistré ; web/ garde les opérations déjà décidées (D-FAC-08, D-FAC-17) :
+la copie, la facture brouillon ou le bon sont écrits, puis ouverts. Même geste,
+même libellé, même avis (« Devis dupliqué — modifiez-le… »).
+
+## D-ECR-FAC-09 — Le code article garde la mesure de l'ancien
+Le champ vient du catalogue (`ReferenceArticleLigne`, module articles) ; sa case
+`.art-pick-hote` lui donne la mesure de `input.art-pick` (complements.css).
+
+## D-ECR-FAC-10 — Le statut d'un devis se change dans son formulaire
+L'ancien n'offrait aucun moyen de passer un devis à « envoyé », « accepté » ou
+« refusé », alors que le tableau de bord et le taux de conversion les comptent.
+Le champ « Statut » reste dans la grille « Client & contact » d'un devis
+existant (5 lignes de texte, la grille gagne une rangée : 22 % des pixels du
+formulaire décalés vers le bas).
+
+## D-ECR-PLN-01 — Rapports : l'équipe interne ne voit que les rapports internes (remplace D-PLN-21)
+L'ancien écran (`renderInterventions`) montrait à l'encadrement les seuls rapports internes, au
+sous-traitant les siens. web/ avait ajouté un filtre « Émetteur » : un sélecteur que l'ancien n'avait
+pas. Retiré ; la règle de l'ancien s'applique (la base continue de ne servir au sous-traitant que ses
+rapports, PLN-52). Le filtre des conducteurs lit l'annuaire (`conducteurFilterOptions` : actifs, plus
+celui déjà choisi), non plus les seuls noms écrits sur les rapports.
+
+## D-ECR-PLN-02 — « Ma journée » hors des sous-onglets du planning
+L'ancien planning n'a que ses quatre sous-onglets (le technicien : « Planning Technicien » seul ; le
+sous-traitant : « Mon planning <société> »). « Ma journée » (D-PLN-19) quitte les onglets et garde sa
+propre adresse, `/planning/ma-journee`, où mènent les lignes du tableau de bord du terrain ; elle
+prend les habits de l'ancien (`.card`, `.section-title`, `.empty`).
+
+## D-ECR-PLN-03 — Les réglages d'une carte restent masqués à qui ne planifie pas
+L'ancien dessinait sur chaque carte posée ✕, heure, durée, équipe, date de fin, ← et la poignée, pour
+tous — le technicien les voyait rognés par la hauteur de la carte, le rôle lecture et la secrétaire
+pouvaient cliquer et se voir refuser par la base. Conformément à la règle du dépôt (« l'interface ne
+fait que masquer ce qui serait de toute façon refusé »), ils ne sont dessinés que pour qui a
+`planning/modifier` ET `bons_commande/modifier` ; de même le champ date d'une carte à planifier.
+Écart mesuré : quelques lignes de texte rogné dans la vue du technicien (`tests/visuel`
+`planning-technicien`, 0,04 % de pixels).
+
+## D-ECR-PLN-04 — « En attente » : la carte repliée de la liste des bons, gestes vers la fiche du bon
+`renderPlanningEnAttente` réutilise `bonCommandeCardHTML(b, 'attente')`. web/ en reprend le rendu
+(repliée : identité, contacts, montant, pastilles, « BC reçu », gestes ; dépliée : le détail et l'état
+de chaque tâche). Les gestes propres au bon mènent à sa fiche (« Modifier », « Créer un SAV »,
+« 🔗 Lier un rapport ») ; « 🧾 Créer la facture » reste désactivé comme dans l'ancien tant que le
+directeur n'a pas validé ; « Supprimer » est désactivé : la suppression d'un bon n'existe pas encore
+dans web/. Ces deux boutons gardent l'habit du navigateur, comme dans l'ancien — `complements.css`
+grise `.btn:disabled`, ce que l'ancienne feuille ne faisait pas (écart commun à tous les écrans,
+signalé).
+
+## D-ECR-PLN-05 — Pièce reçue : la date lisible
+`pieceAttendueLigne` passait l'horodatage `piece_recue_le` à `fmtDate`, qui ne sait lire qu'une date :
+« reçue le 25T16:29:20.875085+00:00/09/2026 ». web/ écrit « reçue le 25/09/2026 ». Correction de
+défaut, une ligne par pièce reçue dans la colonne « Non planifiés ».
+
+## D-ECR-PLN-06 — Fiche d'intervention : « Cette date est terminée » se lit sur les tâches
+La case écrivait `dateOrigineFait`, sans colonne : perdue à l'enregistrement. Elle reste à sa place,
+cochée quand les tâches du jour sont déclarées faites, et désactivée — la journée se clôt par
+« ✓ Travaux terminés » du bandeau (D-PLN-05). « ✓ Enregistrer » enregistre les constats (commentaire,
+pièce, croquis) sur la tâche de la carte (`tache_sauvegarder_terrain`) ; les photos et les travaux en
+plus s'écrivent dès qu'on les ajoute. Le bouton 💶 de chiffrage d'un travail supplémentaire n'est pas
+repris sur la fiche : le prix se décide dans Facturation › Validation.
+
+## D-ECR-PLN-07 — Fiche du sous-traitant : la fenêtre « Valider les travaux » de l'ancien
+Remplace, pour le sous-traitant, la fiche commune de D-PLN-05 : même fenêtre que l'ancien
+(`stValidationModal`). Sa case « Travaux de cette date réalisés » déclare la tâche faite par
+`tache_marquer_realisee` (elle écrivait un champ sans colonne) ; déjà faite, elle est cochée et figée.
+
+## D-ECR-PLN-08 — Assistant de rapport : « Imprimer / PDF » et « Envoyer par email » enregistrent d'abord
+L'ancien imprimait le brouillon non enregistré. web/ enregistre puis ouvre l'aperçu du rapport (qui
+porte l'impression et l'envoi) : un rapport imprimé existe donc en base, avec son numéro.
+
+## D-ECR-PLN-09 — Le bouton « ✨ Générer / améliorer avec l'IA » reste, et le dit
+D-PLN-11 retirait la génération (appel au fournisseur depuis le navigateur, sans clé). Le bouton
+reste à sa place (l'étape « Rapport » est identique à l'ancienne) ; il répond, comme l'ancien sans
+constatations, par sa fenêtre — et sinon que la génération automatique n'est pas disponible.
+
+## D-ECR-PAR-01 — Un jeu d'essai pour le parc et la RH (`tests/visuel/jeux/parc-rh.sql`)
+La base locale n'avait ni salarié, ni véhicule, ni matériel : les listes ne se comparaient que
+vides. Le jeu (idempotent, identifiants fixes `e5…`, libellés « PAR », société ALPHA) pose deux
+salariés, deux véhicules (dont un vendu) et deux matériels. Il ne pose volontairement ni date de
+contrôle technique ni prêt : l'ancien écran lit un `prochainCT` sans colonne et ne relit pas les
+prêts (D-VEH-01, D-VEH-04) — ces écarts sont décidés, les montrer n'aurait fait que les compter.
+
+## D-ECR-PAR-02 — Parc : le HTML de l'ancien, les ajouts décidés dans son style
+Listes, fiches et formulaires de véhicules et de matériel reprennent `renderVehicules`,
+`renderVehiculeDetail`, `vehiculeForm`, `renderMateriel`, `renderMaterielDetail`, `materielForm`
+(en-tête du module AU-DESSUS de la fiche, `.vehicule-hero`, `.chantier-sections`,
+`.entretien-add-row`, `.achats-list`, `.vehicule-abonnement-row`, fenêtre `#vendreVehiculeModal`).
+Les refus se disent comme avant : `alert()` pour une fiche sans nom / sans plaque, bulle
+(`afficherToast`) pour un prêt sans emprunteur, un entretien sans désignation, une vente
+incomplète. Après création, retour à la liste (l'ancien refermait le formulaire). Restent, décidés :
+« Supprimer » sur la fiche véhicule et la confirmation avant de retirer un prêt, un entretien ou
+un document (D-VEH-07), « Autre document… » à côté de « + Ajouter » (D-VEH-03), la validité de la
+carte carburant en date (D-VEH-05), l'acheteur choisi dans le répertoire et le taux dans la vente
+(D-VEH-06). La phrase sous la vente dit que la facture est émise aussitôt : l'ancienne la disait
+« modifiable ensuite dans l'onglet Factures » alors qu'il l'émettait déjà.
+
+## D-ECR-PAR-03 — Le relevé du schéma au clavier, réservé au clavier et aux lecteurs d'écran
+D-VEH-02 permet de poser une marque par zone nommée. Visible, ce sélecteur ajoutait trois
+contrôles que l'ancien écran n'a pas : il passe en `.sr-only` (joignable au clavier, annoncé),
+seul « Effacer les marques » reste à l'écran, comme avant.
+
+## D-ECR-PAR-04 — `BarreRecherche`, composant partagé
+`barreRecherche()` de l'ancien (`.barre-recherche`, compteur « n sur m ») sert à une dizaine de
+listes : il devient `components/ui/barre-recherche.tsx`, libellé caché en plus. La liste du matériel
+garde son champ nu (`renderMateriel` n'utilisait pas la barre commune), et son message vide
+« Aucun matériel pour l'instant. » même quand la recherche écarte tout — c'est celui de l'ancien.
+
+## D-ECR-PAR-05 — RH : la barre de l'ancien au-dessus de chaque rubrique ; les sous-traitants rendus aux Réglages
+`renderRH` pose `.plus-subnav` centrée AU-DESSUS de l'en-tête de la rubrique (« RH », « Dossiers
+documentaires », « Visites médicales », « Équipes »), et la fiche salarié s'ouvre DANS la rubrique
+Salariés, au-dessus de la liste (`#formZoneSalarie`) — la route `/rh/salaries/:id` rend donc
+barre + en-tête sans boutons + formulaire + liste. Le registre a son propre en-tête, sans barre.
+L'onglet « Sous-traitants » que web/ avait ajouté au RH n'existe pas dans l'ancien : les
+sous-traitants y vivent dans Réglages › Intervenants (`renderSousTraitantsSection`), ils y
+retournent ; `/rh?vue=sous-traitants` retombe sur les salariés. Restent décidés : les droits de
+D-RH-05 et D-RH-07 (onglets Documents et Visites, coûts et badges réservés à `rh / modifier`), la
+confirmation avant de retirer une pièce, une visite, une absence (l'ancien retirait sans demander,
+mais il le faisait sur un tableau que la base perdait). Les refus se disent comme avant : `alert()`
+pour une fiche sans nom, bulle pour le reste.
+
+## D-ECR-PAR-06 — Métiers proposés par les écrans RH : les déclarés, triés comme l'ancien
+`metiersDisponibles` de l'ancien fusionne les métiers déclarés et ceux employés sur les bons, puis
+trie à la française. Les écrans RH (poste, filtre, équipes, sous-traitants) prennent les déclarés,
+dédoublonnés et triés par la même règle (`referentielMetiers`) : lire tous les bons pour proposer
+un poste coûterait une requête lourde à chaque fiche. Un métier employé sur un bon et jamais
+déclaré n'est donc pas proposé ici — il l'est aux bons et au planning, où il sert.
+
+## D-ECR-PAR-07 — Écarts de capture qui ne sont pas des écarts de rendu
+Quand l'ancien atteint un état par `window.state` et le nouveau par un clic, Playwright fait
+défiler l'élément cliqué dans la vue : sur téléphone, un tableau large se retrouve décalé. Ces
+écarts sont chiffrés dans le seuil de l'écran et commentés dans `tests/visuel/ecrans-parc-rh.ts`.
+
+## D-ECR-PAR-08 — Réglages : le rail de l'ancien, « Mon nom » compris ; le groupe « Accès » en dernier
+Le rail reprend `REGLAGES_GROUPES` mot pour mot (icônes, libellés, descriptions : « Logo et couleur
+dominante », « Conducteurs, techniciens, sous-traitants »), liste déroulante sur téléphone
+(`.reglages-choix`), et « Mon compte › 👤 Mon nom » redevient une rubrique (le mot de passe reste
+sur `/mon-compte`, D-SOC-06). L'ancien écran ne gérait ni les membres ni l'espace client : ces
+écrans web/ (« Comptes et invitations », « Accès clients ») n'ont pas d'équivalent où se ranger —
+l'invitation d'un salarié, seule trace de l'ancien, vit déjà dans sa fiche RH. Ils restent donc
+dans un groupe « Accès », APRÈS « Mon compte », visible du seul administrateur : le rail que
+connaissent les autres rôles est intact, l'administrateur voit 7 lignes de plus (chiffrées dans
+les seuils).
+
+## D-ECR-PAR-09 — « ⬆ Importer une sauvegarde » mène à Import / export
+La carte « 💾 Sauvegarde de vos données » reprend texte et boutons. « ⬇ Exporter mes données »
+télécharge la sauvegarde de web/ ; celle-ci est une archive qui ne se réimporte pas par l'écran
+(module import-export) : le second bouton, au même endroit et dans le même habit, ouvre l'écran
+Import / export, qui dit ce qui s'importe.
+
+## D-ECR-PAR-10 — Jours fériés d'Alsace-Moselle : une carte sous la fiche
+PLN-53 n'existe pas dans l'ancien écran. La case vit dans une `.card` sous « Informations de
+l'entreprise », en habit de l'ancien (titre, phrase, `.bc-tache-row`), enregistrée au clic.
+
+## D-ECR-PAR-11 — Organisation : gérant, site web et annuaire reviennent
+L'onglet reprend `renderInfosEntrepriseSection` : adresse avec suggestions de la BAN, site web
+(rangé dans les réglages de documents, comme l'ancien), SIRET / SIREN avec « 🔍 Rechercher »
+(annuaire : l'identité choisie écrase, le reste ne remplit que le vide), gérant et son téléphone
+(fusionnés dans `societe_settings.infos_entreprise`, où le PPSPS les relit — web/ ne permettait
+plus de les saisir), puis les trois volets repliables. Un identifiant mal formé se dit dans une
+fenêtre d'alerte, comme `verifierEntite` ; la réussite dans la bulle. « Devis & factures »
+affiche les taux comme l'ancien (« 0, 5.5, 10, 20 ») — la saisie accepte toujours les deux
+écritures (D-SOC-11) — et garde délai compté et mode de règlement après les champs de l'ancien.
+
+## D-ECR-PAR-12 — Conducteurs et fournisseurs se retirent, ne se suppriment pas
+L'ancien « Supprimer » effaçait la fiche ; web/ la retire (`actif`), pour que bons, devis,
+factures et pièces commandées gardent leur conducteur ou leur fournisseur (PAR-06). Le bouton
+prend la place et l'habit de « Supprimer » (`btn small danger`) sous le libellé « Retirer » ; une
+fiche retirée porte « Retiré » et se remet d'un clic. La case « Proposé dans les listes » du
+fournisseur est la même bascule.
+
+## D-ECR-PAR-13 — Statistiques : la page de l'ancien, les ajouts repliés en bas
+**Remplacée en partie par D-STA-A-01** : ni plage libre ni vues par métier et par client (absentes de l'ancien) ; chiffres par étiquette de conducteur, retard sur tout bon.
+`renderStatistiques` : titre « Statistiques par conducteur de travaux » et sa liste de période,
+phrase « Période affichée », trois tuiles `.stat-card` (devis, factures, bons), les trois cartes
+`.stats-charts-grid` aux couleurs de `STATS_PALETTE`, le tableau à neuf colonnes, puis « Chiffre
+d'affaires par équipe et par mois » (mois abrégés comme `moisLabelCourt`). La colonne « Devis
+acceptés » que web/ avait ajoutée disparaît (absente de l'ancien). Restent, décidés : la plage de
+dates libre (option « Entre deux dates »), les vues par métier et par client (D-STA-05), repliées
+en deux `<details>` au bas de l'écran au lieu d'onglets, et les chiffres eux-mêmes — groupés par
+`conducteur_id` avec une ligne « Sans conducteur », retard compté sur un bon ouvert (D-STA-05) —,
+qui diffèrent de l'ancien sur la même base.
+
+## D-ECR-PAR-14 — Espace client : le suivi des bons au HTML de l'ancien
+`PageBonsClient` reprend `renderBonsCommandeClient` / `renderClientBCZoneHTML` : `.page-head`, ligne
+`.card-sub` « {client} · Suivi en temps réel par {société}. », champ « 🔍 Rechercher : … », tuiles
+`.client-tuiles` / `.client-tuile` avec `--tc` / `--tf` et leurs emojis, cartes `.card` à bord gauche
+de 5 px, badge teinté (« 🔴 Pas encore planifié », « 🟠 Planifié le … »…), 📍, 👤, 🔧, 🕓, bloc
+`.client-tentatives` et ses `.contact-tag`, 🔄, « ✅ Réalisé le ». Restent, décidés : le lien « Vos
+documents » (l'ancien n'ouvrait au client que ses bons ; web/ lui montre aussi devis et factures, ESP),
+le bandeau de l'espace client (pas de menu de gestion), et la ligne « Interlocuteur » masquée quand
+tous les bons ont le même — l'ancien la masquait quand le client était lui-même l'interlocuteur,
+information que l'accès client de web/ ne porte pas.
+
+
+## D-ECR-CHA-13 — `/clients/:id` n'est plus qu'une redirection vers la carte du client
+L'ancien n'a pas de fiche client à part : un client se voit dans sa carte. L'adresse est gardée (liens,
+favoris) et ramène à la liste, la recherche remplie du nom du client — sa carte, seule. Un client introuvable
+ramène à la liste entière. De même, une fiche chantier introuvable (ou hors de portée du rôle, RLS) ramène à
+la liste des chantiers, comme `renderChantierDetail`.
+
+## D-ECR-CHA-14 — Rôles comparés ; les écrans hors d'atteinte ne se comparent pas
+Chantiers (liste, fiche), clients et catalogue sont comparés pour le conducteur, le technicien, le
+sous-traitant et la secrétaire (`ecransParRole`). Le terrain n'a ni clients ni catalogue (menu absent dans
+l'ancien, route refusée ici) : rien à comparer. Les écarts mesurés sont ceux de D-ECR-CHA-06 — l'ancien
+montrait à chacun les boutons et les sections (DPGF, achats, factures…) que la base lui refuse.
+
+## D-ECR-CHA-15 — Aperçus d'import et modales, avec des fichiers d'essai
+`tests/visuel/fichiers/` : un export de catalogue (Windows-1252, doublon, ligne trop longue), un export de
+clients sans SIRET (aucun annuaire extérieur interrogé), un DPGF en CSV avec en-tête de document. Aperçu du
+catalogue et correspondance du DPGF : identiques. Aperçu des clients : « Annuaire : non interrogé. » à la place
+du décompte de l'ancien (D-EFA-06), une ligne de même gabarit. Les confirmations sont des boîtes du
+navigateur, hors capture : leur texte est vérifié par les tests unitaires. Les champs numériques du DPGF et
+des achats redeviennent des `type="number"` (alignement et largeur de l'ancienne feuille).
+
+## D-E2E-01 — Le refus d'un règlement dit le montant comme l'ancien, au caractère près
+`refusReglement` / `refusImputation` écrivaient le reste par `formatEuros` (Intl : espace insécable avant
+« € », espace fine entre les milliers). L'ancien l'écrit par `regles-reglements.formaterEuros` : « 394,00 € »
+avec une espace simple, sans séparateur de milliers. L'alerte n'était donc pas le même texte (le parcours
+`facturation.e2e.ts` échouait sur `toBe`). Correction dans `facturation/domain/reglements.ts`
+(`formaterEurosRefus`) ; le test de parité compare désormais le texte exact (il effaçait les blancs) et un
+test de composant (`reglements.essai.tsx`) vérifie l'alerte.
+
+## D-E2E-02 — Un message confié à la navigation est dit par la page d'arrivée
+« 🧾 Créer la facture » (carte du bon, file À facturer), « Créer la facture de situation », la transformation
+d'un rapport et l'enregistrement partiel d'un bon depuis un devis ouvrent une autre page en lui confiant un
+message (`navigate(…, { state: { message } })`). Seule la liste des rapports le lisait : depuis la reprise à
+l'identique de la fiche facture, « Facture créée en brouillon depuis le bon de commande. » et « Situation
+créée en brouillon. » n'étaient plus dits. `lib/useMessageNavigation` les dit dans la bulle de l'ancien
+(`#toastBox`), une fois, en gardant le reste de l'état ; posé dans les fiches facture, devis et bon, et dans
+la liste des rapports. L'ancien n'avait pas ces messages (il ouvrait un formulaire non enregistré, D-ECR-BC-07,
+ou restait sur le chantier, D-ECR-CHA-11) : web/ enregistre le brouillon, il le dit. Test :
+`commandes.essai.tsx` (« le message n'est plus perdu en route »).
+
+## D-E2E-03 — Parcours : une alerte se ferme dans son écouteur
+Le parcours du bon « en attente de BC » attendait l'alerte par `waitForEvent("dialog")` APRÈS le clic : un
+`alert()` ouvert bloque le clic qui l'a provoqué, le test attendait sans fin. L'écran était juste (même alerte
+que `manquesBonCommande` de l'ancien) ; le parcours ferme l'alerte dans `page.once("dialog")` et vérifie en
+plus qu'aucun bon n'a été créé.
+
+## D-E2E-04 — Parcours : la carte ouverte le reste dans son dossier
+Comme l'ancien (`state.bcCardOuverte`, vérifié sur l'ancienne application : après « 📦 Commandé » la carte
+reste dépliée, chevron « ▾ »), la carte d'une pièce commandée reste ouverte une fois reclassée dans le dossier
+de son fournisseur. Le parcours cherchait un « ▸ » qui n'existe plus ; il vérifie maintenant que la carte est
+ouverte, qu'elle dit « commandée le … », puis « ✓ Pièce arrivée ». Relevé au passage : sur la base locale,
+l'ancienne application annonce « 📦 Pièce commandée » sans que la pièce change de section (sa date de commande
+ne tient pas) — défaut de l'ancien, non repris.
+
+## D-VIS2-01 — Écrans « brouillon » et « facture émise » : un jeu d'essai à eux, pas les restes des e2e
+Sur base propre, « Factures › Modifier un brouillon (Mme Durand) » et « … Consulter une facture émise
+(FAC-2026-000025) » expiraient au clic DES DEUX CÔTÉS : aucune carte ne répondait. Ils visaient ce qu'un
+passage des parcours e2e laisse en base (le brouillon né de DEV-2026-900002, un numéro consommé au fil des
+passages). `tests/visuel/jeux/facturation.sql` (appliqué par `scripts/appliquer-jeux-visuels.sh`, après le
+jeu des PDF pour ne pas décaler leurs numéros) pose un brouillon de Mme Durand et une facture émise de
+SCI Les Tilleuls, tous deux à l'interlocuteur « Témoin visuel », que la carte affiche dans les deux
+applications : les écrans les trouvent par lui, quel que soit le numéro donné par la base et quoi que les
+e2e aient créé à côté. Le brouillon n'est pas encore chiffré (prix à 0) et sa création est datée de
+décembre 2025 : l'ancien compte les brouillons dans le chiffre d'affaires du tableau de bord et des
+statistiques et écrit « · null » dans le fil d'activité (DEF-ECR-03, DEF-ECR-04, `DEFAUTS-A-TRANCHER.md`) ;
+un brouillon chiffré et récent faisait donc échouer six écrans du tableau de bord sur ces défauts de
+l'ancien, que le client doit trancher. Le brouillon est sans chapitre, comme celui que l'écran mesurait : avec un chapitre,
+l'ancien montre la liste du métier du chapitre (`chapitreMetierHTML` : « — Déduit du titre — », « — Aucun
+métier — », les métiers), que les formulaires de devis et de facture de web/ n'ont PAS encore (seul le
+bon de commande l'a, `ChampMetierChapitre`). Écart d'application relevé, non traité ici : à reprendre dans
+`LignesAncien` (prop `ChampMetier`) avec l'habit de l'ancien (`select.chapitre-metier.est-deduit`).
+
+## D-VIS2-02 — Trois écarts d'application trouvés par la passe visuelle sur base propre
+- Liste des rapports : un rapport sans statut (le jeu des PDF en pose un) montrait « EN COURS » ; l'ancien
+  écrit `esc(i.statut)`, une pastille vide. `CarteRapport` écrit le statut tel quel. Sans lien avec le
+  passage de la page à `useMessageNavigation` (66409b0).
+- Nouvelle facture, téléphone : le formulaire défilait au montage, AVANT l'arrivée des comptes des
+  sous-onglets ; « Validation (n) » passe alors à la ligne, la zone descend de 16 px, et le défilement doux
+  garde sa cible de départ : 32 % de pixels d'écart. `useDefilementFormulaire` attend que l'écran soit posé
+  (comptes, réglages, pièce), une fois par pièce.
+- Code article des lignes (`ChoixArticle`) : sans `type="text"` ni `art-pick`, l'ancienne feuille ne
+  l'habillait pas (bordure du navigateur, police Arial, pas de « Code… »). Il porte les attributs de l'ancien.

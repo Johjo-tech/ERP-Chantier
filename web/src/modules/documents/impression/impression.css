@@ -1,0 +1,381 @@
+/*
+ * Feuille des pièces imprimées — COPIE VERBATIM de l'application historique.
+ *
+ * Source : src/pages/index.html, commit 9523595 (dernier à toucher le fichier),
+ * lignes 255-259 (.btn), 931 et 965-970 (.view-modal), 985-989 et 1022
+ * (#toastBox), 1363-1639 (#printArea et tout le gabarit .p-*), 1689 et 1726
+ * (.print-preview). Ne pas retoucher à la main : c'est l'ancien rendu qui fait
+ * foi (D-PDF-02). Régénérer plutôt (tests/visuel/pdf/README.md).
+ * Seul l'en-tête ci-dessous est propre à web/ : il rend à ces blocs l'état
+ * « navigateur nu » sur lequel l'ancienne feuille a été écrite, que le
+ * preflight de Tailwind (margin:0, img en bloc, bordures à 0…) aurait altéré.
+ */
+
+/* ── Propre à web/ : isolation et variables ─────────────────────────────── */
+/* `:where` = spécificité nulle : toute règle ci-dessous l'emporte, et cette
+   remise à zéro l'emporte sur le preflight (couche `base` de Tailwind),
+   puisqu'une règle hors couche passe devant toute règle en couche. */
+:where(#printArea, .view-modal, .print-preview, #toastBox),
+:where(#printArea, .view-modal, .print-preview, #toastBox) :where(*:not(.actions-web, .actions-web *)) { all: revert; }
+/* Les gestes propres à web/ posés dans la fenêtre d'aperçu (D-PDF-06) gardent
+   leurs composants : ils ne viennent pas de l'ancienne feuille. */
+/* Ce que l'ancienne feuille pose sur TOUT le document (index.html l. 67-72). */
+:where(#printArea, .view-modal, .print-preview, #toastBox),
+:where(#printArea, .view-modal, .print-preview, #toastBox) :where(*) { box-sizing: border-box; }
+:where(#printArea, .view-modal, .print-preview) :where(h1, h2, h3) { font-family: var(--police-titre); font-weight: 800; }
+:where(#printArea, .view-modal, .print-preview) :where(button) { font-family: inherit; cursor: pointer; }
+:where(#printArea, .view-modal, .print-preview) :where(a) { color: inherit; }
+/* Le 1 px de marge intérieure des cellules n'est pas une règle de la feuille du
+   navigateur mais un attribut implicite du tableau (`cellpadding`), que
+   `all: revert` efface aussi : sans lui, la signature glissait d'un pixel. */
+:where(#printArea, .view-modal, .print-preview) :where(td, th) { padding: 1px; }
+/* Ce que Tailwind pose sur <html> et qui, hérité, changerait la mise en page :
+   l'interligne (1,5 au lieu de « normal ») décalait chaque ligne du document. */
+:where(#printArea, .view-modal, .print-preview, #toastBox) {
+  line-height: normal; font-feature-settings: normal; font-variation-settings: normal;
+  tab-size: 8; -webkit-text-size-adjust: auto; text-size-adjust: auto; -webkit-font-smoothing: antialiased;
+}
+/* html2canvas mesure la ligne de base de chaque police avec une image posée
+   dans un <div> enfant de <body> ; le preflight en fait un bloc, la mesure
+   tombe à côté et tout le texte du PDF glissait de 4 px vers le bas. Le temps
+   de la capture (zone.ts), cette image redevient ce qu'elle est dans l'ancien. */
+body.capture-pdf > div > img { display: inline; vertical-align: baseline; }
+/* Le toast hérite, dans l'ancien, la police du corps de page. */
+:where(#toastBox) { font-family: var(--police-texte); }
+/* Les variables de `:root` de l'ancienne feuille (l. 10-58) que ces blocs lisent.
+   La palette de la société les redéfinit sur le bloc lui-même (palette.ts). */
+:root {
+  --bg:#F3F5F8;
+  --surface:#FFFFFF;
+  --surface-2:#F1F3F7;
+  --border:#E2E6ED;
+  --text:#182233;
+  --text-dim:#6B7686;
+  --accent:#FF6A1A;
+  --accent-soft:#FFE7D6;
+  --accent-2:#C24E00;
+  --accent-rgb:255, 106, 26;
+  --sur-accent:#FFFFFF;
+  --sur-accent-2:#FFFFFF;
+  --secondaire:#182233;
+  --secondaire-soft:#EEF0F4;
+  --sur-secondaire:#FFFFFF;
+  --secondaire-rgb:24, 34, 51;
+  --danger:#D9363E;
+  --success:#12875A;
+  --police-texte:'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --police-titre:'Manrope','Segoe UI Semibold','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --police-mono:'JetBrains Mono','Cascadia Mono','Consolas',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+/* L'écran de l'application vit dans #root (et non #app) : il s'efface de
+   l'impression comme l'ancien #app, pendant qu'une zone est imprimée. */
+@media print{ body.impression-zone > #root{ display:none !important; } }
+
+/* ── Verbatim : index.html l. 255-259 (.btn des actions de l'aperçu) ── */
+.btn{border-radius:8px; padding:10px 16px; font-size:13.5px; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--text); display:inline-flex; align-items:center; gap:6px;}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--sur-accent);}
+.btn.ghost{background:transparent;}
+.btn.small{padding:6px 10px; font-size:12px;}
+.btn.danger{background:transparent;border-color:var(--danger);color:var(--danger);}
+
+/* ── Verbatim : index.html l. 931 ── */
+.view-modal{ position:fixed; inset:0; background:rgba(16,20,30,.6); z-index:200; display:none; align-items:flex-start; justify-content:center; overflow:auto; padding:40px 16px; }
+
+/* ── Verbatim : index.html l. 965-970 ── */
+.view-modal.open{ display:flex; }
+.view-modal-panel{ background:#fff; border-radius:12px; max-width:210mm; width:100%; padding:14mm; box-sizing:border-box; position:relative; box-shadow:0 20px 60px rgba(0,0,0,.35); font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; }
+.view-modal-close{ position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:50%; border:none; background:var(--surface-2); color:var(--text); font-size:16px; cursor:pointer; z-index:2; }
+.view-modal-actions{ display:flex; gap:8px; justify-content:flex-end; margin:0 44px 10mm 0; }
+@media(max-width:860px){ .view-modal{ padding:0; } }
+@media(max-width:860px){ .view-modal-panel{ border-radius:0; min-height:100vh; padding:16mm 6mm; } }
+
+/* ── Verbatim : index.html l. 985-989 et 1022 ── */
+#toastBox{display:none; position:fixed; bottom:26px; left:50%; z-index:10000; max-width:90%; width:auto; min-width:240px; padding:12px 20px; border-radius:11px; font-size:13px; line-height:1.5; box-shadow:0 12px 32px rgba(0,0,0,.25); opacity:0; transform:translateX(-50%) translateY(10px); transition:opacity .25s ease, transform .25s ease; text-align:center; pointer-events:none;}
+#toastBox.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+#toastBox.error{ background:#3A1A1D; color:#FFD9DA; border:1px solid var(--danger); }
+#toastBox.success{ background:#16281E; color:#C9F2D9; border:1px solid #2E7D4F; }
+@media(max-width:860px){ #toastBox{ bottom:78px; } }
+#toastBox.success{background:#123A28; color:#C9F5DF; border-color:var(--success);}
+
+/* ── Verbatim : index.html l. 1363-1639 ── */
+#printArea{ display:none; position:absolute; top:0; left:50%; transform:translateX(-50%); width:210mm; background:#fff; padding:14mm; box-sizing:border-box; font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; z-index:9999; box-shadow:0 0 40px rgba(0,0,0,.25); }
+.p-print-planning h1{font-size:16pt; margin:0 0 4px;}
+.p-print-weeklabel{font-size:11pt; color:#555; margin-bottom:16px; font-weight:600;}
+.p-print-day{margin-bottom:14px; page-break-inside:avoid;}
+.p-print-daytitle{font-weight:700; font-size:11.5pt; border-bottom:1.5px solid #182233; padding-bottom:3px; margin-bottom:6px; text-transform:capitalize;}
+.p-print-item{font-size:10pt; padding:3px 0; border-bottom:1px dotted #ccc;}
+.p-print-empty{font-size:9.5pt; color:#999; font-style:italic; padding:3px 0;}
+#printArea table{ border-collapse:collapse; width:100%; }
+.p-company{ font-family:'Manrope',sans-serif; font-size:17pt; font-weight:800; }
+.p-tagline{ font-size:8.5pt; color:#6B7686; margin-top:1mm; }
+.p-doctitle{ font-family:'Manrope',sans-serif; font-size:15pt; font-weight:800; text-align:right; }
+.p-docmeta{ text-align:right; font-size:9.5pt; color:#6B7686; margin-top:1.5mm; line-height:1.5; }
+.p-rule{ border-bottom:1.6px solid var(--accent); margin:3mm 0 5mm; }
+.p-parties td{ width:50%; vertical-align:top; padding-right:8mm; }
+.p-label{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin-bottom:1.5mm; }
+.p-name{ font-size:11pt; font-weight:700; margin-bottom:1mm; }
+.p-line{ font-size:9.5pt; color:#3A4454; line-height:1.5; }
+/* ---------- Les encadrés des documents, décrits UNE fois ----------
+   Blocs client, cartouches, encadré de notes, bloc des totaux : tous
+   portaient leur propre gris plein, posé à la main et jamais accordé à la
+   couleur de la société. Un fond plein alourdit la page et mange l'encre à
+   l'impression ; une teinte à 10 % de la couleur dominante suffit à délimiter
+   et laisse le papier respirer.
+
+   `rgba(var(--accent-rgb), …)` plutôt que `color-mix` : les composantes sont
+   déjà publiées pour les halos de l'interface, la syntaxe est comprise partout,
+   et html2canvas la rend sans surprise. */
+.p-encadre{
+  background:rgba(var(--accent-rgb), .10);
+  border:.35mm solid rgba(var(--accent-rgb), .30);
+  border-radius:1.5mm;
+  padding:2.5mm 3mm;
+}
+.p-encadre-2{
+  background:rgba(var(--secondaire-rgb), .08);
+  border:.35mm solid rgba(var(--secondaire-rgb), .22);
+  border-radius:1.5mm;
+  padding:2.5mm 3mm;
+}
+.p-locataire{ margin-top:3mm; background:rgba(var(--accent-rgb), .10); border:.35mm solid rgba(var(--accent-rgb), .30); border-left:1mm solid var(--accent); border-radius:1.5mm; padding:2.5mm 3mm; }
+.p-lignes{ margin-top:7mm; }
+/* L'en-tête du tableau porte la SECONDE couleur de la société : c'est la
+   bande la plus visible du document après le filet de titre, et elle était
+   d'un gris qui n'appartenait à personne. */
+.p-lignes th{ font-size:8pt; text-transform:uppercase; letter-spacing:.5px; color:var(--sur-secondaire); background:var(--secondaire); text-align:left; border-bottom:1px solid var(--secondaire); padding:2mm; }
+.p-lignes th.num, .p-lignes td.num{ text-align:right; }
+/* L'unité n'est pas un nombre : collée à droite, elle s'éloignait de la
+   quantité qu'elle qualifie. « 12   m² » se lit, « 12       m² » se déchiffre. */
+.p-lignes th.unite, .p-lignes td.unite{ text-align:left; padding-left:1mm; }
+/* Le commentaire et le chapitre racontent : ils restent à gauche même si le
+   tableau devait un jour être aligné autrement. */
+.p-lignes .p-comment td, .p-lignes .p-chapitre td{ text-align:left; }
+/* Le rembourrage vertical passe de 2,3 mm à 1,1 mm — environ 4 px — et
+   l'interligne se resserre : sept lignes tenaient sur une page, il en tient
+   maintenant le double, sans que la lisibilité en souffre. C'est le réglage
+   qui fait le plus de différence sur un devis de chantier, où les lignes se
+   comptent par dizaines. */
+.p-lignes td{ font-size:9.5pt; padding:1.1mm 2mm; line-height:1.25; border-bottom:.5px solid #EEF0F4; vertical-align:top; }
+.p-lignes tr{ break-inside:avoid; page-break-inside:avoid; }
+.p-notes, .p-sign, .p-locataire{ break-inside:avoid; page-break-inside:avoid; }
+.p-chapitre td{ padding-top:3mm; padding-bottom:1mm; font-weight:700; font-size:9.5pt; color:var(--accent-2); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--accent-soft); }
+.p-comment td{ font-style:italic; color:#6B7686; font-size:9pt; border-bottom:none; }
+/* Ce que le technicien ou le conducteur a ajouté pendant le chantier : le
+   directeur doit le distinguer de ce qui était commandé au départ. */
+.p-ajout td{ background:#FFF7E8; }
+.p-ajout td:first-child{ box-shadow:inset 3px 0 0 #E9A23B; }
+.p-badge-origine{ display:inline-block; margin-right:6px; padding:1px 6px; border-radius:8px; background:#E9A23B; color:#fff; font-size:7.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.3px; vertical-align:middle; }
+/* Un prix manquant est ce qui bloque la validation : il doit se voir. */
+.p-sans-prix td{ background:#FFF1F0; }
+.p-sans-prix td:last-child{ color:#C0392B; font-weight:700; }
+@media print{
+  .p-ajout td{ background:#FFF7E8 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .p-badge-origine{ background:#E9A23B !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .p-sans-prix td{ background:#FFF1F0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
+/* Logo de l'émetteur, en tête de tout document imprimé. */
+/* Le logo remonte : il était collé au corps du document, et se retrouvait
+   plus bas que le titre en face de lui. Aligné en haut de la bande d'en-tête,
+   il tient le regard là où il doit. Un peu plus grand, aussi — 18 mm le
+   faisaient disparaître à côté d'un titre de 15 pt. */
+.p-logo{ max-height:22mm; max-width:60mm; display:block; margin:0 0 2mm; }
+.p-mentions{ margin-top:5mm; padding-top:2.5mm; border-top:.5px solid #E2E6ED; font-size:7.8pt; color:#6B7686; line-height:1.45; break-inside:avoid; page-break-inside:avoid; }
+.p-mentions .p-label{ margin-bottom:1mm; }
+.p-notes{ margin-top:9mm; font-size:9pt; background:rgba(var(--secondaire-rgb), .08); border:.35mm solid rgba(var(--secondaire-rgb), .22); border-radius:2mm; padding:3.5mm 4mm; }
+.p-sign{ margin-top:10mm; }
+.p-sign td{ width:50%; vertical-align:top; font-size:9pt; color:#6B7686; }
+.p-sigline{ margin-top:14mm; border-top:.75px solid #C7CDD6; width:60mm; padding-top:1.5mm; }
+.p-footer{ margin-top:4mm; font-size:7.5pt; color:#9AA3B2; text-align:center; border-top:.5px solid #E2E6ED; padding-top:2.5mm; }
+/* ═════════════ Le gabarit des documents commerciaux ═════════════
+   Devis, bon de commande, pré-facture et facture partagent cette mise en
+   page. Tout est porté par `.p-doc`, posée sur la racine du document : ces
+   mêmes classes servent aussi à l'écran — l'éditeur de pré-facture pose
+   `.p-chapitre` sur ses propres lignes — et une règle non portée les
+   repeindrait. Le rapport d'intervention garde l'ancien en-tête : il n'a ni
+   lignes chiffrées ni totaux, le gabarit ne lui apprendrait rien. */
+
+/* L'en-tête tient DEUX lignes d'alignement, pas une : le nom de l'émetteur et
+   le titre partent du même bord haut, les identifiants fiscaux et le bloc
+   numéro/dates finissent sur le même bord bas. Une rangée de flex ne sait pas
+   tenir les deux à la fois — il faut une grille de deux rangées, le logo à
+   cheval dessus. */
+.p-doc .p-entete-grille{ display:grid; grid-template-columns:34mm 1fr 66mm; column-gap:7mm; }
+.p-doc .p-logo-case{ grid-area:1 / 1 / 3 / 2; display:flex; align-items:center; justify-content:center; }
+.p-doc .p-logo-case .p-logo{ max-height:26mm; max-width:100%; margin:0; }
+.p-doc .p-emetteur{ grid-area:1 / 2 / 2 / 3; min-width:0; padding-bottom:3mm; }
+/* Trois sociétés sur quatre n'ont pas encore de logo : sans ce repli, leur
+   en-tête s'ouvrirait sur 34 mm de vide. La colonne disparaît, le reste glisse. */
+.p-doc .p-sans-logo{ grid-template-columns:1fr 66mm; }
+.p-doc .p-sans-logo .p-emetteur{ grid-area:1 / 1 / 2 / 2; }
+.p-doc .p-sans-logo .p-ident-fisc{ grid-area:2 / 1 / 3 / 2; }
+.p-doc .p-sans-logo .p-titre-col{ grid-area:1 / 2 / 2 / 3; }
+.p-doc .p-sans-logo .p-meta{ grid-area:2 / 2 / 3 / 3; }
+.p-doc .p-emetteur-nom{ font-family:'Manrope',sans-serif; font-size:15pt; font-weight:800; letter-spacing:-.01em; }
+.p-doc .p-emetteur-coord{ font-size:8.5pt; color:var(--text-dim); line-height:1.6; }
+/* Les identifiants et les dates s'écrivent à l'encre du texte, pas dans la
+   couleur de la société : ce sont des données qu'on recopie, pas des titres. */
+.p-doc .p-ident-fisc{ grid-area:2 / 2 / 3 / 3; align-self:end; font-size:8pt; line-height:1.5; }
+.p-doc .p-ident-fisc b{ font-weight:600; }
+/* Le filet vertical se poursuit d'une rangée à l'autre : les deux blocs de la
+   colonne de droite le portent, et rien ne les sépare. */
+.p-doc .p-titre-col{ grid-area:1 / 3 / 2 / 4; padding-left:6mm; padding-bottom:5mm;
+  border-left:.8mm solid rgba(var(--accent-rgb), .28); }
+.p-doc .p-doctitre-grand{ font-family:'Manrope',sans-serif; font-size:24pt; font-weight:800;
+  letter-spacing:-.025em; line-height:1; }
+.p-doc .p-doctitre-grand span{ display:block; height:1.3mm; margin-top:2mm;
+  background:linear-gradient(90deg, var(--accent-soft), var(--accent), var(--accent-2)); }
+/* `margin:0` n'est pas cosmétique : la marge par défaut d'un <dl> vaut 1 em,
+   soit 3,2 mm qui décalent ce bloc vers le haut — son bas ne tombe plus sur
+   celui des identifiants, et le filet vertical se coupe d'autant. */
+.p-doc .p-meta{ grid-area:2 / 3 / 3 / 4; align-self:stretch; margin:0; padding-left:6mm;
+  border-left:.8mm solid rgba(var(--accent-rgb), .28);
+  display:grid; grid-template-columns:1fr auto; align-content:end; gap:1.2mm 5mm; font-size:9pt; }
+.p-doc .p-meta dt{ margin:0; color:var(--text-dim); white-space:nowrap; }
+.p-doc .p-meta dd{ margin:0; text-align:right; font-family:'JetBrains Mono',monospace;
+  font-size:8.5pt; font-weight:500; }
+
+/* Chantier et client, côte à côte. Le fond est un voile de la couleur de la
+   société et non un aplat : un gabarit fait d'aplats mange l'encre. */
+.p-doc .p-cartes{ display:grid; grid-template-columns:1fr 1fr; gap:8mm; margin-top:6mm; }
+.p-doc .p-carte{ background:rgba(var(--accent-rgb), .06); padding:3.5mm 5mm;
+  break-inside:avoid; page-break-inside:avoid; }
+.p-doc .p-carte-titre{ font-size:8pt; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--accent-2); margin-bottom:2mm; }
+.p-doc .p-carte .p-line{ font-size:9.5pt; line-height:1.55; }
+.p-doc .p-carte-refs{ display:grid; grid-template-columns:1fr auto; gap:1mm 4mm;
+  margin:3mm 0 0; padding-top:2.5mm; border-top:.2mm solid rgba(var(--accent-rgb), .28); font-size:8.5pt; }
+.p-doc .p-carte-refs dt{ margin:0; color:var(--text-dim); }
+.p-doc .p-carte-refs dd{ margin:0; text-align:right; font-family:'JetBrains Mono',monospace; }
+
+/* Le chapitre devient une bande qui porte son propre total : il fallait
+   auparavant descendre jusqu'à la ligne de sous-total pour le lire. */
+.p-doc .p-lignes th{ background:none; color:var(--accent-2); padding:0 2mm 1.4mm;
+  border-bottom:.3mm solid #E2E6ED; }
+.p-doc .p-lignes td{ padding:1.05mm 2mm; line-height:1.28; }
+.p-doc .p-chapitre td{ background:rgba(var(--accent-rgb), .10); border-bottom:none;
+  padding:1.5mm 3mm; text-transform:none; letter-spacing:.05em; }
+.p-doc .p-chapitre td:first-child{ border-left:1.2mm solid var(--accent); font-weight:700; font-size:10.5pt; }
+.p-doc .p-chapitre td.st{ font-size:8.5pt; color:var(--text-dim); font-weight:400; text-align:right; }
+.p-doc .p-chapitre td.stv{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10pt; text-align:right; }
+
+/* Le pavé de règlement se cale par le bas sur le net à payer, quelle que soit
+   la hauteur du détail de TVA au-dessus. */
+.p-doc .p-bloc-bas{ display:grid; grid-template-columns:1fr 78mm; gap:9mm; margin-top:5mm;
+  align-items:end; break-inside:avoid; page-break-inside:avoid; }
+.p-doc .p-reglement{ border:.2mm solid #E2E6ED; padding:4mm 5mm; font-size:9pt; color:var(--text-dim); }
+.p-doc .p-reglement b{ display:block; font-size:8pt; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--accent-2); margin-bottom:2mm; }
+.p-doc .p-reglement div{ margin-bottom:1mm; }
+.p-doc .p-reglement span{ font-family:'JetBrains Mono',monospace; font-size:8.5pt; color:#182233; }
+.p-doc .p-totaux{ display:flex; flex-direction:column; gap:2mm; }
+.p-doc .p-tva-detail{ background:rgba(var(--accent-rgb), .06); padding:2.2mm 4mm; font-size:9pt; }
+.p-doc .p-tva-detail b{ display:block; font-size:8pt; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--accent-2); margin-bottom:1.5mm; }
+.p-doc .p-kv{ display:flex; justify-content:space-between; gap:5mm; padding:.6mm 0; font-size:9.5pt; }
+.p-doc .p-kv span{ color:var(--text-dim); }
+.p-doc .p-kv em{ font-style:normal; font-family:'JetBrains Mono',monospace; }
+.p-doc .p-tva-detail .p-kv{ font-size:8.5pt; }
+.p-doc .p-tva-detail .p-kv.somme{ border-top:.2mm solid rgba(var(--accent-rgb), .28);
+  margin-top:1mm; padding-top:1.5mm; font-weight:700; }
+.p-doc .p-tva-detail .p-kv.somme span{ color:#182233; }
+.p-doc .p-ttc{ background:rgba(var(--accent-rgb), .14); padding:1.8mm 4mm; font-weight:700; font-size:11pt; }
+.p-doc .p-ttc span, .p-doc .p-ttc em{ color:var(--accent-2); }
+/* Le bandeau prend le ton foncé de la société, et son encre se calcule sur CE
+   ton : `--sur-accent-2`, et non `--sur-accent`, qui est décidée d'après
+   l'accent plein. À luminosité 0,38 une teinte jaune reste claire. */
+.p-doc .p-net{ background:var(--accent-2); padding:2.6mm 4mm; font-weight:700; font-size:13pt; }
+.p-doc .p-net span, .p-doc .p-net em{ color:var(--sur-accent-2); }
+
+/* Le pied déborde les marges du corps de 8 mm de chaque côté — 198 mm au lieu
+   de 182 — et descend à 6 pt. C'est ce qui permet aux mentions et à l'identité
+   légale de tenir chacune sur UNE seule ligne. Mesuré : 172 mm pour les
+   mentions, 190 mm pour l'identité. Cette dernière est la ligne critique — une
+   raison sociale plus longue la fait se replier, ce qui est le comportement
+   voulu : on ne coupe jamais une mention obligatoire. */
+.p-doc .p-bas-de-page{ margin-left:-8mm; margin-right:-8mm; padding-top:2.2mm;
+  border-top:.5mm solid rgba(var(--accent-rgb), .28); }
+.p-doc .p-mentions{ margin:0; padding:0; border:none; font-size:6pt; line-height:1.3; text-align:center; }
+.p-doc .p-footer{ margin-top:1.6mm; padding-top:1.4mm; font-size:6pt; line-height:1.3; }
+@media print{
+  .p-doc .p-carte, .p-doc .p-chapitre td, .p-doc .p-tva-detail,
+  .p-doc .p-ttc, .p-doc .p-net{
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+}
+
+/* Les mentions légales appartiennent au pied de page, pas à la suite du texte.
+   La page est une colonne haute d'au moins une feuille A4 (297mm moins les
+   14mm de marge de part et d'autre) ; `margin-top:auto` pousse le bloc du bas
+   contre le bord inférieur. Un document plus long repousse simplement le pied
+   après son contenu, ce qui est le comportement voulu. */
+/* La hauteur réservée se lit : une A4, moins les 14 mm de marge de part et
+   d'autre de `#printArea`, moins 5 mm de sûreté. Sans cette marge, le calcul
+   tombait à 297,0 mm pile — mesuré à 297,1 après arrondi des sous-pixels, et
+   html2pdf ajoutait une seconde page entièrement vide. */
+/* Les 12 mm du bas sont réservés au pied de page que jsPDF dessine sur CHAQUE
+   page : html2pdf découpe une image, où ni `position:fixed` ni `<tfoot>` ne se
+   répètent. La hauteur ci-dessous doit rester accordée à `PIED_PDF_MM`, sans
+   quoi le document déborde d'une page. */
+.p-page{ display:flex; flex-direction:column; min-height:calc(297mm - 28mm - 5mm - 12mm); }
+/* Le pied vit dans le document pour l'impression navigateur ; pendant la
+   génération du PDF, jsPDF le dessine lui-même, page après page. */
+#printArea.pdf-en-cours .p-footer{ display:none; }
+
+/* PENDANT LA CAPTURE, la marge basse de la zone ne sert plus à rien : les
+   12 mm réservés au pied la remplacent, sur chaque page et non sur la
+   dernière seulement. Conservée, elle n'était qu'un blanc de 14 mm collé à la
+   fin du document — assez pour faire basculer une page entière. La hauteur de
+   page se relit donc sans elle. */
+#printArea.pdf-en-cours{ padding-bottom:0; }
+#printArea.pdf-en-cours .p-page{ min-height:calc(297mm - 14mm - 12mm - 1mm); }
+
+/* Le document qui ne dépasse que d'un cheveu resserre ses blancs plutôt que
+   de lâcher une page presque vide. `lancerGenerationPdf` pose cette classe
+   après mesure, et ne la garde que si elle fait vraiment gagner une page :
+   on ne resserre jamais un document qui tenait déjà. Seuls les espacements
+   sont touchés, jamais les corps de texte — un document resserré doit rester
+   le même document. */
+#printArea.pdf-serre .p-lignes{ margin-top:3mm; }
+#printArea.pdf-serre .p-lignes td{ padding-top:.6mm; padding-bottom:.6mm; line-height:1.15; }
+#printArea.pdf-serre .p-chapitre td{ padding-top:.9mm; padding-bottom:.9mm; }
+#printArea.pdf-serre .p-cartes{ margin-top:3mm; }
+#printArea.pdf-serre .p-carte{ padding:2.2mm 4mm; }
+#printArea.pdf-serre .p-bloc-bas{ margin-top:3mm; }
+#printArea.pdf-serre .p-tva-detail{ padding:1.4mm 4mm; }
+#printArea.pdf-serre .p-kv{ padding:.2mm 0; }
+#printArea.pdf-serre .p-bas-de-page{ padding-top:1.4mm; }
+#printArea.pdf-serre .p-sign{ margin-top:5mm; }
+#printArea.pdf-serre .p-sigline{ margin-top:9mm; }
+#printArea.pdf-serre .p-notes{ margin-top:4mm; }
+#printArea.pdf-serre .p-section-title{ margin:4mm 0 1.5mm; }
+.p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
+.p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
+.p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
+.p-photo{ width:42mm; height:42mm; object-fit:cover; border-radius:2mm; border:1px solid #E2E6ED; }
+.p-signature-img{ display:block; max-width:55mm; max-height:20mm; margin-top:2mm; }
+@media print{
+  #app,#topbar,#bottomnav,.no-print{display:none !important;}
+  body{background:#fff; color:#182233;}
+  /* Les fonds colorés sont de l'information, pas de la décoration : sans ce
+     réglage le navigateur les efface à l'impression, et l'en-tête du tableau
+     ressort blanc sur blanc. */
+  .p-lignes th, .p-print-grid th, .p-encadre, .p-encadre-2,
+  .p-locataire, .p-notes{
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+}
+#printArea.is-landscape{ width:297mm; }
+.p-print-grid{ width:100%; border-collapse:collapse; table-layout:fixed; }
+.p-print-grid th, .p-print-grid td{ border:1px solid #C7CDD6; vertical-align:top; padding:2mm; }
+.p-print-grid th{ background:var(--secondaire); color:var(--sur-secondaire); font-size:9pt; text-transform:uppercase; letter-spacing:.3px; padding:2.5mm 2mm; }
+.p-print-grid .p-day-cell{ background:#F1F3F7; font-weight:700; font-size:9.5pt; text-transform:capitalize; width:26mm; text-align:center; vertical-align:middle; }
+.p-print-grid .p-work-cell{ height:22mm; }
+.p-print-job{ font-size:7.8pt; line-height:1.35; padding:1mm 1.2mm; margin-bottom:1.2mm; background:var(--accent-soft); border-left:2px solid var(--accent); border-radius:1mm; }
+.p-print-job b{ display:block; font-size:8pt; }
+.p-print-job .p-job-adresse{ color:#555; }
+.p-print-job .p-job-metier{ color:var(--accent-2); font-weight:700; }
+.p-print-empty-cell{ color:#bbb; font-size:8pt; text-align:center; padding-top:6mm; }
+
+/* ── Verbatim : index.html l. 1689 et 1726 ── */
+.print-preview{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; overflow-x:auto; font-family:'Inter',Arial,sans-serif; font-size:10.5pt; color:#182233; }
+.print-preview table{ width:100%; border-collapse:collapse; }
