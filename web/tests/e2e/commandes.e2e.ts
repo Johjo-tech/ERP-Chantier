@@ -20,12 +20,16 @@ test("bon en attente de BC : création contrôlée (BC-30), puis « ✓ BC reçu
   await page.getByRole("button", { name: "En attente de bon de commande" }).click();
   await page.getByLabel("Client", { exact: true }).selectOption({ label: "OPAC du Rhône" });
   await page.getByLabel("Nature des travaux").fill("E2E fuite cage B");
-  // Comme l'ancien : ce qui manque se dit dans une fenêtre d'alerte.
-  const alerte = page.waitForEvent("dialog");
+  // Comme l'ancien : ce qui manque se dit dans une fenêtre d'alerte. Elle se ferme DANS l'écouteur :
+  // un `alert()` ouvert bloque le clic qui l'a provoqué, qui attendrait sinon sans fin (D-E2E-03).
+  const alertes: string[] = [];
+  page.once("dialog", (d) => {
+    alertes.push(d.message());
+    void d.dismiss();
+  });
   await page.getByRole("button", { name: "Enregistrer le bon de commande" }).click();
-  const dialogue = await alerte;
-  expect(dialogue.message()).toMatch(/L'adresse d'intervention est obligatoire/);
-  await dialogue.dismiss();
+  await expect.poll(() => alertes.at(-1)).toMatch(/L'adresse d'intervention est obligatoire/);
+  await expect(page.getByText("Bon de commande créé.")).toHaveCount(0);
 
   await page.getByLabel("Adresse d'intervention *").fill("7 rue de la Charité");
   await page.getByLabel("Désignation, ligne 1").fill("Recherche de fuite");
@@ -62,8 +66,10 @@ test("pièces : le conducteur commande, la pièce passe dans son dossier, puis e
   await bon.getByRole("button", { name: "📦 Commandé" }).click();
   await expect(page.getByText(/Pièce commandée — classée dans le dossier/)).toBeVisible();
   await page.locator(".dossier-header", { hasText: "— Fournisseur non renseigné —" }).click();
-  const commandee = carte(page, "Sans BC");
-  await commandee.getByRole("button", { name: "▸" }).click();
+  // Comme l'ancien (`state.bcCardOuverte`) : la carte ouverte le reste, reclassée dans son dossier (D-E2E-04).
+  const commandee = page.locator(".dossier-contenu .bc-card", { hasText: "Sans BC" });
+  await expect(commandee.getByRole("button", { name: "▾" })).toHaveAttribute("aria-expanded", "true");
+  await expect(commandee).toContainText(/Mitigeur thermostatique 1\/2 — commandée le \d{2}\/\d{2}\/\d{4}/);
   await commandee.getByRole("button", { name: "✓ Pièce arrivée — Renvoyer au planning" }).click();
   await expect(page.getByText(/Pièce reçue — le bon de commande est de retour dans Planning/)).toBeVisible();
 });

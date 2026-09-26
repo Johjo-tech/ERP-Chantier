@@ -2310,3 +2310,36 @@ catalogue et correspondance du DPGF : identiques. Aperçu des clients : « Annua
 du décompte de l'ancien (D-EFA-06), une ligne de même gabarit. Les confirmations sont des boîtes du
 navigateur, hors capture : leur texte est vérifié par les tests unitaires. Les champs numériques du DPGF et
 des achats redeviennent des `type="number"` (alignement et largeur de l'ancienne feuille).
+
+## D-E2E-01 — Le refus d'un règlement dit le montant comme l'ancien, au caractère près
+`refusReglement` / `refusImputation` écrivaient le reste par `formatEuros` (Intl : espace insécable avant
+« € », espace fine entre les milliers). L'ancien l'écrit par `regles-reglements.formaterEuros` : « 394,00 € »
+avec une espace simple, sans séparateur de milliers. L'alerte n'était donc pas le même texte (le parcours
+`facturation.e2e.ts` échouait sur `toBe`). Correction dans `facturation/domain/reglements.ts`
+(`formaterEurosRefus`) ; le test de parité compare désormais le texte exact (il effaçait les blancs) et un
+test de composant (`reglements.essai.tsx`) vérifie l'alerte.
+
+## D-E2E-02 — Un message confié à la navigation est dit par la page d'arrivée
+« 🧾 Créer la facture » (carte du bon, file À facturer), « Créer la facture de situation », la transformation
+d'un rapport et l'enregistrement partiel d'un bon depuis un devis ouvrent une autre page en lui confiant un
+message (`navigate(…, { state: { message } })`). Seule la liste des rapports le lisait : depuis la reprise à
+l'identique de la fiche facture, « Facture créée en brouillon depuis le bon de commande. » et « Situation
+créée en brouillon. » n'étaient plus dits. `lib/useMessageNavigation` les dit dans la bulle de l'ancien
+(`#toastBox`), une fois, en gardant le reste de l'état ; posé dans les fiches facture, devis et bon, et dans
+la liste des rapports. L'ancien n'avait pas ces messages (il ouvrait un formulaire non enregistré, D-ECR-BC-07,
+ou restait sur le chantier, D-ECR-CHA-11) : web/ enregistre le brouillon, il le dit. Test :
+`commandes.essai.tsx` (« le message n'est plus perdu en route »).
+
+## D-E2E-03 — Parcours : une alerte se ferme dans son écouteur
+Le parcours du bon « en attente de BC » attendait l'alerte par `waitForEvent("dialog")` APRÈS le clic : un
+`alert()` ouvert bloque le clic qui l'a provoqué, le test attendait sans fin. L'écran était juste (même alerte
+que `manquesBonCommande` de l'ancien) ; le parcours ferme l'alerte dans `page.once("dialog")` et vérifie en
+plus qu'aucun bon n'a été créé.
+
+## D-E2E-04 — Parcours : la carte ouverte le reste dans son dossier
+Comme l'ancien (`state.bcCardOuverte`, vérifié sur l'ancienne application : après « 📦 Commandé » la carte
+reste dépliée, chevron « ▾ »), la carte d'une pièce commandée reste ouverte une fois reclassée dans le dossier
+de son fournisseur. Le parcours cherchait un « ▸ » qui n'existe plus ; il vérifie maintenant que la carte est
+ouverte, qu'elle dit « commandée le … », puis « ✓ Pièce arrivée ». Relevé au passage : sur la base locale,
+l'ancienne application annonce « 📦 Pièce commandée » sans que la pièce change de section (sa date de commande
+ne tient pas) — défaut de l'ancien, non repris.
