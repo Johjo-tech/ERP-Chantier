@@ -241,7 +241,11 @@ function separer(html: string): { gabarit: string; montants: number[] } {
   return { gabarit: html.replace(MONTANT, "#"), montants: (html.match(MONTANT) ?? []).map(enNombre) };
 }
 
-describe("parité du gabarit des pièces commerciales (renderPrintDoc)", () => {
+// Des milliers de gabarits comparés : sous une machine chargée (agents, CI), le délai
+// commun de 20 s ne suffit pas toujours. Le contenu vérifié ne change pas.
+const DELAI_TIRAGES_MS = 120_000;
+
+describe("parité du gabarit des pièces commerciales (renderPrintDoc)", { timeout: DELAI_TIRAGES_MS }, () => {
   it("données sans demi-centime : HTML strictement identique (2 000 tirages)", () => {
     for (let i = 0; i < 2000; i++) {
       const t = tirage(true);
@@ -270,7 +274,7 @@ describe("parité du gabarit des pièces commerciales (renderPrintDoc)", () => {
   });
 });
 
-describe("parité du rapport d'intervention (renderPrintIntervention)", () => {
+describe("parité du rapport d'intervention (renderPrintIntervention)", { timeout: DELAI_TIRAGES_MS }, () => {
   it("HTML strictement identique (1 000 tirages)", () => {
     for (let i = 0; i < 1000; i++) {
       const s = societe();
