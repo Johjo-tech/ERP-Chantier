@@ -12,30 +12,40 @@ async function connexion(page: Page, email: string) {
 
 test("devis → facture brouillon → émission : le numéro vient de la base, la facture se fige, un règlement partiel", async ({ page }) => {
   await connexion(page, "secretaire.alpha@erp.local");
+  // Les confirmations sont celles de l'ancien écran (`confirm`) : on les accepte, les alertes disent le refus.
+  const alertes: string[] = [];
+  page.on("dialog", (d) => {
+    if (d.type() === "alert") alertes.push(d.message());
+    void d.accept();
+  });
   await page.goto("/devis");
-  await page.getByRole("link", { name: "DEV-2026-900002" }).click();
-  await page.getByRole("button", { name: "Créer la facture" }).click();
-  await expect(page.getByText("Facture créée en brouillon depuis le devis.")).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Facture brouillon");
+  // Comme dans l'ancien : le geste est sur la carte du devis.
+  await page.locator(".card", { hasText: "DEV-2026-900002" }).getByRole("button", { name: "Transformer en facture" }).click();
+  await expect(page.getByRole("heading", { name: "Modifier la facture" })).toBeVisible();
   // Deux lignes à 10 %, remise de 10 % : 600 HT → 540 HT, 594 TTC.
   await expect(page.getByLabel("Totaux du document")).toContainText("594,00 €");
-  await page.getByRole("button", { name: "Émettre la facture" }).click();
-  await page.getByRole("button", { name: "Confirmer" }).click();
-  await expect(page.getByText(/Facture émise sous le numéro FAC-\d{4}-\d{6}\./)).toBeVisible();
-  await expect(page.getByText(/est émise : son contenu est définitif/)).toBeVisible();
-  await expect(page.getByLabel("Désignation, ligne 1")).toHaveAttribute("readonly");
+  await page.getByRole("button", { name: "Enregistrer la facture" }).click();
+  // L'émission se fait depuis la carte, avec la confirmation de l'ancien.
+  const carte = page.locator(".card", { hasText: "Brouillon — non émise" }).filter({ hasText: "594,00 € TTC" }).first();
+  await carte.getByRole("button", { name: "🧾 Émettre" }).click();
+  await expect(page.getByText(/Facture émise sous le n° FAC-\d{4}-\d{6}\./)).toBeVisible();
 
+  await page.goto("/factures/reglements/dossier?client=Mme%20Durand");
+  const piece = page.locator(".card", { hasText: "594,00 €" }).filter({ has: page.getByRole("button", { name: "+ Règlement" }) }).first();
+  await piece.getByRole("button", { name: "+ Règlement" }).click();
   await page.getByLabel("Montant", { exact: true }).fill("200");
-  await page.getByRole("button", { name: "Enregistrer le règlement" }).click();
-  await expect(page.getByText("déjà réglé 200,00 € · reste 394,00 €")).toBeVisible();
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(page.locator(".card", { hasText: "Reste : 394,00 €" }).first()).toBeVisible();
+  await page.locator(".card", { hasText: "Reste : 394,00 €" }).first().getByRole("button", { name: "+ Règlement" }).click();
   await page.getByLabel("Montant", { exact: true }).fill("500");
-  await page.getByRole("button", { name: "Enregistrer le règlement" }).click();
-  await expect(page.getByText("Le montant dépasse le reste à payer (394,00 €).")).toBeVisible();
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect.poll(() => alertes.at(-1)).toBe("Le montant dépasse le reste à payer (394,00 €).");
 
+  // Le devis facturé ne propose plus « Transformer en facture » : sa carte nomme la facture liée.
   await page.goto("/devis");
-  await page.getByRole("link", { name: "DEV-2026-900002" }).click();
-  await page.getByRole("button", { name: "Créer la facture" }).click();
-  await expect(page.getByText(/Ce devis est déjà facturé \(FAC-/)).toBeVisible();
+  const devis = page.locator(".card", { hasText: "DEV-2026-900002" });
+  await expect(devis.getByText(/Facture liée/)).toBeVisible();
+  await expect(devis.getByRole("button", { name: "Transformer en facture" })).toHaveCount(0);
 });
 
 test("situation de travaux : la facture porte l'avancement, le DPGF le cumule", async ({ page }) => {

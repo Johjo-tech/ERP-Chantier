@@ -35,11 +35,12 @@ test("le technicien ne voit ni devis ni clients, et seulement son chantier", asy
 test("la secrétaire crée un devis multi-TVA ; totaux et numéro viennent de la base", async ({ page }) => {
   await connexion(page, "secretaire.alpha@erp.local");
   await page.getByRole("navigation", { name: "Menu principal" }).getByRole("link", { name: "Devis" }).click();
-  await page.getByRole("link", { name: "Nouveau devis" }).click();
+  await page.getByRole("button", { name: "+ Nouveau devis" }).click();
   await page.getByLabel("Client").selectOption({ label: "SCI Les Tilleuls" });
   await page.getByLabel("Désignation, ligne 1").fill("Remplacement colonne");
   await page.getByLabel("Quantité, ligne 1").fill("2");
-  await page.getByLabel("Prix unitaire HT, ligne 1").fill("85,50");
+  // Un champ numérique, comme l'ancien : le point décimal.
+  await page.getByLabel("Prix unitaire HT, ligne 1").fill("85.50");
   await page.getByLabel("TVA, ligne 1").selectOption("10");
   await page.getByRole("button", { name: "+ Ligne" }).click();
   await page.getByLabel("Désignation, ligne 2").fill("Robinet");
@@ -50,18 +51,19 @@ test("la secrétaire crée un devis multi-TVA ; totaux et numéro viennent de la
   await expect(totaux).toContainText("TVA 10 % sur 171,00 €");
   await expect(totaux).toContainText("TVA 20 % sur 45,00 €");
   await expect(totaux).toContainText("242,10 €");
-  await page.getByRole("button", { name: "Enregistrer" }).click();
-  await expect(page.getByText("Devis enregistré.")).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Devis DEV-\d{4}-\d{6}/);
-  await page.getByRole("link", { name: "Aperçu / imprimer" }).click();
+  await page.getByRole("button", { name: "💾 Enregistrer le brouillon" }).click();
+  await expect(page.getByText("Brouillon enregistré.")).toBeVisible();
+  await page.getByRole("button", { name: "Enregistrer le devis" }).click();
+  // Comme l'ancien : on revient à la liste, et la carte ouvre l'aperçu.
+  // Le plus récent en tête (date, puis création décroissantes).
+  await page.locator(".card", { hasText: "SCI Les Tilleuls" }).first().locator(".card-title").click();
   // La fenêtre d'aperçu de l'ancien, avec la pièce même du PDF (D-PDF-06).
   const apercu = page.getByRole("dialog");
   await expect(apercu.locator(".p-doctitre-grand")).toHaveText("DEVIS");
   await expect(apercu.getByText("Valable jusqu'au")).toBeVisible();
   await expect(apercu.getByRole("button", { name: "Enregistrer", exact: true })).toBeVisible();
   await apercu.getByRole("button", { name: "Fermer" }).click();
-  await page.getByRole("link", { name: "Retour à la liste" }).click();
-  await expect(page.getByRole("row", { name: /SCI Les Tilleuls/ }).first()).toContainText("216,00 €");
+  await expect(page.locator(".card", { hasText: "SCI Les Tilleuls" }).first()).toContainText("216,00 €");
 });
 
 test("remplissage automatique d'une ligne depuis le catalogue : la quantité n'est jamais écrasée", async ({ page }) => {

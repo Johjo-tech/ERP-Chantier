@@ -33,6 +33,7 @@ const magasinParFacture = creerMagasin<CriteresParFacture>(CRITERES_PAR_FACTURE_
  * Facturation, le titre, le motif du rôle, puis les trois vues.
  */
 export function CadreReglements({ children }: { children: ReactNode }) {
+  useModeDiscret();
   const { droits } = useCartesFactures();
   const motifRole = motifRoleFacture(droits);
   return (
@@ -46,6 +47,7 @@ export function CadreReglements({ children }: { children: ReactNode }) {
 }
 
 export function PageReglements({ vue }: { vue: VueReglements }) {
+  useModeDiscret();
   const navigate = useNavigate();
   return (
     <CadreReglements>
@@ -62,6 +64,7 @@ export function PageReglements({ vue }: { vue: VueReglements }) {
 }
 
 function SelectEtat({ etat, changer }: { etat: EtatReglement; changer: (e: EtatReglement) => void }) {
+  useModeDiscret();
   return (
     <select aria-label="État" style={{ width: "auto", minWidth: "210px" }} value={etat} onChange={(e) => changer(e.target.value as EtatReglement)}>
       {ETATS_REGLEMENT.map(([k, l]) => <option key={k} value={k}>{l}</option>)}

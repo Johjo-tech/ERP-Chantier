@@ -1877,3 +1877,62 @@ relit pas `intervention_controles`) ni `typePanne` (la colonne est `metier`),
 et « Contrôles réalisés » disparaît du PDF. web/ imprime ce qui est enregistré,
 comme l'ancien l'imprimait à la saisie : c'est le seul écart mesuré sur le
 rapport (1 % des pixels, la section en plus) — `tests/visuel/pdf/`.
+
+## D-ECR-FAC-01 — Les sous-onglets de Facturation suivent les droits
+L'ancien montrait Factures, Avoirs, Validation, À facturer et Règlements à tout
+rôle qui ouvre Facturation. web/ n'affiche Validation et À facturer qu'avec
+`bons_commande/voir`, Règlements qu'avec `reglements/voir` : la base refuserait
+leur contenu (CLAUDE.md, « masquer ce qui serait refusé »). Pour l'administrateur
+et la secrétaire, l'écran est celui de l'ancien.
+
+## D-ECR-FAC-02 — Le reste d'une facture à acomptes est celui de la base
+Suite de D-FAC-01 : « réglé X · reste Y », le dû d'un dossier et le « reste à
+encaisser » se lisent dans `v_facture_solde`, acomptes déduits. L'ancien disait
+« reste 450,00 € » sur une facture de 1 000 € avec 400 € d'acompte et 550 € réglés ;
+web/ dit « reste 50,00 € ». C'est le seul écart de texte des listes (2 lignes).
+
+## D-ECR-FAC-03 — Des boutons, pas des liens, pour les sous-onglets
+`OngletsFacturation` rend de vrais `<button class="plus-subnav-btn">`, comme
+l'ancien : un lien ne centre pas son libellé sur deux lignes (« À facturer » se
+lisait en haut à gauche sur téléphone). `aria-current` dit l'onglet ouvert. Le
+composant partagé `components/ui/onglets.tsx` (NavLink) a le même défaut pour
+les autres écrans : signalé, non modifié.
+
+## D-ECR-FAC-04 — Dans un dossier Validation / À facturer, la carte du bon est repliée
+L'ancien réutilise `bonCommandeCardHTML`, dépliable sur place. web/ montre la
+carte REPLIÉE de l'ancien (identité, montant, pastilles, pré-facture, Modifier,
+Créer la facture) ; le détail et les autres gestes (SAV, lien rapport,
+suppression) sont sur la fiche du bon, où mène le chevron. Les dossiers étant
+fermés par défaut, l'écran de départ est identique (0 %).
+
+## D-ECR-FAC-05 — « ✎ Modifier » dans « Tous les règlements » ouvre sa saisie
+L'ancien posait `formOpen.reglement` sans zone pour l'afficher dans cette vue :
+le bouton ne faisait rien. web/ ouvre le formulaire de l'ancien au-dessus de la
+liste.
+
+## D-ECR-FAC-06 — Deux règlements nés au même instant
+Les deux moitiés d'une imputation d'avoir ont la même date et la même heure de
+création. L'ancien les rendait dans l'ordre physique de la table ; web/ les
+départage par identifiant. Deux cartes permutées (0,35 % des pixels sur
+« Tous les règlements »), aucun texte différent.
+
+## D-ECR-FAC-07 — « ✕ Effacer » paraît dès qu'un filtre est posé
+L'ancien ne redessinait que la liste au choix d'un filtre : le bouton
+n'apparaissait qu'au rendu suivant. web/ le montre tout de suite (1 ligne).
+
+## D-ECR-FAC-08 — Dupliquer, Transformer en facture, Créer un bon : la pièce naît en base
+Depuis la carte d'un devis, l'ancien ouvrait un formulaire prérempli non
+enregistré ; web/ garde les opérations déjà décidées (D-FAC-08, D-FAC-17) :
+la copie, la facture brouillon ou le bon sont écrits, puis ouverts. Même geste,
+même libellé, même avis (« Devis dupliqué — modifiez-le… »).
+
+## D-ECR-FAC-09 — Le code article garde la mesure de l'ancien
+Le champ vient du catalogue (`ReferenceArticleLigne`, module articles) ; sa case
+`.art-pick-hote` lui donne la mesure de `input.art-pick` (complements.css).
+
+## D-ECR-FAC-10 — Le statut d'un devis se change dans son formulaire
+L'ancien n'offrait aucun moyen de passer un devis à « envoyé », « accepté » ou
+« refusé », alors que le tableau de bord et le taux de conversion les comptent.
+Le champ « Statut » reste dans la grille « Client & contact » d'un devis
+existant (5 lignes de texte, la grille gagne une rangée : 22 % des pixels du
+formulaire décalés vers le bas).
