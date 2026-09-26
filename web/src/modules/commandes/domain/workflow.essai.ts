@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ongletDe, parFournisseur, pieceDuBon, SANS_FOURNISSEUR } from "./pieces";
+import { optionsFournisseurs, parFournisseur, SANS_FOURNISSEUR } from "./pieces";
 import { circuitDuBon, etapeWorkflow, etatPieceDuBon, type TacheBon } from "./workflow";
 
 const tache = (t: Partial<TacheBon>): TacheBon => ({
@@ -39,21 +39,17 @@ describe("pièces (BC-19, BC-20)", () => {
     expect(recue).toMatchObject({ pieceACommander: false, description: "Mitigeur", recueLe: "2026-09-24T08:00:00+00:00" });
   });
 
-  it("à commander → commandée (date posée) → reçue (drapeau levé)", () => {
-    expect(ongletDe({ pieceACommander: true, dateCommande: "", description: "", fournisseur: "", recueLe: "" })).toBe("a_commander");
-    expect(ongletDe({ pieceACommander: true, dateCommande: "2026-09-20", description: "", fournisseur: "", recueLe: "" })).toBe("commandees");
-    expect(ongletDe({ pieceACommander: false, dateCommande: "", description: "x", fournisseur: "", recueLe: "2026-09-24" })).toBe("recues");
-    expect(ongletDe({ pieceACommander: false, dateCommande: "", description: "", fournisseur: "", recueLe: "" })).toBeNull();
-  });
 
   it("dossiers par fournisseur, triés, avec un dossier pour le fournisseur absent", () => {
-    const bon = (id: string) => ({ id, numero_interne: id, numero_bc: null, client_nom: "C", adresse: null, ville: null, statut_workflow: null });
-    const pieces = [
-      pieceDuBon(bon("1"), [tache({ piece_a_commander: true, piece_fournisseur: "Point P" })]),
-      pieceDuBon(bon("2"), [tache({ piece_a_commander: true, piece_fournisseur: "  " })]),
-      pieceDuBon(bon("3"), [tache({ piece_a_commander: true, piece_fournisseur: "Cedeo" })]),
-    ];
+    const piece = (id: string, fournisseur: string) => ({ ...etatPieceDuBon([tache({ piece_a_commander: true, piece_fournisseur: fournisseur })]), bon: { id } });
+    const pieces = [piece("1", "Point P"), piece("2", "  "), piece("3", "Cedeo")];
     expect(parFournisseur(pieces).map((d) => d.fournisseur)).toEqual(["— Fournisseur non renseigné —", "Cedeo", "Point P"].sort((a, b) => a.localeCompare(b)));
     expect(parFournisseur(pieces).find((d) => d.fournisseur === SANS_FOURNISSEUR)?.pieces[0]?.bon.id).toBe("2");
+  });
+
+  it("fournisseurs proposés : l'annuaire actif dans son ordre, puis les noms déjà écrits, triés, sans doublon de casse", () => {
+    const annuaire = [{ nom: "Point P", actif: true }, { nom: "Brossette", actif: false }, { nom: "Cedeo", actif: true }];
+    expect(optionsFournisseurs(annuaire, ["cedeo", "Zeta", "Alpha"], "")).toEqual(["Point P", "Cedeo", "Alpha", "Zeta"]);
+    expect(optionsFournisseurs(annuaire, [], "Brossette")).toEqual(["Point P", "Brossette", "Cedeo"]);
   });
 });

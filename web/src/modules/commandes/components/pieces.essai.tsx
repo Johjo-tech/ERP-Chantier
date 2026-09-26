@@ -7,7 +7,7 @@ import { rendreAvecSession } from "@/test/session-factice";
 import { bonAvecTaches, tacheEssai } from "../essai-fixtures";
 import { PagePieces } from "./PagePieces";
 
-const api = vi.hoisted(() => ({ listerPieces: vi.fn(), marquerCommandee: vi.fn(), modifierCommandePiece: vi.fn(), pieceRecue: vi.fn() }));
+const api = vi.hoisted(() => ({ modifierCommandePiece: vi.fn(), pieceRecue: vi.fn() }));
 vi.mock("../api/pieces", () => api);
 const bons = vi.hoisted(() => ({ listerBons: vi.fn(async (): Promise<unknown[]> => []), COLONNES_TACHE: "", EnregistrementPartiel: class extends Error {} }));
 vi.mock("../api/bons", () => bons);

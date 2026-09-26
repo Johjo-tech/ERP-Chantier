@@ -23,7 +23,7 @@ import {
 } from "../api/circuit";
 import { ajouterPhotosAuSav, creerSav, listerPhotos, remplacerPieceJointe, urlPieceJointe, DUREE_URL_SIGNEE_S } from "../api/documents";
 import { listerMetiersDeclares } from "../api/metiers";
-import { listerPieces, marquerCommandee, modifierCommandePiece, pieceRecue } from "../api/pieces";
+import { modifierCommandePiece, pieceRecue } from "../api/pieces";
 import type { EnteteAEnregistrer, EnteteBon } from "../domain/bon";
 import { origineDuTravail } from "../domain/circuit";
 import { metiersDuBon, referentielMetiers } from "../domain/metiers";
@@ -32,7 +32,6 @@ import type { TacheBon } from "../domain/workflow";
 export const clesBons = {
   racine: (s: string) => ["bons-commande", s] as const,
   liste: (s: string) => ["bons-commande", s, "liste"] as const,
-  pieces: (s: string) => ["bons-commande", s, "pieces"] as const,
   fiche: (s: string, id: string) => ["bons-commande", s, "fiche", id] as const,
   taches: (s: string, id: string) => ["bons-commande", s, "taches", id] as const,
   travaux: (s: string, id: string) => ["bons-commande", s, "travaux", id] as const,
@@ -50,11 +49,6 @@ export function useBons() {
 export function useBon(id: string | undefined) {
   const s = useSocieteActive();
   return useQuery({ queryKey: clesBons.fiche(s.id, id ?? ""), queryFn: () => lireBon(id as string), enabled: !!id });
-}
-
-export function usePieces() {
-  const s = useSocieteActive();
-  return useQuery({ queryKey: clesBons.pieces(s.id), queryFn: () => listerPieces(s.id) });
 }
 
 export function useTaches(bonId: string | undefined) {
@@ -165,14 +159,6 @@ export function useSupprimerBon() {
 export function useGenererFacture() {
   const recharger = useRecharger();
   return useMutation({ mutationFn: (id: string) => genererFacture(id), onSettled: recharger });
-}
-
-export function useMarquerCommandee() {
-  const recharger = useRecharger();
-  return useMutation({
-    mutationFn: ({ bonId, date, fournisseur }: { bonId: string; date: string; fournisseur: string | null }) => marquerCommandee(bonId, { date, fournisseur }),
-    onSettled: recharger,
-  });
 }
 
 export function useModifierCommandePiece() {

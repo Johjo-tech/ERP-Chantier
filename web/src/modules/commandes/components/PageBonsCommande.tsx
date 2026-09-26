@@ -32,7 +32,7 @@ function BoutonImporter() {
         onChange={(e) => {
           const fichier = e.target.files?.[0];
           e.target.value = "";
-          if (fichier) void navigate("/commandes/lecture", { state: { fichier } });
+          if (fichier) void navigate("/commandes/nouveau", { state: { lire: fichier } });
         }}
       />
     </label>

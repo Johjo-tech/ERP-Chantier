@@ -274,6 +274,13 @@ function defiler(selecteur: string): Geste {
   };
 }
 
+/** Confier un document à un sélecteur de fichier, des deux côtés (un PDF minimal : la lecture en échoue). */
+function deposer(selecteur: string): Geste {
+  return async (page) => {
+    await page.setInputFiles(selecteur, { name: "bon-client.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+  };
+}
+
 /** Laisser finir un défilement doux (`openForm` défile 50 ms après l'ouverture) avant le geste suivant. */
 function attendre(ms: number): Geste {
   return async (page) => {
@@ -336,6 +343,10 @@ function ecransCommandes(): Ecran[] {
     liste("bons-de-commande-nouveau-sans-bc", "Bons de commande › nouveau bon, « Sans bon de commande »", {}, "/commandes", enchainer(cliquer(".page-head .btn.primary"), attendre(800), cliquer(".plus-subnav-btn:nth-child(2)")), partout(0.001, LIGNES_PARTAGEES)),
     liste("bons-de-commande-modifier", "Bons de commande › modifier un bon (Sans BC)", {}, "/commandes", enchainer(cliquer("#bonCommande-card-a5000000-0000-0000-0000-000000000003 .bc-actions-bas .btn:nth-child(2)"), attendre(800)), partout(0.001, LIGNES_PARTAGEES + CIRCUIT)),
     liste("bons-de-commande-consulter", "Bons de commande › consulter un bon facturé (verrou)", {}, "/commandes", enchainer(defiler(BON_FACTURE), cliquer(`${BON_FACTURE} .bc-actions-bas .btn:first-child`), attendre(800)), partout(0.001, 23 + CIRCUIT)),
+    // La lecture automatique, lancée depuis la liste : sans service de lecture en local, elle échoue des deux côtés.
+    liste("bons-de-commande-lecture-echec", "Bons de commande › importer un BC : issue d'une lecture qui échoue", {}, "/commandes", enchainer(deposer(".page-head label.btn input[type=file]"), attendre(3000)), { bureau: { pixels: 0.05, texte: 4 }, mobile: { pixels: 0.04, texte: 4 } }),
+    // Seul écart : le motif du refus — l'ancien affichait « Edge Function returned a non-2xx status code »,
+    // la lecture de web/ le dit en français (D-ECR-BC-10) ; 2 lignes (écran et toast), de chaque côté.
     pieces("pieces-en-commande", "Pièces en commande"),
     pieces("pieces-dossier-ouvert", "Pièces en commande › dossier fournisseur ouvert", cliquer(".dossier-header")),
     // Téléphone : le champ date de la commande diffère d'un pixel sur son bord droit (rendu natif du sélecteur de date).

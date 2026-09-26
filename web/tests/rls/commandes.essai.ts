@@ -5,7 +5,7 @@
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { enregistrerBon, genererFacture, lireBon, listerBons } from "../../src/modules/commandes/api/bons";
-import { listerPieces, marquerCommandee, pieceRecue } from "../../src/modules/commandes/api/pieces";
+import { modifierCommandePiece, pieceRecue } from "../../src/modules/commandes/api/pieces";
 import type { EnteteAEnregistrer } from "../../src/modules/commandes/domain/bon";
 import { etapeWorkflow } from "../../src/modules/commandes/domain/workflow";
 import type { LigneAEnregistrer } from "../../src/modules/documents/domain/lignes";
@@ -188,16 +188,16 @@ describe("pièces (BC-19, BC-21)", () => {
     expect(error).toBeNull();
 
     const sec = await connecte(COMPTES.secretaireAlpha);
-    await expect(marquerCommandee(id, { date: "2026-09-24", fournisseur: "Cedeo" }, sec)).rejects.toMatchObject({ code: "42501" });
+    await expect(modifierCommandePiece(id, { piece_date_commande: "2026-09-24", piece_fournisseur: "Cedeo" }, sec)).rejects.toMatchObject({ code: "42501" });
     await expect(pieceRecue(id, sec)).rejects.toMatchObject({ code: "42501" });
 
     const cond = await connecte(COMPTES.conducteurAlpha);
-    await marquerCommandee(id, { date: "2026-09-24", fournisseur: "Cedeo" }, cond);
-    const avant = (await listerPieces(ALPHA, cond)).find((p) => p.bon.id === id);
+    await modifierCommandePiece(id, { piece_date_commande: "2026-09-24", piece_fournisseur: "Cedeo" }, cond);
+    const avant = (await listerBons(ALPHA, cond)).find((b) => b.id === id)?.circuit.piece;
     expect(avant).toMatchObject({ pieceACommander: true, fournisseur: "Cedeo", dateCommande: "2026-09-24", description: "Vanne d'essai" });
 
     await pieceRecue(id, cond);
-    const apres = (await listerPieces(ALPHA, cond)).find((p) => p.bon.id === id);
+    const apres = (await listerBons(ALPHA, cond)).find((b) => b.id === id)?.circuit.piece;
     expect(apres?.pieceACommander).toBe(false);
     expect(apres?.recueLe).not.toBe("");
     const { data: tache } = await cond.from("planning_taches").select("date_tache").eq("bon_commande_id", id).single();
