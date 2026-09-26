@@ -1,19 +1,19 @@
 import { Link } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Button } from "@/components/ui/button";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
 import { formatDateFr, todayISO } from "@/lib/dates";
-import { imprimerZonePaysage } from "@/modules/documents/impression/zone";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
+import { imprimerZonePaysage } from "@/modules/documents/impression/zone";
 import { htmlRegistreImprime } from "../domain/impression";
 import { libelleSexe, registreDuPersonnel } from "../domain/salarie";
 import { useSalariesRh } from "../hooks/useRh";
 
+const COLONNES = ["N°", "Nom", "Prénom", "Date de naissance", "Nationalité", "Sexe", "Emploi", "Type de contrat", "Date d'entrée", "Date de sortie"] as const;
+const date = (d: string | null) => (d ? formatDateFr(d) : "—");
+
 /**
- * Le registre unique du personnel (RH-03, C. trav. L.1221-13) : tous les
- * salariés, sortis compris, par ordre d'embauche — à tenir à disposition de
- * l'inspection du travail. Imprimé en paysage (dix colonnes).
+ * Le registre unique du personnel (RH-03, C. trav. L.1221-13), au HTML de
+ * `renderRegistreUniquePersonnel` (app.js l. 15579) : tous les salariés,
+ * sortis compris, par ordre d'embauche. Imprimé en paysage (D-PDF-07).
  */
 export function PageRegistre() {
   const societe = useSocieteActive();
@@ -23,55 +23,65 @@ export function PageRegistre() {
   const liste = registreDuPersonnel(salaries.data);
 
   return (
-    <div>
-      <EnTetePage
-        titre="Registre unique du personnel"
-        sousTitre="Document obligatoire (Code du travail, art. L.1221-13) — liste de tous les salariés par ordre d'embauche, à tenir à disposition de l'inspection du travail."
-        actions={
-          <>
-            <Button asChild variant="ghost"><Link to="/rh">← Retour RH</Link></Button>
-            <Button
-              onClick={() =>
-                // La feuille de l'ancien (`imprimerRegistrePersonnel`), pas l'écran : en-têtes abrégés, paysage.
-                void imprimerZonePaysage(htmlRegistreImprime(societe.nom, salaries.data, todayISO())).catch((e: unknown) => console.error("Registre non imprimé", e))
-              }
-            >
-              🖨️ Imprimer
-            </Button>
-          </>
-        }
-      />
-      <div className="overflow-x-auto">
-        <Table>
-          <THead>
-            <Tr>
-              {["N°", "Nom", "Prénom", "Date de naissance", "Nationalité", "Sexe", "Emploi", "Type de contrat", "Date d'entrée", "Date de sortie"].map((t) => (
-                <Th key={t}>{t}</Th>
+    <>
+      <div className="page-head">
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <Link className="btn small" to="/rh">
+            ← Retour RH
+          </Link>
+          <h1 style={{ margin: 0 }}>Registre unique du personnel</h1>
+        </div>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() =>
+            // La feuille de l'ancien (`imprimerRegistrePersonnel`), pas l'écran : en-têtes abrégés, paysage.
+            void imprimerZonePaysage(htmlRegistreImprime(societe.nom, salaries.data, todayISO())).catch((e: unknown) => console.error("Registre non imprimé", e))
+          }
+        >
+          🖨️ Imprimer
+        </button>
+      </div>
+      <div className="card-sub" style={{ marginBottom: "16px" }}>
+        Document obligatoire (Code du travail, art. L.1221-13) — liste de tous les salariés par ordre d&apos;embauche, à tenir à disposition de l&apos;inspection du travail.
+      </div>
+      <div className="vehicule-liste-wrap">
+        <table className="stats-table" id="registrePersonnelTable">
+          <thead>
+            <tr>
+              {COLONNES.map((t) => (
+                <th key={t}>{t}</th>
               ))}
-            </Tr>
-          </THead>
-          <TBody>
+            </tr>
+          </thead>
+          <tbody>
             {liste.length === 0 ? (
-              <Tr><Td colSpan={10}>Aucun salarié enregistré.</Td></Tr>
+              <tr>
+                <td colSpan={COLONNES.length} className="empty">
+                  Aucun salarié enregistré.
+                </td>
+              </tr>
             ) : (
               liste.map((s, i) => (
-                <Tr key={s.id}>
-                  <Td>{i + 1}</Td>
-                  <Td><strong>{s.nom}</strong></Td>
-                  <Td>{s.prenom}</Td>
-                  <Td>{formatDateFr(s.dateNaissance)}</Td>
-                  <Td>{s.nationalite || "—"}</Td>
-                  <Td>{libelleSexe(s.sexe)}</Td>
-                  <Td>{s.poste || "—"}</Td>
-                  <Td>{s.typeContrat || "—"}</Td>
-                  <Td>{formatDateFr(s.dateEntree)}</Td>
-                  <Td>{formatDateFr(s.dateSortie)}</Td>
-                </Tr>
+                <tr key={s.id}>
+                  <td>{i + 1}</td>
+                  <td>
+                    <strong>{s.nom}</strong>
+                  </td>
+                  <td>{s.prenom}</td>
+                  <td>{date(s.dateNaissance)}</td>
+                  <td>{s.nationalite || "—"}</td>
+                  <td>{libelleSexe(s.sexe)}</td>
+                  <td>{s.poste || "—"}</td>
+                  <td>{s.typeContrat || "—"}</td>
+                  <td>{date(s.dateEntree)}</td>
+                  <td>{date(s.dateSortie)}</td>
+                </tr>
               ))
             )}
-          </TBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
-    </div>
+    </>
   );
 }

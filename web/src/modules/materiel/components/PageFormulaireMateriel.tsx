@@ -2,13 +2,11 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
+import { useDefilerVersFormulaire } from "./communs";
 import { composerListe, etatsProposes, saisieDepuis, schemaSaisieMateriel, valeurDansListe, type Materiel } from "../domain/materiel";
 import { useEnregistrerMateriel, useMateriel, useMateriels, useReferentielMateriel } from "../hooks/useMateriel";
 
@@ -28,45 +26,66 @@ export function PageFormulaireMateriel() {
   return m ? <GardeSociete societeId={m.societe_id} retour="/materiel">{f}</GardeSociete> : f;
 }
 
+/**
+ * Le formulaire de `materielForm` (app.js l. 14737) sous l'en-tête « Matériel »
+ * sans bouton : `.form-panel`, `.field-grid`, « Enregistrer » / « Annuler ».
+ * Un refus se dit comme avant (fenêtre d'alerte, bulle d'échec), et la
+ * création ramène à la liste, où l'ancien refermait le formulaire.
+ */
 function Formulaire({ materiel, etats, categories }: { materiel: Materiel | null; etats: string[]; categories: string[] }) {
   const navigate = useNavigate();
   const enregistrer = useEnregistrerMateriel(materiel?.id);
   const initiales = saisieDepuis(materiel, etats[0] ?? "");
-  const { valeurs, erreurs, changer, valider } = useFormulaire({ ...initiales, categorie: valeurDansListe(categories, initiales.categorie) });
+  const { valeurs, changer } = useFormulaire({ ...initiales, categorie: valeurDansListe(categories, initiales.categorie) });
+  const retour = materiel ? `/materiel/${materiel.id}` : "/materiel";
+  useDefilerVersFormulaire("formZoneMateriel");
 
   function soumettre(e: FormEvent) {
     e.preventDefault();
-    const s = valider(schemaSaisieMateriel);
-    if (s) enregistrer.mutate(s, { onSuccess: (r) => void navigate(`/materiel/${r.id}`) });
+    const r = schemaSaisieMateriel.safeParse(valeurs);
+    if (!r.success) {
+      window.alert(r.error.issues[0]?.message ?? "Saisie invalide.");
+      return;
+    }
+    enregistrer.mutate(r.data, {
+      onSuccess: () => {
+        afficherToast(materiel ? "Matériel modifié." : "Matériel créé.", "success");
+        void navigate(retour);
+      },
+      onError: (err) => afficherToast(messageErreur(err)),
+    });
   }
 
   return (
-    <form onSubmit={soumettre} noValidate className="flex max-w-3xl flex-col gap-4">
-      <EnTetePage titre={materiel ? `Modifier ${materiel.nom}` : "Nouveau matériel"} />
-      {enregistrer.isError && <Alert variant="erreur">{messageErreur(enregistrer.error)}</Alert>}
-      <Card>
-        <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
-          <ChampTexte libelle="Nom du matériel" requis placeholder="Ex : Perforateur Hilti TE 60" valeur={valeurs.nom} onChange={(v) => changer("nom", v)} erreur={erreurs.nom} />
-          <ChampChoix
-            libelle="Catégorie"
-            valeur={valeurs.categorie}
-            onChange={(v) => changer("categorie", v)}
-            options={[{ valeur: "", libelle: "— Non précisé —" }, ...categories.map((c) => ({ valeur: c, libelle: c }))]}
-            aide="La liste se règle dans Réglages › Listes de choix."
-          />
-          <ChampChoix libelle="État général" valeur={valeurs.etat_general} onChange={(v) => changer("etat_general", v)} options={etats.map((e) => ({ valeur: e, libelle: e }))} />
-          <ChampTexte libelle="N° de série (optionnel)" valeur={valeurs.numero_serie} onChange={(v) => changer("numero_serie", v)} />
-          <ChampTexte libelle="Date d'achat" type="date" valeur={valeurs.date_achat} onChange={(v) => changer("date_achat", v)} erreur={erreurs.date_achat} />
-        </CardContent>
-      </Card>
-      <div className="flex gap-2">
-        <Button type="submit" disabled={enregistrer.isPending}>
-          {enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}
-        </Button>
-        <Button variant="ghost" asChild>
-          <Link to={materiel ? `/materiel/${materiel.id}` : "/materiel"}>Annuler</Link>
-        </Button>
+    <>
+      <div className="page-head">
+        <h1>Matériel</h1>
       </div>
-    </form>
+      <div id="formZoneMateriel">
+        <form className="form-panel" onSubmit={soumettre} noValidate>
+          <h3>{materiel ? "Modifier le matériel" : "Nouveau matériel"}</h3>
+          <div className="field-grid">
+            <ChampTexte libelle="Nom du matériel" placeholder="Ex : Perforateur Hilti TE 60" valeur={valeurs.nom} onChange={(v) => changer("nom", v)} />
+            <ChampChoix
+              libelle="Catégorie"
+              valeur={valeurs.categorie}
+              onChange={(v) => changer("categorie", v)}
+              options={[{ valeur: "", libelle: "— Non précisé —" }, ...categories.map((c) => ({ valeur: c, libelle: c }))]}
+            />
+            <ChampChoix libelle="État général" valeur={valeurs.etat_general} onChange={(v) => changer("etat_general", v)} options={etats.map((e) => ({ valeur: e, libelle: e }))} />
+            <ChampTexte libelle="N° de série (optionnel)" valeur={valeurs.numero_serie} onChange={(v) => changer("numero_serie", v)} />
+            <ChampTexte libelle="Date d'achat" type="date" valeur={valeurs.date_achat} onChange={(v) => changer("date_achat", v)} />
+          </div>
+          <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+            <button type="submit" className="btn primary" disabled={enregistrer.isPending}>
+              Enregistrer
+            </button>
+            <Link className="btn ghost" to={retour}>
+              Annuler
+            </Link>
+          </div>
+        </form>
+      </div>
+    </>
   );
 }

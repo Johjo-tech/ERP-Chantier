@@ -71,7 +71,7 @@ export function PageClients({ formulaire }: Props) {
         </div>
       </div>
       <BarreRecherche
-        id="recherche-client"
+        id="client"
         libelle="Rechercher un client"
         placeholder="Rechercher : nom, interlocuteur, ville, SIRET, e-mail…"
         valeur={recherche}

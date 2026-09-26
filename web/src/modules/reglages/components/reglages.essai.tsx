@@ -29,6 +29,11 @@ const numerotation = vi.hoisted(() => ({ listerCompteurs: vi.fn(), reglerCompteu
 vi.mock("@/modules/societes/api/societe", () => societe);
 vi.mock("@/modules/societes/api/reglages", () => reglages);
 vi.mock("../api/numerotation", () => numerotation);
+const gerant = vi.hoisted(() => ({ enregistrerGerant: vi.fn(), lireGerant: vi.fn(), gerantDepuisInfos: () => ({ gerant: "", gerantTelephone: "" }), schemaGerant: {} }));
+vi.mock("../api/gerant", () => gerant);
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/toast", async (original) => ({ ...(await original<typeof import("@/lib/toast")>()), afficherToast: toast }));
+
 
 const fiche: Societe = {
   id: "alpha", code: "alpha", nom: "ALPHA", raison_sociale_legale: "ALPHA Rénovation SAS", forme_juridique: "SAS", siret: null, siren: null,
@@ -64,7 +69,7 @@ describe("écran Réglages (PAR-01)", () => {
     const rail = screen.getByRole("navigation", { name: "Rubriques des réglages" });
     expect(within(rail).getByText("Comptes et invitations")).toBeInTheDocument();
     expect(within(rail).getByText("Numérotation")).toBeInTheDocument();
-    expect(await screen.findByText("Identité légale")).toBeInTheDocument();
+    expect(await screen.findByText("⚖️ Identité légale")).toBeInTheDocument();
   });
 
   it("la secrétaire voit les réglages en lecture seule, sans les comptes", async () => {
@@ -78,7 +83,7 @@ describe("écran Réglages (PAR-01)", () => {
 
   it("une rubrique interdite dans l'URL retombe sur Organisation", async () => {
     ouvrir("lecture", "/reglages/comptes");
-    expect(await screen.findByText("Identité légale")).toBeInTheDocument();
+    expect(await screen.findByText("⚖️ Identité légale")).toBeInTheDocument();
   });
 });
 
@@ -90,9 +95,11 @@ describe("Organisation (SOC-05 à 07)", () => {
 
   it("un SIRET mal formé bloque l'enregistrement", async () => {
     ouvrir("admin");
-    await userEvent.type(await screen.findByLabelText("SIRET"), "12345678901234");
+    const alerte = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    await userEvent.type(await screen.findByLabelText("SIRET / SIREN"), "12345678901234");
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
-    expect(await screen.findByText(/SIRET est incorrect/)).toBeInTheDocument();
+    // Comme `saveInfosEntreprise` : le mal formé se dit dans une fenêtre d'alerte.
+    await waitFor(() => expect(alerte).toHaveBeenCalledWith(expect.stringMatching(/SIRET est incorrect/)));
     expect(societe.modifierSociete).not.toHaveBeenCalled();
   });
 
@@ -106,7 +113,7 @@ describe("Organisation (SOC-05 à 07)", () => {
     expect(saisie.iban).toBe("FR7630006000011234567890189");
     expect(saisie).not.toHaveProperty("nom");
     expect(saisie).not.toHaveProperty("logo_url");
-    expect(await screen.findByText("Informations enregistrées.")).toBeInTheDocument();
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Informations enregistrées.", "success"));
   });
 });
 
@@ -117,10 +124,11 @@ describe("Numérotation (PAR-03)", () => {
     expect(screen.getByText(`DEV-${new Date().getFullYear()}-000042`)).toBeInTheDocument();
     await userEvent.clear(champ);
     await userEvent.type(champ, "10");
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer la numérotation" }));
-    expect(await screen.findByText(/réattribuera des numéros déjà utilisés/)).toBeInTheDocument();
+    expect(confirmer).toHaveBeenCalledWith(expect.stringMatching(/réattribuera des numéros déjà utilisés/));
     expect(numerotation.reglerCompteurs).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Confirmer et enregistrer" }));
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer la numérotation" }));
     await waitFor(() => expect(numerotation.reglerCompteurs).toHaveBeenCalled());
   });
 

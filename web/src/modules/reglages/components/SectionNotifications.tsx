@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { ChampTexte } from "@/components/formulaire/Champ";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { schemaNotifications, type ReglagesSociete } from "@/modules/societes/domain/reglages-societe";
 import { useEnregistrerReglages, useReglagesSociete } from "@/modules/societes/hooks/useSocieteReglages";
-import { CaseACocher, PiedEnregistrement } from "./champs";
+import { PiedEnregistrement } from "./champs";
 
 /** Alertes d'échéance et destinataires des rappels. */
 export function SectionNotifications() {
@@ -31,24 +30,27 @@ function FormulaireNotifications({ reglages, enregistrer }: { reglages: Reglages
   }
 
   return (
-    <form onSubmit={soumettre} noValidate>
-      <Card>
-        <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <CaseACocher libelle="Afficher les alertes d'échéance" coche={actives} onChange={setActives} desactive={!modifiable} />
-          <ChampTexte
-            libelle="Destinataires des rappels (e-mails séparés par des virgules)"
-            valeur={destinataires}
-            onChange={setDestinataires}
-            erreur={erreur}
-            placeholder="conducteur@exemple.fr, rh@exemple.fr"
-            desactive={!modifiable}
-          />
-          <PiedEnregistrement modifiable={modifiable} enCours={enregistrer.isPending} erreur={enregistrer.error} succes={enregistrer.isSuccess ? "Notifications enregistrées." : null} />
-        </CardContent>
-      </Card>
+    <form className="card" onSubmit={soumettre} noValidate>
+      <div className="card-title" style={{ marginBottom: "10px" }}>
+        🔔 Notifications
+      </div>
+      <div className="field-grid">
+        <div className="field full">
+          <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <input type="checkbox" id="rg_notifActives" checked={actives} disabled={!modifiable} onChange={(e) => setActives(e.target.checked)} /> Afficher les alertes d&apos;échéance
+          </label>
+        </div>
+        <ChampTexte
+          className="full"
+          libelle="Destinataires des rappels (emails séparés par des virgules)"
+          valeur={destinataires}
+          onChange={setDestinataires}
+          erreur={erreur}
+          placeholder="conducteur@exemple.fr, rh@exemple.fr"
+          desactive={!modifiable}
+        />
+      </div>
+      <PiedEnregistrement modifiable={modifiable} enCours={enregistrer.isPending} erreur={enregistrer.error} succes={enregistrer.isSuccess ? "Préférences enregistrées." : null} />
     </form>
   );
 }

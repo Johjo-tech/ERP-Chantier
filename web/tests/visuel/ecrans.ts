@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { ecransChantiersClientsCatalogue } from "./ecrans-chantiers";
 import { ecransFacturation } from "./ecrans-facturation";
+import { ecransParcRh } from "./ecrans-parc-rh";
 
 /**
  * La table de correspondance « écran ancien ↔ route nouvelle ».
@@ -112,11 +113,15 @@ export function partout(pixels: number, texte: number): Partial<Record<Taille, S
  * les ramène vers zéro, écran par écran.
  */
 const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
-  materiel: { bureau: { pixels: 0.02, texte: 6 } },
-  reglages: { bureau: { pixels: 0.51, texte: 86 } },
-  rh: { bureau: { pixels: 0.08, texte: 4 } },
-  statistiques: { bureau: { pixels: 0.33, texte: 50 } },
-  vehicules: { bureau: { pixels: 0.03, texte: 5 } },
+  // Repris (D-ECR-PAR-02) : identique sur le jeu `jeux/parc-rh.sql`.
+  materiel: { bureau: { pixels: 0.001, texte: 0 } },
+  // Repris : le groupe « Accès » du rail (D-ECR-PAR-08) et la carte des jours fériés (D-ECR-PAR-10).
+  reglages: { bureau: { pixels: 0.001, texte: 10 } },
+  rh: { bureau: { pixels: 0.001, texte: 0 } },
+  // Repris (D-ECR-PAR-13). Reste la ligne « Sans conducteur » et les comptes par la référence (D-STA-05),
+  // qui décalent graphiques et tableau, la plage libre et les vues par métier / par client repliées.
+  statistiques: { bureau: { pixels: 0.28, texte: 24 } },
+  vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };
 
 const TEMPS_RELATIF = [".activity-time"] as const;
@@ -247,6 +252,7 @@ export const ECRANS: readonly Ecran[] = [
   ...ecransModules(),
   // ── Facturation et devis, repris (D-ECR-FAC) ────────────────────────────
   ...ecransFacturation(),
+  ...ecransParcRh({ onglet, cliquer, partout }),
 ];
 
 /**

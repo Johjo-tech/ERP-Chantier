@@ -1,15 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { z } from "zod";
-import { ChampChoix, ChampTexte } from "@/components/formulaire/Champ";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
+import { ChampTexte } from "@/components/formulaire/Champ";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
+import type { EtablissementTrouve } from "@/modules/clients/domain/annuaire";
 import { useMembres } from "@/modules/comptes/hooks/useComptes";
-import { useMetiers } from "@/modules/reglages/hooks/useReglagesEcran";
+import { useDefilerVersFormulaire, useToastErreur } from "@/modules/materiel/components/communs";
+import { ChampSiret } from "@/modules/reglages/components/ChampsAnnuaire";
 import {
   comptesSousTraitantLiables,
   echeanceDocumentSousTraitant,
@@ -20,8 +19,8 @@ import {
   type DocumentSousTraitant,
   type SousTraitant,
 } from "../domain/intervenants";
-import { useGererIntervenants, useSeuilsRh } from "../hooks/useRh";
-import { BoutonPiece, CasesMetiers, ChoixFichier } from "./communs";
+import { useMetiersRh, useGererIntervenants, useSeuilsRh } from "../hooks/useRh";
+import { BoutonPiece, CasesMetiers } from "./communs";
 
 interface Props {
   fiche: SousTraitant | null;
@@ -30,112 +29,195 @@ interface Props {
   onFermer: () => void;
 }
 
-/** La fiche d'un sous-traitant : identité légale contrôlée, métiers, compte relié (AUTH-44), documents. */
+/**
+ * La fiche d'un sous-traitant, au HTML de `sousTraitantForm` (app.js l. 18210) :
+ * identité légale contrôlée et recherche dans l'annuaire, coordonnées, métiers,
+ * documents. En plus de l'ancien (décidés) : l'interlocuteur et le compte relié
+ * (AUTH-44), sans lesquels l'entreprise ne voit pas ses tâches au planning.
+ */
 export function FormulaireSousTraitant({ fiche, fiches, documents, onFermer }: Props) {
   const gerer = useGererIntervenants();
   const membres = useMembres();
-  const metiers = useMetiers();
-  const { valeurs, erreurs, changer, valider } = useFormulaire(valeursSousTraitant(fiche));
+  const metiers = useMetiersRh();
+  const { valeurs, changer } = useFormulaire(valeursSousTraitant(fiche));
   const [coches, setCoches] = useState<string[]>(fiche?.metiers.length ? fiche.metiers : fiche?.metier ? [fiche.metier] : []);
   const comptes = comptesSousTraitantLiables(membres.data ?? [], fiches, fiche?.id ?? null);
-  const c = (champ: keyof typeof valeurs) => ({ valeur: valeurs[champ], onChange: (v: string) => changer(champ, v), erreur: erreurs[champ] });
+  const c = (champ: keyof typeof valeurs) => ({ valeur: valeurs[champ], onChange: (v: string) => changer(champ, v) });
+  useDefilerVersFormulaire("formZoneSousTraitant");
 
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
+  function enregistrer() {
     // Les métiers vivent hors des champs texte du formulaire : ils rejoignent la saisie AVANT la validation.
-    const saisie = valider(z.preprocess((v) => ({ ...(v as object), metiers: coches }), schemaSaisieSousTraitant));
-    if (saisie) gerer.sousTraitant.mutate({ id: fiche?.id ?? null, saisie }, { onSuccess: onFermer });
+    const r = z.preprocess((v) => ({ ...(v as object), metiers: coches }), schemaSaisieSousTraitant).safeParse(valeurs);
+    if (!r.success) {
+      window.alert(r.error.issues.map((i) => i.message).join("\n"));
+      return;
+    }
+    gerer.sousTraitant.mutate(
+      { id: fiche?.id ?? null, saisie: r.data },
+      { onSuccess: () => { onFermer(); afficherToast(fiche ? "Sous-traitant modifié." : "Sous-traitant créé.", "success"); }, onError: (e) => afficherToast(messageErreur(e)) }
+    );
+  }
+
+  function depuisAnnuaire(e: EtablissementTrouve) {
+    changer("siret", e.siret);
+    changer("nom", e.nom);
+    changer("adresse", e.adresse);
+    changer("codePostal", e.codePostal);
+    changer("ville", e.ville);
+    changer("siren", e.siren);
+    if (e.tvaIntracom && !valeurs.tvaIntracom.trim()) changer("tvaIntracom", e.tvaIntracom);
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <form onSubmit={soumettre} noValidate aria-label={fiche ? "Modifier le sous-traitant" : "Nouveau sous-traitant"} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-2">
-        <h3 className="font-semibold sm:col-span-2">{fiche ? `Modifier ${fiche.nom}` : "Nouveau sous-traitant"}</h3>
-        <div className="sm:col-span-2">
-          <ChampTexte libelle="Nom / Entreprise" {...c("nom")} requis placeholder="Ex : SARL Toiture Plus" />
-        </div>
-        <ChampTexte libelle="SIRET" inputMode="numeric" {...c("siret")} />
-        <ChampTexte libelle="SIREN" inputMode="numeric" {...c("siren")} placeholder="9 chiffres" aide="Le SIREN sert à rapprocher les factures que ce sous-traitant vous adresse." />
+    <div className="form-panel" role="form" aria-label={fiche ? "Modifier le sous-traitant" : "Nouveau sous-traitant"}>
+      <h3>{fiche ? "Modifier le sous-traitant" : "Nouveau sous-traitant"}</h3>
+      <div className="field-grid">
+        <ChampTexte className="full" libelle="Nom / Entreprise" {...c("nom")} placeholder="Ex : SARL Toiture Plus" />
+        <ChampSiret id="st_siret" valeur={valeurs.siret} desactive={false} onChange={(v) => changer("siret", v)} onEtablissement={depuisAnnuaire} />
+        <ChampTexte libelle="SIREN" inputMode="numeric" {...c("siren")} placeholder="9 chiffres" />
         <ChampTexte libelle="N° de TVA intracommunautaire" {...c("tvaIntracom")} placeholder="FR…" />
-        <ChampTexte libelle="Adresse" {...c("adresse")} />
+        <div className="field full">
+          <small style={{ color: "var(--text-dim)", fontSize: "11px" }}>Le SIREN sert à rapprocher automatiquement les factures que ce sous-traitant vous adresse.</small>
+        </div>
+        <ChampTexte className="full" libelle="Adresse" {...c("adresse")} />
         <ChampTexte libelle="Code postal" {...c("codePostal")} />
         <ChampTexte libelle="Ville" {...c("ville")} />
         <ChampTexte libelle="Téléphone" type="tel" {...c("telephone")} />
-        <ChampTexte libelle="E-mail" type="email" {...c("email")} />
+        <ChampTexte libelle="Email" type="email" {...c("email")} />
+        <div className="field full">
+          <label>Métier(s)</label>
+          <CasesMetiers legende="Métier(s)" referentiel={metiers.data} coches={coches} onChange={setCoches} />
+        </div>
         <ChampTexte libelle="Interlocuteur" {...c("contactNom")} />
         <ChampTexte libelle="E-mail de l'interlocuteur" type="email" {...c("contactEmail")} />
-        <div className="sm:col-span-2">
-          <ChampChoix
-            libelle="Compte relié"
-            {...c("contactProfileId")}
-            options={[{ valeur: "", libelle: "— Aucun —" }, ...comptes]}
-            aide="Le compte (rôle sous-traitant) de l'entreprise : sans lui, elle ne voit ni ses tâches ni ses montants au planning."
-          />
+        <div className="field full">
+          <label htmlFor="st_compte">Compte relié</label>
+          <select id="st_compte" value={valeurs.contactProfileId} onChange={(e) => changer("contactProfileId", e.target.value)}>
+            {[{ valeur: "", libelle: "— Aucun —" }, ...comptes].map((o) => (
+              <option key={o.valeur} value={o.valeur}>
+                {o.libelle}
+              </option>
+            ))}
+          </select>
+          <div className="card-sub" style={{ marginTop: "4px" }}>
+            Le compte (rôle sous-traitant) de l&apos;entreprise : sans lui, elle ne voit ni ses tâches ni ses montants au planning.
+          </div>
         </div>
-        <div className="sm:col-span-2">
-          <CasesMetiers legende="Métier(s)" referentiel={(metiers.data ?? []).map((m) => m.libelle)} coches={coches} onChange={setCoches} />
+      </div>
+      {fiche ? (
+        <DocumentsSousTraitant sousTraitantId={fiche.id} documents={documents} />
+      ) : (
+        <div className="card-sub" style={{ marginTop: "14px" }}>
+          💡 Enregistrez d&apos;abord la fiche pour pouvoir ajouter ses documents (décennale, vigilance…).
         </div>
-        {gerer.sousTraitant.isError && <Alert variant="erreur" className="sm:col-span-2">{messageErreur(gerer.sousTraitant.error)}</Alert>}
-        <div className="flex gap-2 sm:col-span-2">
-          <Button type="submit" disabled={gerer.sousTraitant.isPending}>Enregistrer</Button>
-          <Button variant="ghost" onClick={onFermer}>Annuler</Button>
-        </div>
-      </form>
-      {fiche ? <DocumentsSousTraitant sousTraitantId={fiche.id} documents={documents} /> : <p className="text-sm text-muted-foreground">💡 Enregistrez d'abord la fiche pour pouvoir ajouter ses documents (décennale, vigilance…).</p>}
+      )}
+      <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+        <button type="button" className="btn primary" disabled={gerer.sousTraitant.isPending} onClick={enregistrer}>
+          Enregistrer
+        </button>
+        <button type="button" className="btn ghost" onClick={onFermer}>
+          Annuler
+        </button>
+      </div>
     </div>
   );
 }
 
+/** Vert tant que la pièce vaut, orangé à l'approche, rouge une fois expirée. */
+const COULEURS = { aucune: "#5BC97A", bientot: "#F0A82E", expire: "#EF5A6F" } as const;
+
 function DocumentsSousTraitant({ sousTraitantId, documents }: { sousTraitantId: string; documents: readonly DocumentSousTraitant[] }) {
   const gerer = useGererIntervenants();
   const seuils = useSeuilsRh();
+  const idFichier = useId();
   const [type, setType] = useState<string>(TYPES_DOC_SOUS_TRAITANT[0]);
   const [date, setDate] = useState("");
   const [fichier, setFichier] = useState<File | null>(null);
   const aujourdHui = todayISO();
-  const echec = gerer.ajouterDocument.error ?? gerer.supprimerDocument.error;
+  useToastErreur(gerer.ajouterDocument.error ?? gerer.supprimerDocument.error);
 
-  function ajouter(e: FormEvent) {
-    e.preventDefault();
+  function ajouter() {
     gerer.ajouterDocument.mutate(
       { sousTraitantId, type, dateValidite: date || null, fichier },
       {
         onSuccess: () => {
           setDate("");
           setFichier(null);
+          afficherToast("Document enregistré.", "success");
         },
       }
     );
   }
 
   return (
-    <section aria-label="Documents du sous-traitant" className="flex flex-col gap-2 rounded-md border border-border p-3 text-sm">
-      <h3 className="font-semibold">📑 Documents (décennale, vigilance URSSAF…)</h3>
-      <form onSubmit={ajouter} aria-label="Ajouter un document" className="flex flex-wrap items-end gap-2">
-        <ChampChoix libelle="Type" valeur={type} onChange={setType} options={TYPES_DOC_SOUS_TRAITANT.map((t) => ({ valeur: t, libelle: t }))} />
-        <ChampTexte libelle="Date d'expiration" type="date" valeur={date} onChange={setDate} />
-        <ChoixFichier libelle="Fichier" onFichiers={(f) => setFichier(f[0] ?? null)} nomActuel={fichier?.name} />
-        <Button type="submit" size="sm" disabled={gerer.ajouterDocument.isPending}>+ Ajouter</Button>
-      </form>
-      {echec && <Alert variant="erreur">{messageErreur(echec)}</Alert>}
-      {documents.length === 0 ? (
-        <p className="text-muted-foreground">Aucun document enregistré.</p>
-      ) : (
-        <ul className="divide-y divide-border">
-          {trierDocumentsSousTraitant(documents).map((d) => {
+    <>
+      <div className="chantier-subsection-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
+        <span>📑 Documents (décennale, vigilance URSSAF…)</span>
+      </div>
+      <div className="entretien-add-row" role="group" aria-label="Ajouter un document">
+        <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value)}>
+          {TYPES_DOC_SOUS_TRAITANT.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <input type="date" aria-label="Date d'expiration" placeholder="Date d'expiration" value={date} onChange={(e) => setDate(e.target.value)} />
+        <label className="btn small" style={{ cursor: "pointer" }} htmlFor={idFichier} title={fichier?.name}>
+          📎 Fichier
+          <input type="file" id={idFichier} accept=".pdf,image/*" style={{ display: "none" }} onChange={(e) => setFichier(e.target.files?.[0] ?? null)} />
+        </label>
+        <button type="button" className="btn primary" disabled={gerer.ajouterDocument.isPending} onClick={ajouter}>
+          + Ajouter
+        </button>
+      </div>
+      <div className="achats-list" style={{ marginTop: "10px" }}>
+        {documents.length === 0 ? (
+          <div className="empty">Aucun document enregistré.</div>
+        ) : (
+          trierDocumentsSousTraitant(documents).map((d) => {
             const alerte = echeanceDocumentSousTraitant(d.dateValidite, aujourdHui, seuils.documentLegal);
+            const couleur = COULEURS[alerte?.niveau ?? "aucune"];
             return (
-              <li key={d.id} className="flex flex-wrap items-center gap-2 py-1.5">
-                <span className="flex-1">📑 {d.type ?? d.nom}</span>
-                <span className="text-xs text-muted-foreground">{d.dateValidite ? `Expire le ${formatDateFr(d.dateValidite)}` : "Sans date d'expiration"}</span>
-                {alerte && <Badge variant={alerte.niveau === "expire" ? "danger" : "alerte"}>{alerte.niveau === "expire" ? "EXPIRÉ" : `DANS ${alerte.jours} J`}</Badge>}
-                <BoutonPiece chemin={d.fichierChemin} libelle="📎 voir" />
-                <BoutonConfirme libelle="✕" question={`Retirer « ${d.type ?? d.nom} » ?`} onConfirmer={() => gerer.supprimerDocument.mutate(d)} />
-              </li>
+              <div key={d.id} className="achat-row" style={{ "--cat-color": couleur } as CSSProperties}>
+                <div className="achat-row-icon" style={{ background: `${couleur}22`, color: couleur }}>
+                  📑
+                </div>
+                <div className="achat-row-main">
+                  <div className="achat-designation">
+                    {d.type ?? d.nom}
+                    {d.fichierChemin && (
+                      <>
+                        {" · "}
+                        <BoutonPiece chemin={d.fichierChemin} libelle="📎 voir" />
+                      </>
+                    )}
+                  </div>
+                  <div className="achat-date">
+                    {d.dateValidite ? `Expire le ${formatDateFr(d.dateValidite)}` : "Sans date d\u2019expiration"}
+                    {alerte && (
+                      <>
+                        {" "}
+                        <span className={`badge ${alerte.niveau === "expire" ? "danger" : "warn"}`}>{alerte.niveau === "expire" ? "EXPIRÉ" : `DANS ${alerte.jours} J`}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn small danger"
+                  aria-label={`Retirer ${d.type ?? d.nom}`}
+                  onClick={() => {
+                    if (window.confirm(`Retirer « ${d.type ?? d.nom} » ?`)) gerer.supprimerDocument.mutate(d);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             );
-          })}
-        </ul>
-      )}
-    </section>
+          })
+        )}
+      </div>
+    </>
   );
 }

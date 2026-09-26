@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("../api/materiels", () => api.materiels);
 vi.mock("../api/annuaires", () => api.annuaires);
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/toast", async (original) => ({ ...(await original<typeof import("@/lib/toast")>()), afficherToast: toast }));
 
 const pretEnCours = { id: "p1", materiel_id: "m1", salarie_id: "s1", personne: null, date_debut: "2026-09-20", duree_jours: 5, date_fin: null, etat_depart: "Bon état" };
 function materiel(extra: Partial<MaterielAvecPrets> = {}): MaterielAvecPrets {
@@ -69,22 +71,23 @@ describe("prêts du matériel", () => {
     expect(within(form).getByLabelText("État au prêt")).toHaveValue("Bon état");
     await within(form).findByRole("option", { name: "Thomas Martin" });
     await userEvent.selectOptions(within(form).getByLabelText(/Prêté à/), "s1");
-    await userEvent.click(within(form).getByRole("button", { name: "Prêter" }));
+    await userEvent.click(within(form).getByRole("button", { name: "+ Prêter" }));
     expect(api.materiels.preterMateriel).toHaveBeenCalledWith("m1", expect.objectContaining({ salarie_id: "s1", etat: "Bon état", duree_jours: null }));
   });
 
-  it("sans emprunteur, rien ne part et le champ le dit", async () => {
+  it("sans emprunteur, rien ne part et la bulle le dit", async () => {
     fiche("admin");
     const form = await screen.findByRole("form", { name: "Prêter" });
-    await userEvent.click(within(form).getByRole("button", { name: "Prêter" }));
-    expect(await screen.findByText("Choisissez la personne à qui prêter.")).toBeInTheDocument();
+    await userEvent.click(within(form).getByRole("button", { name: "+ Prêter" }));
+    // Comme l'ancien écran : la bulle le dit (`showToast`), rien ne part.
+    expect(toast).toHaveBeenCalledWith("Choisissez la personne à qui prêter ce matériel.");
     expect(api.materiels.preterMateriel).not.toHaveBeenCalled();
   });
 
   it("un prêt en cours se marque rendu", async () => {
     api.materiels.lireMateriel.mockResolvedValue(materiel({ prets: [pretEnCours] }));
     fiche("conducteur");
-    await userEvent.click(await screen.findByRole("button", { name: "Marquer comme rendu" }));
+    await userEvent.click(await screen.findByRole("button", { name: "✓ Marquer comme rendu" }));
     expect(api.materiels.rendreMateriel).toHaveBeenCalledWith("p1", expect.anything());
   });
 

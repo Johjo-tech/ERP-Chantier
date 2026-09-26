@@ -1,84 +1,109 @@
 import { useState } from "react";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Card } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Chargement, Erreur } from "@/components/etats/Etats";
+import { Icone } from "@/components/ui/icones";
 import { todayISO } from "@/lib/dates";
+import { useModeDiscret } from "@/lib/modeDiscret";
 import { bornesStats, PERIODES_STATS, refusPlage, type Bornes, type PeriodeStats } from "../domain/periodes";
-import { StatsClients, StatsConducteurs, StatsEquipes, StatsMetiers } from "./SectionsStatistiques";
-
-type Onglet = "conducteurs" | "metiers" | "clients" | "equipes";
-
-const ONGLETS: Record<Onglet, string> = {
-  conducteurs: "Par conducteur",
-  metiers: "Par métier",
-  clients: "Par client",
-  equipes: "Par équipe et par mois",
-};
+import { useParClient, useParConducteur } from "../hooks/useStatistiques";
+import { GraphiquesConducteurs, TableauConducteurs } from "./Barres";
+import { StatsClients, StatsEquipes, StatsMetiers } from "./SectionsStatistiques";
 
 /**
- * Statistiques (`renderStatistiques`) : admin, secrétaire, conducteur, lecture
- * (matrice « statistiques / voir »). Toujours par la RÉFÉRENCE du conducteur,
- * jamais par son nom (STA-22).
+ * Statistiques, au HTML de `renderStatistiques` (app.js l. 12168) : en-tête et
+ * période, trois tuiles, les graphiques et le tableau par conducteur, puis le
+ * chiffre d'affaires par équipe et par mois. Toujours par la RÉFÉRENCE du
+ * conducteur, jamais par son nom (D-STA-05). En plus de l'ancien (décidés) :
+ * une plage de dates libre, et les vues par métier et par client, repliées au
+ * bas de l'écran (D-ECR-PAR-13).
  */
 export function PageStatistiques() {
+  useModeDiscret();
   const jour = todayISO();
   const [periode, setPeriode] = useState<PeriodeStats>("tout");
   const [plage, setPlage] = useState<Bornes>({ du: null, au: null });
-  const [onglet, setOnglet] = useState<Onglet>("conducteurs");
   const refus = periode === "plage" ? refusPlage(plage.du ?? "", plage.au ?? "") : null;
   const bornes = bornesStats(periode, jour, plage);
 
   return (
-    <div className="flex flex-col gap-4">
-      <EnTetePage
-        titre="Statistiques"
-        sousTitre={`Période : ${PERIODES_STATS[periode].toLowerCase()}. Bons de commande comptés à leur création, devis et factures à leur date.`}
-        actions={
-          <div className="flex flex-wrap items-end gap-2">
-            <Label className="flex flex-col gap-1 text-sm">Période
-              <Select className="w-auto" value={periode} onChange={(e) => setPeriode(e.target.value as PeriodeStats)}>
-                {Object.entries(PERIODES_STATS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </Select>
-            </Label>
-            {periode === "plage" && (
-              <>
-                <Label className="flex flex-col gap-1 text-sm">Du<Input type="date" value={plage.du ?? ""} onChange={(e) => setPlage((p) => ({ ...p, du: e.target.value || null }))} /></Label>
-                <Label className="flex flex-col gap-1 text-sm">Au<Input type="date" value={plage.au ?? ""} onChange={(e) => setPlage((p) => ({ ...p, au: e.target.value || null }))} /></Label>
-              </>
-            )}
-          </div>
-        }
-      />
-      <div role="tablist" aria-label="Axes des statistiques" className="flex flex-wrap gap-1 border-b border-border">
-        {(Object.keys(ONGLETS) as Onglet[]).map((o) => (
-          <button
-            key={o}
-            type="button"
-            role="tab"
-            id={`onglet-${o}`}
-            aria-selected={onglet === o}
-            aria-controls="panneau-statistiques"
-            onClick={() => setOnglet(o)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${onglet === o ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            {ONGLETS[o]}
-          </button>
-        ))}
+    <>
+      <div className="page-head">
+        <h1>Statistiques par conducteur de travaux</h1>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          {periode === "plage" && (
+            <>
+              <input type="date" aria-label="Du" value={plage.du ?? ""} onChange={(e) => setPlage((p) => ({ ...p, du: e.target.value || null }))} style={{ width: "auto" }} />
+              <input type="date" aria-label="Au" value={plage.au ?? ""} onChange={(e) => setPlage((p) => ({ ...p, au: e.target.value || null }))} style={{ width: "auto" }} />
+            </>
+          )}
+          <select aria-label="Période" style={{ width: "auto", minWidth: "170px" }} value={periode} onChange={(e) => setPeriode(e.target.value as PeriodeStats)}>
+            {Object.entries(PERIODES_STATS).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-      <div role="tabpanel" id="panneau-statistiques" aria-labelledby={`onglet-${onglet}`}>
-        {refus ? (
-          <Card className="p-4 text-sm text-muted-foreground">{refus}</Card>
-        ) : onglet === "conducteurs" ? (
-          <StatsConducteurs bornes={bornes} jour={jour} />
-        ) : onglet === "metiers" ? (
-          <StatsMetiers bornes={bornes} jour={jour} />
-        ) : onglet === "clients" ? (
-          <StatsClients bornes={bornes} />
-        ) : (
-          <StatsEquipes bornes={bornes} />
-        )}
+      <div className="card-sub" style={{ marginBottom: "14px", marginTop: "-8px" }}>
+        Période affichée : <strong>{PERIODES_STATS[periode].toLowerCase()}</strong>. « Travaux supplémentaires » = part des bons de commande ayant eu au moins un travail signalé en plus (par le technicien, le conducteur ou le directeur), leur nombre, et leur montant une fois chiffrés en pré-facture.
       </div>
+      {refus ? <div className="empty">{refus}</div> : <Contenu bornes={bornes} jour={jour} />}
+    </>
+  );
+}
+
+function Tuile({ icone, fond, couleur, libelle, valeur }: { icone: "devis" | "factures" | "bonsCommande"; fond: string; couleur: string; libelle: string; valeur: number }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-card-top">
+        <span className="stat-icon" style={{ background: fond, color: couleur }}>
+          <Icone nom={icone} />
+        </span>
+      </div>
+      <div className="stat-label">{libelle}</div>
+      <div className="stat-num">{valeur}</div>
     </div>
+  );
+}
+
+function Contenu({ bornes, jour }: { bornes: Bornes; jour: string }) {
+  const q = useParConducteur(bornes, jour);
+  const clients = useParClient(bornes, null);
+  if (q.isPending) return <Chargement />;
+  if (q.isError) return <Erreur erreur={q.error} reessayer={() => void q.refetch()} />;
+  const stats = q.data;
+  const nbFactures = (clients.data ?? []).reduce((n, c) => n + c.nb_factures, 0);
+  return (
+    <>
+      <div className="grid-stats" style={{ marginBottom: "18px" }}>
+        <Tuile icone="devis" fond="var(--info-soft)" couleur="var(--info)" libelle="Devis effectués" valeur={stats.reduce((n, s) => n + s.devis, 0)} />
+        <Tuile icone="factures" fond="var(--success-soft)" couleur="var(--success)" libelle="Factures effectuées" valeur={nbFactures} />
+        <Tuile icone="bonsCommande" fond="var(--accent-soft)" couleur="var(--accent)" libelle="Bons de commande" valeur={stats.reduce((n, s) => n + s.bons, 0)} />
+      </div>
+      {!stats.length ? (
+        <div className="empty">Aucune donnée pour l&apos;instant — attribuez un conducteur de travaux à vos bons de commande, devis ou factures.</div>
+      ) : (
+        <>
+          <div className="card-sub" style={{ marginBottom: "16px" }}>
+            « En retard » = date de fin de travaux prévue dépassée sans que le bon de commande ait été refermé. « Taux de devis transformé » = part des devis pour lesquels une facture a été émise.
+          </div>
+          <GraphiquesConducteurs stats={stats} />
+          <TableauConducteurs stats={stats} />
+        </>
+      )}
+      <StatsEquipes bornes={bornes} />
+      <details style={{ marginTop: "28px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Par métier</summary>
+        <div style={{ marginTop: "12px" }}>
+          <StatsMetiers bornes={bornes} jour={jour} />
+        </div>
+      </details>
+      <details style={{ marginTop: "12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Par client</summary>
+        <div style={{ marginTop: "12px" }}>
+          <StatsClients bornes={bornes} />
+        </div>
+      </details>
+    </>
   );
 }

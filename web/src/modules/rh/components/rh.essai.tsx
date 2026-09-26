@@ -6,6 +6,7 @@ import { rendreAvecSession } from "@/test/session-factice";
 import { REGLAGES_SOCIETE_DEFAUT } from "@/modules/societes/domain/reglages-societe";
 import type { Salarie } from "../domain/salarie";
 import { PageFicheSalarie } from "./PageFicheSalarie";
+import { OngletSousTraitants } from "./OngletSousTraitants";
 import { PageRh } from "./PageRh";
 
 const salaries = vi.hoisted(() => ({ listerSalaries: vi.fn(), creerSalarie: vi.fn(), modifierSalarie: vi.fn(), definirEquipe: vi.fn(), supprimerSalarie: vi.fn() }));
@@ -145,11 +146,11 @@ describe("fiche salarié (RH-05, RH-06, AUTH-20)", () => {
   it("une absence se range en base avec ses jours ouvrés, et le solde se recalcule", async () => {
     dossier.listerAbsences.mockResolvedValue([{ id: "a1", salarieId: "s1", type: "Congé payé", dateDebut: "2026-08-03", dateFin: "2026-08-07", nbJours: 5, commentaire: null, justificatifChemin: null, justificatifNom: null }]);
     fiche("admin");
-    expect(await screen.findByText("20,0 jour(s)")).toBeInTheDocument();
-    const form = screen.getByRole("form", { name: "Ajouter une absence" });
+    expect(await screen.findByDisplayValue("20.0 jour(s)")).toBeInTheDocument();
+    const form = screen.getByRole("group", { name: "Ajouter une absence" });
     await userEvent.type(within(form).getByLabelText("Début"), "2026-10-05");
     await userEvent.type(within(form).getByLabelText("Fin"), "2026-10-09");
-    await userEvent.click(within(form).getByRole("button", { name: "+ Ajouter l'absence" }));
+    await userEvent.click(within(form).getByRole("button", { name: "+ Ajouter" }));
     await waitFor(() => expect(dossier.ajouterAbsence).toHaveBeenCalledWith("alpha", "s1", expect.objectContaining({ type: "Congé payé", dateDebut: "2026-10-05" }), 5, expect.any(String), null));
   });
 
@@ -168,17 +169,18 @@ describe("fiche salarié (RH-05, RH-06, AUTH-20)", () => {
 
 describe("sous-traitants (PAR-06, AUTH-44)", () => {
   it("un SIRET mal formé bloque l'enregistrement", async () => {
-    rendreAvecSession(<PageRh />, { role: "admin", chemin: "/rh?vue=sous-traitants" });
+    rendreAvecSession(<OngletSousTraitants />, { role: "admin" });
     await userEvent.click(await screen.findByRole("button", { name: "+ Nouveau sous-traitant" }));
     await userEvent.type(screen.getByLabelText(/Nom \/ Entreprise/), "Toit Plus");
-    await userEvent.type(screen.getByLabelText("SIRET"), "12345678901234");
+    const alerte = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    await userEvent.type(screen.getByLabelText("SIRET / SIREN"), "12345678901234");
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
-    expect(await screen.findByText("Le SIRET est incorrect : sa clé de contrôle ne tombe pas juste.")).toBeInTheDocument();
+    await waitFor(() => expect(alerte).toHaveBeenCalledWith(expect.stringMatching(/Le SIRET est incorrect : sa clé de contrôle ne tombe pas juste\./)));
     expect(intervenants.enregistrerSousTraitant).not.toHaveBeenCalled();
   });
 
   it("le conducteur voit la liste mais ne crée pas de sous-traitant", async () => {
-    rendreAvecSession(<PageRh />, { role: "conducteur", chemin: "/rh?vue=sous-traitants" });
+    rendreAvecSession(<OngletSousTraitants />, { role: "conducteur" });
     expect(await screen.findByText("Aucun sous-traitant enregistré pour cette société.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "+ Nouveau sous-traitant" })).not.toBeInTheDocument();
   });

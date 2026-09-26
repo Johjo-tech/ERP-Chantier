@@ -6,6 +6,8 @@ import { BlocFeries } from "./BlocFeries";
 
 const api = vi.hoisted(() => ({ lireFeriesAlsaceMoselle: vi.fn(), definirFeriesAlsaceMoselle: vi.fn() }));
 vi.mock("@/modules/societes/api/feries", () => api);
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/toast", async (original) => ({ ...(await original<typeof import("@/lib/toast")>()), afficherToast: toast }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -20,7 +22,7 @@ describe("Réglages › Organisation › Jours fériés (PLN-53)", () => {
     expect(cas).not.toBeChecked();
     await userEvent.click(cas);
     await waitFor(() => expect(api.definirFeriesAlsaceMoselle).toHaveBeenCalledWith("alpha", true));
-    expect(await screen.findByText("Réglage des jours fériés enregistré.")).toBeInTheDocument();
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Réglage des jours fériés enregistré.", "success"));
   });
 
   it("le conducteur lit le réglage sans pouvoir le changer", async () => {

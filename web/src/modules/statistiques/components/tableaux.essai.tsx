@@ -152,18 +152,18 @@ describe("tableau de bord du terrain", () => {
 });
 
 describe("statistiques", () => {
-  it("par conducteur, puis par métier, par client et par équipe", async () => {
+  it("par conducteur, puis par équipe ; métier et client repliés au bas de l'écran", async () => {
     rendreAvecSession(<PageStatistiques />, { role: "admin" });
     const ligne = (await screen.findByRole("cell", { name: "Christophe Conducteur" })).closest("tr") as HTMLElement;
-    // 16 bons dont 4 en retard → 75 % dans les temps, 25 % en retard.
-    expect(within(ligne).getByText("75 % (12)")).toBeInTheDocument();
-    expect(within(ligne).getByText("25 % (4)")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Par métier" }));
-    expect(await screen.findByRole("cell", { name: "Peinture" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Par client" }));
-    expect(await screen.findByRole("link", { name: "OPAC du Rhône" })).toHaveAttribute("href", "/factures/reglements/dossier?client=OPAC%20du%20Rh%C3%B4ne");
-    await userEvent.click(screen.getByRole("tab", { name: "Par équipe et par mois" }));
+    // 16 bons dont 4 en retard → 75 % dans les temps, 25 % en retard (pastilles de l'ancien : « 75% » puis « (12) »).
+    expect(within(ligne).getByText("75%")).toBeInTheDocument();
+    expect(within(ligne).getByText("(12)")).toBeInTheDocument();
+    expect(within(ligne).getByText("25%")).toBeInTheDocument();
     expect(await screen.findByRole("cell", { name: "Non attribué" })).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Par métier"));
+    expect(await screen.findByRole("cell", { name: "Peinture" })).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Par client"));
+    expect(await screen.findByRole("link", { name: "OPAC du Rhône" })).toHaveAttribute("href", "/factures/reglements/dossier?client=OPAC%20du%20Rh%C3%B4ne");
   });
 
   it("une plage incomplète ne lance rien et dit pourquoi", async () => {

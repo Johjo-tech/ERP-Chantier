@@ -13,6 +13,8 @@ import { TYPE_HABILITATION, type DocumentRh } from "../domain/documents";
 import type { DocumentSousTraitant, PlanConducteur, SaisieEquipe, SaisieSousTraitant } from "../domain/intervenants";
 import type { SaisieSalarie } from "../domain/salarie";
 import type { SaisieVisite, VisiteMedicale } from "../domain/visites";
+import { referentielMetiers } from "@/modules/commandes/domain/metiers";
+import { useMetiers } from "@/modules/reglages/hooks/useReglagesEcran";
 
 export const clesRh = {
   tout: (id: string) => ["rh", id] as const,
@@ -25,6 +27,16 @@ export const clesRh = {
   documentsSousTraitants: (id: string) => ["rh", id, "documents-sous-traitants"] as const,
   fichesConducteur: (id: string) => ["rh", id, "fiches-conducteur"] as const,
 };
+
+/**
+ * Les métiers proposés par les écrans RH, dans l'ordre de `metiersDisponibles`
+ * (app.js l. 18643) : dédoublonnés sans tenir compte de la casse ni des accents,
+ * puis triés à la française. Seuls les métiers DÉCLARÉS y entrent (D-ECR-PAR-06).
+ */
+export function useMetiersRh(): { data: string[]; isPending: boolean } {
+  const metiers = useMetiers();
+  return { data: referentielMetiers((metiers.data ?? []).map((m) => m.libelle)), isPending: metiers.isPending };
+}
 
 export function useDroitsRh() {
   const role = useSession().roleEffectif;

@@ -1,8 +1,9 @@
 /**
- * La barre de recherche des listes de l'ancien écran (`barreRecherche`,
- * app.js l. 4446) : un champ, et « 3 sur 12 » à côté dès qu'une recherche
- * écarte des fiches. Rien quand elle n'écarte rien — l'ancien ne disait pas
- * « 12 sur 12 ».
+ * La barre de recherche des listes de l'ancien écran (`barreRecherche`, app.js
+ * l. 4446) : un champ `search` pleine largeur dans `.barre-recherche`, et le
+ * compteur « 3 sur 12 » à droite dès que la recherche écarte une fiche.
+ * Le libellé caché remplace l'absence de `<label>` de l'ancien sans rien
+ * changer à l'écran.
  */
 export function BarreRecherche({
   id,
@@ -21,15 +22,14 @@ export function BarreRecherche({
   total: number;
   libelle: string;
 }) {
-  const filtre = valeur.trim() !== "" && affiches !== total;
+  const compte = valeur.trim() && affiches !== total ? `${affiches} sur ${total}` : "";
   return (
     <div className="barre-recherche">
-      <input type="search" id={id} aria-label={libelle} value={valeur} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
-      {filtre && (
-        <span className="compteur-resultats" aria-live="polite">
-          {affiches} sur {total}
-        </span>
-      )}
+      <label htmlFor={`recherche-${id}`} className="sr-only">
+        {libelle}
+      </label>
+      <input type="search" id={`recherche-${id}`} value={valeur} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      {compte && <span className="compteur-resultats">{compte}</span>}
     </div>
   );
 }

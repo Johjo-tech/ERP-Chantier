@@ -1,13 +1,11 @@
-import { useState, type FormEvent } from "react";
-import { Chargement, Erreur, Vide } from "@/components/etats/Etats";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Input } from "@/components/ui/input";
+import { useState, type ReactNode } from "react";
+import { Chargement, Erreur } from "@/components/etats/Etats";
+import { BarreRecherche } from "@/components/ui/barre-recherche";
 import { messageErreur } from "@/lib/erreurs";
-import { cn } from "@/lib/utils";
+import { correspond } from "@/lib/recherche";
+import { afficherToast } from "@/lib/toast";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
+import { useDefilerVersFormulaire } from "@/modules/materiel/components/communs";
 import type { Entree } from "../api/listes";
 import { CLES_DOMAINES, DOMAINES_LISTES, echange, ordonner, prochainePosition, schemaSaisieEntree, type DomaineListe } from "../domain/listes";
 import { useEcrireEntrees, useEntrees } from "../hooks/useReglagesEcran";
@@ -15,113 +13,167 @@ import { ListeMetiers } from "./ListeMetiers";
 
 type Onglet = "metiers" | DomaineListe;
 
-/** Les listes de choix de la société, une par onglet ; les métiers gardent leur formulaire à couleurs (PAR-04, PAR-05). */
-export function SectionListes() {
-  const [onglet, setOnglet] = useState<Onglet>("metiers");
-  const onglets: { id: Onglet; titre: string }[] = [{ id: "metiers", titre: "Métiers" }, ...CLES_DOMAINES.map((d) => ({ id: d, titre: DOMAINES_LISTES[d].titre }))];
+/** `DOMAINES_REFERENTIEL.metiers` de l'ancien : la seule liste qui garde son propre écran. */
+const METIERS = { titre: "Métiers", aide: "Les corps d'état de la société. Ils servent aux bons, aux tâches, aux équipes et aux sous-totaux par métier." };
+
+/**
+ * Les onglets et la phrase d'aide, communs à toutes les listes
+ * (`ongletsReferentiel`, app.js l. 17688).
+ */
+function OngletsListes({ onglet, onChange }: { onglet: Onglet; onChange: (o: Onglet) => void }) {
+  const onglets: { id: Onglet; titre: string }[] = [{ id: "metiers", titre: METIERS.titre }, ...CLES_DOMAINES.map((d) => ({ id: d, titre: DOMAINES_LISTES[d].titre }))];
+  const aide = onglet === "metiers" ? METIERS.aide : DOMAINES_LISTES[onglet].aide;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Listes de choix</CardTitle>
-        <div role="tablist" aria-label="Listes" className="flex flex-wrap gap-1 pt-2">
-          {onglets.map((o) => (
-            <button
-              key={o.id}
-              role="tab"
-              type="button"
-              aria-selected={o.id === onglet}
-              onClick={() => setOnglet(o.id)}
-              className={cn("rounded-md px-3 py-1 text-sm hover:bg-muted", o.id === onglet && "bg-primary/10 font-medium text-primary")}
-            >
-              {o.titre}
-            </button>
-          ))}
-        </div>
-      </CardHeader>
-      <CardContent role="tabpanel">{onglet === "metiers" ? <ListeMetiers /> : <ListeReferentiel key={onglet} domaine={onglet} />}</CardContent>
-    </Card>
+    <>
+      <div className="plus-subnav" role="tablist" aria-label="Listes" style={{ marginBottom: "12px", marginTop: "30px" }}>
+        {onglets.map((o) => (
+          <button key={o.id} type="button" role="tab" aria-selected={o.id === onglet} className={`plus-subnav-btn ${o.id === onglet ? "active" : ""}`} onClick={() => onChange(o.id)}>
+            {o.titre}
+          </button>
+        ))}
+      </div>
+      <div className="card-sub" style={{ marginBottom: "12px" }}>
+        {aide}
+      </div>
+    </>
   );
 }
 
-function ListeReferentiel({ domaine }: { domaine: DomaineListe }) {
+/** Les listes de choix de la société, une par onglet (`renderReferentielsSection`, app.js l. 17697) ; les métiers gardent leur écran (PAR-04, PAR-05). */
+export function SectionListes() {
+  const [onglet, setOnglet] = useState<Onglet>("metiers");
+  if (onglet === "metiers") {
+    return (
+      <>
+        <OngletsListes onglet={onglet} onChange={setOnglet} />
+        <ListeMetiers />
+      </>
+    );
+  }
+  return <ListeReferentiel key={onglet} domaine={onglet} onglets={<OngletsListes onglet={onglet} onChange={setOnglet} />} />;
+}
+
+function ListeReferentiel({ domaine, onglets }: { domaine: DomaineListe; onglets: ReactNode }) {
   const def = DOMAINES_LISTES[domaine];
   const entrees = useEntrees();
   const ecrire = useEcrireEntrees();
   const modifiable = usePermission("reglages", "modifier");
-  const [nouveau, setNouveau] = useState("");
-  const [enEdition, setEnEdition] = useState<{ id: string; libelle: string } | null>(null);
-  const [refus, setRefus] = useState<string | null>(null);
+  const [recherche, setRecherche] = useState("");
+  const [edition, setEdition] = useState<Entree | "nouvelle" | null>(null);
 
-  if (entrees.isPending) return <Chargement />;
-  if (entrees.isError) return <Erreur erreur={entrees.error} reessayer={() => void entrees.refetch()} />;
-  const liste = ordonner(entrees.data.filter((e) => e.domaine === domaine));
-  const erreur = [ecrire.creer, ecrire.renommer, ecrire.supprimer, ecrire.placer].find((m) => m.isError)?.error;
-
-  function ajouter(e: FormEvent) {
-    e.preventDefault();
-    const r = schemaSaisieEntree.safeParse({ libelle: nouveau });
-    if (!r.success) return setRefus(r.error.issues[0]?.message ?? "Libellé invalide.");
-    setRefus(null);
-    ecrire.creer.mutate({ domaine, libelle: r.data.libelle, position: prochainePosition(liste) }, { onSuccess: () => setNouveau("") });
-  }
-
-  function renommer(e: FormEvent) {
-    e.preventDefault();
-    if (!enEdition) return;
-    const r = schemaSaisieEntree.safeParse({ libelle: enEdition.libelle });
-    if (!r.success) return setRefus(r.error.issues[0]?.message ?? "Libellé invalide.");
-    setRefus(null);
-    ecrire.renommer.mutate({ id: enEdition.id, libelle: r.data.libelle }, { onSuccess: () => setEnEdition(null) });
-  }
-
+  const liste = entrees.data ? ordonner(entrees.data.filter((e) => e.domaine === domaine)) : [];
+  const affichees = liste.filter((e) => correspond(recherche, e.libelle, e.code));
   const deplacer = (e: Entree, sens: -1 | 1) => {
     const p = echange(liste, e.id, sens);
-    if (p) ecrire.placer.mutate(p);
+    if (p) ecrire.placer.mutate(p, { onError: (err) => afficherToast(messageErreur(err)) });
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">{def.aide}</p>
-      {(refus || erreur) && <Alert variant="erreur">{refus ?? messageErreur(erreur)}</Alert>}
-      {liste.length === 0 ? (
-        <Vide message="Aucune entrée dans cette liste." />
-      ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-          {liste.map((e, i) => (
-            <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-              {enEdition?.id === e.id ? (
-                <form onSubmit={renommer} className="flex flex-1 gap-2">
-                  <Input aria-label="Nouveau libellé" value={enEdition.libelle} onChange={(ev) => setEnEdition({ id: e.id, libelle: ev.target.value })} autoFocus />
-                  <Button type="submit" size="sm">Enregistrer</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEnEdition(null)}>Annuler</Button>
-                </form>
-              ) : (
-                <span className="flex items-center gap-2">
-                  {e.couleur && <span aria-hidden="true" className="h-3 w-3 rounded" style={{ background: e.couleur }} />}
+    <>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px" }}>
+        <span>Listes de choix</span>
+        {modifiable && (
+          <button type="button" className="btn small primary" onClick={() => setEdition("nouvelle")}>
+            + Nouvelle {def.singulier}
+          </button>
+        )}
+      </div>
+      {onglets}
+      <BarreRecherche id="referentiel" libelle={`Rechercher dans ${def.titre}`} valeur={recherche} onChange={setRecherche} placeholder="Rechercher…" affiches={affichees.length} total={liste.length} />
+      <div id="formZoneReferentiel">
+        {edition && <FormulaireEntree key={edition === "nouvelle" ? "nouvelle" : edition.id} domaine={domaine} entree={edition === "nouvelle" ? null : edition} position={prochainePosition(liste)} onFermer={() => setEdition(null)} />}
+      </div>
+      <div id="liste-referentiel">
+        {entrees.isPending && <Chargement />}
+        {entrees.isError && <Erreur erreur={entrees.error} reessayer={() => void entrees.refetch()} />}
+        {entrees.isSuccess && affichees.length === 0 && <div className="empty">{recherche.trim() ? "Aucun entrée ne correspond à la recherche." : "Aucune entrée dans cette liste."}</div>}
+        {affichees.map((e, i) => (
+          <div key={e.id} className="card">
+            <div className="card-row">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {e.couleur && <span style={{ width: "16px", height: "16px", borderRadius: "4px", background: e.couleur, flexShrink: 0, border: "1px solid rgba(0,0,0,.1)" }} />}
+                <div className="card-title">
                   {e.icone ? `${e.icone} ` : ""}
                   {e.libelle}
-                  {e.code && <code className="text-xs text-muted-foreground">{e.code}</code>}
-                </span>
-              )}
-              {modifiable && enEdition?.id !== e.id && (
-                <span className="flex gap-1">
-                  <Button size="sm" variant="ghost" aria-label={`Monter ${e.libelle}`} disabled={i === 0} onClick={() => deplacer(e, -1)}>↑</Button>
-                  <Button size="sm" variant="ghost" aria-label={`Descendre ${e.libelle}`} disabled={i === liste.length - 1} onClick={() => deplacer(e, 1)}>↓</Button>
-                  <Button size="sm" variant="outline" onClick={() => setEnEdition({ id: e.id, libelle: e.libelle })}>Renommer</Button>
-                  <BoutonConfirme libelle="Supprimer" question={`Supprimer « ${e.libelle} » ?`} onConfirmer={() => ecrire.supprimer.mutate(e.id)} />
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {modifiable && (
-        <form onSubmit={ajouter} className="flex gap-2">
-          <Input aria-label={`Nouvelle ${def.singulier}`} placeholder={`Nouvelle ${def.singulier}`} value={nouveau} onChange={(e) => setNouveau(e.target.value)} />
-          <Button type="submit" disabled={ecrire.creer.isPending}>Ajouter</Button>
-        </form>
-      )}
-      <p className="text-xs text-muted-foreground">Le code interne est posé à la création et ne change plus : les fiches qui emploient une valeur la gardent.</p>
+                </div>
+              </div>
+              {e.code && <span className="card-sub mono">{e.code}</span>}
+            </div>
+            {modifiable && (
+              <div style={{ marginTop: "8px", display: "flex", gap: "8px" }}>
+                <button type="button" className="btn small ghost" title="Monter" aria-label={`Monter ${e.libelle}`} disabled={i === 0} onClick={() => deplacer(e, -1)}>
+                  ▲
+                </button>
+                <button type="button" className="btn small ghost" title="Descendre" aria-label={`Descendre ${e.libelle}`} disabled={i === affichees.length - 1} onClick={() => deplacer(e, 1)}>
+                  ▼
+                </button>
+                <button type="button" className="btn small" onClick={() => setEdition(e)}>
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  className="btn small danger"
+                  title="Les fiches qui portent cette valeur la gardent : elle continuera d'être proposée tant qu'une fiche l'emploie."
+                  onClick={() => {
+                    if (window.confirm("Supprimer définitivement cet élément ?")) ecrire.supprimer.mutate(e.id, { onError: (err) => afficherToast(messageErreur(err)) });
+                  }}
+                >
+                  Supprimer
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** `referentielForm` (app.js l. 17745) : le libellé ; le code, posé par l'application, se lit sans se changer. */
+function FormulaireEntree({ domaine, entree, position, onFermer }: { domaine: DomaineListe; entree: Entree | null; position: number; onFermer: () => void }) {
+  const def = DOMAINES_LISTES[domaine];
+  const ecrire = useEcrireEntrees();
+  const [libelle, setLibelle] = useState(entree?.libelle ?? "");
+  useDefilerVersFormulaire("formZoneReferentiel");
+
+  function enregistrer() {
+    const r = schemaSaisieEntree.safeParse({ libelle });
+    if (!r.success) {
+      window.alert("Le libellé est requis.");
+      return;
+    }
+    const fini = { onSuccess: onFermer, onError: (e: unknown) => afficherToast(messageErreur(e)) };
+    if (entree) ecrire.renommer.mutate({ id: entree.id, libelle: r.data.libelle }, fini);
+    else ecrire.creer.mutate({ domaine, libelle: r.data.libelle, position }, fini);
+  }
+
+  return (
+    <div className="form-panel">
+      <h3>
+        {entree ? "Modifier" : "Nouvelle"} {def.singulier} — {def.titre}
+      </h3>
+      <div className="field-grid">
+        <div className="field full">
+          <label htmlFor="ref_libelle">Libellé</label>
+          <input type="text" id="ref_libelle" value={libelle} placeholder={`Ex : ${def.singulier === "unité" ? "m²" : "Échafaudage"}`} onChange={(e) => setLibelle(e.target.value)} />
+        </div>
+        {entree?.code && (
+          <div className="field full">
+            <div className="reglage-titre">Code interne</div>
+            <div className="card-sub">
+              <code>{entree.code}</code> — posé par l&apos;application, il ne se change pas : c&apos;est lui que l&apos;écran teste pour ouvrir les champs particuliers.
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+        <button type="button" className="btn primary" disabled={ecrire.creer.isPending || ecrire.renommer.isPending} onClick={enregistrer}>
+          Enregistrer
+        </button>
+        <button type="button" className="btn ghost" onClick={onFermer}>
+          Annuler
+        </button>
+      </div>
     </div>
   );
 }

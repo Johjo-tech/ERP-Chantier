@@ -19,7 +19,10 @@ const BONS: BonClient[] = [
   { ...base, id: "rouge", numero_bc: "CMD-1", adresse_locataire: "3 place Bellecour" },
 ];
 
-vi.mock("../hooks/useEspaceClient", () => ({ useBonsClient: () => ({ isPending: false, isError: false, data: BONS, refetch: vi.fn() }) }));
+vi.mock("../hooks/useEspaceClient", () => ({
+  useBonsClient: () => ({ isPending: false, isError: false, data: BONS, refetch: vi.fn() }),
+  useAccesClients: () => [{ clientId: "c", clientNom: "OPAC du Rhône", societeNom: "Réno Confort" }],
+}));
 
 function ouvrir() {
   return render(<MemoryRouter><PageBonsClient /></MemoryRouter>);
@@ -28,11 +31,12 @@ function ouvrir() {
 describe("suivi des bons par le client (ESP-01 à ESP-03)", () => {
   it("ce qui attend d'abord : rouge, jaune, orange, vert", () => {
     ouvrir();
+    expect(screen.getByText("OPAC du Rhône · Suivi en temps réel par Réno Confort.")).toBeInTheDocument();
     const cartes = within(screen.getByRole("list", { name: "Bons de commande" })).getAllByRole("listitem");
     expect(cartes.map((c) => within(c).getByText(/^BC n°/).textContent)).toEqual(["BC n° CMD-1", "BC n° CMD-2", "BC n° CMD-3", "BC n° CMD-4"]);
-    expect(within(cartes[1] as HTMLElement).getByText("Pièce : Mitigeur thermostatique")).toBeInTheDocument();
+    expect(within(cartes[1] as HTMLElement).getByText("🔧 Pièce : Mitigeur thermostatique")).toBeInTheDocument();
     expect(within(cartes[1] as HTMLElement).getByText(/Locataire injoignable/)).toBeInTheDocument();
-    expect(within(cartes[2] as HTMLElement).getByText("Planifié le 02/10/2026 à 08:30")).toBeInTheDocument();
+    expect(within(cartes[2] as HTMLElement).getByText("🟠 Planifié le 02/10/2026 à 08:30")).toBeInTheDocument();
   });
 
   it("les tuiles comptent la recherche et filtrent d'un geste", async () => {

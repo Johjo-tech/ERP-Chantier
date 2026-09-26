@@ -1,6 +1,4 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useToastErreur } from "@/modules/materiel/components/communs";
 import { libelleDepuisNomFichier, TYPE_HABILITATION, type DocumentRh } from "../domain/documents";
 import { useDroitsRh, useGererDossier, useSeuilsRh, type HabilitationEnAttente } from "../hooks/useRh";
 import { ChoixFichier } from "./communs";
@@ -14,51 +12,86 @@ interface Props {
 }
 
 /**
- * Habilitations et certifications (CACES, habilitation électrique, AIPR).
- * L'ancien bloc écrivait un tableau sans colonne : tout se perdait au
- * rechargement. Elles vont au dossier (type `habilitation`) ; choisies avant
- * l'enregistrement, elles attendent et partent avec la fiche.
+ * Habilitations et certifications (CACES, habilitation électrique, AIPR), au
+ * HTML de `habilitationsZoneHTML` (app.js l. 16576). Elles vont au dossier
+ * (type `habilitation`, D-RH-03) ; choisies avant l'enregistrement, elles
+ * attendent et partent avec la fiche.
  */
 export function SectionHabilitations({ salarieId, documents, enAttente, onEnAttente }: Props) {
   const droits = useDroitsRh();
   const seuils = useSeuilsRh();
   const gerer = useGererDossier();
+  useToastErreur(gerer.supprimerDocument.error);
   const deja = documents.filter((d) => d.type === TYPE_HABILITATION);
   const maj = (cle: string, champ: "nom" | "dateExpiration", valeur: string) => onEnAttente(enAttente.map((h) => (h.cle === cle ? { ...h, [champ]: valeur } : h)));
   const ajouter = (fichiers: (File | null)[]) =>
     onEnAttente([...enAttente, ...fichiers.map((fichier) => ({ cle: crypto.randomUUID(), nom: fichier ? libelleDepuisNomFichier(fichier.name) : "", dateExpiration: "", fichier }))]);
 
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <p className="text-muted-foreground">Joignez l'attestation (PDF ou image) et sa date de fin de validité : sans elle, aucune alerte ne préviendra de son expiration.</p>
+    <>
+      <p className="card-sub">CACES, habilitation électrique, AIPR… Joignez l&apos;attestation (PDF ou image) et sa date de fin de validité : sans elle, aucune alerte ne préviendra de son expiration.</p>
       {deja.length > 0 && (
-        <ul className="divide-y divide-border">
+        <div style={{ marginTop: "8px" }}>
           {deja.map((d) => (
-            <LigneDocument key={d.id} doc={d} seuil={seuils.habilitation} modifier={null} retirer={droits.supprimer ? () => gerer.supprimerDocument.mutate(d) : null} />
+            <LigneDocument
+              key={d.id}
+              doc={d}
+              seuil={seuils.habilitation}
+              modifier={null}
+              retirer={
+                droits.supprimer
+                  ? () => {
+                      if (window.confirm("Retirer ce document du dossier ? Le fichier joint sera supprimé.")) gerer.supprimerDocument.mutate(d);
+                    }
+                  : null
+              }
+            />
           ))}
-        </ul>
-      )}
-      {enAttente.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {enAttente.map((h, i) => (
-            <li key={h.cle} className="flex flex-wrap items-center gap-2">
-              <Input aria-label={`Intitulé de l'habilitation ${i + 1}`} className="min-w-48 flex-1" value={h.nom} placeholder="Ex : CACES R486, Habilitation électrique B1V…" onChange={(e) => maj(h.cle, "nom", e.target.value)} />
-              <Input aria-label={`Fin de validité de l'habilitation ${i + 1}`} type="date" className="w-auto" value={h.dateExpiration} onChange={(e) => maj(h.cle, "dateExpiration", e.target.value)} />
-              <span className="text-xs text-muted-foreground">{h.fichier ? `📎 ${h.fichier.name}` : "sans fichier"}</span>
-              <Badge variant="alerte" title="Sera déposée à l'enregistrement de la fiche">à déposer</Badge>
-              <Button size="sm" variant="ghost" aria-label={`Retirer l'habilitation ${i + 1}`} onClick={() => onEnAttente(enAttente.filter((x) => x.cle !== h.cle))}>✕</Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {!deja.length && !enAttente.length && <p className="text-muted-foreground">Aucune habilitation renseignée.</p>}
-      {droits.modifier && (
-        <div className="flex flex-wrap items-center gap-2">
-          <ChoixFichier libelle="Joindre des habilitations" multiple onFichiers={(f) => ajouter(f)} />
-          <Button size="sm" variant="outline" onClick={() => ajouter([null])}>+ Sans fichier</Button>
-          {!salarieId && <span className="text-xs text-muted-foreground">Elles seront déposées à l'enregistrement de la fiche.</span>}
         </div>
       )}
-    </div>
+      {enAttente.length > 0 && (
+        <div style={{ marginTop: "8px" }}>
+          {enAttente.map((h, i) => (
+            <div key={h.cle} className="chantier-file-row">
+              <span style={{ flex: 1, minWidth: 0, display: "flex", gap: "8px", alignItems: "center" }}>
+                <input
+                  type="text"
+                  aria-label={`Intitulé de l'habilitation ${i + 1}`}
+                  value={h.nom}
+                  placeholder="Ex : CACES R486, Habilitation électrique B1V…"
+                  style={{ flex: 1, minWidth: 0 }}
+                  onChange={(e) => maj(h.cle, "nom", e.target.value)}
+                />
+                <input
+                  type="date"
+                  aria-label={`Fin de validité de l'habilitation ${i + 1}`}
+                  value={h.dateExpiration}
+                  style={{ width: "auto" }}
+                  title="Fin de validité"
+                  onChange={(e) => maj(h.cle, "dateExpiration", e.target.value)}
+                />
+              </span>
+              <span className="card-sub">{h.fichier ? `📎 ${h.fichier.name}` : "sans fichier"}</span>
+              <span className="badge warn" title="Sera déposée à l'enregistrement de la fiche">
+                à déposer
+              </span>
+              <button type="button" className="btn small danger" aria-label={`Retirer l'habilitation ${i + 1}`} onClick={() => onEnAttente(enAttente.filter((x) => x.cle !== h.cle))}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!deja.length && !enAttente.length && <div className="empty">Aucune habilitation renseignée.</div>}
+      {droits.modifier && (
+        <div className="achat-salarie-zone" style={{ marginTop: "10px" }}>
+          <ChoixFichier libelle="Joindre des habilitations" multiple primaire sansNom onFichiers={(f) => ajouter(f)} />
+          <button type="button" className="btn small" onClick={() => ajouter([null])}>
+            + Sans fichier
+          </button>
+          {!salarieId && <span className="card-sub">Elles seront déposées à l&apos;enregistrement de la fiche.</span>}
+        </div>
+      )}
+    </>
   );
 }

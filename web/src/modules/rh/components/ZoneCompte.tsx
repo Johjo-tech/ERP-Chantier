@@ -1,30 +1,44 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { BoutonConfirme } from "@/components/ui/confirmation";
-import { Input, Select } from "@/components/ui/input";
-import { formatDateFr } from "@/lib/dates";
+import { formatDateFr, jourIso } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
+import { useToastErreur } from "@/modules/materiel/components/communs";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { invitationEnAttente, libelleRole, messageInvitation, MESSAGES_ISSUE, ROLES_INVITATION, schemaSaisieInvitation } from "@/modules/comptes/domain/comptes";
 import { useGererComptes, useInvitations, useMembres } from "@/modules/comptes/hooks/useComptes";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
 
 /**
- * Le compte du salarié (RH-05). Le compte ne se rattache plus à la main — un
- * homonyme choisi de travers donnait ses droits à quelqu'un d'autre : il se
- * crée par invitation, à l'adresse de la personne, et la base l'inscrit à la
- * confirmation. Réutilise `comptes/api` (même fonction de bord, mêmes règles).
+ * Le compte du salarié (RH-05), au HTML de `zoneInvitationHTML` (app.js
+ * l. 16465). Le compte ne se rattache plus à la main — un homonyme choisi de
+ * travers donnait ses droits à quelqu'un d'autre : il se crée par invitation,
+ * à l'adresse de la personne, et la base l'inscrit à la confirmation.
  */
 export function ZoneCompte({ salarieId, profileId, email, rolePropose }: { salarieId: string | null; profileId: string | null; email: string; rolePropose: RoleMembre }) {
   const membres = useMembres();
   const peutInviter = usePermission("utilisateurs", "creer");
   if (profileId) {
     const nom = membres.data?.find((m) => m.profileId === profileId)?.nom;
-    return <p className="text-sm text-success">✓ Compte rattaché{nom ? ` — ${nom}` : ""}.</p>;
+    return (
+      <div className="card-sub" style={{ marginTop: "6px", color: "#15803d" }}>
+        ✓ Compte rattaché{nom ? ` — ${nom}` : ""}.
+      </div>
+    );
   }
-  if (!peutInviter) return <p className="text-sm text-muted-foreground">⚠ Sans compte. Seul un administrateur peut lui en créer un.</p>;
-  if (!salarieId) return <p className="text-sm text-muted-foreground">Enregistrez la fiche, puis invitez-le à se créer un compte : le bloc apparaîtra ici.</p>;
+  if (!peutInviter)
+    return (
+      <div className="card-sub" style={{ marginTop: "6px" }}>
+        ⚠ Sans compte. Seul un administrateur peut lui en créer un.
+      </div>
+    );
+  if (!salarieId)
+    return (
+      <div className="card-sub" style={{ marginTop: "6px" }}>
+        Enregistrez la fiche, puis invitez-le à se créer un compte : le bloc apparaîtra ici.
+      </div>
+    );
   return <Invitation salarieId={salarieId} emailFiche={email} rolePropose={rolePropose} />;
 }
 
@@ -33,67 +47,82 @@ function Invitation({ salarieId, emailFiche, rolePropose }: { salarieId: string;
   const gerer = useGererComptes();
   const [email, setEmail] = useState(emailFiche);
   const [role, setRole] = useState<string>(rolePropose);
-  const [erreur, setErreur] = useState<string | null>(null);
-  const [confirmerAdmin, setConfirmerAdmin] = useState(false);
   const attente = invitationEnAttente(invitations.data ?? [], salarieId);
+  useToastErreur(gerer.inviter.error ?? gerer.annuler.error);
+  const reussi = { onSuccess: (r: { etat: Parameters<typeof messageInvitation>[0]; email: string }) => afficherToast(messageInvitation(r.etat, r.email), "success") };
 
-  function inviter(e: FormEvent) {
-    e.preventDefault();
+  function inviter() {
     const r = schemaSaisieInvitation.safeParse({ email, role });
-    if (!r.success) return setErreur(r.error.issues[0]?.message ?? "Saisie invalide.");
-    if (r.data.role === "admin" && !confirmerAdmin) return setConfirmerAdmin(true);
-    setErreur(null);
-    setConfirmerAdmin(false);
-    gerer.inviter.mutate({ salarieId, saisie: r.data });
+    if (!r.success) {
+      afficherToast(r.error.issues[0]?.message ?? "Indiquez une adresse e-mail valide.");
+      return;
+    }
+    if (r.data.role === "admin" && !window.confirm("Donner TOUS les droits à ce compte, y compris la gestion des utilisateurs ?")) return;
+    gerer.inviter.mutate({ salarieId, saisie: r.data }, reussi);
   }
 
-  const retour = gerer.inviter.isSuccess ? <Alert variant="succes">{messageInvitation(gerer.inviter.data.etat, gerer.inviter.data.email)}</Alert> : null;
-  const echec = gerer.inviter.error ?? gerer.annuler.error;
-  if (invitations.isPending) return <p className="text-sm text-muted-foreground">Chargement des invitations…</p>;
+  if (invitations.isPending)
+    return (
+      <div className="card-sub" style={{ marginTop: "6px" }}>
+        Chargement des invitations…
+      </div>
+    );
   if (attente) {
     return (
-      <div className="flex flex-col gap-1 text-sm">
-        {retour}
-        {echec && <Alert variant="erreur">{messageErreur(echec)}</Alert>}
-        <p>
-          ✉ Invitation en attente pour <strong>{attente.email}</strong>
-          {attente.invitee_le ? ` — envoyée le ${formatDateFr(attente.invitee_le)}` : ""}.
-        </p>
-        <span className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
+      <div className="card-sub" style={{ marginTop: "8px" }}>
+        ✉ Invitation en attente pour <strong>{attente.email}</strong>
+        {attente.invitee_le ? ` — envoyée le ${formatDateFr(jourIso(attente.invitee_le))}` : ""}.
+        <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+          <button
+            type="button"
+            className="btn small"
             disabled={gerer.inviter.isPending}
             onClick={() => {
               // Renvoyer = réinviter à l'identique ; la fonction de bord refuse un renvoi à moins de 10 min.
               const r = schemaSaisieInvitation.safeParse({ email: attente.email, role: attente.role });
-              if (r.success) gerer.inviter.mutate({ salarieId, saisie: r.data });
-              else setErreur(r.error.issues[0]?.message ?? "Invitation illisible.");
+              if (r.success) gerer.inviter.mutate({ salarieId, saisie: r.data }, reussi);
+              else afficherToast(r.error.issues[0]?.message ?? "Invitation illisible.");
             }}
           >
             Renvoyer
-          </Button>
-          <BoutonConfirme libelle="Annuler l'invitation" question="Annuler l'invitation ? Le lien déjà envoyé ne donnera plus aucun droit." onConfirmer={() => gerer.annuler.mutate(attente.id)} />
-        </span>
+          </button>
+          <button
+            type="button"
+            className="btn small danger"
+            onClick={() => {
+              if (window.confirm("Annuler l'invitation ? Le lien déjà envoyé ne donnera plus aucun droit.")) gerer.annuler.mutate(attente.id);
+            }}
+          >
+            Annuler
+          </button>
+        </div>
       </div>
     );
   }
   return (
-    <form onSubmit={inviter} noValidate aria-label="Inviter le salarié" className="flex flex-col gap-2 rounded-md border border-dashed border-border p-2 text-sm">
-      {retour}
-      <p className="text-muted-foreground">Pas de compte ? Invitez-le : il recevra un courriel et choisira son mot de passe.</p>
-      <span className="flex flex-wrap gap-2">
-        <Input aria-label="Adresse e-mail de l'invitation" type="email" className="min-w-48 flex-1" value={email} placeholder="adresse e-mail" onChange={(e) => setEmail(e.target.value)} />
-        <Select aria-label="Rôle du compte" className="w-auto" value={role} onChange={(e) => setRole(e.target.value)}>
+    <div style={{ marginTop: "8px", padding: "10px", border: "1px dashed var(--border)", borderRadius: "10px" }} role="group" aria-label="Inviter le salarié">
+      <div className="card-sub" style={{ marginBottom: "6px" }}>
+        Pas de compte ? Invitez-le : il recevra un courriel et choisira son mot de passe.
+      </div>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+        <input type="email" aria-label="Adresse e-mail de l'invitation" value={email} placeholder="adresse e-mail" style={{ flex: 1, minWidth: "180px" }} onChange={(e) => setEmail(e.target.value)} />
+        <select aria-label="Rôle du compte" style={{ width: "auto" }} value={role} onChange={(e) => setRole(e.target.value)}>
           {ROLES_INVITATION.map((r) => (
-            <option key={r.role} value={r.role}>{r.libelle}</option>
+            <option key={r.role} value={r.role}>
+              {r.libelle}
+            </option>
           ))}
-        </Select>
-        <Button type="submit" size="sm" disabled={gerer.inviter.isPending}>✉ Inviter</Button>
-      </span>
-      {confirmerAdmin && <Alert>Donner TOUS les droits à ce compte, y compris la gestion des utilisateurs ? Cliquez de nouveau sur « Inviter » pour confirmer.</Alert>}
-      {(erreur || echec) && <Alert variant="erreur">{erreur ?? messageErreur(echec)}</Alert>}
-    </form>
+        </select>
+        <button type="button" className="btn small primary" disabled={gerer.inviter.isPending} onClick={inviter}>
+          ✉ Inviter
+        </button>
+      </div>
+      {!emailFiche.trim() && (
+        <div className="card-sub" style={{ marginTop: "6px" }}>
+          Renseignez d&apos;abord son e-mail ci-dessous, ou saisissez-le ici.
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -13,7 +13,8 @@ describe("rubriques (PAR-01)", () => {
   it("l'administrateur voit tout, comptes et accès clients compris", () => {
     expect(ids("admin")).toContain("comptes");
     expect(ids("admin")).toContain("acces-clients");
-    expect(ids("admin")).toHaveLength(13);
+    // Les 11 rubriques de l'ancien, « Mon nom » et les deux de l'accès (D-ECR-PAR-08).
+    expect(ids("admin")).toHaveLength(14);
   });
 
   it("secrétaire, conducteur et lecture voient les réglages, pas les comptes", () => {

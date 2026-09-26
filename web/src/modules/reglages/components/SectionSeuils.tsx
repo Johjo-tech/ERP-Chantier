@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { ChampTexte } from "@/components/formulaire/Champ";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import {
   appliquerSeuils,
@@ -20,10 +19,10 @@ import { PiedEnregistrement } from "./champs";
  * la cloche », ce qui serait faux pour la conduite — ce seuil ne sonne rien.
  */
 const TEXTES: Record<DomaineSeuils, { titre: string; phrase: string }> = {
-  rh: { titre: "Seuils d'alerte RH", phrase: "Nombre de jours avant échéance à partir duquel l'alerte apparaît." },
-  vehicules: { titre: "Seuils d'alerte véhicules", phrase: "Nombre de jours avant échéance à partir duquel l'alerte apparaît." },
+  rh: { titre: "🧑‍🔧 Seuils d'alerte RH", phrase: "Nombre de jours avant échéance à partir duquel l'alerte apparaît dans la cloche." },
+  vehicules: { titre: "🚚 Seuils d'alerte véhicules", phrase: "Nombre de jours avant échéance à partir duquel l'alerte apparaît dans la cloche." },
   conduite: {
-    titre: "Conduite de travaux",
+    titre: "🦺 Conduite de travaux",
     phrase: "Au-delà de ce délai, un bon reçu et jamais planifié remonte dans « Sans rendez-vous » sur le tableau de bord du conducteur.",
   },
 };
@@ -57,29 +56,27 @@ function FormulaireSeuils({ domaine, reglages, enregistrer }: { domaine: Domaine
   }
 
   return (
-    <form onSubmit={soumettre} noValidate>
-      <Card>
-        <CardHeader>
-          <CardTitle>{TEXTES[domaine].titre}</CardTitle>
-          <p className="text-sm text-muted-foreground">{TEXTES[domaine].phrase}</p>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          {cles.map((c) => (
-            <ChampTexte
-              key={c}
-              libelle={LIBELLES_SEUILS[c]}
-              inputMode="numeric"
-              valeur={valeurs[c] ?? ""}
-              onChange={(v) => setValeurs((x) => ({ ...x, [c]: v }))}
-              erreur={erreurs[c]}
-              desactive={!modifiable}
-            />
-          ))}
-          <div className="sm:col-span-2">
-            <PiedEnregistrement modifiable={modifiable} enCours={enregistrer.isPending} erreur={enregistrer.error} succes={enregistrer.isSuccess ? "Seuils enregistrés." : null} />
-          </div>
-        </CardContent>
-      </Card>
+    <form className="card" onSubmit={soumettre} noValidate>
+      <div className="card-title" style={{ marginBottom: "10px" }}>
+        {TEXTES[domaine].titre}
+      </div>
+      <div className="card-sub" style={{ marginBottom: "14px" }}>
+        {TEXTES[domaine].phrase}
+      </div>
+      <div className="field-grid">
+        {cles.map((c) => (
+          <ChampTexte
+            key={c}
+            libelle={LIBELLES_SEUILS[c]}
+            type="number"
+            valeur={valeurs[c] ?? ""}
+            onChange={(v) => setValeurs((x) => ({ ...x, [c]: v }))}
+            erreur={erreurs[c]}
+            desactive={!modifiable}
+          />
+        ))}
+      </div>
+      <PiedEnregistrement modifiable={modifiable} enCours={enregistrer.isPending} erreur={enregistrer.error} succes={enregistrer.isSuccess ? "Préférences enregistrées." : null} />
     </form>
   );
 }

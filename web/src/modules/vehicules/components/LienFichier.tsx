@@ -1,8 +1,11 @@
-import { Button } from "@/components/ui/button";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { useUrlFichier } from "@/modules/chantiers/hooks/useFiche";
 
-/** Ouvrir un fichier du seau privé : par une URL signée, demandée au moment du clic. */
+/**
+ * Ouvrir un fichier du seau privé : le lien nu de l'ancien écran (« 📎 … »),
+ * par une URL signée demandée au moment du clic. Un refus se dit par la bulle.
+ */
 export function LienFichier({ chemin, libelle }: { chemin: string; libelle: string }) {
   const url = useUrlFichier();
   function ouvrir() {
@@ -13,15 +16,22 @@ export function LienFichier({ chemin, libelle }: { chemin: string; libelle: stri
         if (fenetre) fenetre.location.href = u;
         else window.location.assign(u);
       },
-      onError: () => fenetre?.close(),
+      onError: (e) => {
+        fenetre?.close();
+        afficherToast(messageErreur(e));
+      },
     });
   }
   return (
-    <>
-      <Button variant="link" className="h-auto p-0 text-xs" onClick={ouvrir}>
-        {libelle}
-      </Button>
-      {url.isError && <span role="alert" className="text-xs text-destructive">{messageErreur(url.error)}</span>}
-    </>
+    <a
+      href="#"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ouvrir();
+      }}
+    >
+      {libelle}
+    </a>
   );
 }

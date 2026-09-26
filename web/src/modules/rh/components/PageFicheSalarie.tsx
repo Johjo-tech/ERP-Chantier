@@ -1,45 +1,59 @@
-import { useCallback, useId, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { useCallback, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
-import { EnTetePage } from "@/components/page/EnTetePage";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { messageErreur } from "@/lib/erreurs";
+import { afficherToast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
 import { useMembres } from "@/modules/comptes/hooks/useComptes";
-import { useMetiers } from "@/modules/reglages/hooks/useReglagesEcran";
+import { useDefilerVersFormulaire } from "@/modules/materiel/components/communs";
 import { libelleEquipe, planConducteur, roleAProposer } from "../domain/intervenants";
 import { nomComplet, schemaSaisieSalarie, valeursFormulaire, type Salarie } from "../domain/salarie";
-import { useAbsencesRh, useDocumentsRh, useDroitsRh, useEnregistrerFiche, useEquipes, useFichesConducteurLiees, useSalariesRh, useVisitesRh, type HabilitationEnAttente, type VisiteEnAttente } from "../hooks/useRh";
+import { useMetiersRh, useAbsencesRh, useDocumentsRh, useDroitsRh, useEnregistrerFiche, useEquipes, useFichesConducteurLiees, useSalariesRh, useSeuilsRh, useVisitesRh, type HabilitationEnAttente, type VisiteEnAttente } from "../hooks/useRh";
 import { ChampsSalarie } from "./ChampsSalarie";
 import { Avertissements } from "./communs";
+import { ListeSalaries } from "./ListeSalaries";
+import { CadreRh } from "./PageRh";
 import { SectionConges } from "./SectionConges";
 import { SectionDossier } from "./SectionDossier";
 import { SectionHabilitations } from "./SectionHabilitations";
 import { SectionVisites } from "./SectionVisites";
 import { PropositionRole, ZoneCompte } from "./ZoneCompte";
 
-/** La fiche salarié, en création (`/rh/salaries/nouveau`) ou en modification (`/rh/salaries/:id`). */
+/**
+ * La fiche salarié, en création (`/rh/salaries/nouveau`) ou en modification
+ * (`/rh/salaries/:id`). Comme l'ancien écran, elle s'ouvre DANS la rubrique
+ * Salariés, au-dessus de la liste (`#formZoneSalarie`).
+ */
 export function PageFicheSalarie() {
   const { id } = useParams();
   const salaries = useSalariesRh();
-  const metiers = useMetiers();
-  if (salaries.isPending || metiers.isPending) return <Chargement />;
-  if (salaries.isError) return <Erreur erreur={salaries.error} reessayer={() => void salaries.refetch()} />;
-  const salarie = id && id !== "nouveau" ? (salaries.data.find((s) => s.id === id) ?? null) : null;
-  // Juste après une création, la liste se relit encore : la fiche n'y est pas « introuvable ».
-  if (id && id !== "nouveau" && !salarie && salaries.isFetching) return <Chargement />;
-  if (id && id !== "nouveau" && !salarie) return <Alert variant="erreur">Salarié introuvable, ou vous n'y avez pas accès.</Alert>;
-  const referentiel = (metiers.data ?? []).map((m) => m.libelle);
-  return <FicheSalarie key={salarie?.id ?? "nouveau"} salarie={salarie} referentiel={referentiel} />;
+  const metiers = useMetiersRh();
+  const contenu = (() => {
+    if (salaries.isPending || metiers.isPending) return <Chargement />;
+    if (salaries.isError) return <Erreur erreur={salaries.error} reessayer={() => void salaries.refetch()} />;
+    const salarie = id && id !== "nouveau" ? (salaries.data.find((s) => s.id === id) ?? null) : null;
+    // Juste après une création, la liste se relit encore : la fiche n'y est pas « introuvable ».
+    if (id && id !== "nouveau" && !salarie && salaries.isFetching) return <Chargement />;
+    if (id && id !== "nouveau" && !salarie)
+      return (
+        <div role="alert" className="wf-banner alerte">
+          Salarié introuvable, ou vous n&apos;y avez pas accès.
+        </div>
+      );
+    const referentiel = metiers.data;
+    return <FicheSalarie key={salarie?.id ?? "nouveau"} salarie={salarie} referentiel={referentiel} />;
+  })();
+  return (
+    <CadreRh vue="salaries">
+      <ListeSalaries formulaire={contenu} />
+    </CadreRh>
+  );
 }
 
 function FicheSalarie({ salarie, referentiel }: { salarie: Salarie | null; referentiel: string[] }) {
-  const idFormulaire = useId();
   const navigate = useNavigate();
-  const cree = (useLocation().state as { cree?: boolean } | null)?.cree === true;
   const droits = useDroitsRh();
+  const seuils = useSeuilsRh();
   const equipes = useEquipes();
   const fiches = useFichesConducteurLiees();
   const membres = useMembres();
@@ -47,7 +61,7 @@ function FicheSalarie({ salarie, referentiel }: { salarie: Salarie | null; refer
   const visites = useVisitesRh();
   const absences = useAbsencesRh();
   const enregistrer = useEnregistrerFiche();
-  const { valeurs, erreurs, changer, valider } = useFormulaire(valeursFormulaire(salarie, referentiel));
+  const { valeurs, changer } = useFormulaire(valeursFormulaire(salarie, referentiel));
   const existante = salarie ? ((fiches.data ?? []).find((f) => f.salarieId === salarie.id) ?? null) : null;
   // Une fiche RETIRÉE n'est pas cochée : l'ancien écran la cochait et la réactivait au premier enregistrement (D-RH-09).
   const [conducteur, setConducteur] = useState<boolean | null>(null);
@@ -58,12 +72,19 @@ function FicheSalarie({ salarie, referentiel }: { salarie: Salarie | null; refer
   const [visiteOuverte, setVisiteOuverte] = useState(false);
   const [proposition, setProposition] = useState<{ profileId: string; roleActuel: Parameters<typeof PropositionRole>[0]["roleActuel"] } | null>(null);
   const suiviVisite = useCallback((o: boolean) => setVisiteOuverte(o), []);
+  useDefilerVersFormulaire("formZoneSalarie");
 
-  function soumettre(e: FormEvent) {
-    e.preventDefault();
-    if (visiteOuverte) return setAvertissements(["Une visite est en cours de saisie : enregistrez-la ou annulez-la avant la fiche."]);
-    const saisie = valider(schemaSaisieSalarie);
-    if (!saisie) return;
+  function soumettre() {
+    if (visiteOuverte) {
+      afficherToast("Une visite est en cours de saisie : enregistrez-la ou annulez-la avant la fiche.");
+      return;
+    }
+    const r = schemaSaisieSalarie.safeParse(valeurs);
+    if (!r.success) {
+      window.alert(r.error.issues[0]?.message ?? "Saisie invalide.");
+      return;
+    }
+    const saisie = r.data;
     const devientConducteur = estConducteur && !existante?.actif;
     enregistrer.mutate(
       {
@@ -82,70 +103,91 @@ function FicheSalarie({ salarie, referentiel }: { salarie: Salarie | null; refer
           if (aProposer) return setProposition(aProposer);
           if (issue.habilitationsRestantes.length || issue.visitesRestantes.length) return;
           // Une création reste ouverte : dossier et congés n'existent qu'à partir de là.
-          if (!salarie) navigate(`/rh/salaries/${issue.id}`, { replace: true, state: { cree: true } });
-          else if (!issue.avertissements.length) navigate("/rh");
+          if (!salarie) {
+            afficherToast("Salarié créé — son dossier documentaire est maintenant ouvert.", "success");
+            void navigate(`/rh/salaries/${issue.id}`, { replace: true });
+          } else if (!issue.avertissements.length) {
+            afficherToast("Salarié modifié.", "success");
+            void navigate("/rh");
+          }
         },
+        onError: (err) => afficherToast(messageErreur(err)),
       }
     );
   }
 
   const idSalarie = salarie?.id ?? null;
   const optionsEquipes = (equipes.data ?? []).map((e) => ({ valeur: e.id, libelle: libelleEquipe(e) }));
-  const nom = salarie ? nomComplet(salarie) : "Nouveau salarié";
+  const nom = salarie ? nomComplet(salarie) : "";
+  const documentsDuSalarie = (documents.data ?? []).filter((d) => d.salarieId === idSalarie);
   return (
-    <div className="flex flex-col gap-4">
-      <EnTetePage titre={salarie ? `Modifier ${nom}` : "Nouveau salarié"} actions={<Button asChild variant="ghost"><Link to="/rh">← Retour RH</Link></Button>} />
-      {cree && <Alert variant="succes">Salarié créé — son dossier documentaire est maintenant ouvert.</Alert>}
-      {proposition && salarie && <PropositionRole nom={nom} profileId={proposition.profileId} roleActuel={proposition.roleActuel} onFini={() => navigate("/rh")} />}
-      <form id={idFormulaire} onSubmit={soumettre} noValidate aria-label="Fiche salarié" className="flex flex-col gap-3">
-        <ChampsSalarie valeurs={valeurs} erreurs={erreurs} changer={changer} referentiel={referentiel} equipes={optionsEquipes} salarie={salarie} />
-        <fieldset className="flex flex-col gap-1">
-          <legend className="text-sm font-medium">Rôle dans l'entreprise</legend>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={estConducteur} disabled={!droits.conducteur} onChange={(e) => setConducteur(e.target.checked)} />
-            Conducteur de travaux — proposé dans les documents
-          </label>
-          {!droits.conducteur && <p className="text-xs text-muted-foreground">Votre rôle ne permet pas de modifier les fiches de conducteur (administrateur).</p>}
-        </fieldset>
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Compte utilisateur</span>
-          <p className="text-xs text-muted-foreground">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</p>
-          <ZoneCompte salarieId={idSalarie} profileId={salarie?.profileId ?? null} email={valeurs.email} rolePropose={estConducteur ? "conducteur" : "technicien"} />
-        </div>
-      </form>
-      <Section titre="⚡ Habilitations & certifications">
-        <SectionHabilitations salarieId={idSalarie} documents={(documents.data ?? []).filter((d) => d.salarieId === idSalarie)} enAttente={habilitations} onEnAttente={setHabilitations} />
-      </Section>
-      <Section titre="📁 Dossier documentaire">
-        <SectionDossier salarieId={idSalarie} documents={(documents.data ?? []).filter((d) => d.salarieId === idSalarie)} />
-      </Section>
-      <Section titre="🩺 Suivi médical">
-        <SectionVisites salarieId={idSalarie} visites={(visites.data ?? []).filter((v) => v.salarieId === idSalarie)} prochaine={salarie?.visiteMedicaleProchaine ?? null} enAttente={visitesAttente} onEnAttente={setVisitesAttente} onEdition={suiviVisite} />
-      </Section>
+    // Un `div` et non un `form` : dossier et visites y portent leurs propres formulaires, qu'on ne peut pas imbriquer.
+    <div className="form-panel" role="form" aria-label="Fiche salarié">
+      <h3>{salarie ? "Modifier le salarié" : "Nouveau salarié"}</h3>
+      {proposition && salarie && <PropositionRole nom={nom} profileId={proposition.profileId} roleActuel={proposition.roleActuel} onFini={() => void navigate("/rh")} />}
+      <ChampsSalarie
+        valeurs={valeurs}
+        changer={changer}
+        referentiel={referentiel}
+        equipes={optionsEquipes}
+        salarie={salarie}
+        seuilVisite={seuils.visiteMedicale}
+        role={
+          <div className="field">
+            <div className="reglage-titre">Rôle dans l&apos;entreprise</div>
+            <label className="bc-tache-row">
+              <input type="checkbox" id="sal_estConducteur" checked={estConducteur} disabled={!droits.conducteur} onChange={(e) => setConducteur(e.target.checked)} />
+              <span>Conducteur de travaux — proposé dans les documents</span>
+            </label>
+          </div>
+        }
+        compte={
+          <div className="field">
+            <label>Compte utilisateur</label>
+            <div className="card-sub">Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même.</div>
+            <ZoneCompte salarieId={idSalarie} profileId={salarie?.profileId ?? null} email={valeurs.email} rolePropose={estConducteur ? "conducteur" : "technicien"} />
+          </div>
+        }
+      />
+      <div className="section-title" style={{ marginTop: "14px" }}>
+        ⚡ Habilitations &amp; certifications
+      </div>
+      <div id="habilitationsZone">
+        <SectionHabilitations salarieId={idSalarie} documents={documentsDuSalarie} enAttente={habilitations} onEnAttente={setHabilitations} />
+      </div>
+      <div className="section-title" style={{ marginTop: "18px" }}>
+        📁 Dossier documentaire
+      </div>
+      <SectionDossier salarieId={idSalarie} documents={documentsDuSalarie} />
+      <div className="section-title" style={{ marginTop: "18px" }}>
+        🩺 Suivi médical
+      </div>
+      <div id="suiviMedicalZone">
+        <SectionVisites
+          salarieId={idSalarie}
+          visites={(visites.data ?? []).filter((v) => v.salarieId === idSalarie)}
+          prochaine={salarie?.visiteMedicaleProchaine ?? null}
+          enAttente={visitesAttente}
+          onEnAttente={setVisitesAttente}
+          onEdition={suiviVisite}
+        />
+      </div>
       {idSalarie ? (
-        <Section titre="🏖️ Congés & absences">
-          <SectionConges salarieId={idSalarie} soldeInitial={valeurs.soldeCpInitial} absences={(absences.data ?? []).filter((a) => a.salarieId === idSalarie)} />
-        </Section>
+        <SectionConges salarieId={idSalarie} soldeInitial={valeurs.soldeCpInitial} onSoldeInitial={(v) => changer("soldeCpInitial", v)} absences={(absences.data ?? []).filter((a) => a.salarieId === idSalarie)} />
       ) : (
-        <p className="text-sm text-muted-foreground">💡 Enregistrez d'abord la fiche pour pouvoir ajouter le dossier documentaire et les congés.</p>
+        <div className="card-sub" style={{ marginTop: "14px" }}>
+          💡 Enregistrez d&apos;abord la fiche pour pouvoir ajouter le dossier documentaire, le contrat de travail et les congés.
+        </div>
       )}
       <Avertissements messages={avertissements} />
-      {enregistrer.isError && <Alert variant="erreur">{messageErreur(enregistrer.error)}</Alert>}
-      <div className="flex gap-2">
-        <Button type="submit" form={idFormulaire} disabled={enregistrer.isPending}>{enregistrer.isPending ? "Enregistrement…" : "Enregistrer"}</Button>
-        <Button asChild variant="ghost"><Link to="/rh">Annuler</Link></Button>
+      <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+        <button type="button" className="btn primary" disabled={enregistrer.isPending} onClick={soumettre}>
+          Enregistrer
+        </button>
+        <Link className="btn ghost" to="/rh">
+          Annuler
+        </Link>
       </div>
     </div>
-  );
-}
-
-function Section({ titre, children }: { titre: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{titre}</CardTitle>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
   );
 }
