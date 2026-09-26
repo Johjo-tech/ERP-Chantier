@@ -19,16 +19,21 @@ declare
 begin
   select id into v_brouillon from factures where societe_id = v_soc and interlocuteur = 'Témoin visuel' and client_id = v_durand;
   if v_brouillon is null then
+    -- Un brouillon en cours de saisie, pas encore chiffré, créé il y a des mois : l'ancien compte
+    -- les brouillons dans le chiffre d'affaires du tableau de bord et des statistiques
+    -- (DEF-ECR-03) et en écrit la création « Mme Durand · null » dans le fil d'activité
+    -- (DEF-ECR-04). Ces défauts sont à trancher par le client ; un écran de facturation n'a pas
+    -- à les faire mesurer aux écrans du tableau de bord.
     insert into factures (societe_id, client_id, client_nom, interlocuteur, adresse, code_postal, ville, date, echeance,
-                          remise_pourcentage, acomptes_deduits, conditions_reglement, mode_paiement, statut, type_document)
+                          remise_pourcentage, acomptes_deduits, conditions_reglement, mode_paiement, statut, type_document, cree_le)
     values (v_soc, v_durand, 'Mme Durand', 'Témoin visuel', '5 impasse des Lilas', '69100', 'Villeurbanne', '2026-09-22', '2026-10-22',
-            0, 0, '30 jours net', 'virement', 'brouillon', 'facture')
+            0, 0, '30 jours net', 'virement', 'brouillon', 'facture', '2025-12-10 09:00+01')
     returning id into v_brouillon;
     -- Sans chapitre, comme le brouillon né du devis que l'écran mesurait : le métier d'un
     -- chapitre manque encore aux formulaires de devis et de facture (D-VIS2-01).
     insert into facture_lignes (facture_id, position, type, designation, quantite, prix_unitaire, unite, tva) values
-      (v_brouillon, 0, 'ligne', 'Dépose de la baignoire', 1, 280, 'forfait', 10),
-      (v_brouillon, 1, 'ligne', 'Receveur extra-plat 90 × 120', 1, 465.5, 'u', 10);
+      (v_brouillon, 0, 'ligne', 'Dépose de la baignoire', 1, 0, 'forfait', 10),
+      (v_brouillon, 1, 'ligne', 'Receveur extra-plat 90 × 120', 1, 0, 'u', 10);
   end if;
 
   select id into v_emise from factures where societe_id = v_soc and interlocuteur = 'Témoin visuel' and client_id = v_tilleuls;

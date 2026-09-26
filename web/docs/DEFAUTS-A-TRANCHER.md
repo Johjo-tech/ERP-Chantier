@@ -39,3 +39,29 @@ mot de passe des comptes d'essai : `motdepasse-local`.
   dossier « — Fournisseur non renseigné — », sa carte reste ouverte et dit « commandée le … » (parcours
   `tests/e2e/commandes.e2e.ts`, « pièces : le conducteur commande… »). La nouvelle diffère donc de l'ancienne
   sur ce point ; à confirmer par le client.
+
+### DEF-ECR-03 — Tableau de bord et Statistiques : un brouillon compte dans le chiffre d'affaires
+- **Écrans** : Tableau de bord › pilotage (graphique « Chiffre d'affaires », « Total période ») ;
+  Statistiques (tableau par équipe et par mois).
+- **Reproduction** : compte `admin.alpha@erp.local` ; données : une facture BROUILLON chiffrée de la
+  société ALPHA, datée du mois en cours (Factures › « + Nouvelle facture », client Mme Durand, une ligne à
+  745,50 € HT, « 💾 Enregistrer le brouillon », sans émettre) ; ouvrir le tableau de bord, puis Statistiques.
+- **Ancienne** : « Total période » augmente de 745,50 €, la colonne du mois dans Statistiques aussi
+  (`computeRevenuePeriod` et les statistiques additionnent `computeDocTotals(f).ht` de TOUTES les factures,
+  brouillons compris, sans regarder le statut). Un brouillon daté d'un autre mois ajoute même une colonne à
+  Statistiques.
+- **Juste** : une pièce non émise n'est pas du chiffre d'affaires : seules les factures émises (numérotées)
+  comptent, avoirs en négatif.
+- **Nouvelle aujourd'hui** : ne compte pas le brouillon (total inférieur de 745,50 € sur la même base).
+  La nouvelle diffère donc de l'ancienne ; à trancher (voir aussi la section « Statistiques et tableaux de
+  bord »).
+
+### DEF-ECR-04 — Tableau de bord : la création d'un brouillon s'écrit « Mme Durand · null »
+- **Écran** : Tableau de bord › pilotage, fil « Activité récente ».
+- **Reproduction** : compte `admin.alpha@erp.local` ; créer une facture brouillon (Factures › « + Nouvelle
+  facture », client Mme Durand, « 💾 Enregistrer le brouillon ») ; revenir au tableau de bord.
+- **Ancienne** : l'événement « Facture créée » porte le sous-titre « Mme Durand · null » : `buildActivityFeed`
+  écrit `${f.client} · ${f.numero}` et un brouillon n'a pas de numéro.
+- **Juste** : « Mme Durand · Brouillon — non émise » (le libellé des cartes de facture), ou le nom seul.
+- **Nouvelle aujourd'hui** : écrit « Mme Durand », sans « · null ». La nouvelle diffère de l'ancienne ; à
+  trancher.

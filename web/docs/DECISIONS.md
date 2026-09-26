@@ -2352,7 +2352,11 @@ passages). `tests/visuel/jeux/facturation.sql` (appliqué par `scripts/appliquer
 jeu des PDF pour ne pas décaler leurs numéros) pose un brouillon de Mme Durand et une facture émise de
 SCI Les Tilleuls, tous deux à l'interlocuteur « Témoin visuel », que la carte affiche dans les deux
 applications : les écrans les trouvent par lui, quel que soit le numéro donné par la base et quoi que les
-e2e aient créé à côté. Le brouillon est sans chapitre, comme celui que l'écran mesurait : avec un chapitre,
+e2e aient créé à côté. Le brouillon n'est pas encore chiffré (prix à 0) et sa création est datée de
+décembre 2025 : l'ancien compte les brouillons dans le chiffre d'affaires du tableau de bord et des
+statistiques et écrit « · null » dans le fil d'activité (DEF-ECR-03, DEF-ECR-04, `DEFAUTS-A-TRANCHER.md`) ;
+un brouillon chiffré et récent faisait donc échouer six écrans du tableau de bord sur ces défauts de
+l'ancien, que le client doit trancher. Le brouillon est sans chapitre, comme celui que l'écran mesurait : avec un chapitre,
 l'ancien montre la liste du métier du chapitre (`chapitreMetierHTML` : « — Déduit du titre — », « — Aucun
 métier — », les métiers), que les formulaires de devis et de facture de web/ n'ont PAS encore (seul le
 bon de commande l'a, `ChampMetierChapitre`). Écart d'application relevé, non traité ici : à reprendre dans
