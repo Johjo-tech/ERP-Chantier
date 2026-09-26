@@ -326,7 +326,9 @@ function ecransCommandes(): Ecran[] {
     seuils,
   });
   return [
-    liste("bons-de-commande", "Bons de commande › liste", {}, "/commandes"),
+    // L'ancien lit les bons sans tri (l'ordre physique de la vue) ; web/ les range par date puis numéro (D-ECR-BC-09).
+    // Quand la base porte des bons de même date créés dans le désordre, les cartes du haut s'échangent : même texte, pixels décalés.
+    liste("bons-de-commande", "Bons de commande › liste", {}, "/commandes", undefined, { bureau: { pixels: 0.05, texte: 0 }, mobile: { pixels: 0.005, texte: 0 } }),
     liste("bons-de-commande-carte-ouverte", "Bons de commande › carte dépliée (bon facturé)", {}, "/commandes", enchainer(cliquer(`${BON_FACTURE} .bc-chevron`), defiler(BON_FACTURE))),
     liste("bons-de-commande-en-attente", "Bons de commande › filtre « En attente de bon de commande », carte dépliée", { bonCommandeCreationTypeFilter: "attenteBC" }, "/commandes?mode=attente_bc", cliquer(`${BON_EN_ATTENTE} .bc-chevron`)),
     liste("bons-de-commande-sans-resultat", "Bons de commande › recherche sans résultat", { bonCommandeSearch: "zzzz-introuvable" }, "/commandes?recherche=zzzz-introuvable"),

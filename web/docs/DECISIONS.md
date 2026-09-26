@@ -1944,3 +1944,11 @@ créer le brouillon (D-BC-14) puis l'ouvre. Même libellé, même place, même g
 Photos et dessin du technicien, « Planifiée une première fois le… », « Intervention
 terminée le… » : sans colonne en base (dérivés vides dans l'ancien aussi), non repris.
 La « Fiche d'intervention du technicien » montre le commentaire de tâche et la pièce.
+
+## D-ECR-BC-09 — L'ordre des cartes reste déterminé (date, puis numéro)
+L'ancien lit `v_bons_commande_terrain` sans `order` : les bons arrivent dans l'ordre
+physique de la vue, qui change au gré des mises à jour. web/ garde un ordre stable —
+date décroissante, numéro interne décroissant, puis identifiant (la pagination
+l'exige). Sur une base où des bons de même date ont été créés dans le désordre, les
+cartes du haut peuvent s'échanger : même texte, pixels décalés (seuil de l'écran
+`bons-de-commande` : 5 % au bureau, 0,5 % au téléphone).
