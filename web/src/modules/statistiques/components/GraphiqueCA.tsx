@@ -1,6 +1,6 @@
 import { useState, type FocusEvent, type MouseEvent } from "react";
 import { useModeDiscret } from "@/lib/modeDiscret";
-import type { RevenuPeriode } from "../domain/ancien/pilotage";
+import { barresGraphique, type RevenuPeriode } from "../domain/ancien/pilotage";
 import type { MoisCalendaire } from "../domain/periodes";
 import { formatEurosEcranAncien } from "./format";
 
@@ -25,8 +25,6 @@ const ECART = 4;
 /** La part d'un groupe qu'occupe chaque barre. */
 const PART_BARRE = 0.32;
 const OPACITE_PRECEDENTE = 0.32;
-/** Une barre non nulle reste visible, même minuscule face au plus grand mois. */
-const HAUTEUR_MIN = 2;
 /** Sous l'axe : la ligne des mois. */
 const DECALAGE_MOIS = 22;
 /** La légende, calée à 230 px du bord droit et 10 px du haut. */
@@ -51,12 +49,11 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
   useModeDiscret();
   const [survol, setSurvol] = useState<Survol | null>(null);
   const { currentYear: anneeCourante, prevYear: anneePrecedente } = serie;
-  const points = mois.map((m, i) => ({ ...m, courant: serie.data[i]?.current ?? 0, precedent: serie.data[i]?.previous ?? 0 }));
-  const max = Math.max(1, ...points.map((p) => Math.max(p.courant, p.precedent)));
+  const barres = barresGraphique(serie, mois.map((m) => m.libelleLong));
+  const points = mois.map((m, i) => ({ ...m, ...(barres[i] ?? { courant: 0, precedent: 0, hauteurCourant: 0, hauteurPrecedent: 0, infobulleCourant: "", infobullePrecedent: "" }) }));
   const largeurGroupe = (L - 2 * COTE) / points.length;
   const barre = Math.min(LARGEUR_BARRE_MAX, largeurGroupe * PART_BARRE);
   const utile = H - HAUT - BAS;
-  const hauteur = (m: number) => (m > 0 ? Math.max(HAUTEUR_MIN, utile * (m / max)) : 0);
 
   /** `showRevenueTooltip` : la bulle suit le pointeur dans la carte. */
   const placer = (x: number, y: number, carte: DOMRect) => {
@@ -74,13 +71,13 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
         {points.map((p, i) => {
           const centre = COTE + i * largeurGroupe + largeurGroupe / 2;
           const barres = [
-            { cle: "precedent", x: centre - barre - ECART / 2, m: p.precedent, libelle: `${p.libelleLong} ${anneePrecedente}`, couleur: COULEUR_PRECEDENTE, opacite: OPACITE_PRECEDENTE },
-            { cle: "courant", x: centre + ECART / 2, m: p.courant, libelle: `${p.libelleLong} ${anneeCourante}`, couleur: COULEUR_COURANTE, opacite: 1 },
+            { cle: "precedent", x: centre - barre - ECART / 2, m: p.precedent, h: p.hauteurPrecedent, libelle: p.infobullePrecedent, couleur: COULEUR_PRECEDENTE, opacite: OPACITE_PRECEDENTE },
+            { cle: "courant", x: centre + ECART / 2, m: p.courant, h: p.hauteurCourant, libelle: p.infobulleCourant, couleur: COULEUR_COURANTE, opacite: 1 },
           ];
           return (
             <g key={p.cle}>
               {barres.map((b) => {
-                const h = hauteur(b.m);
+                const h = b.h;
                 const montrer = (x: number, y: number, carte: DOMRect | null) => carte && setSurvol({ ...placer(x, y, carte), libelle: b.libelle, montant: b.m });
                 return (
                   <g

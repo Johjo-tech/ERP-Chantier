@@ -164,7 +164,7 @@ describe("tableau de bord du terrain", () => {
     expect(screen.getByText("🎉 Rien de planifié aujourd’hui.")).toBeInTheDocument();
   });
 
-  it("sous-traitant : son tableau à trois tuiles, comme l'ancien (DEF-STA-14)", async () => {
+  it("sous-traitant : ses trois tuiles, et le bandeau de l'ancien à chaque ouverture (DEF-STA-14, DEF-STA-19)", async () => {
     autres.lirePlanning.mockResolvedValue({
       ...planningVide,
       bons: [bonPlanning({ id: "b1", montant_sous_traitant: 300 })],
@@ -173,11 +173,13 @@ describe("tableau de bord du terrain", () => {
       monSousTraitantId: ST_A.id,
     });
     rendreAvecSession(<TableauDeBord />, { role: "sous_traitant" });
-    expect(await screen.findByText(`Bonjour 👋 ${ST_A.nom}`)).toBeInTheDocument();
+    // L'ancien ne retenait aucun sous-traitant « actuel » : « Sous-traitant », quel que soit le compte.
+    expect(await screen.findByText("Bonjour 👋 Sous-traitant")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("👤 Sélectionnez votre nom dans Réglages pour ne voir que vos documents.");
     const pretes = screen.getByRole("link", { name: /Factures .* prêtes/ });
     expect(within(pretes).getByText("1")).toBeInTheDocument();
-    expect(screen.getByText("Mes devis")).toBeInTheDocument();
-    expect(screen.getByText("Mes factures impayées")).toBeInTheDocument();
+    expect(within(screen.getByRole("link", { name: /Mes devis/ })).getByText("0")).toBeInTheDocument();
+    expect(within(screen.getByRole("link", { name: /Mes factures impayées/ })).getByText("0")).toBeInTheDocument();
   });
 });
 

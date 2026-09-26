@@ -13,6 +13,8 @@ import { dateDuJourEnLettres, salutation } from "./format";
 const JOURNEE_VISIBLE = 8;
 /** « Les six prochains jours » : `Date.now() + 6 × 24 h`, comme l'ancien. */
 const JOURS_A_VENIR = 6;
+/** `state.currentSousTraitant` de l'ancien à l'ouverture : jamais choisi. */
+const SOUS_TRAITANT_NON_CHOISI: string = "";
 
 /**
  * Le technicien (`renderDashboardTechnicien`, au HTML et aux calculs près) :
@@ -79,19 +81,23 @@ export function TableauTerrain({ nom }: { nom: string }) {
 
 /**
  * Le sous-traitant (`renderDashboardSousTraitant`, au HTML et aux calculs
- * près) : ses factures à émettre, ses devis, ses factures impayées. Il est
- * reconnu par son compte (l'ancien le faisait choisir dans Réglages) ;
- * factures et devis de sous-traitant n'ont pas de colonne (D-FAC-09,
+ * près) : ses factures à émettre, ses devis, ses factures impayées.
+ * Factures et devis de sous-traitant n'ont pas de colonne (D-FAC-09,
  * D-FAC-14) : ces deux tuiles valent 0, comme dans l'ancien.
+ *
+ * Le sous-traitant « actuel » de l'ancien ne se choisissait qu'à la main dans
+ * Réglages, et rien ne le retenait : à chaque ouverture il valait « », d'où
+ * « Bonjour 👋 Sous-traitant », le bandeau, et le compte de TOUS les bons que
+ * la RLS lui laisse lire (les siens). Même chose ici (DEF-STA-19).
  */
 export function TableauSousTraitant() {
   const societe = useSocieteActive();
   const planning = usePlanning();
   if (planning.isPending) return <Chargement />;
   if (planning.isError) return <Erreur erreur={planning.error} reessayer={() => void planning.refetch()} />;
-  const { bons, taches, sousTraitants, monSousTraitantId } = planning.data;
+  const { bons, taches, sousTraitants } = planning.data;
   const noms = new Map(sousTraitants.map((s) => [s.id, s.nom]));
-  const actuel = (monSousTraitantId && noms.get(monSousTraitantId)) || "";
+  const actuel = SOUS_TRAITANT_NON_CHOISI;
   const t = tableauSousTraitant(bons, taches, noms, actuel);
   return (
     <>

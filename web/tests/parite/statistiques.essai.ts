@@ -26,7 +26,7 @@ import * as ancienTotaux from "../../../src/api/regles-totaux";
 import { dateISO, formatDateFr, todayISO } from "../../src/lib/dates";
 import { statsConducteur, type BonConducteur } from "../../src/modules/statistiques/domain/conducteur";
 import type { LigneChiffree } from "../../src/modules/statistiques/domain/ancien/montants";
-import { activiteRecente, aTraiterPilotage, resumeDuMois, revenuPeriode, revenuPlage, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage, type RapportPilotage, type ReglementPilotage } from "../../src/modules/statistiques/domain/ancien/pilotage";
+import { activiteRecente, aTraiterPilotage, barresGraphique, resumeDuMois, revenuPeriode, revenuPlage, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage, type RapportPilotage, type ReglementPilotage } from "../../src/modules/statistiques/domain/ancien/pilotage";
 import { equipesParMois, periodeLabel, repartitionCA, retardParConducteur, statsParConducteur, totauxStats, type BonStats, type EquipeStats, type PeriodeStats } from "../../src/modules/statistiques/domain/ancien/statistiques";
 import { mesBonsTechnicien, tableauSousTraitant, tableauTechnicien, type BonTerrain, type TacheTerrain } from "../../src/modules/statistiques/domain/ancien/terrain";
 import { moisDepuisJanvier, moisGlissants } from "../../src/modules/statistiques/domain/periodes";
@@ -56,7 +56,7 @@ const FONCTIONS = [
   "buildMonthsBack", "buildYTDMonths", "monthsForPeriod", "computeRevenuePeriod", "computeMonthSummary", "circuitTermine", "computeDashTraiter",
   "buildActivityFeed", "computeTopClients", "renderTopClientsHTML", "renderDashboard", "computeCustomRevenue",
   "filtrerParPeriode", "moisLabelCourt", "periodeLabel", "computeStatsParConducteur", "technicienLabel", "computeStatsBinomesParMois",
-  "renderStatsCARepartitionHTML", "renderStatsRetardHTML", "mesBonsTechnicien", "renderDashboardTechnicien",
+  "renderStatsCARepartitionHTML", "renderStatsRetardHTML", "renderYearlyComparisonSVG", "mesBonsTechnicien", "renderDashboardTechnicien",
   "sousTraitantActuel", "facturesDuSousTraitant", "bcFacturesKTA", "factureSTQuiCouvre", "renderDashboardSousTraitant",
 ] as const;
 const CONSTANTES = ["CIRCUIT_CLOS", "JOURNEE_VISIBLE", "STATS_PALETTE"] as const;
@@ -80,6 +80,7 @@ interface Ancien {
   renderStatsRetardHTML: (s: unknown[]) => string;
   renderDashboardTechnicien: () => string;
   renderDashboardSousTraitant: () => string;
+  renderYearlyComparisonSVG: (y: unknown) => string;
 }
 
 /** Ce que le pont pose sur `window` : les modules de règles, tels quels. */
@@ -117,7 +118,6 @@ function ancien(state: Etat, stubs: { monEquipeId?: string | null } = {}): Ancie
     estSousTraitant: () => state.currentRole === "sous_traitant",
     quickActionsHTML: () => "",
     globalSearchResultsHTML: () => "",
-    renderYearlyComparisonSVG: () => "",
     relativeTime: () => "",
     salutation: () => "",
     enteteDashboard: () => "",
@@ -562,6 +562,67 @@ describe("technicien et sous-traitant : renderDashboardTechnicien, renderDashboa
     expect(tableauTechnicien([b], taches, jour, jour).duJour).toHaveLength(0);
     expect(a.bac.tuiles[0]?.valeur).toBe(0);
     expect(tableauSousTraitant([b], taches, noms, "Serge SARL")).toEqual({ facturesPretes: 1, devis: 0, impayees: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("DEF-STA-15 à 19 : ce que l'ancien dessine et écrit", () => {
+  it("DEF-STA-15 : mêmes hauteurs de barres, même infobulle (l'année de la dernière barre pour toutes)", () => {
+    aLInstant(INSTANTS[0]);
+    const jour = todayISO();
+    for (let n = 0; n < TIRAGES; n++) {
+      const s = societe(INSTANTS[0]);
+      const a = ancien(etatAncien(s));
+      const vieux = a.computeRevenuePeriod(etatAncien(s).factures as unknown[], a.buildMonthsBack(12));
+      const svg = a.renderYearlyComparisonSVG(vieux);
+      const mois = moisGlissants(12, jour);
+      const barres = barresGraphique(revenuPeriode(s.factures, moisAnciens(12, jour), 2026), mois.map((m) => m.libelleLong));
+      const hauteurs = [...svg.matchAll(/height="([^"]*)" rx="3" fill="var\(--(?:text-dim|accent)\)"(?: opacity="0.32")? pointer-events/g)].map((m) => m[1]);
+      expect(barres.flatMap((b) => [b.hauteurPrecedent.toFixed(1), b.hauteurCourant.toFixed(1)])).toEqual(hauteurs);
+      const infobulles = [...svg.matchAll(/showRevenueTooltip\(event,'([^']*)'/g)].map((m) => m[1]);
+      expect(barres.flatMap((b) => [b.infobullePrecedent, b.infobulleCourant])).toEqual(infobulles);
+    }
+    const octobre = barresGraphique(revenuPeriode([], moisAnciens(12, jour), 2026), moisGlissants(12, jour).map((m) => m.libelleLong))[0];
+    expect(octobre?.infobulleCourant).toBe("octobre 2026");
+  });
+
+  it("DEF-STA-16 (non reproduit, à trancher) : l'infobulle de l'ancien écrit le montant sans le mode discret", () => {
+    expect(sourceDe("renderYearlyComparisonSVG")).toContain("money(d.current)");
+    expect(sourceDe("renderYearlyComparisonSVG")).not.toContain("moneyDisplay");
+  });
+
+  it("DEF-STA-17 : une part négative quand les avoirs l'emportent, comme l'ancien", () => {
+    aLInstant(INSTANTS[0]);
+    const jour = todayISO();
+    const piece = (id: string, type: string, conducteur: string, ht: number): FacturePilotage => ({
+      id, numero: id, client_nom: "C", date: jour, echeance: null, statut: "impayée", type_document: type, legacy_id: null, bon_commande_id: null, devis_id: null, conducteur, cree_le: null, remise_pourcentage: 0,
+      lignes: [{ type: "ligne", quantite: 1, prix_unitaire: ht, tva: 20 }],
+    });
+    const cas: Societe = { factures: [piece("f1", "facture", "Karim", 100), piece("a1", "avoir", "Christophe Conducteur", 60)], devis: [], reglements: [], rapports: [], bonsPilotage: [], bonsStats: [], conducteurs: [] };
+    const a = ancien(etatAncien(cas, { statsPeriode: "tout" }));
+    const neuf = statsParConducteur(pourStats(cas), "tout", jour, INSTANTS[0]);
+    const html = a.renderStatsCARepartitionHTML(a.computeStatsParConducteur());
+    const parts = [...html.matchAll(/card-sub">\(([^)]*)%\)/g)].map((m) => Number(m[1]));
+    expect(repartitionCA(neuf)?.map((l) => l.part)).toEqual(parts);
+    expect(parts).toEqual([250, -150]);
+  });
+
+  it("DEF-STA-18 : un bon se range dans la période par sa date de saisie", () => {
+    const instant = INSTANTS[0];
+    aLInstant(instant);
+    const jour = todayISO();
+    const cas: Societe = {
+      factures: [], devis: [], reglements: [], rapports: [], bonsPilotage: [], conducteurs: [],
+      bonsStats: [{ id: "b", cree_le: `${jour}T08:00:00Z`, conducteur: "Karim", technicien: null, bon_commande_parent_id: null, date_fin_travaux: null }],
+    };
+    const a = ancien(etatAncien(cas));
+    expect(totauxStats(pourStats(cas), "mois", instant).bons).toBe(a.filtrerParPeriode(etatAncien(cas).bonsCommande as unknown[], "createdAt", "mois").length);
+    expect(totauxStats(pourStats(cas), "mois", instant).bons).toBe(1);
+  });
+
+  it("DEF-STA-19 : le bandeau du sous-traitant sans nom renvoie aux Réglages", () => {
+    const a = ancien({ societeId: SOC, currentRole: "sous_traitant", currentSousTraitant: "", bonsCommande: [], factures: [], devis: [] });
+    expect(a.renderDashboardSousTraitant()).toContain("Sélectionnez votre nom dans <b>Réglages</b> pour ne voir que vos documents.");
   });
 });
 

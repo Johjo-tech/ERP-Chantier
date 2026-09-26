@@ -292,3 +292,39 @@ export function topClients(factures: readonly FacturePilotage[]): LigneTopClient
   const max = Math.max(...top.map((t) => t.total));
   return top.map((t) => ({ ...t, largeur: Math.round((t.total / max) * 100) }));
 }
+
+// ---------- Graphique du chiffre d'affaires ----------
+
+/** `renderYearlyComparisonSVG` : 300 px de haut, dont 40 en haut et 34 en bas pour la légende et les mois. */
+const HAUTEUR_UTILE = 300 - 40 - 34;
+/** Une barre non nulle reste visible, même minuscule face au plus grand mois. */
+const HAUTEUR_MIN = 2;
+
+export interface BarresMois {
+  courant: number;
+  precedent: number;
+  hauteurCourant: number;
+  hauteurPrecedent: number;
+  infobulleCourant: string;
+  infobullePrecedent: string;
+}
+
+/**
+ * Les barres de `renderYearlyComparisonSVG` : hauteur proportionnelle au plus
+ * grand mois (au moins 1), 2 px au moins pour un montant positif, rien pour un
+ * montant nul ou négatif. L'infobulle porte l'année de la DERNIÈRE barre pour
+ * toutes (DEF-STA-15) : sur 12 mois, octobre de l'an dernier s'annonce
+ * « octobre » de cette année.
+ */
+export function barresGraphique(serie: RevenuPeriode, libellesLongs: readonly string[]): BarresMois[] {
+  const max = Math.max(1, ...serie.data.map((d) => Math.max(d.current, d.previous)));
+  const hauteur = (m: number) => (m > 0 ? Math.max(HAUTEUR_MIN, HAUTEUR_UTILE * (m / max)) : 0);
+  return serie.data.map((d, i) => ({
+    courant: d.current,
+    precedent: d.previous,
+    hauteurCourant: hauteur(d.current),
+    hauteurPrecedent: hauteur(d.previous),
+    infobulleCourant: `${libellesLongs[i] ?? ""} ${serie.currentYear}`,
+    infobullePrecedent: `${libellesLongs[i] ?? ""} ${serie.prevYear}`,
+  }));
+}

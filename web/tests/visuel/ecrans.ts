@@ -118,29 +118,22 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   // Repris : le groupe « Accès » du rail (D-ECR-PAR-08) et la carte des jours fériés (D-ECR-PAR-10).
   reglages: { bureau: { pixels: 0.001, texte: 10 } },
   rh: { bureau: { pixels: 0.001, texte: 0 } },
-  // Repris (D-ECR-PAR-13). Reste la ligne « Sans conducteur » et les comptes par la référence (D-STA-05),
-  // qui décalent graphiques et tableau, la plage libre et les vues par métier / par client repliées.
-  statistiques: { bureau: { pixels: 0.28, texte: 24 } },
+  // Repris (D-ECR-PAR-13), calculs de l'ancien défauts compris (D-STA-A-01) : plus d'écart décidé.
+  statistiques: { bureau: { pixels: 0.001, texte: 0 } },
   vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };
 
 const TEMPS_RELATIF = [".activity-time"] as const;
 
 /**
- * Le tableau de bord de pilotage : ce qui change d'une seconde à l'autre, et le
- * classement des clients — groupé par FICHE ici, par nom écrit sur la facture
- * dans l'ancien (D-STA-05) : sur la même base, les deux listes n'ont ni les
- * mêmes lignes ni le même nombre. Le reste de l'écran se compare.
+ * Le tableau de bord de pilotage : seul ce qui change d'une seconde à l'autre
+ * est masqué ; tuiles, classement et résumé se calculent comme l'ancien
+ * (D-STA-A-01) et se comparent.
  */
-const PILOTAGE = [...TEMPS_RELATIF, ".topclient-card"] as const;
+const PILOTAGE = [...TEMPS_RELATIF] as const;
 
-/**
- * Ce qui reste d'écart DÉCIDÉ sur le pilotage : la première tuile (« Encaissé
- * ce mois (TTC) », D-STA-04, 2 lignes), le restant dû lu sur le solde de la
- * base (D-STA-11, 2 lignes) et la ligne « CA encaissé » que le résumé ne
- * répète plus (D-STA-11, 2 lignes).
- */
-const ECART_DECIDE_PILOTAGE = 6;
+/** Plus d'écart décidé sur le pilotage : les chiffres sont ceux de l'ancien (D-STA-A-01). */
+const ECART_DECIDE_PILOTAGE = 0;
 
 export const ECRANS: readonly Ecran[] = [
   // ── Le cadre ─────────────────────────────────────────────────────────────
@@ -212,7 +205,7 @@ export const ECRANS: readonly Ecran[] = [
     nouveau: { chemin: "/plus" },
     seuils: { mobile: { pixels: 0.001, texte: 0 } },
   },
-  // ── Les trois tableaux de bord ───────────────────────────────────────────
+  // ── Les quatre tableaux de bord ──────────────────────────────────────────
   {
     id: "tableau-de-bord-pilotage",
     titre: "Tableau de bord › pilotage (administrateur)",
@@ -240,6 +233,15 @@ export const ECRANS: readonly Ecran[] = [
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
     // Le compte d'essai n'a pas d'équipe : les deux montrent alors tout (D-VIS-09).
+    seuils: partout(0.001, 0),
+  },
+  {
+    id: "tableau-de-bord-sous-traitant",
+    titre: "Tableau de bord › sous-traitant",
+    compte: "soustraitant",
+    ancien: { chemin: "/" },
+    nouveau: { chemin: "/" },
+    // Son tableau à trois tuiles, bandeau compris (D-STA-A-01, DEF-STA-14, DEF-STA-19).
     seuils: partout(0.001, 0),
   },
   // ── Bons de commande et pièces (vague « écrans identiques », D-ECR-BC) ──
