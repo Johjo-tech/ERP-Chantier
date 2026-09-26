@@ -1877,3 +1877,78 @@ relit pas `intervention_controles`) ni `typePanne` (la colonne est `metier`),
 et « Contrôles réalisés » disparaît du PDF. web/ imprime ce qui est enregistré,
 comme l'ancien l'imprimait à la saisie : c'est le seul écart mesuré sur le
 rapport (1 % des pixels, la section en plus) — `tests/visuel/pdf/`.
+
+## D-ECR-BC-01 — Bons de commande : les cartes de l'ancien (remplace D-BC-01)
+L'exigence « identique à l'ancienne » l'emporte sur le tableau : la liste reprend
+`bonCommandeCardHTML` (`CarteBon`) — carte repliée (client, n° du client, conducteur,
+adresse), contacts à droite, montant et pastilles (logement, étape, `statut`), zone
+« 📄 Le bon de commande est arrivé ? », puis la rangée d'actions ; une seule carte
+dépliée à la fois, avec le même identifiant DOM que l'ancien (`bonCommande-card-<id>`).
+Les huit filtres, leurs libellés et leurs options sont ceux de l'ancien, lus dans les
+annuaires (conducteurs actifs, métiers déclarés, clients, interlocuteurs). Le total
+TTC du bouton de pré-facture est calculé sur les lignes, lues avec la liste. Le
+`statut` libre (« en attente ») s'affiche en pastille grise comme dans l'ancien
+(remplace la partie « ne l'affiche pas » de D-BC-13, qui reste : jamais réécrit).
+Les boutons que la base refuserait sont masqués selon le rôle : « 🧾 Créer la
+facture » (factures/creer), « Créer un SAV » (bons_commande/creer), « Supprimer »
+(bons_commande/supprimer, rétabli : RLS `bons_commande_delete`).
+Écart mesuré : 0,04 % de pixels (anticrénelage), 0 ligne de texte.
+
+## D-ECR-BC-02 — Les boutons désactivés à demeure de la carte gardent l'aspect de l'ancien
+`complements.css` grise tout `.btn:disabled` ; l'ancien ne grisait pas « 🧾 Créer la
+facture » avant la pré-facture ni « Supprimer » sous verrou. Règle limitée à
+`.bc-actions-bas .btn:disabled` (fichier partagé, modification localisée).
+
+## D-ECR-BC-03 — « Pièces en commande » : deux temps et des dossiers (remplace l'onglet « Reçues » de D-043)
+Comme `renderPiecesCommande` : « 📦 À commander », puis « 🚚 Commandées — par
+fournisseur » en dossiers 📁/📂 (un ouvert à la fois), cartes de bon en contexte
+`pieceCommande` ; la barre `barreRecherche` et son compteur « n sur N ». Une pièce
+reçue quitte l'écran (l'ancien n'avait pas « Reçues »). Date et fournisseur
+s'écrivent chacun à son changement (`updatePieceCommandeChamp`), « 📦 Commandé » pose
+la date du jour, « ✓ Pièce arrivée — Renvoyer au planning » appelle `bc_piece_recue`
+puis ouvre le planning. Fournisseurs proposés : annuaire actif puis noms déjà écrits
+sur des commandes ; ceux des achats de chantier (`fournisseursEmployes`) ne sont pas
+lus. Gestes réservés à planning/modifier (D-043 inchangé). Le « Aucun pièce … » de
+`listeVide` est recopié tel quel.
+
+## D-ECR-BC-04 — Le formulaire du bon : le panneau de l'ancien, la page reste une route
+`/commandes/nouveau`, `/commandes/:id` et `/commandes/:id/sav` rendent l'en-tête « Bons
+de commande » sans boutons puis `form-panel form-panel-v2` (`bonCommandeForm`) : zone
+de lecture, trois modes, sections « Client & contact », « Bon de commande » / « SAV »,
+« Lieu & locataire », « Organisation », « Chiffrage », barre collante ; la page défile
+jusqu'au formulaire comme `openForm`. Comportements repris : alerte native pour le
+client manquant et la liste des manques, retour à la liste avec « Bon de commande
+créé. / modifié. », brouillon qui reste ouvert avec « Brouillon enregistré à HH:MM ».
+Le SAV se crée dans ce même formulaire (« Nouveau SAV », photos), par `creerSav`
+(numéro de notre série). Non repris : annotation et catégorie des photos du SAV
+(vignette simple). Le téléphone du locataire s'affiche mais n'est toujours pas écrit
+(D-041). « BC reçu », « Créer la facture » et le lien vers la facture ne sont plus
+dans la fiche : ils sont sur la carte, comme dans l'ancien.
+
+## D-ECR-BC-05 — L'éditeur de lignes reste le composant partagé
+Le tableau des lignes (`documents/EditeurLignes`) et ses 16 à 23 lignes de texte
+d'écart (poignée, « Code… », « Prix U. HT », « 10% ») sont repris avec les devis, qui
+le partagent ; le seuil des écrans du formulaire le chiffre (`LIGNES_PARTAGEES`).
+
+## D-ECR-BC-06 — Le panneau « Circuit du bon » reste sous le formulaire (D-BC-03)
+L'ancien menait le circuit depuis le planning et Facturation › Validation (modales).
+Le panneau reste sous le formulaire d'un bon existant, hors de la première fenêtre ;
+son texte (25 lignes) est chiffré dans le seuil des écrans « modifier / consulter ».
+
+## D-ECR-BC-07 — « 🧾 Créer la facture » garde la base (`bc_generer_facture`)
+L'ancien ouvrait un formulaire de facture prérempli côté écran ; web/ laisse la base
+créer le brouillon (D-BC-14) puis l'ouvre. Même libellé, même place, même garde
+(pré-facture validée).
+
+## D-ECR-BC-08 — Ce que la carte ne montre pas faute de donnée
+Photos et dessin du technicien, « Planifiée une première fois le… », « Intervention
+terminée le… » : sans colonne en base (dérivés vides dans l'ancien aussi), non repris.
+La « Fiche d'intervention du technicien » montre le commentaire de tâche et la pièce.
+
+## D-ECR-BC-09 — L'ordre des cartes reste déterminé (date, puis numéro)
+L'ancien lit `v_bons_commande_terrain` sans `order` : les bons arrivent dans l'ordre
+physique de la vue, qui change au gré des mises à jour. web/ garde un ordre stable —
+date décroissante, numéro interne décroissant, puis identifiant (la pagination
+l'exige). Sur une base où des bons de même date ont été créés dans le désordre, les
+cartes du haut peuvent s'échanger : même texte, pixels décalés (seuil de l'écran
+`bons-de-commande` : 5 % au bureau, 0,5 % au téléphone).

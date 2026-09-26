@@ -71,15 +71,21 @@ export async function creerSav(origine: EnteteBon, probleme: string | null, phot
   return data.id;
 }
 
-async function ajouterPhotos(societeId: string, savId: string, photos: readonly File[], client: Client): Promise<void> {
-  for (const [position, photo] of photos.entries()) {
+/** Des photos de plus sur un SAV déjà enregistré : elles se rangent après celles qu'il porte. */
+export function ajouterPhotosAuSav(societeId: string, savId: string, photos: readonly File[], deja: number, client: Client = supabase()): Promise<void> {
+  return ajouterPhotos(societeId, savId, photos, client, deja);
+}
+
+async function ajouterPhotos(societeId: string, savId: string, photos: readonly File[], client: Client, deja = 0): Promise<void> {
+  for (const [rang, photo] of photos.entries()) {
+    const position = deja + rang;
     const chemin = cheminPieceJointe(societeId, savId, photo.name, Date.now() + position);
     try {
       await televerser(chemin, photo, client);
       const { error } = await client.from("bon_commande_photos").insert({ bon_commande_id: savId, chemin, position, legende: null });
       if (error) throw error;
     } catch (cause) {
-      throw new SavSansToutesSesPhotos(savId, photos.length - position, cause);
+      throw new SavSansToutesSesPhotos(savId, photos.length - rang, cause);
     }
   }
 }

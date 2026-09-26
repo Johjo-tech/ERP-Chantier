@@ -10,68 +10,69 @@ async function connexion(page: Page, email: string) {
   await expect(page.getByRole("navigation", { name: "Menu principal" })).toBeVisible();
 }
 
-test("bon en attente de BC : création contrôlée (BC-30), puis « BC reçu »", async ({ page }) => {
+/** La carte d'un bon dans la liste (D-ECR-BC-01) : nommée par son numéro interne et son client. */
+const carte = (page: Page, texte: string) => page.locator(".bc-card", { hasText: texte });
+
+test("bon en attente de BC : création contrôlée (BC-30), puis « ✓ BC reçu » depuis sa carte", async ({ page }) => {
   await connexion(page, "conducteur.alpha@erp.local");
   await page.getByRole("navigation", { name: "Menu principal" }).getByRole("link", { name: "Bons de commande" }).click();
-  await page.getByRole("link", { name: "Nouveau bon de commande" }).click();
-  await page.getByRole("button", { name: "En attente de BC" }).click();
-  await page.getByLabel("Client").selectOption({ label: "OPAC du Rhône" });
+  await page.getByRole("button", { name: "+ Nouveau bon de commande" }).click();
+  await page.getByRole("button", { name: "En attente de bon de commande" }).click();
+  await page.getByLabel("Client", { exact: true }).selectOption({ label: "OPAC du Rhône" });
   await page.getByLabel("Nature des travaux").fill("E2E fuite cage B");
-  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
-  await expect(page.getByText(/L'adresse d'intervention est obligatoire/)).toBeVisible();
+  // Comme l'ancien : ce qui manque se dit dans une fenêtre d'alerte.
+  const alerte = page.waitForEvent("dialog");
+  await page.getByRole("button", { name: "Enregistrer le bon de commande" }).click();
+  const dialogue = await alerte;
+  expect(dialogue.message()).toMatch(/L'adresse d'intervention est obligatoire/);
+  await dialogue.dismiss();
 
-  await page.getByLabel("Adresse du lieu").fill("7 rue de la Charité");
+  await page.getByLabel("Adresse d'intervention *").fill("7 rue de la Charité");
   await page.getByLabel("Désignation, ligne 1").fill("Recherche de fuite");
   await page.getByLabel("Prix unitaire HT, ligne 1").fill("95");
-  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
-  await expect(page.getByText("Bon de commande enregistré.")).toBeVisible();
-  // Le numéro interne vient de la base, pas de l'écran.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Bon de commande [A-Z]+-\d{4}-\d{6}$/);
-  await expect(page.getByText("Montant du bon (HT, d'après les lignes) : 95,00 €")).toBeVisible();
+  await page.getByRole("button", { name: "Enregistrer le bon de commande" }).click();
+  await expect(page.getByText("Bon de commande créé.")).toBeVisible();
 
-  await page.getByLabel("Numéro du bon reçu").fill("E2E-CMD-2026");
-  await page.getByRole("button", { name: "BC reçu" }).click();
+  const bon = carte(page, "E2E fuite cage B").or(carte(page, "7 rue de la Charité")).first();
+  await bon.getByLabel("N° indiqué sur le bon du client").fill("E2E-CMD-2026");
+  await bon.getByRole("button", { name: "✓ BC reçu" }).click();
   await expect(page.getByText(/n'est plus en attente, et le numéro partira sur sa facture/)).toBeVisible();
-  await page.getByRole("link", { name: "Retour à la liste" }).click();
-  await expect(page.getByRole("row", { name: /E2E-CMD-2026/ })).toBeVisible();
+  await expect(carte(page, "E2E-CMD-2026")).toBeVisible();
 });
 
 test("bon chiffré : la secrétaire crée la facture brouillon, le bon passe « Facturé »", async ({ page }) => {
   await connexion(page, "secretaire.alpha@erp.local");
   await page.goto("/commandes");
-  await expect(page.getByRole("row", { name: /BC-2026-900001/ })).toContainText("À facturer");
-  await page.getByRole("link", { name: "BC-2026-900001" }).click();
-  await page.getByRole("button", { name: "Créer la facture" }).click();
+  const bon = carte(page, "CMD-OPAC-7781");
+  await expect(bon).toContainText("À facturer");
+  await bon.getByRole("button", { name: "🧾 Créer la facture" }).click();
   await expect(page.getByText("Facture créée en brouillon depuis le bon de commande.")).toBeVisible();
   await expect(page.getByLabel("Désignation, ligne 1")).toHaveValue("Dépose faïence");
   await page.goto("/commandes");
-  await expect(page.getByRole("row", { name: /BC-2026-900001/ })).toContainText("Facturé");
-  await page.getByRole("link", { name: "BC-2026-900001" }).click();
-  await expect(page.getByRole("button", { name: "Créer la facture" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Voir la facture (brouillon)" })).toBeVisible();
+  await expect(carte(page, "CMD-OPAC-7781")).toContainText("Facturé");
+  await expect(carte(page, "CMD-OPAC-7781").getByRole("button", { name: "🧾 Créer la facture" })).toHaveCount(0);
 });
 
-test("pièces : le conducteur commande chez un fournisseur, puis la pièce arrive", async ({ page }) => {
+test("pièces : le conducteur commande, la pièce passe dans son dossier, puis elle arrive", async ({ page }) => {
   await connexion(page, "conducteur.alpha@erp.local");
   await page.getByRole("navigation", { name: "Menu principal" }).getByRole("link", { name: "Pièces en commande" }).click();
-  await expect(page.getByText("Mitigeur thermostatique 1/2")).toBeVisible();
-  await page.getByLabel("Fournisseur").fill("E2E Plomberie Rhône");
-  await page.getByRole("button", { name: "Marquer commandée" }).click();
-  await expect(page.getByText("Pièce commandée — classée dans le dossier E2E Plomberie Rhône.")).toBeVisible();
-  await page.getByRole("tab", { name: /Commandées/ }).click();
-  const dossier = page.getByRole("region", { name: "Fournisseur E2E Plomberie Rhône" });
-  await expect(dossier).toContainText("Mitigeur thermostatique 1/2");
-  await dossier.getByRole("button", { name: "Pièce reçue" }).click();
-  await expect(page.getByText(/Pièce reçue — le bon retourne au planning/)).toBeVisible();
-  await page.getByRole("tab", { name: /Reçues/ }).click();
-  await expect(page.getByText("Mitigeur thermostatique 1/2")).toBeVisible();
+  const bon = carte(page, "Sans BC");
+  await bon.getByRole("button", { name: "▸" }).click();
+  await expect(bon).toContainText("Mitigeur thermostatique 1/2");
+  await bon.getByRole("button", { name: "📦 Commandé" }).click();
+  await expect(page.getByText(/Pièce commandée — classée dans le dossier/)).toBeVisible();
+  await page.locator(".dossier-header", { hasText: "— Fournisseur non renseigné —" }).click();
+  const commandee = carte(page, "Sans BC");
+  await commandee.getByRole("button", { name: "▸" }).click();
+  await commandee.getByRole("button", { name: "✓ Pièce arrivée — Renvoyer au planning" }).click();
+  await expect(page.getByText(/Pièce reçue — le bon de commande est de retour dans Planning/)).toBeVisible();
 });
 
 test("le rôle lecture consulte un bon sans rien pouvoir enregistrer", async ({ page }) => {
   await connexion(page, "lecture.alpha@erp.local");
   await page.goto("/commandes");
-  await expect(page.getByRole("link", { name: "Nouveau bon de commande" })).toHaveCount(0);
-  await page.getByRole("link", { name: "BC-2026-900003" }).click();
+  await expect(page.getByRole("button", { name: "+ Nouveau bon de commande" })).toHaveCount(0);
+  await carte(page, "Mme Durand").first().getByRole("button", { name: "Modifier" }).click();
   await expect(page.getByText(/Consultation : votre rôle/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Enregistrer", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Enregistrer le bon de commande" })).toHaveCount(0);
 });

@@ -35,6 +35,10 @@ button.section-link{ background:none; border:none; padding:0; cursor:pointer; fo
    grise à peine. Les écrans de l'ancien désactivaient rarement ; les nouveaux
    le font plus souvent (envoi en cours), il faut que cela se voie. */
 .btn:disabled{ opacity:.55; cursor:not-allowed; }
+/* Sauf sur la carte d'un bon : ses boutons désactivés à demeure (« 🧾 Créer la
+   facture » avant la pré-facture, « Supprimer » sous verrou) gardent l'aspect
+   de l'ancien, où le navigateur ne les grisait pas (D-ECR-BC-02). */
+.bc-actions-bas .btn:disabled{ opacity:1; cursor:default; }
 
 /* Le bandeau « voir en tant que » (D-010) : absent de l'ancien écran, il en
    prend le bandeau d'alerte. Deux bandeaux à la fois s'empilent. */

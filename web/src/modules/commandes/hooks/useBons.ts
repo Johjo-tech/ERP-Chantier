@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { todayISO } from "@/lib/dates";
 import { useSession, useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
-import { ecrireContacts, EnregistrementPartiel, enregistrerBcRecu, enregistrerBon, genererFacture, lireBon, listerBons } from "../api/bons";
+import { ecrireContacts, EnregistrementPartiel, enregistrerBcRecu, enregistrerBon, genererFacture, lireBon, listerBons, supprimerBon } from "../api/bons";
 import { messageErreur } from "@/lib/erreurs";
 import {
   ajouterTravail,
@@ -21,9 +21,9 @@ import {
   validerPrefacture,
   type ChiffrageDirecteur,
 } from "../api/circuit";
-import { creerSav, listerPhotos, remplacerPieceJointe, urlPieceJointe, DUREE_URL_SIGNEE_S } from "../api/documents";
+import { ajouterPhotosAuSav, creerSav, listerPhotos, remplacerPieceJointe, urlPieceJointe, DUREE_URL_SIGNEE_S } from "../api/documents";
 import { listerMetiersDeclares } from "../api/metiers";
-import { listerPieces, marquerCommandee, pieceRecue } from "../api/pieces";
+import { listerPieces, marquerCommandee, modifierCommandePiece, pieceRecue } from "../api/pieces";
 import type { EnteteAEnregistrer, EnteteBon } from "../domain/bon";
 import { origineDuTravail } from "../domain/circuit";
 import { metiersDuBon, referentielMetiers } from "../domain/metiers";
@@ -83,6 +83,12 @@ export function useUrlPieceJointe(chemin: string | null) {
   return useQuery({ queryKey: clesBons.url(chemin ?? ""), queryFn: () => urlPieceJointe(chemin as string), enabled: !!chemin, staleTime: DUREE_URL_SIGNEE_S * SECONDE_MS * MARGE });
 }
 
+/** Les métiers déclarés dans les réglages : ce que propose le filtre « Tous les métiers » (`metierPersoFilterOptions`). */
+export function useMetiersDeclares() {
+  const s = useSocieteActive();
+  return useQuery({ queryKey: clesBons.metiers(s.id), queryFn: () => listerMetiersDeclares(s.id) });
+}
+
 /** Les métiers proposés : déclarés + employés sur les bons de la société (BC-54). */
 export function useMetiersDisponibles(): string[] {
   const s = useSocieteActive();
@@ -116,14 +122,17 @@ export interface EnregistrementBon {
   pieceJointe?: File | null;
   /** Le chemin actuel, pour effacer l'ancien fichier après remplacement. */
   pieceJointeActuelle?: string | null;
+  /** Un SAV modifié : les photos ajoutées, rangées après l'enregistrement. */
+  photosSav?: readonly File[];
 }
 
 export function useEnregistrerBon(id: string | undefined) {
   const s = useSocieteActive();
   const recharger = useRecharger();
   return useMutation({
-    mutationFn: async ({ entete, lignes, pieceJointe, pieceJointeActuelle = null }: EnregistrementBon) => {
+    mutationFn: async ({ entete, lignes, pieceJointe, pieceJointeActuelle = null, photosSav = [] }: EnregistrementBon) => {
       const bonId = await enregistrerBon(s.id, id ?? null, entete, lignes);
+      if (photosSav.length) await ajouterPhotosAuSav(s.id, bonId, photosSav, (await listerPhotos(bonId)).length);
       // Après le bon, jamais avant : le chemin de stockage porte son uuid, qui n'existe qu'une fois le bon créé.
       if (pieceJointe === undefined) return bonId;
       try {
@@ -148,6 +157,11 @@ export function useContacts() {
   return useMutation({ mutationFn: ({ id, contacts }: { id: string; contacts: Parameters<typeof ecrireContacts>[1] }) => ecrireContacts(id, contacts), onSettled: recharger });
 }
 
+export function useSupprimerBon() {
+  const recharger = useRecharger();
+  return useMutation({ mutationFn: (id: string) => supprimerBon(id), onSettled: recharger });
+}
+
 export function useGenererFacture() {
   const recharger = useRecharger();
   return useMutation({ mutationFn: (id: string) => genererFacture(id), onSettled: recharger });
@@ -159,6 +173,11 @@ export function useMarquerCommandee() {
     mutationFn: ({ bonId, date, fournisseur }: { bonId: string; date: string; fournisseur: string | null }) => marquerCommandee(bonId, { date, fournisseur }),
     onSettled: recharger,
   });
+}
+
+export function useModifierCommandePiece() {
+  const recharger = useRecharger();
+  return useMutation({ mutationFn: ({ bonId, champs }: { bonId: string; champs: Parameters<typeof modifierCommandePiece>[1] }) => modifierCommandePiece(bonId, champs), onSettled: recharger });
 }
 
 export function usePieceRecue() {

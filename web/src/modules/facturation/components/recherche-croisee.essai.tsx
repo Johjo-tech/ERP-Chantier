@@ -16,6 +16,8 @@ import { PageFactures } from "./PageFactures";
 const bons = vi.hoisted(() => ({ listerBons: vi.fn() }));
 vi.mock("@/modules/commandes/api/bons", () => ({ ...bons, EnregistrementPartiel: class extends Error {} }));
 vi.mock("@/modules/commandes/api/metiers", () => ({ listerMetiersDeclares: vi.fn(async () => []) }));
+// La carte d'un bon cite son rapport lié (D-ECR-BC-01).
+vi.mock("@/modules/interventions/api/rapports", () => ({ listerRapports: vi.fn(async () => []) }));
 const factures = vi.hoisted(() => ({ listerFactures: vi.fn() }));
 vi.mock("../api/factures", () => factures);
 const soldes = vi.hoisted(() => ({ soldesDesFactures: vi.fn() }));
@@ -87,19 +89,19 @@ describe("recherche croisée des factures et des bons (TRV-06, TRV-07)", () => {
 
   it("un bon se trouve par le numéro de sa facture, rapprochée par la référence client normalisée", async () => {
     ouvrir("/commandes");
-    await screen.findByRole("link", { name: "BC-2026-900001" });
+    await screen.findByRole("article", { name: /Bon BC-2026-900001 / });
     await userEvent.type(screen.getByLabelText("Rechercher un bon de commande"), "FAC-2026-000010");
-    await waitFor(() => expect(screen.queryByRole("link", { name: "BC-2026-900002" })).not.toBeInTheDocument());
-    expect(within(screen.getByRole("row", { name: /BC-2026-900001/ })).getByText(/🔎 Facture FAC-2026-000010/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("article", { name: /Bon BC-2026-900002 / })).not.toBeInTheDocument());
+    expect(within(screen.getByRole("article", { name: /Bon BC-2026-900001 / })).getByText(/🔎 Facture FAC-2026-000010/)).toBeInTheDocument();
   });
 });
 
 describe("filtres dans l'adresse (D-CLI-10)", () => {
   it("la tuile « SAV » ouvre la liste des bons déjà filtrée", async () => {
     ouvrir("/commandes?type=sav");
-    expect(await screen.findByRole("link", { name: "BC-2026-900002" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "BC-2026-900001" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Type de bon")).toHaveValue("sav");
+    expect(await screen.findByRole("article", { name: /Bon BC-2026-900002 / })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /Bon BC-2026-900001 / })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Type")).toHaveValue("sav");
   });
 
   it("la tuile « Devis en attente » ouvre les devis envoyés ; un montant se cherche ; Entrée met en évidence", async () => {
