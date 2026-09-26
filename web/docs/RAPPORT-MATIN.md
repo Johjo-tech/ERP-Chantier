@@ -57,8 +57,8 @@ décision écrite, 0 restant. Parité : 100 %.**
 | **espace-client** | 100 % | Chantiers, devis envoyés, factures émises et leur solde, suivi des bons, en lecture seule |
 | transversal | 100 % | Notifications (cloche), mode discret, menu épinglé, recherche multi-mots et montants, formats français exacts, listes lues en entier (jamais tronquées) |
 
-Capteurs sur une **base neuve** : **941 tests** (unitaires, parité, garde-fous —
-`npm run check`), **286 tests RLS** contre la base locale, **11 parcours**
+Capteurs sur une **base neuve** : **993 tests** (unitaires, parité, garde-fous —
+`npm run check`), **283 tests RLS** contre la base locale, **11 parcours**
 navigateur (Playwright), build vert, CI GitHub `web` et CI historique vertes.
 
 ## Lancer l'app sur votre Mac
@@ -123,8 +123,8 @@ l'état actuel. Corrections **proposées**, jamais appliquées :
 - **Décisions à valider par le métier** :
   - D-SQL-02 : la **reprise d'historique** de factures devient réservée à
     l'administrateur (l'ancien écran échouera aussi pour la secrétaire).
-  - D-STA-02 / D-STA-04 : le CA exclut les factures d'acompte ; « Encaissé ce
-    mois » est en TTC.
+  - Statistiques : **tranché par le client** — identiques à l'ancien, défauts compris
+    (D-STA-A-01) ; chaque défaut conservé est dans `DEFAUTS-A-TRANCHER.md` (DEF-STA).
   - D-AUTH-06 : un technicien peut encore **créer** une fiche conducteur par
     l'API — à fermer après vérification de l'ancien écran.
   - D-RH-01 : le conducteur ne voit plus le badge de visite médicale.
@@ -136,7 +136,7 @@ l'état actuel. Corrections **proposées**, jamais appliquées :
 
 ## Migrations de schéma nécessaires (non appliquées)
 
-**35 propositions**, dans l'ordre des fichiers ; détail, essai à blanc et
+**34 propositions actives** (la n° 22, statistiques, retirée), dans l'ordre des fichiers ; détail, essai à blanc et
 contrôles préalables dans `docs/migrations-proposees.md`. Toutes rejouées deux
 fois de suite sur une base neuve (`scripts/essai-base-neuve.sh`). Les vues refaites
 (`v_facture_solde`, `v_salaries_annuaire`, vues terrain) **s'arrêtent d'elles-mêmes**
@@ -146,7 +146,7 @@ si leur définition vivante en production diffère de celle attendue.
 - Intégrité / calcul : n° 5, 6, 7, 12 (solde vrai, avoirs), 13 (règlements en
   base), 15, 26, 32 à 35 (gestes en une transaction).
 - Fonction : espace client (4, 14, 29), chantier (9), sous-traitant et terrain
-  (16 à 19), parc (21), statistiques (22), fériés (28), notifications (31).
+  (16 à 19), parc (21), fériés (28), notifications (31).
 - À écrire ensuite (non rédigées) : bon depuis devis atomique, situation de
   travaux atomique, client/conducteur d'une autre société refusés par la base,
   corrections de `bc_generer_facture`, `extraire-bc` authentifiée, niveau
