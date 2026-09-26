@@ -853,6 +853,7 @@ rédigé sur un nom libre doit d'abord recevoir son client ; les lignes partent
 sans prix (préconisations « x2 m² » → quantité et unité).
 
 ## D-STA-01 — Les agrégats des tableaux de bord sont calculés par la base (proposition 20260926080000)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 L'ancien écran chargeait toutes les collections et additionnait dans le
 navigateur des totaux recalculés pièce par pièce. `web/` appelle des fonctions
 d'agrégat (`stats_indicateurs`, `stats_ca_par_mois`, `stats_activite_recente`,
@@ -863,6 +864,7 @@ garde « statistiques / voir » (42501) : le module, qu'aucune politique
 n'invoquait, devient opposable. L'écran n'en tire que des taux et des parts.
 
 ## D-STA-02 — Le chiffre d'affaires ne compte que des factures émises (STA-21, P-19)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 CA HT = pièces émises (ni brouillon sans numéro, même définition que
 `v_facture_solde`), avoirs en négatif quel que soit le signe de leurs lignes,
 **factures d'acompte exclues** : leur montant est repris en entier par la
@@ -879,6 +881,7 @@ primaire), l'identité d'une série est toujours écrite, jamais portée par la
 seule couleur.
 
 ## D-STA-04 — « Encaissé ce mois » = règlements datés du mois, en TTC (STA-21, P-19)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 L'ancien « CA encaissé (HT) » additionnait le HT des factures au statut stocké
 « payée » datées du mois de la FACTURE. La tuile dit désormais ce qui est entré
 en caisse : Σ des règlements datés du mois, hors lettrage d'avoir (modes
@@ -887,6 +890,7 @@ TTC — la tuile l'écrit. Une pièce historique réglée par reprise, sans
 règlement, n'y apparaît pas.
 
 ## D-STA-05 — Statistiques par la référence du conducteur ; retard sur un bon ouvert (STA-22)
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 Groupement par `conducteur_id` (le nom de sa fiche, « Sans conducteur » à
 défaut), jamais par l'étiquette `conducteur`. « En retard » = fin de travaux
 dépassée sur un bon **ouvert** (ni chiffré, ni facturé, ni clos, aucune
@@ -901,6 +905,7 @@ Par client : groupé par la fiche, par le nom à défaut. Écran enrichi d'une
 plage de dates libre.
 
 ## D-STA-06 — « Locataires à rappeler » : seulement sur un bon encore ouvert
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 Le pilotage historique relançait aussi des affaires chiffrées ou closes ; le
 tableau du conducteur, lui, ne regardait que les bons ouverts. Les deux suivent
 désormais la même règle.
@@ -920,24 +925,83 @@ matrice seule (« statistiques / voir » : admin, secrétaire, conducteur,
 lecture), comme le planning (D-PLN-12).
 
 ## D-STA-09 — Le sous-traitant reçoit le tableau du terrain
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 Son ancien tableau comptait ses factures « KTA » prêtes, ses devis et ses
 factures impayées : factures et devis de sous-traitant ne sont pas repris
 (D-FAC-09, D-FAC-14). Il reçoit donc, comme le technicien, sa journée (par son
 entreprise, `monSousTraitantId`) et rien d'autre ; aucun montant.
 
 ## D-STA-10 — Tableau du conducteur : sa fiche par son compte, aucun montant
+**Remplacée en partie par D-STA-A-01** : le bandeau « aucune fiche » reprend le texte de l'ancien (« Cochez « Conducteur de travaux » sur votre fiche dans RH… ») ; le reste tient.
 Les affaires se filtrent par `conducteurs.profile_id` = compte connecté ; sans
 fiche, toute la société, avec un bandeau qui le dit. L'API ne demande à la vue
 terrain aucune colonne de prix. Un administrateur qui « voit en tant que »
 conducteur n'a pas de fiche : il voit toute la société, bandeau compris.
 
 ## D-STA-11 — Factures échues et taux d'encaissement lus sur le solde calculé par la base
+**Remplacée par D-STA-A-01** (calculs identiques à l'ancienne, défauts compris).
 « Factures échues » = pièces qui doivent encore (`du` > 0, avoirs exclus) avec
 une échéance dépassée — plus le statut stocké, qu'une facture partiellement
 réglée pouvait contredire. Taux d'encaissement (RM-70, formule inchangée) :
 impayés = Σ `du`, dénominateur = Σ TTC des pièces émises (avoirs négatifs),
 brouillons exclus (P-19). Le résumé du mois ne répète plus « CA encaissé » :
 la tuile le porte déjà.
+
+## D-STA-A-01 — Décision du client : calculs identiques à l'ancienne, défauts compris
+Le client exige que les tableaux de bord (pilotage administrateur/secrétaire/lecture, conducteur,
+technicien, sous-traitant) et l'écran Statistiques calculent EXACTEMENT comme `app.js` : mêmes
+définitions, mêmes filtres, mêmes arrondis, même groupement, mêmes libellés, mêmes tuiles. Elle
+remplace D-STA-01, 02, 04, 05, 06, 09, 11 (et en partie D-STA-10, D-VIS-07, D-VIS-08,
+D-ECR-PAR-13, D-CLI-10). Chaque défaut ainsi gardé est décrit, avec sa reproduction et la
+correction à remettre, dans `docs/DEFAUTS-A-TRANCHER.md` (DEF-STA-01 à 19), pour que le client
+tranche un par un.
+
+**Comment** : les collections que l'ancien chargeait sont lues entières (`api/collections.ts` :
+factures et devis avec leurs lignes, règlements, rapports, bons par la vue terrain, fiches de
+conducteur, équipes ; « À traiter » reprend `useBons`, le technicien et le sous-traitant le
+planning) et calculées dans `domain/ancien/` en **virgule flottante, `Math.round` compris** —
+seule exception au décimal exact du domaine (D-006), consignée dans le garde-fou
+(`tests/garde-fous.essai.ts`, `CALCULS_DE_L_ANCIEN`) : une somme décimale et une somme flottante
+s'affichent différemment sur un demi-centime, et seul le flottant rend l'affichage de l'ancien. Les
+montants s'écrivent comme `moneyDisplay` (`formatEurosEcranAncien` : `Intl` sur le nombre, mode
+discret compris). Aucun calcul n'est enregistré. La proposition 20260926080000 (`stats_*`) est
+retirée (docs/migrations-proposees.md). Parité : `tests/parite/statistiques.essai.ts` évalue la
+source de `app.js` et compare au flottant près, à l'heure de Paris.
+
+**Défauts de l'ancien conservés** (détail dans DEFAUTS-A-TRANCHER.md) :
+1. Chiffre d'affaires = toutes les factures datées : brouillons, acomptes et situations compris,
+   avoirs en négatif (graphique, total, plage libre, top clients, statistiques) — DEF-STA-01.
+2. « CA encaissé ce mois (HT) » = HT des factures au statut stocké « payée » datées du mois de la
+   facture, pas les règlements du mois — DEF-STA-02.
+3. Restant dû et taux d'encaissement comptent les brouillons (dus et facturés) ; une facture
+   « payée » sans règlement est due — DEF-STA-03.
+4. « Factures impayées » (nombre) et « Factures échues » lues sur le statut stocké — DEF-STA-04.
+5. « Locataires à rappeler » compte les bons clos, chiffrés, facturés — DEF-STA-05.
+6. Activité récente : « Client · null » pour une facture sans numéro ; lettrages d'avoir montrés
+   comme « Paiement reçu » — DEF-STA-06.
+7. Top clients par le nom écrit sur la facture — DEF-STA-07.
+8. Statistiques par l'étiquette `conducteur` (graphies distinctes = lignes distinctes, aucune ligne
+   « Sans conducteur », fiches sans pièce à zéro) — DEF-STA-08.
+9. « En retard » = fin de travaux dépassée, même sur un bon facturé ou clos — DEF-STA-09.
+10. Barre rouge pleine « 0 / 0 » pour un conducteur sans bon — DEF-STA-10.
+11. Travaux supplémentaires toujours à 0 (champ sans colonne) — DEF-STA-11.
+12. Jamais d'« injoignable » (`parseInt` d'un tableau) — DEF-STA-12.
+13. Technicien : seul le jour du rendez-vous compte, ses bons par la colonne `technicien` — DEF-STA-13.
+14. Sous-traitant : son tableau à trois tuiles, « Mes devis » et « Mes factures impayées » toujours à
+    0 — DEF-STA-14. Les tuiles ouvrent le planning : les écrans de factures et devis de
+    sous-traitant n'existent pas (D-FAC-09, D-FAC-14). Comme à chaque ouverture de l'ancien, aucun
+    sous-traitant « actuel » : « Bonjour 👋 Sous-traitant » et le bandeau « Sélectionnez votre nom
+    dans Réglages » — DEF-STA-19.
+15. Infobulle du graphique sur 12 mois : l'année de la dernière barre pour toutes — DEF-STA-15.
+16. Part du chiffre d'affaires négative ou au-delà de 100 % avec des avoirs — DEF-STA-17.
+17. Bons rangés dans la période par leur date de saisie — DEF-STA-18.
+
+**Non reproduit, à trancher** : l'infobulle de l'ancien écrit le montant même en mode discret
+(DEF-STA-16) ; `web/` le masque, comme tout montant d'écran (TRV-05).
+
+**Retiré de l'écran Statistiques** (absent de l'ancien) : plage de dates libre, vues par métier et
+par client. **Inchangé** : recherche globale du tableau de bord (hors calculs), mesures du
+conducteur (déjà identiques), graphiques en SVG écrits à la main (D-STA-03).
 
 ## D-VEH-01 — Les prêts du parc ont leur table et leur durée (proposition 20260926070000)
 L'ancien écran rangeait prêts et entretiens dans le JSON de la fiche, sans
@@ -1468,6 +1532,7 @@ d'UPDATE séparé). `devisDepuisIntervention`, `factureDepuisIntervention`,
 leurs hooks et `Bouton*DepuisRapport` sont supprimés.
 
 ## D-CLI-10 — Filtres dans l'adresse (remplace D-STA-07)
+**Remplacée en partie par D-STA-A-01** : « Devis en attente » compte les devis « envoyé » calculés à l'écran, plus par `stats_indicateurs` (retirée).
 Devis, bons de commande et planning lisent et écrivent leurs filtres dans
 l'URL (`useFiltresAdresse`, `replace` : une frappe n'empile pas l'historique).
 Tuiles : « Devis en attente » → `/devis?statut=envoyé` (la définition de
@@ -1749,6 +1814,7 @@ Les écrans de modules héritent de ce rendu ; leur HTML propre (grilles Tailwin
 reprendre écran par écran.
 
 ## D-VIS-07 — Le graphique du chiffre d'affaires : la géométrie de l'ancien, le tableau pour les lecteurs d'écran
+**Remplacée en partie par D-STA-A-01** : plus d'infobulle de définition sur le titre ; hauteur des barres et année de l'infobulle calculées comme l'ancien (DEF-STA-15).
 Même dessin que `renderYearlyComparisonSVG` (960 × 300, barres ≤ 20 px, N-1 à 32 %, légende en
 haut à droite, bulle `#revenueTooltip` qui suit le pointeur). D-STA-03 voulait un tableau
 équivalent : il reste, mais en `.sr-only` — visible, il ajoutait un « Voir en tableau » que l'ancien
@@ -1757,6 +1823,7 @@ l'ancien (6 mois, 12 mois, « Sélectionner les dates » → la fenêtre `revenu
 « Depuis janvier » n'y figurait pas. La définition du chiffre (D-STA-02) passe en infobulle du titre.
 
 ## D-VIS-08 — Tableau de bord : ce qui reste différent est décidé
+**Remplacée en partie par D-STA-A-01** : tuile « CA encaissé ce mois (HT) », restant dû et résumé du mois (avec « Chiffre d'affaires encaissé (HT) ») de l'ancien, classement par nom ; le sous-traitant retrouve son tableau.
 Les trois variantes reprennent le HTML de l'ancien (`.dash-greetrow` et sa main levée,
 `.grid-stats-4`, `.stat-card`, `.traiter-row` et leurs pastilles, `.dash-columns3`, `.progress-bar`,
 `.mesure-conducteur`). Écarts restants, tous décidés : tuile « Encaissé ce mois (TTC) »
@@ -2269,6 +2336,7 @@ fiche retirée porte « Retiré » et se remet d'un clic. La case « Proposé da
 fournisseur est la même bascule.
 
 ## D-ECR-PAR-13 — Statistiques : la page de l'ancien, les ajouts repliés en bas
+**Remplacée en partie par D-STA-A-01** : ni plage libre ni vues par métier et par client (absentes de l'ancien) ; chiffres par étiquette de conducteur, retard sur tout bon.
 `renderStatistiques` : titre « Statistiques par conducteur de travaux » et sa liste de période,
 phrase « Période affichée », trois tuiles `.stat-card` (devis, factures, bons), les trois cartes
 `.stats-charts-grid` aux couleurs de `STATS_PALETTE`, le tableau à neuf colonnes, puis « Chiffre
