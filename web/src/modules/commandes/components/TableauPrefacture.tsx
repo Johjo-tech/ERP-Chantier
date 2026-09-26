@@ -1,6 +1,5 @@
 import { Fragment, useContext } from "react";
-import { somme } from "@/lib/money";
-import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
+import { formatEuros, somme } from "@/lib/money";
 import { ligneVide, type LigneEdition } from "@/modules/documents/domain/lignes";
 import { memeMetier, METIER_AUCUN, metierAffiche, metierChoisi, montantsParMetier } from "../domain/metiers";
 import { badgeOrigine, metierDuTravail, placerTravaux, UNITE_DEFAUT, type LigneDocument, type SaisieTravail, type TacheDuTravail, type Travail } from "../domain/prefacture";
@@ -61,7 +60,6 @@ function LigneTravail({ t, metier, saisie, onSaisie, actif }: { t: Travail; meti
 
 /** Ce que chaque métier pèse (`sousTotauxMetiersHTML`), sur le document fusionné, dès deux groupes. */
 function SousTotaux({ document }: { document: readonly LigneDocument[] }) {
-  useModeDiscret();
   const connus = useContext(MetiersConnus);
   const groupes = montantsParMetier(document, connus);
   if (groupes.length < 2) return null;
@@ -75,10 +73,10 @@ function SousTotaux({ document }: { document: readonly LigneDocument[] }) {
             <tr key={g.metier ?? "sans"}>
               <td>{g.metier ? <span className="badge" style={{ background: "var(--accent-soft)", color: "var(--accent-2)" }}>{g.metier}</span> : <span className="card-sub">Hors chapitre nommé</span>}</td>
               <td className="card-sub">{g.nbLignes} ligne{g.nbLignes > 1 ? "s" : ""}</td>
-              <td className="num mono" style={{ fontWeight: 600 }}>{formatEurosEcran(g.montantHt)} HT</td>
+              <td className="num mono" style={{ fontWeight: 600 }}>{formatEuros(g.montantHt)} HT</td>
             </tr>
           ))}
-          <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total HT</td><td className="num mono" style={{ fontWeight: 700 }}>{formatEurosEcran(total)}</td></tr>
+          <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total HT</td><td className="num mono" style={{ fontWeight: 700 }}>{formatEuros(total)}</td></tr>
         </tbody>
       </table>
     </div>
@@ -93,7 +91,6 @@ function SousTotaux({ document }: { document: readonly LigneDocument[] }) {
  * « Travaux supplémentaires constatés sur le chantier ».
  */
 export function TableauPrefacture({ lignes, onLignes, travaux, taches, saisies, onSaisie, document, tvaDefaut, chiffrageTravaux, desactive }: Props) {
-  useModeDiscret();
   const connus = useContext(MetiersConnus);
   const placement = placerTravaux(lignes, travaux, taches, connus);
   const maj = (i: number, champs: Partial<LigneEdition>) => onLignes(lignes.map((l, j) => (j === i ? { ...l, ...champs } : l)));
@@ -105,7 +102,7 @@ export function TableauPrefacture({ lignes, onLignes, travaux, taches, saisies, 
   const rangs = lignes.map((l, i) => {
     const chapitre = chapitres[i] ?? null;
     if (l.type !== "ligne") {
-      const allure = l.type === "chapitre" ? { fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".4px", color: "#C24E00" } : { fontStyle: "italic" as const, color: "#6B7686" };
+      const allure = l.type === "chapitre" ? { fontWeight: "bold", textTransform: "uppercase" as const, letterSpacing: ".4px", color: "#C24E00" } : { fontStyle: "italic" as const, color: "#6B7686" };
       return (
         <Fragment key={l.cle}>
           <tr className={`dnd-row ${l.type === "chapitre" ? "p-chapitre" : "p-comment"}`}>

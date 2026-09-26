@@ -2,7 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { Modale } from "@/components/ui/modale";
 import { formatDateFr } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
-import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
+import { formatEuros } from "@/lib/money";
 import { afficherToast } from "@/lib/toast";
 import { useSession, useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
@@ -123,7 +123,6 @@ interface Props {
  * la transition par la base (hors circuit compris).
  */
 function CorpsPrefacture({ bon, taches, travaux, reglages, onFermer, onEnregistre }: Props) {
-  useModeDiscret();
   const { roleEffectif } = useSession();
   const droits = actionsFacturation(roleEffectif);
   const prixVisibles = useVoitLesPrix();
@@ -176,7 +175,7 @@ function CorpsPrefacture({ bon, taches, travaux, reglages, onFermer, onEnregistr
   }
 
   function confirmerHorsCircuit() {
-    if (!window.confirm(`Envoyer ce bon de commande en facturation SANS passer par le planning ?\n\n${bon.client_nom} — ${formatEurosEcran(t.ttc)} TTC\n\nAucune tâche n'attestera des travaux. Le bon passera directement à « À facturer ».\nCe contournement est enregistré au journal de la base, avec votre nom.`)) return;
+    if (!window.confirm(`Envoyer ce bon de commande en facturation SANS passer par le planning ?\n\n${bon.client_nom} — ${formatEuros(t.ttc)} TTC\n\nAucune tâche n'attestera des travaux. Le bon passera directement à « À facturer ».\nCe contournement est enregistré au journal de la base, avec votre nom.`)) return;
     lancer(true);
   }
 

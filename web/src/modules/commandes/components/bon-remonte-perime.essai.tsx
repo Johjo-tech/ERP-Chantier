@@ -124,5 +124,8 @@ describe("pré-facture : après « Enregistrer sans valider », la fenêtre remo
     await userEvent.click(screen.getByRole("button", { name: "💾 Enregistrer sans valider" }));
     await waitFor(() => expect(base.prix).toHaveLength(2));
     expect(base.prix[1]).toEqual(["Pose carrelage"]);
+    // La relecture qui suit l'enregistrement doit aboutir avant la fin du test, sinon elle remonte un écran démonté.
+    await attendre(200);
+    expect(screen.getByDisplayValue("Pose carrelage")).toBeInTheDocument();
   });
 });
