@@ -39,6 +39,7 @@ export function BarresRepartition({ lignes }: { lignes: readonly { libelle: stri
 }
 
 function BarresRetard({ stats }: { stats: readonly StatConducteur[] }) {
+  useModeDiscret();
   if (!stats.some((s) => s.bons > 0)) return <div className="empty">Aucun bon de commande pour l&apos;instant.</div>;
   return (
     <>
@@ -72,6 +73,7 @@ function BarresRetard({ stats }: { stats: readonly StatConducteur[] }) {
 }
 
 function MiniBarre({ libelle, taux, couleur }: { libelle: string; taux: number; couleur: string }) {
+  useModeDiscret();
   return (
     <div className="stats-mini-bar-row">
       <span className="stats-mini-label">{libelle}</span>
@@ -85,6 +87,7 @@ function MiniBarre({ libelle, taux, couleur }: { libelle: string; taux: number; 
 
 /** Les trois cartes de `.stats-charts-grid` (app.js l. 12205). */
 export function GraphiquesConducteurs({ stats }: { stats: readonly StatConducteur[] }) {
+  useModeDiscret();
   return (
     <div className="stats-charts-grid">
       <div className="card stats-chart-card">

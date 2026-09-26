@@ -17,6 +17,7 @@ const VERT_ENTRETIEN = "#5BC97A";
 const LIGNE = { "--cat-color": VERT_ENTRETIEN } as CSSProperties;
 
 function LigneEntretien({ en, voitLesPrix, modifiable, onModifier, onSupprimer }: { en: Entretien; voitLesPrix: boolean; modifiable: boolean; onModifier: () => void; onSupprimer: () => void }) {
+  useModeDiscret();
   return (
     <div className="achat-row" style={LIGNE}>
       <div className="achat-row-icon" style={{ background: `${VERT_ENTRETIEN}22`, color: VERT_ENTRETIEN }}>

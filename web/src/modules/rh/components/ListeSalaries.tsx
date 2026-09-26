@@ -73,6 +73,7 @@ export function ListeSalaries({ formulaire }: { formulaire?: ReactNode }) {
 }
 
 function Cartes({ liste }: { liste: readonly Salarie[] }) {
+  useModeDiscret();
   const droits = useDroitsRh();
   const documents = useDocumentsRh();
   const visites = useVisitesRh();

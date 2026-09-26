@@ -10,6 +10,7 @@ import type { Vehicule } from "../domain/vehicule";
 import { FormulaireVente } from "./FormulaireVente";
 
 function Abonnement(props: { titre: string; fournisseur: string | null; numero: string | null; vide: string; validite: string | null; prefixeValidite: string; seuil: number | undefined; vendu: boolean }) {
+  useModeDiscret();
   const e = props.seuil === undefined ? null : etiquetteEcheance(props.validite, props.seuil, props.vendu);
   return (
     <div className="vehicule-abonnement-row">

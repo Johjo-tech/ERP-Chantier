@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { formatDateFr } from "@/lib/dates";
+import { formatDateFr, jourIso } from "@/lib/dates";
 import { messageErreur } from "@/lib/erreurs";
 import { afficherToast } from "@/lib/toast";
 import { useToastErreur } from "@/modules/materiel/components/communs";
@@ -71,7 +71,7 @@ function Invitation({ salarieId, emailFiche, rolePropose }: { salarieId: string;
     return (
       <div className="card-sub" style={{ marginTop: "8px" }}>
         ✉ Invitation en attente pour <strong>{attente.email}</strong>
-        {attente.invitee_le ? ` — envoyée le ${formatDateFr(attente.invitee_le.slice(0, 10))}` : ""}.
+        {attente.invitee_le ? ` — envoyée le ${formatDateFr(jourIso(attente.invitee_le))}` : ""}.
         <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
           <button
             type="button"
