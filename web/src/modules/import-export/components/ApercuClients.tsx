@@ -68,8 +68,8 @@ export function ApercuClients({ nom, rapport, apercu, onImporter, onRapport, ret
         <Chiffre valeur={rapport.signalements.length} libelle="signalés" />
       </div>
       <div className="card-sub" style={{ margin: "10px 0" }}>
-        L'annuaire des entreprises n'est pas interrogé : les fiches sont écrites telles que le fichier les décrit. Une mise à jour ne remplace que ce que le fichier
-        renseigne, et ne change pas le type d'un client existant.
+        {/* À la place du « Annuaire : 0 interrogé… » de l'ancien, une ligne de même gabarit (D-EFA-06, D-EFA-07). */}
+        Annuaire : non interrogé.
       </div>
       {cadres.length > 0 && (
         <div className="wf-banner" style={{ marginTop: "10px" }}>

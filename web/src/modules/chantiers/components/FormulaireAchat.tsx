@@ -63,7 +63,7 @@ export function FormulaireAchat({ chantierId, categories }: { chantierId: string
           ))}
         </select>
         <input type="text" aria-label="Désignation" placeholder="Désignation…" style={{ flex: 1 }} value={valeurs.designation} onChange={(e) => changer("designation", e.target.value)} />
-        <input type="text" inputMode="decimal" aria-label="Montant HT" placeholder="Montant HT" value={valeurs.montant} onChange={(e) => changer("montant", e.target.value)} />
+        <input type="number" step="0.01" aria-label="Montant HT" placeholder="Montant HT" value={valeurs.montant} onChange={(e) => changer("montant", e.target.value)} />
         <input type="date" aria-label="Date" value={valeurs.date_achat} onChange={(e) => changer("date_achat", e.target.value)} />
         <button type="submit" className="btn primary" disabled={ajouter.isPending}>
           + Ajouter
@@ -86,8 +86,8 @@ export function FormulaireAchat({ chantierId, categories }: { chantierId: string
           ))}
         </select>
         <input
-          type="text"
-          inputMode="decimal"
+          type="number"
+          step="0.25"
           aria-label="Heures"
           placeholder="Heures"
           value={valeurs.heures}

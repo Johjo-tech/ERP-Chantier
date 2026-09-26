@@ -22,7 +22,8 @@ interface Props {
   importer: (f: File | null) => void;
 }
 
-const enTexte = (n: number) => String(n).replace(".", ",");
+// Le point du nombre : les champs sont des `type="number"`, comme l'ancien (alignés à droite par la feuille).
+const enTexte = (n: number) => String(n);
 const depuisServeur = (l: LigneDpgfBase, figee: boolean): BrouillonLigneDpgf => ({
   id: l.id,
   type: l.type,

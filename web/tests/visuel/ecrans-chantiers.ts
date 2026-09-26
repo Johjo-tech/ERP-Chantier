@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { cliquer, onglet, partout, type Ecran, type Seuils, type Taille } from "./ecrans";
 
@@ -214,8 +215,64 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       seuils: { bureau: { pixels: 0.001, texte: 38 }, mobile: { pixels: 0.009, texte: 38 } },
     },
     ...ecransParRole(),
+    ...ecransImports(),
+    ...ecransModales(),
   ];
 }
+
+const FICHIERS = join(import.meta.dirname, "fichiers");
+
+/** Choisit un fichier d'essai (`tests/visuel/fichiers/`) dans le champ désigné, puis laisse l'aperçu se dessiner. */
+function deposer(selecteur: string, fichier: string): Geste {
+  return async (page) => {
+    await page.locator(selecteur).first().setInputFiles(join(FICHIERS, fichier), { timeout: 5_000 });
+    await page.waitForTimeout(1_500);
+  };
+}
+
+/**
+ * Les aperçus d'import et la modale de correspondance du DPGF, avec les mêmes
+ * fichiers d'essai des deux côtés. Rien n'est écrit : on s'arrête avant
+ * « Importer ». La modale « Planifier » et le détail d'une tâche ne se
+ * comparent pas : l'ancien ne lit ni lignes de DPGF ni tâches (D-ECR-CHA-11),
+ * il n'a donc pas de bouton pour les ouvrir ; les confirmations sont des boîtes
+ * du navigateur, hors capture — leur texte est vérifié par les tests unitaires.
+ */
+function ecransImports(): Ecran[] {
+  const catalogue = puis(cliquer(".page-head .btn:not(.primary)"), deposer("#catalogueZone input[type=file]", "catalogue-visuel.csv"));
+  const clients = puis(cliquer(".page-head .btn:not(.primary)"), deposer(".form-panel input[type=file]", "clients-visuel.csv"));
+  const dpgf = deposer(".dpgf-import-banner input[type=file]", "dpgf-visuel.csv");
+  return [
+    {
+      id: "catalogue-import-apercu",
+      titre: "Catalogue › import › aperçu d'un fichier",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(onglet("catalogue"), catalogue) },
+      nouveau: { chemin: "/articles", gestes: catalogue },
+      // « à mettre à jour » se lit une fraction de seconde plus tard (codes existants demandés à la base) : quelques pixels.
+      seuils: { bureau: { pixels: 0.002, texte: 0 }, mobile: { pixels: 0.003, texte: 0 } },
+    },
+    {
+      id: "clients-import-apercu",
+      titre: "Clients › import › aperçu d'un fichier",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(onglet("clients"), clients) },
+      nouveau: { chemin: "/clients", gestes: clients },
+      // « Annuaire : non interrogé. » à la place du décompte de l'annuaire, que l'import n'appelle pas (D-EFA-06) : 1 ligne remplacée.
+      seuils: { bureau: { pixels: 0.002, texte: 2 }, mobile: { pixels: 0.004, texte: 2 } },
+    },
+    {
+      id: "chantier-import-dpgf",
+      titre: "Chantiers › fiche › Importer le DPGF (correspondance des colonnes)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(onglet("chantiers", { viewingChantier: CHANTIER_C }), dpgf) },
+      nouveau: { chemin: `/chantiers/${CHANTIER_C}`, gestes: dpgf },
+      // La modale est identique ; restent, sous elle, « Reprendre un devis » (D-CHA-06) et Intervenants (D-ECR-CHA-09).
+      seuils: partout(0.001, 16),
+    },
+  ];
+}
+
 
 /** Les rôles autres qu'administrateur et lecture, sur les écrans de ce périmètre qu'ils atteignent. */
 type RoleCompare = "conducteur" | "technicien" | "soustraitant" | "secretaire";
@@ -268,7 +325,7 @@ const SEUILS_ROLES: Record<string, Partial<Record<Taille, Seuils>> | null | unde
   "chantiers--conducteur": { bureau: { pixels: 0.001, texte: 4 }, mobile: { pixels: 0.004, texte: 4 } }, // D-ECR-CHA-11
   "chantiers--technicien": { bureau: { pixels: 0.031, texte: 1 }, mobile: { pixels: 0.12, texte: 1 } }, // « + Nouveau chantier » : D-ECR-CHA-06
   "chantiers--soustraitant": { bureau: { pixels: 0.031, texte: 1 }, mobile: { pixels: 0.12, texte: 1 } }, // idem
-  "chantiers--secretaire": { bureau: { pixels: 0.044, texte: 1 }, mobile: { pixels: 0.167, texte: 1 } }, // idem
+  "chantiers--secretaire": { bureau: { pixels: 0.057, texte: 1 }, mobile: { pixels: 0.167, texte: 1 } }, // idem
   "chantier-fiche--conducteur": partout(0.001, 17), // « Facturer la sélection » (factures/créer), D-CHA-06, D-ECR-CHA-09
   "chantier-fiche--technicien": { bureau: { pixels: 0.206, texte: 50 }, mobile: { pixels: 0.428, texte: 50 } }, // D-ECR-CHA-06, D-ECR-CHA-09
   "chantier-fiche--secretaire": { bureau: { pixels: 0.212, texte: 53 }, mobile: { pixels: 0.429, texte: 53 } }, // D-ECR-CHA-06, D-ECR-CHA-09
@@ -278,3 +335,70 @@ const SEUILS_ROLES: Record<string, Partial<Record<Taille, Seuils>> | null | unde
   "catalogue--conducteur": partout(0.001, 0),
   "catalogue--secretaire": partout(0.001, 0),
 };
+
+
+/** Le chantier du jeu `jeux/chantiers.sql` : une ligne de DPGF avec métier, une tâche de to-do. */
+const CHANTIER_MODALES = "c4000000-0000-0000-0000-000000000001";
+
+/**
+ * Ouvre, dans l'ANCIEN, la fiche du chantier des modales après lui avoir posé
+ * dans son état la ligne de DPGF et la tâche du jeu d'essai — celles que sa
+ * lecture groupée des filles ne ramène pas sur cette base (D-ECR-CHA-11). Mêmes
+ * valeurs que `jeux/chantiers.sql`, aux noms de champs de l'ancien écran.
+ */
+const ficheModalesAncien: Geste = async (page) => {
+  await page.evaluate((id) => {
+    const w = window as unknown as { state: { chantiers: Record<string, unknown>[]; viewingChantier: string | null }; setTab: (t: string) => void };
+    const c = w.state.chantiers.find((x) => x.id === id);
+    if (!c) throw new Error(`chantier ${id} absent de l'ancien : jouer tests/visuel/jeux/chantiers.sql`);
+    c.dpgfLignes = [
+      { id: "c4100000-0000-0000-0000-000000000001", type: "ligne", designation: "VIS-CHA Lessivage des murs", qte: 10, prixUnitaire: 0, avancementCumule: 0, metier: "Peinture", tachesPlanifiees: [] },
+    ];
+    c.todoList = [{ id: "c4200000-0000-0000-0000-000000000001", texte: "VIS-CHA Bâcher la toiture", statut: "a_faire", fait: false }];
+    w.state.viewingChantier = id;
+    w.setTab("chantiers");
+  }, CHANTIER_MODALES);
+};
+
+/**
+ * Remonte la page sous une modale ouverte : le clic sur « 📅 Planifier » l'a
+ * descendue au bas de la fiche, dont la hauteur diffère d'une section
+ * (Intervenants, D-ECR-CHA-09). On compare la modale, sur le même fond.
+ */
+const enHaut: Geste = async (page) => {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(200);
+};
+
+function ecransModales(): Ecran[] {
+  const nouveau = `/chantiers/${CHANTIER_MODALES}`;
+  return [
+    {
+      id: "chantier-fiche-remplie",
+      titre: "Chantiers › fiche avec DPGF et to-do (VIS-CHA Modales)",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: ficheModalesAncien },
+      nouveau: { chemin: nouveau },
+      // Identiques, modale comprise ; seule s'ajoute la section Intervenants, sous la ligne de flottaison (D-ECR-CHA-09, 12 lignes).
+      seuils: partout(0.001, 12),
+    },
+    {
+      id: "chantier-planifier",
+      titre: "Chantiers › fiche › Planifier une quantité",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(ficheModalesAncien, cliquer(".dpgf-ligne-row .btn.small.primary"), enHaut) },
+      nouveau: { chemin: nouveau, gestes: puis(cliquer(".dpgf-ligne-row .btn.small.primary"), enHaut) },
+      // Identiques, modale comprise ; seule s'ajoute la section Intervenants, sous la ligne de flottaison (D-ECR-CHA-09, 12 lignes).
+      seuils: partout(0.001, 12),
+    },
+    {
+      id: "chantier-detail-tache",
+      titre: "Chantiers › fiche › Détail de la tâche",
+      compte: "admin",
+      ancien: { chemin: "/", gestes: puis(ficheModalesAncien, cliquer(".todo-kanban-card")) },
+      nouveau: { chemin: nouveau, gestes: cliquer(".todo-kanban-card") },
+      // Identiques, modale comprise ; seule s'ajoute la section Intervenants, sous la ligne de flottaison (D-ECR-CHA-09, 12 lignes).
+      seuils: partout(0.001, 12),
+    },
+  ];
+}

@@ -1982,9 +1982,12 @@ visuelle ôte le focus avant de capturer.
 Clients en lecture seule : l'ancien montrait « + Nouveau client », « Modifier le client », « Supprimer le client »…
 que la RLS refuse. Masqués (règle du projet : l'écran masque ce qui serait refusé). 10 lignes d'écart mesurées.
 
-## D-ECR-CHA-07 — Le nom du client des chantiers est affiché
-L'ancien lit un champ texte `client` que la base ne remplit pas : la carte, le bandeau et le formulaire du
-chantier restaient vides. web/ affiche `client_nom` (et présélectionne le client). 2 lignes par écran.
+## D-ECR-CHA-07 — Le nom du client des chantiers n'est pas affiché, comme l'ancien (révisée)
+L'ancien lit un champ texte `client` que la base ne remplit pas : la carte et le bandeau du chantier le
+laissent vide. Un premier passage l'affichait (`client_nom`) ; c'était une correction non décidée, qui
+faisait passer une ligne de plus sur téléphone (10 à 15 % d'écart sur la liste et la fiche). Retirée :
+l'écran est identique (< 1 %). Le formulaire « Modifier les infos » garde le client présélectionné — sans
+quoi l'enregistrer détacherait le chantier de sa fiche client. L'afficher reste une correction à décider.
 
 ## D-ECR-CHA-08 — Confirmations par la boîte du navigateur
 Retirer un article, supprimer un client ou un interlocuteur, retirer un fichier ou un intervenant : `confirm()`
@@ -1998,14 +2001,38 @@ Absente de l'ancien ; nécessaire à la RLS du terrain (affectation). Dans les h
 L'ancien les listait sans tri (ordre physique de la base) ; web/ par date décroissante. Un avoir s'affiche en
 négatif, comme l'ancien.
 
-## D-ECR-CHA-11 — DPGF chiffré : le geste de l'ancien, et un écart d'environnement
+## D-ECR-CHA-11 — DPGF chiffré : le geste de l'ancien ; et un défaut de lecture de l'ancien
 « + Ligne » / « + Chapitre » ajoutent une ligne au tableau ; ajouts, retraits et modifications partent ensemble
 par « Enregistrer les lignes » (les saisies en cours survivent à un ajout, CHA-53). L'import écrit dès la
 confirmation (D-CHA-07). « Facturer la sélection » ouvre la situation de travaux (page du module facturation)
-plutôt que la modale. Sur la base locale, l'ancien ne lit AUCUNE fille de chantier (sa lecture groupée tombe sur
-`chantier_achats`) : la fiche « Salle de bains Durand » y montre 0,00 € et aucune ligne là où web/ lit la ligne de
-DPGF — écart chiffré dans les seuils, pas un défaut de rendu.
+plutôt que la modale. L'ancien ne lit AUCUNE fille de chantier (DPGF, to-do, documents, achats,
+inspections) : sa lecture groupée trie `chantier_achats` sur une colonne `position` qui n'existe pas — en
+production non plus (`database.types.ts`) — et la requête entière tombe (42703, relevé par la sonde
+`tests/visuel/sonde.visuel.ts`). web/ les lit : là où une fille existe (DPGF de « Salle de bains Durand »),
+l'écart est chiffré dans les seuils. Pour comparer quand même la fiche remplie et ses modales (« Planifier une
+quantité », « Détail de la tâche »), `tests/visuel/jeux/chantiers.sql` pose un chantier « VIS-CHA Modales »,
+et la comparaison donne à l'ancien, dans son état, les mêmes lignes : 0 % d'écart.
 
 ## D-ECR-CHA-12 — Compléments CSS : un lien habillé en bouton se comporte comme un bouton
 `a.btn` centre son texte, ignore la casse de son titre ; `a.plus-subnav-btn` centre en largeur et en hauteur
 (`complements.css`). Commun à tous les écrans qui font d'un bouton de l'ancien un lien.
+
+## D-ECR-CHA-13 — `/clients/:id` n'est plus qu'une redirection vers la carte du client
+L'ancien n'a pas de fiche client à part : un client se voit dans sa carte. L'adresse est gardée (liens,
+favoris) et ramène à la liste, la recherche remplie du nom du client — sa carte, seule. Un client introuvable
+ramène à la liste entière. De même, une fiche chantier introuvable (ou hors de portée du rôle, RLS) ramène à
+la liste des chantiers, comme `renderChantierDetail`.
+
+## D-ECR-CHA-14 — Rôles comparés ; les écrans hors d'atteinte ne se comparent pas
+Chantiers (liste, fiche), clients et catalogue sont comparés pour le conducteur, le technicien, le
+sous-traitant et la secrétaire (`ecransParRole`). Le terrain n'a ni clients ni catalogue (menu absent dans
+l'ancien, route refusée ici) : rien à comparer. Les écarts mesurés sont ceux de D-ECR-CHA-06 — l'ancien
+montrait à chacun les boutons et les sections (DPGF, achats, factures…) que la base lui refuse.
+
+## D-ECR-CHA-15 — Aperçus d'import et modales, avec des fichiers d'essai
+`tests/visuel/fichiers/` : un export de catalogue (Windows-1252, doublon, ligne trop longue), un export de
+clients sans SIRET (aucun annuaire extérieur interrogé), un DPGF en CSV avec en-tête de document. Aperçu du
+catalogue et correspondance du DPGF : identiques. Aperçu des clients : « Annuaire : non interrogé. » à la place
+du décompte de l'ancien (D-EFA-06), une ligne de même gabarit. Les confirmations sont des boîtes du
+navigateur, hors capture : leur texte est vérifié par les tests unitaires. Les champs numériques du DPGF et
+des achats redeviennent des `type="number"` (alignement et largeur de l'ancienne feuille).
