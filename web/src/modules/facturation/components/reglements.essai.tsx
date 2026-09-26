@@ -136,6 +136,20 @@ describe("dossier client (FAC-33, FAC-35, FAC-23)", () => {
     expect(screen.getByLabelText("Montant")).toHaveValue(300);
     expect(screen.getByText("Total 300,00 € · déjà réglé 0,00 € · reste 300,00 €")).toBeInTheDocument();
   });
+
+  it("un montant au-delà du reste : l'alerte de l'ancien, au caractère près (D-E2E-01)", async () => {
+    // Intl écrivait « 300,00 € » avec une espace insécable : même mot, autre texte que l'alerte de l'ancien.
+    const alerter = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    ouvrir("/factures/reglements/dossier?client=OPAC");
+    await screen.findByText("FAC-2026-000002");
+    await userEvent.click(within(carteDe("FAC-2026-000002")).getByRole("button", { name: "+ Règlement" }));
+    const champ = screen.getByLabelText("Montant");
+    await userEvent.clear(champ);
+    await userEvent.type(champ, "500");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(alerter).toHaveBeenCalledWith("Le montant dépasse le reste à payer (300,00 €).");
+    alerter.mockRestore();
+  });
 });
 
 describe("vues des règlements (FAC-30 à FAC-32)", () => {

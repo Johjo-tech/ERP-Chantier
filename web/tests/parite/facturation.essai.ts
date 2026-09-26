@@ -38,8 +38,9 @@ describe("parité règlements", () => {
       expect(reg.statutEnBase(b.cle)).toBe(ancienReg.statutEnBase(a.cle));
       const m = g.parmi([euros(), 0, -3, a.reste, a.reste + 0.01]);
       const sauf = g.parmi([null, "r0"]);
-      expect(reg.refusReglement({ montant: m, ttc, reglements: rs, idModifie: sauf })?.replace(/\s/g, "")).toBe(
-        ancienReg.refusReglement({ montant: m, ttc, reglements: rs, idModifie: sauf })?.replace(/\s/g, "") ?? undefined
+      // Au caractère près, espaces compris : l'alerte est celle de l'ancien écran (D-E2E-01).
+      expect(reg.refusReglement({ montant: m, ttc, reglements: rs, idModifie: sauf })).toBe(
+        ancienReg.refusReglement({ montant: m, ttc, reglements: rs, idModifie: sauf })
       );
     }
   });
@@ -56,7 +57,7 @@ describe("parité règlements", () => {
       const a = ancienReg.imputer(recu, factures);
       const b = reg.imputer(recu, factures);
       expect(b.map((x) => [x.id, Number(x.montant), Number(x.resteApres)])).toEqual(a.map((x) => [x.id, x.montant, x.resteApres]));
-      expect(reg.refusImputation(recu, factures)?.replace(/\s/g, "") ?? null).toBe(ancienReg.refusImputation(recu, factures)?.replace(/\s/g, "") ?? null);
+      expect(reg.refusImputation(recu, factures)).toBe(ancienReg.refusImputation(recu, factures));
     }
   });
 });

@@ -1,5 +1,14 @@
 import Big from "big.js";
-import { arrondiCentimes, formatEuros, montant, somme, ZERO, type Montant } from "@/lib/money";
+import { arrondiCentimes, enDecimal2, montant, somme, ZERO, type Montant } from "@/lib/money";
+
+/**
+ * Le montant d'un refus s'écrit comme la règle historique l'écrit (`regles-reglements.formaterEuros`) :
+ * espace simple, sans séparateur de milliers. `formatEuros` (Intl) pose des espaces insécables, et
+ * l'alerte n'aurait plus le même texte que celle de l'ancien écran (D-E2E-01).
+ */
+function formaterEurosRefus(m: Montant): string {
+  return `${enDecimal2(m).replace(".", ",")} €`;
+}
 
 /**
  * Règlements d'une facture : ce qui est payé, ce qui reste, le statut.
@@ -72,7 +81,7 @@ export function refusReglement(saisie: {
   if (m.lte(0)) return "Le montant doit être supérieur à 0.";
   const reste = resteAPayer(saisie.ttc, saisie.reglements, saisie.idModifie);
   if (reste.lte(0)) return "Cette facture est déjà entièrement réglée.";
-  if (m.minus(reste).gt(DEMI_CENTIME)) return `Le montant dépasse le reste à payer (${formatEuros(reste)}).`;
+  if (m.minus(reste).gt(DEMI_CENTIME)) return `Le montant dépasse le reste à payer (${formaterEurosRefus(reste)}).`;
   return null;
 }
 
@@ -119,7 +128,7 @@ export function refusImputation(montantRecu: unknown, factures: readonly Facture
   if (m.lte(0)) return "Le montant reçu doit être supérieur à 0.";
   const du = arrondiCentimes(somme(factures.map((f) => { const r = arrondiCentimes(montant(f.reste)); return r.gt(0) ? r : ZERO; })));
   if (du.lte(0)) return "Les factures sélectionnées sont déjà réglées.";
-  if (m.minus(du).gt(DEMI_CENTIME)) return `Le montant reçu dépasse le total dû (${formatEuros(du)}). Un trop-perçu ne s'impute pas.`;
+  if (m.minus(du).gt(DEMI_CENTIME)) return `Le montant reçu dépasse le total dû (${formaterEurosRefus(du)}). Un trop-perçu ne s'impute pas.`;
   return null;
 }
 
