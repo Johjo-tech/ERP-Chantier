@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { cliquer, onglet, partout, type Ecran } from "./ecrans";
+import { cliquer, onglet, partout, type Ecran, type Seuils, type Taille } from "./ecrans";
 
 /**
  * Chantiers, clients et catalogue : chaque écran et ses états, des deux côtés.
@@ -166,8 +166,8 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers") },
       nouveau: { chemin: "/chantiers" },
-      // Le nom du client sur la carte, que l'ancien laisse vide (D-ECR-CHA-07, 2 lignes) ; le DPGF de Durand, que l'ancien ne lit pas sur cette base (sa lecture des filles tombe sur `chantier_achats`, D-ECR-CHA-11, 4 lignes).
-      seuils: { bureau: { pixels: 0.021, texte: 6 }, mobile: { pixels: 0.101, texte: 6 } },
+      // Seul reste le DPGF de Durand, que l'ancien ne lit pas sur cette base (D-ECR-CHA-11) : 2 lignes remplacées.
+      seuils: { bureau: { pixels: 0.001, texte: 4 }, mobile: { pixels: 0.004, texte: 4 } },
     },
     {
       id: "chantiers-nouveau",
@@ -175,8 +175,8 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("chantiers"), cliquer(".page-head .btn.primary")) },
       nouveau: { chemin: "/chantiers", gestes: cliquer(".page-head .btn.primary") },
-      // Le nom du client sur la carte, que l'ancien laisse vide (D-ECR-CHA-07, 2 lignes) ; le DPGF de Durand, que l'ancien ne lit pas sur cette base (sa lecture des filles tombe sur `chantier_achats`, D-ECR-CHA-11, 4 lignes).
-      seuils: partout(0.001, 6),
+      // Seul reste le DPGF de Durand, que l'ancien ne lit pas sur cette base (D-ECR-CHA-11), sous le formulaire.
+      seuils: partout(0.001, 4),
     },
     {
       id: "chantiers-recherche-vide",
@@ -192,8 +192,8 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers", { viewingChantier: CHANTIER_C }) },
       nouveau: { chemin: `/chantiers/${CHANTIER_C}` },
-      // Le client dans le bandeau (D-ECR-CHA-07, 2 lignes ; il passe à la ligne sur téléphone), « Reprendre un devis » (D-CHA-06, 5 lignes), la section Intervenants (D-ECR-CHA-09, 11 lignes).
-      seuils: { bureau: { pixels: 0.001, texte: 18 }, mobile: { pixels: 0.152, texte: 18 } },
+      // « Reprendre un devis » (D-CHA-06, 5 lignes) et la section Intervenants (D-ECR-CHA-09, 11 lignes), sous la ligne de flottaison.
+      seuils: partout(0.001, 16),
     },
     {
       id: "chantier-modifier",
@@ -210,8 +210,71 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers", { viewingChantier: CHANTIER_DURAND }) },
       nouveau: { chemin: `/chantiers/${CHANTIER_DURAND}` },
-      // Le client dans le bandeau (D-ECR-CHA-07, 2 lignes ; il passe à la ligne sur téléphone), « Reprendre un devis » (D-CHA-06, 5 lignes), la section Intervenants (D-ECR-CHA-09, 11 lignes). Et la ligne de DPGF que l'ancien ne lit pas ici (D-ECR-CHA-11) : montants, métiers proposés, « 📅 Planifier ».
-      seuils: { bureau: { pixels: 0.002, texte: 40 }, mobile: { pixels: 0.01, texte: 40 } },
+      // Comme la fiche C, plus le DPGF de Durand, que l'ancien ne lit pas sur cette base (D-ECR-CHA-11) : montants, métiers proposés, « 📅 Planifier ».
+      seuils: { bureau: { pixels: 0.001, texte: 38 }, mobile: { pixels: 0.009, texte: 38 } },
     },
+    ...ecransParRole(),
   ];
 }
+
+/** Les rôles autres qu'administrateur et lecture, sur les écrans de ce périmètre qu'ils atteignent. */
+type RoleCompare = "conducteur" | "technicien" | "soustraitant" | "secretaire";
+
+/**
+ * Chaque rôle sur la liste des chantiers, une fiche, les clients et le
+ * catalogue. Seuils : l'écart mesuré (cliquet), chaque ligne commentée par sa
+ * décision dans `SEUILS_ROLES`.
+ */
+function ecransParRole(): Ecran[] {
+  const roles: RoleCompare[] = ["conducteur", "technicien", "soustraitant", "secretaire"];
+  const ecrans: { id: string; titre: string; ancien: Geste; nouveau: string }[] = [
+    { id: "chantiers", titre: "Chantiers › liste", ancien: onglet("chantiers"), nouveau: "/chantiers" },
+    { id: "chantier-fiche", titre: "Chantiers › fiche", ancien: onglet("chantiers", { viewingChantier: CHANTIER_C }), nouveau: `/chantiers/${CHANTIER_C}` },
+    { id: "chantier-fiche-durand", titre: "Chantiers › fiche Durand", ancien: onglet("chantiers", { viewingChantier: CHANTIER_DURAND }), nouveau: `/chantiers/${CHANTIER_DURAND}` },
+    { id: "clients", titre: "Clients › liste", ancien: onglet("clients"), nouveau: "/clients" },
+    { id: "catalogue", titre: "Catalogue › liste", ancien: onglet("catalogue"), nouveau: "/articles" },
+  ];
+  return roles.flatMap((role) =>
+    ecrans
+      .filter((e) => SEUILS_ROLES[`${e.id}--${role}`] !== null)
+      .map((e) => ({
+        id: `${e.id}--${role}`,
+        titre: `${e.titre} (${role})`,
+        compte: role,
+        ancien: { chemin: "/", gestes: e.ancien },
+        nouveau: { chemin: e.nouveau },
+        seuils: SEUILS_ROLES[`${e.id}--${role}`] ?? { bureau: { pixels: 1, texte: 10_000 }, mobile: { pixels: 1, texte: 10_000 } },
+      }))
+  );
+}
+
+/**
+ * Seuils par écran et par rôle. `null` : écran hors d'atteinte du rôle dans
+ * les DEUX applications (menu absent, et la nouvelle refuse la route) — rien à
+ * comparer.
+ */
+const SEUILS_ROLES: Record<string, Partial<Record<Taille, Seuils>> | null | undefined> = {
+  // Le terrain n'a ni clients ni catalogue au menu de l'ancien ; la nouvelle refuse la route (ART-40, RLS).
+  "clients--technicien": null,
+  "clients--soustraitant": null,
+  "catalogue--technicien": null,
+  "catalogue--soustraitant": null,
+  // Le sous-traitant n'est affecté qu'à Durand : sa fiche C ramène à la liste des deux côtés, on compare Durand.
+  "chantier-fiche--soustraitant": null,
+  "chantier-fiche-durand--conducteur": null,
+  "chantier-fiche-durand--technicien": null,
+  "chantier-fiche-durand--secretaire": null,
+  // Les boutons et sections que la base refuse à ce rôle sont masqués ; l'ancien les montrait (D-ECR-CHA-06).
+  "chantiers--conducteur": { bureau: { pixels: 0.001, texte: 4 }, mobile: { pixels: 0.004, texte: 4 } }, // D-ECR-CHA-11
+  "chantiers--technicien": { bureau: { pixels: 0.031, texte: 1 }, mobile: { pixels: 0.12, texte: 1 } }, // « + Nouveau chantier » : D-ECR-CHA-06
+  "chantiers--soustraitant": { bureau: { pixels: 0.031, texte: 1 }, mobile: { pixels: 0.12, texte: 1 } }, // idem
+  "chantiers--secretaire": { bureau: { pixels: 0.044, texte: 1 }, mobile: { pixels: 0.167, texte: 1 } }, // idem
+  "chantier-fiche--conducteur": partout(0.001, 17), // « Facturer la sélection » (factures/créer), D-CHA-06, D-ECR-CHA-09
+  "chantier-fiche--technicien": { bureau: { pixels: 0.206, texte: 50 }, mobile: { pixels: 0.428, texte: 50 } }, // D-ECR-CHA-06, D-ECR-CHA-09
+  "chantier-fiche--secretaire": { bureau: { pixels: 0.212, texte: 53 }, mobile: { pixels: 0.429, texte: 53 } }, // D-ECR-CHA-06, D-ECR-CHA-09
+  "chantier-fiche-durand--soustraitant": { bureau: { pixels: 0.2, texte: 59 }, mobile: { pixels: 0.413, texte: 59 } }, // D-ECR-CHA-06, D-ECR-CHA-09
+  "clients--conducteur": { bureau: { pixels: 0.195, texte: 10 }, mobile: { pixels: 0.466, texte: 10 } }, // D-ECR-CHA-06
+  "clients--secretaire": partout(0.001, 0),
+  "catalogue--conducteur": partout(0.001, 0),
+  "catalogue--secretaire": partout(0.001, 0),
+};

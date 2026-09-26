@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { rendreAvecSession } from "@/test/session-factice";
 import type { ClientListe } from "../api/clients";
 import { PageClients } from "./PageClients";
+import { PageFicheClient } from "./PageFicheClient";
 import { PageFormulaireClient } from "./PageFormulaireClient";
 
 const api = vi.hoisted(() => ({
@@ -231,5 +232,34 @@ describe("délai de paiement libre", () => {
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
     await waitFor(() => expect(api.creerClient).toHaveBeenCalled());
     expect(api.creerClient.mock.calls[0]?.[1]).toMatchObject({ delai_paiement_jours: 305, delai_paiement_mode: "fin_de_mois" });
+  });
+});
+
+
+describe("/clients/:id — l'ancien n'avait pas de fiche à part (D-ECR-CHA-13)", () => {
+  function ouvrirFiche(chemin: string) {
+    return rendreAvecSession(
+      <Routes>
+        <Route path="/clients/:id" element={<PageFicheClient />} />
+        <Route path="/clients" element={<PageClients />} />
+      </Routes>,
+      { role: "secretaire", chemin }
+    );
+  }
+
+  it("ramène à la liste, filtrée sur la carte du client", async () => {
+    api.lireClient.mockResolvedValue(client("OPAC du Rhône"));
+    ouvrirFiche("/clients/opac");
+    expect(await screen.findByText("OPAC du Rhône")).toBeInTheDocument();
+    expect(screen.getByLabelText("Rechercher un client")).toHaveValue("OPAC du Rhône");
+    expect(screen.queryByText("Mme Durand")).not.toBeInTheDocument();
+  });
+
+  it("un client introuvable ramène à la liste entière", async () => {
+    api.lireClient.mockRejectedValue({ code: "PGRST116", message: "Aucune donnée" });
+    const erreur = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    ouvrirFiche("/clients/inconnu");
+    expect(await screen.findByText("Mme Durand")).toBeInTheDocument();
+    erreur.mockRestore();
   });
 });

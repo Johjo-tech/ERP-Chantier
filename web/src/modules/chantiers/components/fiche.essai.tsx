@@ -87,6 +87,14 @@ function ouvrir(role: RoleMembre, chemin = "/chantiers/ch1") {
   );
 }
 
+describe("fiche introuvable", () => {
+  it("un chantier introuvable ou hors de portée ramène à la liste, comme l'ancien", async () => {
+    api.chantiers.lireChantier.mockRejectedValue({ code: "PGRST116", message: "Aucune donnée" });
+    ouvrir("sous_traitant", "/chantiers/inconnu");
+    expect(await screen.findByRole("heading", { name: "Chantiers" })).toBeInTheDocument();
+  });
+});
+
 describe("liste des chantiers (CHA-01) — les cartes de l'ancien", () => {
   it("filtre par type et compte comptes-rendus, devis, factures", async () => {
     ouvrir("admin", "/chantiers");

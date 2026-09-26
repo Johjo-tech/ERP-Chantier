@@ -137,8 +137,9 @@ function CarteChantier({ c, total, pourcentage, compteurs }: PropsCarte) {
     >
       <div className={`chantier-a4-type ${c.type === "neuf" ? "neuf" : "rehab"}`}>{libelleTypeChantier(c.type)}</div>
       <div className="chantier-a4-nom">{c.nom}</div>
-      {/* Le nom du client, que l'ancien laissait vide faute de le lire sur la fiche (D-ECR-CHA-07). */}
-      <div className="chantier-a4-client">{c.client_nom ?? ""}</div>
+      {/* Vide, comme l'ancien : il lit un champ `client` que la base ne remplit pas. L'afficher est une correction à décider (D-ECR-CHA-07). */}
+      <div className="chantier-a4-client" />
+
       <div className="chantier-a4-adresse">{adresseComplete(c)}</div>
       <div className="chantier-a4-dates">
         {c.date_debut ? formatDateFr(c.date_debut) : "?"} → {c.date_fin ? formatDateFr(c.date_fin) : "?"}
