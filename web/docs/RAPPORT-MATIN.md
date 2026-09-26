@@ -1,13 +1,29 @@
 # Rapport — réécriture React de l'ERP Chantier
 
+## État au 26 septembre 2026 (matin)
+
+- **Identique à l'ancienne** (exigence du client) : 228 écrans sur 229 comparés pixel et texte contre
+  l'ancienne application sur la même base locale ; le 229ᵉ (recherche du catalogue) échouait par une
+  attente fixe du test, corrigée (5 passes vertes de suite).
+- **Défauts de l'ancienne : rien n'est tranché à la place du client.** Catalogue complet dans
+  [`DEFAUTS-A-TRANCHER.md`](DEFAUTS-A-TRANCHER.md) — 129 entrées : 19 statistiques et 4 écrans
+  reproduits à l'identique, 30 défauts de la base de production (corrections proposées, jamais
+  appliquées), 56 corrections déjà actives dans `web/` (chacune avec ce qu'il faut défaire pour revenir
+  à l'identique), 20 défauts reproduits sans correction. Chaque entrée : reproduction pas à pas, ce qui
+  serait juste, correction prête.
+- **Statistiques et tableaux de bord** : calculés comme `app.js`, défauts compris (D-STA-A-01), test de
+  parité qui évalue le code de l'ancien tel quel.
+- **Capteurs sur base neuve** : `npm run check` 993 ✓ · `npm run build` ✓ · `npm run test:rls` 283 ✓ ·
+  `npm run test:e2e` 11/11 ✓ · `npm run test:visuel` 228/229 puis écran instable corrigé.
+
 ## Environnement utilisé : **Supabase LOCAL** (Docker), jamais la production
 
 - Base locale propre à `web/` (projet `erp-chantier-web`, ports **554xx** pour
   cohabiter avec celui de la racine), reconstruite depuis le dépôt : les **63
   migrations** de `supabase/migrations/` rejouées une à une (62 appliquées, la
   63ᵉ compensée par `web/supabase/rattrapage/`), les colonnes connues de la
-  production comblées d'après `database.types.ts`, puis les **35 migrations
-  proposées** (`web/supabase/propositions/`) et le jeu d'essai.
+  production comblées d'après `database.types.ts`, puis les **34 migrations
+  proposées** (la 35ᵉ, agrégats de statistiques, retirée) (`web/supabase/propositions/`) et le jeu d'essai.
 - Aucune connexion à la production, aucune clé réelle dans le code ; les clés
   locales viennent de `supabase status` et vont dans `.env.local` (non versionné).
 - Types de base = copie des types générés depuis la production (D-003) ; les
@@ -37,7 +53,7 @@ décision écrite, 0 restant. Parité : 100 %.**
 | **planning / interventions** | 100 % | Calendrier 6 semaines (glisser-déposer et clavier), « Ma journée » du terrain, rapports d'intervention en 4 étapes, transformation en devis / facture |
 | **rh** | 100 % | Salariés, documents, visites médicales, congés, équipes, sous-traitants, registre du personnel |
 | **vehicules / materiel** | 100 % | Parc, échéances, entretiens, prêts, vente ; matériel et prêts |
-| **statistiques** | 100 % | Tableau de bord selon le rôle, pilotage (CA vs N-1, impayés, à traiter, top clients), statistiques par conducteur / métier / client / équipe |
+| **statistiques** | 100 % | Tableau de bord selon le rôle, pilotage (CA vs N-1, impayés, à traiter, top clients), statistiques par conducteur et par équipe — **calculées comme l'ancien, défauts compris** (décision du client, D-STA-A-01) |
 | **espace-client** | 100 % | Chantiers, devis envoyés, factures émises et leur solde, suivi des bons, en lecture seule |
 | transversal | 100 % | Notifications (cloche), mode discret, menu épinglé, recherche multi-mots et montants, formats français exacts, listes lues en entier (jamais tronquées) |
 
