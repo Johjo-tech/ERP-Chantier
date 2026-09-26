@@ -1983,3 +1983,15 @@ dates libre (option « Entre deux dates »), les vues par métier et par client 
 en deux `<details>` au bas de l'écran au lieu d'onglets, et les chiffres eux-mêmes — groupés par
 `conducteur_id` avec une ligne « Sans conducteur », retard compté sur un bon ouvert (D-STA-05) —,
 qui diffèrent de l'ancien sur la même base.
+
+## D-ECR-PAR-14 — Espace client : le suivi des bons au HTML de l'ancien
+`PageBonsClient` reprend `renderBonsCommandeClient` / `renderClientBCZoneHTML` : `.page-head`, ligne
+`.card-sub` « {client} · Suivi en temps réel par {société}. », champ « 🔍 Rechercher : … », tuiles
+`.client-tuiles` / `.client-tuile` avec `--tc` / `--tf` et leurs emojis, cartes `.card` à bord gauche
+de 5 px, badge teinté (« 🔴 Pas encore planifié », « 🟠 Planifié le … »…), 📍, 👤, 🔧, 🕓, bloc
+`.client-tentatives` et ses `.contact-tag`, 🔄, « ✅ Réalisé le ». Restent, décidés : le lien « Vos
+documents » (l'ancien n'ouvrait au client que ses bons ; web/ lui montre aussi devis et factures, ESP),
+le bandeau de l'espace client (pas de menu de gestion), et la ligne « Interlocuteur » masquée quand
+tous les bons ont le même — l'ancien la masquait quand le client était lui-même l'interlocuteur,
+information que l'accès client de web/ ne porte pas.
+
