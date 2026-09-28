@@ -149,6 +149,16 @@ const PILOTAGE = [...TEMPS_RELATIF] as const;
 const ECART_DECIDE_PILOTAGE = 90;
 const PIXELS_DECIDES_PILOTAGE = 0.03;
 
+/**
+ * DEF-REP-10, D-REP-10 : la carte d'un bon ne porte plus la pastille grise `statut` (« en attente »,
+ * figée depuis la création) ; l'ancien l'affichait sur chaque carte, à côté de l'étape du circuit.
+ * Par carte visible (repliée ou dépliée, fenêtre de pré-facture comprise : la liste reste dessous),
+ * une ligne de texte change — « … Travaux à pointer en attente » devient « … Travaux à pointer » —,
+ * soit une manquante et une ajoutée ; le jeu d'essai montre au plus dix cartes. Pixels : la pastille
+ * seule. Marge PROVISOIRE ajoutée au seuil mesuré avant la correction : à relever puis abaisser.
+ */
+const MARGE_PASTILLE_STATUT: Record<Taille, Seuils> = { bureau: { pixels: 0.01, texte: 20 }, mobile: { pixels: 0.02, texte: 20 } };
+
 export const ECRANS: readonly Ecran[] = [
   // ── Le cadre ─────────────────────────────────────────────────────────────
   {
@@ -648,15 +658,6 @@ function ecransCommandes(): Ecran[] {
   ]);
 }
 
-/**
- * DEF-REP-10, D-REP-10 : la carte d'un bon ne porte plus la pastille grise `statut` (« en attente »,
- * figée depuis la création) ; l'ancien l'affichait sur chaque carte, à côté de l'étape du circuit.
- * Par carte visible (repliée ou dépliée, fenêtre de pré-facture comprise : la liste reste dessous),
- * une ligne de texte change — « … Travaux à pointer en attente » devient « … Travaux à pointer » —,
- * soit une manquante et une ajoutée ; le jeu d'essai montre au plus dix cartes. Pixels : la pastille
- * seule. Marge PROVISOIRE ajoutée au seuil mesuré avant la correction : à relever puis abaisser.
- */
-const MARGE_PASTILLE_STATUT: Record<Taille, Seuils> = { bureau: { pixels: 0.01, texte: 20 }, mobile: { pixels: 0.02, texte: 20 } };
 function sansPastilleStatut(ecrans: Ecran[]): Ecran[] {
   return ecrans.map((e) => {
     const seuils: Partial<Record<Taille, Seuils>> = {};
