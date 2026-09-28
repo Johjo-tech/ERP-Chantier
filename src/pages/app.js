@@ -1552,34 +1552,79 @@ function relativeTime(iso){
   if(d < 7) return `il y a ${d} j`;
   return fmtDate(iso.slice(0,10));
 }
+/**
+ * Le fil d'activité, rangé sur la date des PIÈCES et non sur celle de leur
+ * saisie.
+ *
+ * `createdAt` datait l'écriture en base, pas l'événement. Une reprise
+ * d'historique — 3 165 pièces de 2025 écrites en un après-midi — remplissait
+ * donc le fil de « Facture créée · aujourd'hui » sur des factures de janvier
+ * de l'année précédente. Le tableau de bord annonçait comme activité du jour
+ * ce qui était de l'archive.
+ *
+ * Les libellés suivent : sur la date de la pièce, « créé » n'a plus de sens —
+ * c'est le document qu'on nomme, pas le geste. Et un avoir se nomme avoir : il
+ * s'annonçait « Facture créée », avec son montant, au milieu des factures.
+ */
 function buildActivityFeed(soc){
   const events = [];
-  state.devis.filter(d=>d.societeId===soc && d.createdAt).forEach(d=>{
-    events.push({icon:'devis', color:'success', date:d.createdAt, label:'Devis créé', sub:`${d.client} · ${d.numero}`, amount:computeDocTotals(d).ht, id:d.id, goFn:`goToDevis('${d.id}')`});
+  state.devis.filter(d=>d.societeId===soc && d.date).forEach(d=>{
+    events.push({icon:'devis', color:'success', date:d.date, label:'Devis', sub:`${d.client} · ${d.numero}`, amount:computeDocTotals(d).ht, id:d.id, goFn:`goToDevis('${d.id}')`});
   });
-  state.factures.filter(f=>f.societeId===soc && f.createdAt).forEach(f=>{
-    events.push({icon:'factures', color:'info', date:f.createdAt, label:'Facture créée', sub:`${f.client} · ${f.numero}`, amount:computeDocTotals(f).ht, id:f.id, goFn:`goToFacture('${f.id}')`});
+  state.factures.filter(f=>f.societeId===soc && f.date).forEach(f=>{
+    const unAvoir = estAvoirDoc(f);
+    events.push({icon:'factures', color: unAvoir? 'warn' : 'info', date:f.date,
+      label: unAvoir? 'Avoir' : 'Facture',
+      sub:`${f.client} · ${f.numero || 'brouillon'}`,
+      amount:computeDocTotals(f).ht, id:f.id, goFn:`goToFacture('${f.id}')`});
   });
-  state.interventions.filter(i=>i.societeId===soc && i.createdAt).forEach(i=>{
-    events.push({icon:'interventions', color:'warn', date:i.createdAt, label:'Rapport créé', sub:`${i.client} · ${i.numero||''}`, amount:null, id:i.id, goFn:`goToIntervention('${i.id}')`});
+  state.interventions.filter(i=>i.societeId===soc && i.date).forEach(i=>{
+    events.push({icon:'interventions', color:'warn', date:i.date, label:"Rapport d'intervention", sub:`${i.client} · ${i.numero||''}`, amount:null, id:i.id, goFn:`goToIntervention('${i.id}')`});
   });
-  state.reglements.filter(r=>r.societeId===soc && r.createdAt).forEach(r=>{
+  state.reglements.filter(r=>r.societeId===soc && r.date).forEach(r=>{
     const f = state.factures.find(x=>x.id===r.factureId);
-    events.push({icon:'reglements', color:'success', date:r.createdAt, label:'Paiement reçu', sub:f? `${f.client} · ${f.numero}` : '', amount:r.montant, id:r.id, goFn: f? `goToFacture('${f.id}')` : ''});
+    events.push({icon:'reglements', color:'success', date:r.date, label:'Paiement reçu', sub:f? `${f.client} · ${f.numero}` : '', amount:r.montant, id:r.id, goFn: f? `goToFacture('${f.id}')` : ''});
   });
-  return events.sort((a,b)=> new Date(b.date).getTime()-new Date(a.date).getTime()).slice(0,6);
+  /* Les dates de pièce sont des jours (« 2026-09-28 »), pas des instants :
+     comparées en texte elles se rangent déjà dans le bon ordre, et `new Date`
+     sur une chaîne courte n'apporte rien qu'un fuseau à se tromper. */
+  return events.sort((a,b)=> String(b.date).localeCompare(String(a.date))).slice(0,6);
 }
-function computeTopClients(factures){
-  const totals = {};
+/**
+ * Le classement des clients sur un exercice, avec le rappel de N-1.
+ *
+ * Il additionnait TOUTES les factures, sans aucune borne de date : une reprise
+ * d'historique — 3 165 pièces de l'exercice précédent — écrasait l'activité
+ * courante, à côté d'une tuile qui annonce le « CA encaissé CE MOIS ». Deux
+ * échelles de temps dans le même écran, et rien pour les distinguer.
+ *
+ * L'exercice précédent n'est pas écarté pour autant : c'est la référence N-1,
+ * et c'est précisément ce que la reprise est venue apporter. Il s'affiche en
+ * regard, avec la variation.
+ *
+ * Les avoirs comptent NÉGATIVEMENT, `computeDocTotals` leur ayant déjà posé
+ * leur signe : un client beaucoup avoirisé ne doit pas remonter au classement.
+ */
+function cumulParClient(factures, annee){
+  const totaux = {};
   factures.forEach(f=>{
-    const t = computeDocTotals(f).ht;
-    totals[f.client] = (totals[f.client]||0) + t;
+    if(String(f.date||'').slice(0,4) !== String(annee)) return;
+    totaux[f.client] = (totaux[f.client]||0) + computeDocTotals(f).ht;
   });
-  return Object.entries(totals).map(([client, total])=>({client, total})).sort((a,b)=>b.total-a.total).slice(0,5);
+  return totaux;
 }
-function renderTopClientsHTML(factures){
-  const top = computeTopClients(factures);
-  if(!top.length) return '<div class="empty">Pas encore de factures.</div>';
+function computeTopClients(factures, annee){
+  const courant = cumulParClient(factures, annee);
+  const precedent = cumulParClient(factures, annee - 1);
+  return Object.entries(courant)
+    .map(([client, total])=>({ client, total, precedent: precedent[client] || 0 }))
+    .filter(c=>c.total > 0)
+    .sort((a,b)=>b.total-a.total)
+    .slice(0,5);
+}
+function renderTopClientsHTML(factures, annee){
+  const top = computeTopClients(factures, annee);
+  if(!top.length) return `<div class="empty">Aucune facture sur ${annee}.</div>`;
   const max = Math.max(...top.map(t=>t.total));
   return top.map((t,i)=>`
     <div class="topclient-row cliquable" role="button" tabindex="0" title="Ouvrir le dossier de règlements de ${esc(t.client)}"
@@ -1588,13 +1633,33 @@ function renderTopClientsHTML(factures){
       <span class="topclient-rank">${i+1}</span>
       <div class="topclient-mid">
         <div class="topclient-name">${esc(t.client)}</div>
+        <div class="card-sub" style="margin-top:2px;">${comparaisonN1HTML(t.total, t.precedent, annee - 1)}</div>
         <div class="progress-bar" style="margin-top:5px;"><div class="progress-fill" style="width:${Math.round(t.total/max*100)}%; background:var(--accent);"></div></div>
       </div>
       <div class="topclient-amount">${moneyDisplay(t.total)}</div>
     </div>`).join('');
 }
+
+/**
+ * Le rappel de l'exercice précédent, et l'écart — ou rien à dire.
+ *
+ * Sans montant N-1, on n'écrit pas « +100 % » : on ne compare pas à une
+ * absence, et un client nouveau n'a pas « progressé ».
+ */
+function comparaisonN1HTML(courant, precedent, anneePrecedente){
+  if(!precedent) return `<span style="color:var(--text-dim);">rien en ${anneePrecedente}</span>`;
+  const ecart = Math.round((courant - precedent) / Math.abs(precedent) * 100);
+  const couleur = ecart > 0 ? 'var(--success)' : ecart < 0 ? 'var(--danger)' : 'var(--text-dim)';
+  const signe = ecart > 0 ? '+' : '';
+  return `${anneePrecedente} : ${moneyDisplay(precedent)} · <b style="color:${couleur};">${signe}${ecart} %</b>`;
+}
 function computeMonthSummary(soc){
   const ym = todayISO().slice(0,7);
+  /* Le même mois un an plus tôt, et l'exercice précédent entier. C'est ce que
+     la reprise d'historique est venue apporter : sans elle ces deux chiffres
+     valaient zéro, et le tableau de bord n'avait rien à quoi se comparer. */
+  const annee = parseInt(ym.slice(0, 4), 10);
+  const ymN1 = `${annee - 1}${ym.slice(4)}`;
   const factures = state.factures.filter(f=>f.societeId===soc);
   const devisDuMois = state.devis.filter(d=>d.societeId===soc && (d.date||'').slice(0,7)===ym);
   const caMois = factures.filter(f=>f.statut==='payée' && (f.date||'').slice(0,7)===ym).reduce((s,f)=>s+computeDocTotals(f).ht,0);
@@ -1613,7 +1678,17 @@ function computeMonthSummary(soc){
   },0);
   const totalFacture = factures.reduce((s,f)=>s+computeDocTotals(f).ttc,0) || 1;
   const tauxEncaisse = Math.max(0, Math.round((1 - impayeesMontant/totalFacture)*100));
-  return { caMois, caMoisPct: Math.min(100, Math.round(caMois/maxMois*100)), tauxConversion, devisCount: devisDuMois.length, tauxEncaisse, impayeesMontant };
+  /* Le MÊME filtre que `caMois` — « payée » — sans quoi on comparerait de
+     l'encaissé à du facturé et l'écart ne voudrait rien dire. */
+  const caMoisN1 = factures.filter(f=>f.statut==='payée' && (f.date||'').slice(0,7)===ymN1)
+    .reduce((s,f)=>s+computeDocTotals(f).ht,0);
+  /* Le cumul, lui, est du FACTURÉ : c'est ce qu'on compare d'un exercice à
+     l'autre, encaissé ou non. Le libellé le dit. */
+  const cumulAnnee = factures.filter(f=>(f.date||'').slice(0,4)===String(annee)).reduce((s,f)=>s+computeDocTotals(f).ht,0);
+  const cumulAnneeN1 = factures.filter(f=>(f.date||'').slice(0,4)===String(annee-1)).reduce((s,f)=>s+computeDocTotals(f).ht,0);
+  return { caMois, caMoisPct: Math.min(100, Math.round(caMois/maxMois*100)), tauxConversion,
+    devisCount: devisDuMois.length, tauxEncaisse, impayeesMontant,
+    annee, caMoisN1, cumulAnnee, cumulAnneeN1 };
 }
 /* `fiche` restreint le décompte à un conducteur. Absente, on compte toute la
    société — c'est ce qu'attendent le pilotage et l'écran d'accueil. */
@@ -2067,6 +2142,7 @@ function renderDashboard(){
   const activity = buildActivityFeed(soc);
   const summary = computeMonthSummary(soc);
   const traiter = computeDashTraiter(soc);
+  const anneeEnCours = new Date().getFullYear();
   const period = state.dashRevenuePeriod || '6m';
   const revenuePeriod = computeRevenuePeriod(factures, monthsForPeriod(period));
   const totalTraiter = traiter.enAttenteConducteur + traiter.aValiderDirecteur + traiter.aFacturer + traiter.rappelsAujourdhui + traiter.facturesEchues;
@@ -2088,7 +2164,7 @@ function renderDashboard(){
     <div id="dashboardNormalContent" style="display:${state.globalSearch && state.globalSearch.trim() ? 'none':''};">
     ${quickActionsHTML()}
     <div class="grid-stats grid-stats-4">
-      <div class="stat-card success cliquable" role="button" tabindex="0" title="Voir les factures réglées ce mois" onclick="ouvrirDepuisDashboard('caEncaisse')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('caEncaisse');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--success-soft); color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">CA encaissé ce mois (HT)</div><div class="stat-num stat-num-money">${moneyDisplay(summary.caMois)}</div></div>
+      <div class="stat-card success cliquable" role="button" tabindex="0" title="Voir les factures réglées ce mois" onclick="ouvrirDepuisDashboard('caEncaisse')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('caEncaisse');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--success-soft); color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">CA encaissé ce mois (HT)</div><div class="stat-num stat-num-money">${moneyDisplay(summary.caMois)}</div><div class="stat-subamount">${comparaisonN1HTML(summary.caMois, summary.caMoisN1, summary.annee - 1)}</div></div>
       <div class="stat-card cliquable" role="button" tabindex="0" title="Voir les devis en attente de réponse" onclick="ouvrirDepuisDashboard('devisEnAttente')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('devisEnAttente');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--info-soft); color:var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.devis}</svg></span></div><div class="stat-label">Devis en attente</div><div class="stat-num">${devisEnAttente.length}</div><div class="stat-subamount">${moneyDisplay(devisEnAttenteMontant)} HT</div></div>
       <div class="stat-card ${impayees.length?'danger':''} cliquable" role="button" tabindex="0" title="Voir les factures impayées" onclick="ouvrirDepuisDashboard('impayees')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('impayees');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--danger-soft); color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.factures}</svg></span></div><div class="stat-label">Factures impayées</div><div class="stat-num">${impayees.length}</div><div class="stat-subamount">${moneyDisplay(summary.impayeesMontant)} restant dû</div></div>
       <div class="stat-card ${traiter.aFacturer?'warn':''} cliquable" role="button" tabindex="0" title="Voir les bons de commande à facturer" onclick="ouvrirDepuisDashboard('aFacturer')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ouvrirDepuisDashboard('aFacturer');}"><div class="stat-card-top"><span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-2);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.bonsCommande}</svg></span></div><div class="stat-label">À facturer</div><div class="stat-num">${traiter.aFacturer}</div><div class="stat-subamount">${moneyDisplay(traiter.aFacturerMontant)} HT</div></div>
@@ -2134,9 +2210,9 @@ function renderDashboard(){
         </div>
       </div>
       <div class="dash-col">
-        <div class="section-title-row"><span class="section-title" style="margin:0;">Top clients (HT)</span></div>
+        <div class="section-title-row"><span class="section-title" style="margin:0;">Top clients ${anneeEnCours} (HT)</span></div>
         <div class="card activity-card topclient-card">
-          ${renderTopClientsHTML(factures)}
+          ${renderTopClientsHTML(factures, anneeEnCours)}
         </div>
       </div>
       <div class="dash-col">
@@ -2148,6 +2224,10 @@ function renderDashboard(){
           <div class="progress-bar"><div class="progress-fill" style="width:${summary.tauxConversion}%; background:var(--info);"></div></div>
           <div class="summary-row cliquable" style="margin-top:16px;" role="button" tabindex="0" title="Voir les règlements" onclick="ouvrirDepuisDashboard('reglements')"><span>Taux d'encaissement</span><b>${summary.tauxEncaisse}%</b></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${summary.tauxEncaisse}%; background:var(--accent);"></div></div>
+          ${/* Le cumul de l'exercice face au précédent : c'est le chiffre que
+                la reprise d'historique rend enfin lisible. */''}
+          <div class="summary-row" style="margin-top:16px;"><span>Facturé ${summary.annee} (HT)</span><b>${moneyDisplay(summary.cumulAnnee)}</b></div>
+          <div class="card-sub">${comparaisonN1HTML(summary.cumulAnnee, summary.cumulAnneeN1, summary.annee - 1)}</div>
         </div>
       </div>
     </div>
