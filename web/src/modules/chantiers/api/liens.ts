@@ -18,13 +18,20 @@ export const schemaFactureDuChantier = z.object({
 });
 export type FactureDuChantier = z.infer<typeof schemaFactureDuChantier>;
 
-/** Le TTC vient de la vue `v_facture_totaux` : aucun total recalculé ici. */
+/**
+ * L'ordre des trois listes de la fiche : date décroissante, puis numéro, puis identifiant.
+ * Sans départage, deux pièces du même jour venaient dans l'ordre physique de la base, qui
+ * change au gré des mises à jour (DEF-COR-56, D-ECR-CHA-10). Le TTC vient de la vue
+ * `v_facture_totaux` : aucun total recalculé ici.
+ */
 export async function listerFacturesDuChantier(chantierId: string): Promise<FactureDuChantier[]> {
   const { data, error } = await supabase()
     .from("factures")
     .select("id, numero, type_document, statut, date")
     .eq("chantier_id", chantierId)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .order("numero", { ascending: false, nullsFirst: false })
+    .order("id");
   if (error) throw error;
   const factures = analyser(z.array(schemaFactureDuChantier.omit({ ttc: true })), data, "factures du chantier");
   if (!factures.length) return [];
@@ -44,7 +51,7 @@ export type DevisDuChantier = z.infer<typeof schemaDevisDuChantier>;
 
 /** Les devis du chantier et leur HT, lu dans la vue `v_devis_totaux` : aucun total recalculé ici. */
 export async function listerDevisDuChantier(chantierId: string): Promise<DevisDuChantier[]> {
-  const { data, error } = await supabase().from("devis").select("id, numero, statut").eq("chantier_id", chantierId).order("date", { ascending: false });
+  const { data, error } = await supabase().from("devis").select("id, numero, statut").eq("chantier_id", chantierId).order("date", { ascending: false }).order("numero", { ascending: false, nullsFirst: false }).order("id");
   if (error) throw error;
   const devis = analyser(z.array(schemaDevisDuChantier.omit({ ht: true })), data, "devis du chantier");
   if (!devis.length) return [];
@@ -76,7 +83,9 @@ export async function listerDevisAvecLignes(chantierId: string): Promise<DevisAv
     .from("devis")
     .select("id, numero, statut, devis_lignes(type, designation, quantite, prix_unitaire, unite, position)")
     .eq("chantier_id", chantierId)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .order("numero", { ascending: false, nullsFirst: false })
+    .order("id");
   if (error) throw error;
   return analyser(z.array(schemaDevisAvecLignes), data, "devis du chantier").map((d) => ({
     ...d,

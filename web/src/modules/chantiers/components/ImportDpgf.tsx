@@ -75,6 +75,7 @@ export function ImportDpgf({ chantierId, fichier, lignes, figees, fermer }: Prop
   const rangees = lu.feuilles[feuille] ?? [];
   const n = Math.max(0, Number.parseInt(aIgnorer, 10) || 0);
   const nbColonnes = nombreDeColonnes(rangees);
+  const aRemplacer = lignes.filter((l) => !figees.has(l.id)).map((l) => l.id);
 
   function changerIgnorees(v: string) {
     setAIgnorer(v);
@@ -84,7 +85,6 @@ export function ImportDpgf({ chantierId, fichier, lignes, figees, fermer }: Prop
   function confirmer() {
     const r = lignesDepuisCorrespondance(rangees, n, roles);
     if (!r.ok) return afficherToast(r.motif);
-    const aRemplacer = lignes.filter((l) => !figees.has(l.id)).map((l) => l.id);
     const suivante = lignes.reduce((max, l) => (figees.has(l.id) ? Math.max(max, l.position) : max), -1) + 1;
     importer.mutate(
       { lignes: r.lignes, aRemplacer, positionSuivante: suivante },
@@ -154,6 +154,14 @@ export function ImportDpgf({ chantierId, fichier, lignes, figees, fermer }: Prop
           </tbody>
         </table>
       </div>
+      {/* L'ancien remplaçait tout sans le dire, lignes facturées comprises (DEF-COR-06, D-CHA-07) :
+          on annonce ce qui part et ce qui reste. Rien à dire sur un DPGF vide — la modale reste alors
+          celle de l'ancien. */}
+      {(aRemplacer.length > 0 || figees.size > 0) && (
+        <p className="card-sub" style={{ marginTop: "10px" }}>
+          L'import remplace les {aRemplacer.length} ligne(s) actuelle(s) du DPGF{figees.size ? ` ; ${figees.size} ligne(s) déjà facturée(s) ou planifiée(s) sont conservées` : ""}.
+        </p>
+      )}
       <PiedModale>
         <button type="button" className="btn primary" onClick={confirmer} disabled={importer.isPending}>
           Importer ces lignes

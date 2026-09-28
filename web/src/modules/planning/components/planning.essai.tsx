@@ -262,3 +262,23 @@ describe("fériés d'Alsace-Moselle (PLN-53)", () => {
     expect(colonne()?.classList.contains("is-non-ouvre")).toBe(true);
   });
 });
+
+// DEF-COR-21 (BC-90, D-BC-08) : l'ancien offrait, sur la carte en attente, une case par
+// métier « réalisé » qui écrivait `metiersFait`, sans colonne : cochée, puis décochée au
+// rechargement. L'état de chaque métier se lit désormais sur ses tâches, sans case.
+describe("En attente : l'avancement des métiers se lit sur les tâches (DEF-COR-21)", () => {
+  it("la carte dépliée dit l'état de chaque tâche, et n'offre aucune case sans effet", async () => {
+    rendreAvecSession(<PagePlanning />, { role: "conducteur" });
+    await userEvent.click(await screen.findByRole("tab", { name: "En attente technicien" }));
+    const carte = await waitFor(() => {
+      const c = document.getElementById("bonCommande-card-b1");
+      if (!c) throw new Error("carte b1 absente");
+      return c;
+    });
+    await userEvent.click(within(carte).getByRole("button", { name: "▸" }));
+    const liste = carte.querySelector<HTMLElement>(".bc-metiers-checklist");
+    expect(liste).not.toBeNull();
+    expect(within(liste as HTMLElement).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(liste).toHaveTextContent(/Plomberie : /);
+  });
+});

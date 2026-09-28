@@ -6,6 +6,13 @@
 #      qui n'existent qu'en local tant qu'elles ne sont pas validées ;
 #   4. charge le jeu d'essai (seed-web.sql).
 # Rejouable : chaque étape tolère d'avoir déjà été faite.
+#
+# SANS_PROPOSITIONS=1 saute l'étape 3 : la base ressemble alors à la production
+# (même reconstruction que `comparer-a-la-production.sh`). Sert à PROUVER qu'un
+# test RLS marqué [proposition] échoue sans sa proposition — un test qui passe
+# des deux côtés ne prouve rien (docs/tests-rls.md, « Écart avec la production »).
+# Partir d'une base vide (`npx supabase stop --no-backup`) : une proposition
+# déjà appliquée ne se défait pas.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -20,10 +27,14 @@ if [ "$(psql_ -At -c "select to_regclass('public.devis') is not null")" != "t" ]
   bash scripts/rejouer-migrations.sh
 fi
 
-for f in supabase/propositions/*.sql; do
-  [ -e "$f" ] || continue
-  psql_ < "$f" > /dev/null && echo "  OK  proposition $(basename "$f")"
-done
+if [ "${SANS_PROPOSITIONS:-}" = "1" ]; then
+  echo "  --  propositions NON appliquées (SANS_PROPOSITIONS=1) : base à l'image de la production"
+else
+  for f in supabase/propositions/*.sql; do
+    [ -e "$f" ] || continue
+    psql_ < "$f" > /dev/null && echo "  OK  proposition $(basename "$f")"
+  done
+fi
 
 psql_ < supabase/seed-web.sql && echo "  OK  jeu d'essai"
 npx supabase status -o env 2>/dev/null | grep -E '^(API_URL|ANON_KEY)=' | sed 's/^API_URL/VITE_SUPABASE_URL/; s/^ANON_KEY/VITE_SUPABASE_ANON_KEY/' > .env.local

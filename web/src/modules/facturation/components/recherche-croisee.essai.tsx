@@ -95,6 +95,9 @@ describe("recherche croisée des factures et des bons (TRV-06, TRV-07)", () => {
     await screen.findByText("FAC-2026-000011");
     await userEvent.type(screen.getByLabelText("Rechercher"), "étanchéité");
     await waitFor(() => expect(screen.queryByText("FAC-2026-000011")).not.toBeInTheDocument());
+    // DEF-COR-48 (D-ECR-CHA-05) : l'ancien redessinait la zone, champ compris, à chaque frappe — le focus se perdait.
+    expect(screen.getByLabelText("Rechercher")).toHaveFocus();
+    expect(screen.getByLabelText("Rechercher")).toHaveValue("étanchéité");
     const carteF1 = document.getElementById("facture-card-f1") as HTMLElement;
     expect(within(carteF1).getByText(/🔎 Nature Étanchéité terrasse/)).toBeInTheDocument();
   });
@@ -137,5 +140,28 @@ describe("filtres dans l'adresse (D-CLI-10)", () => {
     await userEvent.type(champ, "{Enter}");
     // La carte trouvée s'encadre comme dans l'ancien (`.search-focus`).
     expect(document.getElementById("devis-card-d3")).toHaveClass("search-focus");
+  });
+});
+
+// DEF-COR-54 (FAC-100) : l'avertissement de la réf. figée vide avait disparu quand l'émission
+// est revenue sur la carte, comme dans l'ancien (passage du 26/09). Il est remis dans la
+// question de l'ancien, qui reste la même mot pour mot.
+describe("émettre sans réf. de bon de commande client (DEF-COR-54)", () => {
+  it("la question de l'ancien prévient que la réf. manquante sera figée vide ; avec une réf., rien de plus", async () => {
+    ecran.listerFacturesEcran.mockResolvedValue([
+      carte({ id: "f1", numero: null, statut: "brouillon", ref_bon_commande_client: null }),
+      carte({ id: "f2", numero: null, statut: "brouillon", client_nom: "SCI Tilleuls", ref_bon_commande_client: "CMD-42" }),
+    ]);
+    soldes.soldesDesFactures.mockResolvedValue([]);
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValue(false);
+    ouvrir("/factures");
+    await screen.findByText("SCI Tilleuls");
+    const sans = document.getElementById("facture-card-f1") as HTMLElement;
+    await userEvent.click(await within(sans).findByRole("button", { name: /Émettre/ }));
+    expect(confirmer).toHaveBeenLastCalledWith(expect.stringMatching(/^Émettre la facture de OPAC du Rhône .*passer par un avoir\.\n\nAucune réf\. de bon de commande client : elle sera figée vide, comme tout l'en-tête\.$/s));
+    const avec = document.getElementById("facture-card-f2") as HTMLElement;
+    await userEvent.click(within(avec).getByRole("button", { name: /Émettre/ }));
+    expect(confirmer).toHaveBeenLastCalledWith(expect.not.stringContaining("figée vide"));
+    confirmer.mockRestore();
   });
 });

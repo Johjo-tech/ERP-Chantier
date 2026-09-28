@@ -102,6 +102,18 @@ describe("[proposition] émetteur sous-traitant et visibilité (PLN-52)", () => 
     expect(force.data).toEqual([]);
   });
 
+  // Le cas ci-dessus passe par l'écran, qui écrit `bon_commande_id` : sans la proposition il
+  // tombe sur la colonne absente avant d'avoir rien dit de la visibilité. Celui-ci n'écrit que
+  // des colonnes de production, pour que le défaut lui-même (DEF-BDD-25) se voie sans elle.
+  it("un rapport interne, écrit avec les seules colonnes de production, reste invisible au sous-traitant", async () => {
+    const r = await admin.from("interventions").insert({ societe_id: ALPHA, client_nom: "OPAC du Rhône", constatations: "Rapport interne (colonnes de production)" }).select("id").single();
+    if (r.error) throw r.error;
+    crees.push(r.data.id);
+    const vu = await sousTraitant.from("interventions").select("id").eq("id", r.data.id);
+    expect(vu.error).toBeNull();
+    expect(vu.data).toEqual([]);
+  });
+
   it("le rôle lecture ne supprime ni un rapport ni ses contrôles", async () => {
     const id = await rapport(technicien, { controles: { joints: true } });
     const lecture = await connecte(COMPTES.lectureAlpha);

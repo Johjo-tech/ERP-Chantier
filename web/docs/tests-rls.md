@@ -64,7 +64,8 @@ Mot de passe de tous : `motdepasse-local`.
 | `interventions.essai.ts` | Rapport du technicien : numéro INT par la base, contrôles, photo et signatures ; vacant : pas de signature client ; le sous-traitant rédige au nom de son entreprise et ne voit que ses rapports ; lecture ne supprime rien ; un rapport par bon | **oui** (20260926052000) |
 | `vehicules.essai.ts` | Conducteur ne crée pas de véhicule ; plaque unique par société ; CT dans `date_controle_technique` ; BETA ne voit rien. Secrétaire prête (durée), second prêt en cours refusé, durée ≤ 0 refusée, technicien ne note pas d'entretien, lecture ne supprime ni entretien ni prêt de matériel, secrétaire ne prête pas de matériel, technicien prête et rend ; secrétaire dépose sous `vehicules/`, lecture non | **oui** (20260926070000) |
 | `vehicules-api.essai.ts` | Les `api/` du parc telles quelles : fiche, plaque en double en clair, entretien avec facture (compteur qui monte, jamais ne descend), prêt avec schéma et retour, document à échéance vu par les alertes, vente → facture `FAC-` émise une seule fois, prêts de matériel | **oui** (20260926070000) |
-| `transversal.essai.ts` | D-CHA-04 : le bon né du DPGF, posé au planning, garde UNE tâche, datée, liée à sa ligne | non |
+| `transversal.essai.ts` | D-CHA-04 : le bon né du DPGF, posé au planning, garde UNE tâche, datée, liée à sa ligne | oui, sans la marque (20260926020000 : `chantier_dpgf_lignes.metier`) |
+| | Fonctions de déclencheur sans EXECUTE pour `anon`/`authenticated`, barrière de `v_salaries_annuaire` (relevé du catalogue, DEF-BDD-15) | **oui** (20260926104000) |
 | `notifications.essai.ts` | La cloche : « fait » posé par un technicien et vu de toute la société, auteur posé par la base, pas de doublon, étanchéité entre sociétés, le rôle lecture ne remet rien « à faire » | **oui** (20260926120000) |
 | `clients-api.essai.ts` | Les `api/` des clients et de la facture : liste lue par pages jusqu'au compte exact, lecture de rapprochement, identité de l'acheteur recopiée à la création et suivie au changement de client (CLI-26, CLI-32, TRV-10) | non |
 | `transformations.essai.ts` | Rapport → devis / facture par la voie unique : lien posé dès l'INSERT, lignes « x3,5 m² », logement nettoyé, « déjà transformé », rapport lié à un bon (D-CLI-09) | non |
@@ -74,6 +75,60 @@ Mot de passe de tous : `motdepasse-local`.
 | `transactions-facturation.essai.ts` | Relecture 4 : supprimer un brouillon de situation (la secrétaire rend le DPGF qu'elle ne voit pas ; émise entre-temps, situation plus récente ou conducteur : refus ET DPGF inchangé) ; avoir émis d'un seul geste, second avoir total refusé, rien créé sur refus ; imputation annulée entière, conducteur refusé ; un bon ne se facture qu'une fois (déjà facturé, deux appels simultanés) | **oui** (20260926130000 à 133000) — **le cas « déjà facturé » échoue contre la fonction actuelle (vérifié)** |
 | `notifications.essai.ts` (suite) | Le filtre de la cloche est compris par PostgREST et ne rend que les bons qui peuvent sonner (relecture 4, I4) | non |
 | `inviter-salarie.essai.ts` | La fonction de bord `inviter-salarie` (code historique tel quel) sert le `functions.invoke` de l'écran : invitée, renvoi < 10 min (429), secrétaire (403), déjà relié (409), rôle hors liste (400) — clé de service LOCALE lue par `scripts/test-rls.sh` (D-AUTH-09) | non |
+
+## Écart avec la production : chaque proposition prouvée (28/09)
+
+La base locale n'est pas la production : elle reçoit les 34 propositions de
+`supabase/propositions/`, que la production n'a pas. Un test `[proposition]` qui passe en local
+prouve la correction ; il ne prouve le **défaut** que s'il échoue sur une base qui ressemble à la
+production. `SANS_PROPOSITIONS=1` construit cette base (mêmes migrations du dépôt et même
+rattrapage que `scripts/comparer-a-la-production.sh`, qui la compare à un export de la production) :
+
+```bash
+npx supabase stop --no-backup
+SANS_PROPOSITIONS=1 npm run base:locale   # à l'image de la production
+npm run test:rls                          # relever les [proposition] qui échouent
+npx supabase stop --no-backup
+npm run base:locale                       # avec les propositions
+npm run test:rls                          # tout doit passer
+```
+
+Relevé du 28/09 (287 cas) :
+
+| Base | Passent | Échouent | Ne démarrent pas |
+|---|---|---|---|
+| sans propositions | 130 | 127 | 30 : `espace-client*.essai.ts` (19 — le compte client ne peut pas exister sans `acces_clients`), `statistiques.essai.ts` (11 — `imputer_avoir` absente) |
+| avec propositions | 287 | 0 | 0 |
+
+Chaque entrée DEF-BDD de `docs/DEFAUTS-A-TRANCHER.md` porte sa ligne « Preuve » : les tests qui
+échouent sans elle et passent avec. Vingt-neuf défauts sont prouvés ; DEF-BDD-15 ne l'est qu'en
+partie (le droit EXECUTE des fonctions de déclencheur n'existe que pour des fonctions créées en
+production par le tableau de bord, que le dépôt ne contient pas).
+
+Ce que le relevé a changé dans les tests :
+
+- `politiques.essai.ts` connectait le compte client dans son `beforeAll` : sans la proposition de
+  l'espace client, tout le fichier sautait, et avec lui les preuves de B2, B3, I1 à I8, M1, M3, M6.
+  Le compte n'est plus connecté que par le cas B1.
+- Trois cas passaient **aussi** sans leur proposition, sans rien prouver : « le rôle lecture ne
+  supprime pas un prêt de matériel » (aucun prêt à effacer), « l'auteur est posé par la base »
+  (`undefined` comparé à un identifiant), et le cas « le sous-traitant ne voit que ses rapports »
+  tombait sur la colonne `bon_commande_id` absente avant d'avoir parlé de visibilité. Les deux
+  premiers sont renforcés ; un cas « rapport interne, écrit avec les seules colonnes de
+  production » est ajouté pour le troisième.
+- DEF-BDD-15, dit « non observable par l'API », a désormais ses deux relevés du catalogue
+  (`transversal.essai.ts`, par `catalogue.ts`, en lecture seule).
+
+Passent des deux côtés, **par construction** (gardes de non-régression, pas des preuves) : le
+conducteur ajoute une dépense ; le rôle lecture n'écrit aucun règlement ; qui voit les prix chiffre
+toujours ; I6 (lecture des fichiers de propositions) ; le technicien dépose toujours hors du
+dossier RH ; la vente d'un véhicule émet une facture ; le technicien ne lit la to-do d'un chantier
+qu'une fois affecté ; aucune fonction de déclencheur exécutable par `anon`.
+
+Dépendent d'une proposition **sans en porter la marque** (ils écrivent une colonne proposée) :
+`chantiers-api.essai.ts` (trois cas), `chantiers.essai.ts` « planifier une quantité »,
+`transversal.essai.ts` « D-CHA-04 », `transformations.essai.ts` (deux cas),
+`interventions.essai.ts` « logement vacant », `statistiques.essai.ts` (tout le fichier).
 
 ## Scénarios à exécuter plus tard (non automatisés cette nuit)
 

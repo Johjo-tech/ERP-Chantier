@@ -62,6 +62,8 @@ vi.mock("../api/liens", () => ({
   identitePourPpsps: vi.fn(),
 }));
 vi.mock("../api/stockage", () => ({ urlFichier: vi.fn() }));
+const toast = vi.hoisted(() => ({ afficherToast: vi.fn() }));
+vi.mock("@/lib/toast", async (original) => ({ ...(await original<typeof import("@/lib/toast")>()), afficherToast: toast.afficherToast }));
 
 const LIGNE = { chantier_id: "ch1", type: "ligne" as const, unite: "u", devis_source_id: null, metier: null };
 
@@ -196,6 +198,17 @@ describe("to-do (CHA-14)", () => {
     await waitFor(() => expect(api.todos.changerStatutTodo).toHaveBeenCalledWith("t1", "en_cours"));
     await userEvent.type(screen.getByLabelText("Nouvelle tâche"), "Commander la benne{Enter}");
     await waitFor(() => expect(api.todos.ajouterTodo).toHaveBeenCalledWith("ch1", "Commander la benne", 1));
+  });
+
+  // DEF-COR-07 (CHA-54) : l'ancien taisait l'échec d'une écriture (`catch` muets) ; la
+  // tâche semblait ajoutée, puis disparaissait au rechargement.
+  it("un ajout refusé par la base se dit, et la saisie n'est pas perdue", async () => {
+    api.todos.ajouterTodo.mockRejectedValueOnce({ code: "42501", message: "new row violates row-level security policy for table \"chantier_todos\"" });
+    ouvrir("technicien");
+    await userEvent.type(await screen.findByLabelText("Nouvelle tâche"), "Commander la benne{Enter}");
+    await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledTimes(1));
+    expect(toast.afficherToast.mock.calls[0]?.[0]).not.toMatch(/row-level security/);
+    expect(screen.getByLabelText("Nouvelle tâche")).toHaveValue("Commander la benne");
   });
 
   it("le rôle lecture ne modifie rien", async () => {

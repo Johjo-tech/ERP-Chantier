@@ -67,6 +67,9 @@ const seuils = (bureau: Seuils, mobile: Seuils): Partial<Record<Taille, Seuils>>
  */
 const ACOMPTES = 2;
 
+/** Le brouillon que « Par facture » ne liste plus (DEF-COR-15) : ses 6 lignes, et le décompte changé (2). */
+const BROUILLON_PAR_FACTURE = 8;
+
 /**
  * « ✕ Effacer » paraît dès qu'un filtre est posé (D-ECR-FAC-07) ; l'ancien ne
  * redessinait que la liste, et le bouton n'apparaissait qu'au rendu suivant.
@@ -95,7 +98,10 @@ export function ecransFacturation(): Ecran[] {
     factures("factures-validation", "Factures › Validation", { facturesView: "validation" }, "/facturation/validation", seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 })),
     factures("factures-a-facturer", "Factures › À facturer", { facturesView: "afacturer" }, "/facturation/a-facturer", seuils({ pixels: 0.001, texte: 0 }, { pixels: 0.001, texte: 0 })),
     factures("factures-reglements", "Factures › Règlements › Par client", { facturesView: "reglements", reglementsVue: "clients", reglementsClient: null }, "/factures/reglements", seuils({ pixels: 0.002, texte: ACOMPTES }, { pixels: 0.002, texte: ACOMPTES })),
-    factures("factures-reglements-par-facture", "Factures › Règlements › Par facture", { facturesView: "reglements", reglementsVue: "factures", reglementsClient: null }, "/factures/reglements/par-facture", seuils({ pixels: 0.002, texte: 2 * ACOMPTES }, { pixels: 0.002, texte: 2 * ACOMPTES })),
+    // DEF-COR-15 (D-FAC-17, voulu) : le brouillon de Mme Durand n'est plus listé — sa carte (6 lignes) et le
+    // décompte « 4 factures » → « 3 factures » (2 lignes) ; en bureau, les cartes qui la suivent remontent d'un
+    // cran : 11,2 % des pixels mesurés le 28/09. En mobile, la carte est sous la ligne de flottaison.
+    factures("factures-reglements-par-facture", "Factures › Règlements › Par facture", { facturesView: "reglements", reglementsVue: "factures", reglementsClient: null }, "/factures/reglements/par-facture", seuils({ pixels: 0.12, texte: 2 * ACOMPTES + BROUILLON_PAR_FACTURE }, { pixels: 0.002, texte: 2 * ACOMPTES + BROUILLON_PAR_FACTURE })),
     factures("factures-reglements-tous", "Factures › Règlements › Tous les règlements", { facturesView: "reglements", reglementsVue: "tous", reglementsClient: null }, "/factures/reglements/tous", seuils({ pixels: MEME_INSTANT, texte: 0 }, { pixels: 0.002, texte: 0 })),
     factures("factures-reglements-dossier", "Factures › Règlements › dossier d'un client", { facturesView: "reglements", reglementsClient: "OPAC du Rhône" }, "/factures/reglements/dossier?client=OPAC%20du%20Rh%C3%B4ne", seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 })),
     // Le dossier qui porte le brouillon du jeu : titre « Brouillon — non émise » et ligne « Pas encore émise… » (97287c3).

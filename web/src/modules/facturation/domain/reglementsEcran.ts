@@ -89,6 +89,9 @@ export function facturesParEtat<P extends PieceReglement>(pieces: readonly P[], 
   const terme = (p: P) => p.f.echeance || p.f.date || "";
   const lignes = pieces
     .filter((p) => !estAvoir(p.f.type_document))
+    // DEF-COR-15 (D-FAC-17) : un brouillon ne doit rien — l'ancien le listait « Non réglée »
+    // à 0 et le comptait dans « N factures ». Sans numéro, il n'est pas encore une facture.
+    .filter((p) => !!p.f.numero)
     .filter((p) => !c.client || p.f.client_nom === c.client)
     .filter((p) => !c.du || terme(p) >= c.du)
     .filter((p) => !c.au || terme(p) <= c.au)
