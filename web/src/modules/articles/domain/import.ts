@@ -167,8 +167,8 @@ export function decouperLigne(ligne: string): string[] {
  * un prix mal lu entrait au catalogue sans un mot. Tout le reste est illisible —
  * prix à 0 et signalement, comme l'ancien le faisait déjà pour « abc ».
  */
-const PRIX_LISIBLE = /^[+-]?((\d{1,3}([   ]\d{3})+|\d+)([.,]\d*)?|[.,]\d+)$/;
-const ESPACES_DE_MILLIERS = /[   ]/g;
+const PRIX_LISIBLE = /^[+-]?((\d{1,3}([ \u00a0\u202f]\d{3})+|\d+)([.,]\d*)?|[.,]\d+)$/;
+const ESPACES_DE_MILLIERS = /[ \u00a0\u202f]/g;
 
 export function lirePrix(brut: string): number | null {
   const texte = brut.trim();
