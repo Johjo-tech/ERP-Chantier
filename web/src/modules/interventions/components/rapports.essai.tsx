@@ -70,14 +70,12 @@ describe("liste des rapports (PLN-20, PLN-52)", () => {
     expect(within(carte).queryByRole("button", { name: "Transformer en facture" })).not.toBeInTheDocument();
   });
 
-  it("un rapport sans statut porte la pastille vide de l'ancien, pas « en cours »", async () => {
+  it("un rapport sans statut porte le statut d'un rapport neuf, pas une pastille vide (DEF-ECR-01)", async () => {
     api.listerRapports.mockResolvedValue([rapport({ statut: null })]);
     rendreAvecSession(<PageRapports />, { role: "admin" });
     const carte = await carteDe("OPAC du Rhône");
-    const pastille = carte.querySelector(".badge.gray");
-    expect(pastille).not.toBeNull();
-    expect(pastille?.textContent).toBe("");
-    expect(within(carte).queryByText("en cours")).not.toBeInTheDocument();
+    expect(within(carte).getByText("en cours")).toHaveClass("badge", "yellow");
+    expect([...carte.querySelectorAll(".badge")].some((b) => b.textContent === "")).toBe(false);
   });
 
   it("transformer en devis crée le brouillon depuis le rapport", async () => {
@@ -203,6 +201,33 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
     ouvrir();
     await userEvent.click(await screen.findByRole("button", { name: "Transformer en devis" }));
     await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith(expect.stringMatching(/déjà été transformé en devis \(DEV-2026-000004\)/)));
+  });
+
+  it("l'aperçu a le squelette de l'ancien : ✕, puis la barre « Imprimer » « Enregistrer », puis la pièce ; les gestes de web/ SOUS la pièce (D-COR2-04)", async () => {
+    api.lireRapport.mockResolvedValue(complet({}));
+    transfo.courrielDuClient.mockResolvedValue("contact@opac.fr");
+    ouvrir();
+    await screen.findByRole("button", { name: "Transformer en facture" });
+    const panneau = document.querySelector("#viewInterventionModal.view-modal.open > .view-modal-panel") as HTMLElement;
+    expect(panneau).not.toBeNull();
+    // index.html l. 1808-1817 : les trois premiers enfants, dans cet ordre et avec ces classes.
+    const [croix, barre, contenu, gestes, ...reste] = [...panneau.children] as HTMLElement[];
+    expect(croix).toHaveClass("view-modal-close");
+    expect(croix?.textContent).toBe("✕");
+    expect(barre?.className).toBe("view-modal-actions no-print");
+    expect([...(barre?.children ?? [])].map((b) => [b.tagName, b.className, b.textContent])).toEqual([["BUTTON", "btn small", "Imprimer"], ["BUTTON", "btn small primary", "Enregistrer"]]);
+    expect(contenu?.id).toBe("viewInterventionContent");
+    expect(within(contenu as HTMLElement).getByText("RAPPORT D'INTERVENTION")).toBeInTheDocument();
+    // Les gestes propres à web/ : une rangée de l'ancien (`btn small`), après la pièce — jamais au-dessus.
+    expect(gestes?.className).toBe("view-modal-actions no-print gestes-web");
+    expect([...(gestes?.children ?? [])].map((b) => [b.className, b.textContent])).toEqual([["btn small", "Envoyer par email"], ["btn small", "Transformer en devis"], ["btn small", "Transformer en facture"]]);
+    expect(reste).toEqual([]);
+    expect(panneau.querySelector(".actions-web, [class*='flex-wrap']")).toBeNull();
+    // « Envoyer par email » ouvre la fenêtre de l'ancien (`openEmailComposeModal`), destinataire et objet remplis.
+    await userEvent.click(within(gestes as HTMLElement).getByRole("button", { name: "Envoyer par email" }));
+    expect(await screen.findByLabelText("2. Destinataire")).toHaveValue("contact@opac.fr");
+    expect(screen.getByLabelText("Objet")).toHaveValue("Rapport d'intervention — OPAC du Rhône");
+    expect(screen.getByRole("button", { name: "Copier le texte" })).toBeInTheDocument();
   });
 
   it("le rôle lecture ne voit aucun des deux gestes", async () => {

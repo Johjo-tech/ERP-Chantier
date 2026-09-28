@@ -39,7 +39,11 @@ INT-2026-000001 — numéro attribué par la base à la naissance, à ajuster da
   (tolérance 24/255 par canal, le bruit du JPEG) ; le texte extrait (le pied
   légal, seul écrit en texte) est comparé ligne à ligne ;
 - l'aperçu à l'écran (`openViewDoc` de l'ancien, page `/…/apercu` de web/) est
-  photographié et comparé de même.
+  photographié et comparé de même. Sur le rapport d'intervention, la rangée
+  `.gestes-web` de web/ (envoi, transformation — absents de l'aperçu de
+  l'ancien) est posée sous la pièce et masquée à la capture (D-COR2-04) :
+  avant, placée au-dessus, elle passait à la ligne et décalait toute la pièce
+  (30 % d'écart).
 
 Les polices Google Fonts sont servies aux deux applications depuis un même
 cache : le mandataire du bac à sable en perd au hasard, et une capture faite

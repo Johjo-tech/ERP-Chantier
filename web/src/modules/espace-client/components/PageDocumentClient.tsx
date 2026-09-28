@@ -8,7 +8,7 @@ import { emetteurDepuisIdentite, pieceImprimee } from "@/modules/documents/impre
 import { lireFacture } from "@/modules/facturation/api/factures";
 import { contexteFacture } from "@/modules/facturation/domain/impression";
 import { mentionsLegales } from "@/modules/facturation/domain/mentions";
-import { useEmetteurClient } from "../hooks/useEspaceClient";
+import { useCommuneClient, useEmetteurClient } from "../hooks/useEspaceClient";
 
 /**
  * Un devis ou une facture du client : la MÊME pièce que celle qu'il reçoit
@@ -29,18 +29,22 @@ export function PageDocumentClient({ nature }: { nature: "devis" | "facture" }) 
     enabled: !!id,
   });
   const societeId = doc.data?.devis?.societe_id ?? doc.data?.facture?.societe_id;
+  const clientNom = doc.data?.devis?.client_nom ?? doc.data?.facture?.client_nom;
   const emetteur = useEmetteurClient(societeId);
-  if (doc.isPending || (doc.isSuccess && emetteur.isPending)) return <Chargement />;
+  // Le code postal et la ville du bloc « Client » : sans eux la pièce sortait sans commune (D-MAIN-02, D-COR2-05).
+  const commune = useCommuneClient(societeId, clientNom);
+  if (doc.isPending || (doc.isSuccess && (emetteur.isPending || (!!clientNom && commune.isPending)))) return <Chargement />;
   if (doc.isError) return <Erreur erreur={doc.error} reessayer={() => void doc.refetch()} />;
   if (emetteur.isError) return <Erreur erreur={emetteur.error} reessayer={() => void emetteur.refetch()} />;
   const e = emetteur.data;
   if (!e) return null;
   const imprimable = emetteurDepuisIdentite(e.identite);
   const { devis, facture } = doc.data;
+  const fiche = commune.data ?? null;
   const contexte = devis
-    ? contexteDevis(devis, imprimable, 0)
+    ? contexteDevis(devis, imprimable, 0, fiche)
     : facture
-      ? contexteFacture(facture, { devisNumero: null, rectifiee: null }, imprimable, mentionsLegales(e.mentions))
+      ? contexteFacture(facture, { devisNumero: null, rectifiee: null }, imprimable, mentionsLegales(e.mentions), fiche)
       : null;
   if (!contexte) return null;
   return <ApercuPiece piece={pieceImprimee(contexte, imprimable.variables)} fermer={() => void navigate("/espace-client")} />;

@@ -6,6 +6,7 @@ import { messageErreur } from "@/lib/erreurs";
 import { Can } from "@/modules/auth-roles/components/Can";
 import { logementLabel } from "@/modules/documents/impression/gabarit";
 import type { RapportDeLaListe } from "../api/rapports";
+import { statutDuRapport } from "../domain/rapport";
 import { useLierBon, useSupprimerRapport } from "../hooks/useRapports";
 import { ActionsTransformation } from "./ActionsTransformation";
 import { LienBon } from "./LienBon";
@@ -41,8 +42,7 @@ export function CarteRapport({ r, numeroBon }: { r: RapportDeLaListe; numeroBon:
   const supprimer = useSupprimerRapport();
   const [lien, setLien] = useState(false);
   const echec = (e: unknown) => afficherToast(messageErreur(e));
-  // L'ancien écrit `esc(i.statut)` : un rapport sans statut (repris, ou né hors de l'écran) porte une pastille vide, pas « en cours ».
-  const statut = r.statut ?? "";
+  const statut = statutDuRapport(r.statut);
   const photos = r.nbPhotos ? `${r.nbPhotos} photo${r.nbPhotos > 1 ? "s" : ""}` : "";
 
   return (

@@ -7,6 +7,7 @@ import { useFormulaire } from "@/lib/useFormulaire";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { dateEcheance, delaiHorsPlafond, delaiPaiementRetenu, delaiPreregle, DELAIS_PREREGLES, libelleDelaiPaiement, MODES_REGLEMENT, type DelaiPaiement } from "@/modules/clients/domain/delais";
 import { useClients, useInterlocuteurs } from "@/modules/clients/hooks/useClients";
+import { ChampMetierAncien } from "@/modules/commandes/components/MetierChapitreAncien";
 import { LignesAncien } from "@/modules/documents/components/LignesAncien";
 import { SectionLieuAncien } from "@/modules/documents/components/SectionLieuAncien";
 import { TotauxAncien } from "@/modules/documents/components/TotauxAncien";
@@ -240,7 +241,7 @@ export function FormulaireFacture({ facture, reglages, ChampReference }: { factu
         <SectionLieuAncien valeurs={valeurs} changer={changer} suffixe="Facture" avecTelephone={false} />
         <div className="form-section">
           <div className="form-section-head">Lignes</div>
-          <LignesAncien lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} ChampReference={ChampReference} />
+          <LignesAncien lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} ChampReference={ChampReference} ChampMetier={ChampMetierAncien} />
         </div>
         <div className="form-section">
           <div className="form-section-head">Remise &amp; totaux</div>

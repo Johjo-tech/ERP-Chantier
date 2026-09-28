@@ -50,8 +50,8 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-STA-17 | Part du CA négative ou > 100 % | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-17 ») | calcul |
 | DEF-STA-18 | Bons rangés par date de saisie | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-18 ») | calcul |
 | DEF-STA-19 | Sous-traitant : salutation et bandeau génériques | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-14 et 19 », `components/tableaux.essai.tsx`) | affichage |
-| DEF-ECR-01 | Rapport sans statut : pastille vide | identique à l'ancienne | affichage |
-| DEF-ECR-02 | « 📦 Commandé » n'enregistre pas la date | corrigé dans web/ | données perdues |
+| DEF-ECR-01 | Rapport sans statut : pastille vide | corrigé dans web/ (30724e8) ; correction proposée en base (20260928212000) | affichage |
+| DEF-ECR-02 | « 📦 Commandé » n'enregistre pas la date | corrigé dans web/ (vérifié, D-COR2-02) | données perdues |
 | DEF-ECR-03 | Brouillon compté dans le CA (= STA-01) | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-01 / DEF-ECR-03 ») | calcul |
 | DEF-ECR-04 | « Mme Durand · null » (= STA-06) | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-06 / DEF-ECR-04 ») | affichage |
 | DEF-BDD-01 | `prochain_numero` ouvert à une autre société | correction proposée en base | sécurité |
@@ -402,6 +402,14 @@ ancienne, juste) ; l'état dit ce qui est fait.
   de pastille du tout ; et, en base, un défaut sur la colonne pour qu'un rapport ne naisse pas sans statut.
 - **Nouvelle aujourd'hui** : identique à l'ancienne (pastille grise vide, D-VIS2-02). Elle affichait
   « EN COURS » avant d'être alignée.
+- **État (28/09, « corrige tout »)** : **corrigé** — la carte affiche le statut qu'un rapport reçoit à sa
+  naissance, pastille jaune « en cours » (`interventions/domain/rapport.ts#statutDuRapport`, commit
+  30724e8 ; test `interventions/components/rapports.essai.tsx`, « un rapport sans statut porte le statut
+  d'un rapport neuf… », qui échoue sur l'ancien rendu). **Correction proposée en base** : défaut
+  `'en cours'` sur `interventions.statut` (`supabase/propositions/20260928212000_un_rapport_nait_en_cours.sql`,
+  test RLS `tests/rls/interventions.essai.ts` « [proposition] un rapport écrit hors de l'écran naît
+  « en cours » », écrit, non lancé). Écart visuel attendu noté sur l'écran `rapports` (`tests/visuel/ecrans.ts`).
+  D-COR2-01.
 
 ### DEF-ECR-02 — Pièces en commande : « 📦 Commandé » n'enregistre pas la date de commande
 - **Écran** : Pièces en commande (bon « Sans BC » de Mme Durand, une pièce à commander).
@@ -419,6 +427,12 @@ ancienne, juste) ; l'état dit ce qui est fait.
   dossier « — Fournisseur non renseigné — », sa carte reste ouverte et dit « commandée le … » (parcours
   `tests/e2e/commandes.e2e.ts`, « pièces : le conducteur commande… »). La nouvelle diffère donc de l'ancienne
   sur ce point ; à confirmer par le client.
+- **État (28/09, « corrige tout »)** : **corrigé** (vérifié, rien à changer) — `ZonePieceCarte` écrit
+  `piece_date_commande = todayISO()` (date de Paris) par `commandes/api/pieces.ts#modifierCommandePiece`, sur
+  toutes les tâches du bon qui portent la pièce ; zéro ligne écrite = refus qui remonte. Preuves : test
+  `commandes/api/pieces.essai.ts` (nouveau : filtres de l'écriture, refus), `commandes/components/pieces.essai.tsx`
+  (« le conducteur marque commandé… »), relu en base `tests/rls/commandes.essai.ts` (« pièces (BC-19, BC-21) »),
+  parcours `tests/e2e/commandes.e2e.ts`. D-COR2-02.
 
 ### DEF-ECR-03 — Tableau de bord et Statistiques : un brouillon compte dans le chiffre d'affaires
 Même défaut que **DEF-STA-01** (reproduction et correction y sont décrites). **Corrigé** (commit e0002ce,

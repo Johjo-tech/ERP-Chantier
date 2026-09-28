@@ -1,40 +1,36 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { ApercuPiece } from "@/modules/documents/components/ApercuPiece";
-import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
+import { useIdentiteDocument, useImprimerPiece } from "@/modules/documents/hooks/useIdentiteDocument";
+import type { PieceImprimee } from "@/modules/documents/impression/zone";
+import { ModaleEmail } from "@/modules/facturation/components/ModaleEmail";
 import type { RapportComplet } from "../api/rapports";
 import { pieceRapport } from "../domain/impression";
 import { courrielDuRapport } from "../domain/rapport";
 import { useBonsLiables, useCourrielClient, useRapport } from "../hooks/useRapports";
 import { ActionsTransformation } from "./ActionsTransformation";
 
-function Envoi({ complet }: { complet: RapportComplet }) {
+/**
+ * « Envoyer par email » comme l'ancien (`envoyerRapportEmail` → `openEmailComposeModal`) : la fenêtre
+ * `#emailModal` — télécharger le PDF, destinataire, objet, message, ouvrir la messagerie ou copier le texte.
+ */
+function Envoi({ complet, piece }: { complet: RapportComplet; piece: PieceImprimee }) {
   const r = complet.rapport;
   const courriel = useCourrielClient(r.client_id);
-  const [copie, setCopie] = useState<string | null>(null);
+  const imprimer = useImprimerPiece();
+  const [ouverte, setOuverte] = useState(false);
   const { objet, corps } = courrielDuRapport(r);
-  const dest = courriel.data ?? "";
   return (
     <>
-      <Button asChild variant="outline"><a href={`mailto:${dest}?subject=${encodeURIComponent(objet)}&body=${encodeURIComponent(corps)}`}>Envoyer par e-mail</a></Button>
-      <Button
-        variant="ghost"
-        onClick={() =>
-          void navigator.clipboard.writeText(`À : ${dest}\nObjet : ${objet}\n\n${corps}`).then(
-            () => setCopie("Texte copié — collez-le dans votre messagerie, et joignez le PDF imprimé."),
-            (e: unknown) => {
-              console.warn("Copie impossible", e);
-              setCopie("Impossible de copier automatiquement : sélectionnez le texte à la main.");
-            }
-          )
-        }
-      >
-        Copier le texte
-      </Button>
-      {copie && <Alert className="w-full">{copie}</Alert>}
+      <button type="button" className="btn small" onClick={() => setOuverte(true)}>Envoyer par email</button>
+      {ouverte && (
+        <ModaleEmail
+          brouillon={{ destinataire: courriel.data ?? "", objet, corps }}
+          telecharger={() => imprimer.mutate({ piece, action: "save" })}
+          fermer={() => setOuverte(false)}
+        />
+      )}
     </>
   );
 }
@@ -43,7 +39,8 @@ function Envoi({ complet }: { complet: RapportComplet }) {
  * Le rapport tel que l'ancien l'ouvrait (`openViewIntervention`) : la pièce
  * même du PDF (`renderPrintIntervention`), « Imprimer » et « Enregistrer ».
  * L'envoi et la transformation en devis ou facture, propres à web/ sur cette
- * page (PLN-20, D-CLI-09), se posent devant (D-PDF-06).
+ * page (PLN-20, D-CLI-09), se posent sous la pièce, en `btn small` comme la
+ * barre de l'ancien (D-PDF-06, D-COR2-04).
  */
 export function PageApercuRapport() {
   const { id } = useParams();
@@ -65,9 +62,9 @@ export function PageApercuRapport() {
       fermer={() => void navigate("/rapports")}
       actions={
         <>
-          <Envoi complet={complet} />
+          <Envoi complet={complet} piece={piece} />
           {/* La voie de la carte, relue par son id (D-CLI-09) ; lié à un bon, le rapport se facture par le bon (PLN-20). */}
-          <ActionsTransformation rapport={r.id} bonId={r.bon_commande_id} taille="default" />
+          <ActionsTransformation rapport={r.id} bonId={r.bon_commande_id} />
         </>
       }
     />

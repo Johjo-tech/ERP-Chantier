@@ -83,12 +83,12 @@ export function useEnregistrerInfosDiverses(chantierId: string) {
 
 export function useDpgf(chantierId: string) {
   const autorise = usePeutVoirDpgf();
-  return useQuery({ queryKey: clesChantiers.dpgf(chantierId), queryFn: () => listerDpgf(chantierId), enabled: autorise });
+  return useQuery({ queryKey: clesChantiers.dpgf(chantierId), queryFn: () => listerDpgf(chantierId), enabled: autorise && chantierId !== "" });
 }
 
 export function useTachesPlanifiees(chantierId: string) {
   const autorise = usePeutVoirDpgf();
-  return useQuery({ queryKey: clesChantiers.planifiees(chantierId), queryFn: () => listerTachesPlanifiees(chantierId), enabled: autorise });
+  return useQuery({ queryKey: clesChantiers.planifiees(chantierId), queryFn: () => listerTachesPlanifiees(chantierId), enabled: autorise && chantierId !== "" });
 }
 
 function useInvaliderDpgf(chantierId: string) {

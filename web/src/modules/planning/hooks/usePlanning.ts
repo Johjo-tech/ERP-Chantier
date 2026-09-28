@@ -91,12 +91,12 @@ export function useValiderTache() {
 
 export function useLignesDuBon(bcId: string) {
   const s = useSocieteActive();
-  return useQuery({ queryKey: clesPlanning.lignes(s.id, bcId), queryFn: () => lignesDuBon(bcId) });
+  return useQuery({ queryKey: clesPlanning.lignes(s.id, bcId), queryFn: () => lignesDuBon(bcId), enabled: bcId !== "" });
 }
 
 export function useTravauxSupplementaires(bcId: string, active: boolean) {
   const s = useSocieteActive();
-  return useQuery({ queryKey: clesPlanning.travaux(s.id, bcId), queryFn: () => travauxSupplementaires(bcId), enabled: active });
+  return useQuery({ queryKey: clesPlanning.travaux(s.id, bcId), queryFn: () => travauxSupplementaires(bcId), enabled: active && bcId !== "" });
 }
 
 export function useAjouterTravail() {
@@ -123,7 +123,7 @@ export function usePhotosDuBon(bcId: string) {
   const s = useSocieteActive();
   const qc = useQueryClient();
   const cle = clesPlanning.photos(s.id, bcId);
-  const liste = useQuery({ queryKey: cle, queryFn: () => photosDuBon(bcId) });
+  const liste = useQuery({ queryKey: cle, queryFn: () => photosDuBon(bcId), enabled: bcId !== "" });
   const rafraichir = () => void qc.invalidateQueries({ queryKey: cle });
   const ajouter = useMutation({ mutationFn: ({ fichier, position }: { fichier: Blob; position: number }) => ajouterPhoto(s.id, bcId, fichier, position), onSettled: rafraichir });
   const retirer = useMutation({ mutationFn: (photo: PhotoTerrain) => supprimerPhoto(photo), onSettled: rafraichir });

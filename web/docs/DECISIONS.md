@@ -2603,3 +2603,79 @@ importés tels quels (`tests/parite/import-factures.essai.ts`, `tests/parite/rep
 `scripts/vider-documents-production.sql` est un script d'exploitation de la base de production, hors
 application. `web/` n'a pas à le reprendre (règle : rien hors de `web/`, aucune connexion à la
 production) ; la base locale se reconstruit par `scripts/preparer-base-locale.sh`.
+
+## D-COR2-01 — Rapport sans statut : « en cours », et un défaut en base (DEF-ECR-01, « corrige tout »)
+Remplace, pour ce point seulement, la reprise à l'identique de D-VIS2-02. Un rapport sans statut (repris,
+écrit hors de l'écran) ne porte plus une pastille grise vide : il porte le statut qu'un rapport reçoit à sa
+naissance (`STATUT_DEFAUT`, « en cours », pastille jaune de `badgeClass`) — le seul qu'il puisse avoir tant
+que personne ne l'a changé ; « pas de pastille » aurait caché qu'un rapport est encore ouvert
+(`statutDuRapport`, `interventions/domain/rapport.ts`). En base, proposition 20260928212000 : défaut
+`'en cours'` sur `interventions.statut`, sans réécrire les rapports déjà sans statut (donnée de production,
+relevé fourni). Test RLS écrit, non lancé. Écart visuel attendu : écran `rapports`.
+
+## D-COR2-02 — « 📦 Commandé » : la date de commande est bien enregistrée (DEF-ECR-02)
+Vérifié dans le code et les tests : `todayISO()` (Paris) écrit sur toutes les tâches du bon qui portent la
+pièce, un refus (aucune ligne) remonte ; relu en base par `tests/rls/commandes.essai.ts`, parcouru par
+`tests/e2e/commandes.e2e.ts`. Rien à changer ; un test de l'écriture elle-même est ajouté
+(`commandes/api/pieces.essai.ts`). Entrée marquée « corrigé ».
+
+## D-COR2-03 — Devis et factures : la liste « métier du chapitre » de l'ancien (écart D-VIS2-01)
+L'ancien montre sur TOUT chapitre, quel que soit le document (`chapitreRow` → `chapitreMetierHTML`), la
+liste du métier : `<select class="chapitre-metier [est-deduit] [est-approchant]">`, « — Déduit du titre — »,
+« — Aucun métier — », puis `metiersDisponibles` (déclarés, puis employés par les bons). web/ ne l'avait que
+sur le bon. Les colonnes existent déjà (`devis_lignes.metier`, `facture_lignes.metier` dans
+`database.types.ts`) et l'enregistrement les écrivait déjà : **aucune migration**. Port littéral :
+`commandes/components/MetierChapitreAncien.tsx` (`SelectMetierChapitre`, partagé avec la pré-facture qui en
+avait sa copie ; `ChampMetierAncien` branché dans `LignesAncien` par `PageEditionDevis` et
+`FormulaireFacture`). Les trois états : `null` (« Déduit du titre » — le métier lu reste SÉLECTIONNÉ, en
+retrait), un nom, la sentinelle `METIER_AUCUN` ; jamais `""`. Parité `tests/parite/metier-chapitre.essai.tsx`
+contre `chapitreMetierHTML` évaluée avec `src/api/regles-metiers.ts` importé tel quel : elle a révélé qu'un
+métier écrit dans une autre casse (« plomberie ») ne sélectionnait pas son option (React compare la valeur
+exacte, l'ancien `memeMetier`) — corrigé, pré-facture comprise. Reste hors périmètre : le formulaire du BON
+garde son `ChampMetierChapitre` (libellé « Métier du chapitre » au-dessus, « (lu : …) »), qui n'a pas l'habit
+de l'ancien.
+
+## D-COR2-04 — Aperçu du rapport : le haut de la fenêtre de l'ancien, les gestes de web/ sous la pièce
+Aperçu INT-2026-000001 : 30 % d'écart d'écran, la rangée « Envoyer par e-mail / Copier le texte /
+Transformer en devis / facture » (boutons `btn`, `flex-wrap`, posée AU-DESSUS de la barre) passait à la ligne
+et poussait toute la pièce. L'ancien (`openViewIntervention`, index.html l. 1808-1817) n'a que ✕,
+« Imprimer », « Enregistrer ». **Décision** : ces gestes propres à web/ (PLN-20, D-CLI-09) restent sur
+l'aperçu mais SOUS la pièce, dans une rangée `.view-modal-actions no-print gestes-web` en `btn small` comme la
+barre de l'ancien ; le squelette du haut est celui de l'ancien. « Envoyer par email » (libellé de l'ancien)
+ouvre la fenêtre de l'ancien `#emailModal` (`envoyerRapportEmail` → `openEmailComposeModal`, `ModaleEmail`),
+où vit « Copier le texte » ; l'encadré « Texte copié… » qui déformait la rangée disparaît. Test de
+structure : `rapports.essai.tsx` (« l'aperçu a le squelette de l'ancien… »). La comparaison des aperçus
+(`tests/visuel/pdf/comparer-pdf.ts`) masque `.gestes-web`, écart attendu écrit. L'écart de 1 % du PDF n'est
+pas traité ici (le HTML de la pièce est déjà strictement identique, parité `impression.essai.ts`) : à
+mesurer par le contrôle visuel.
+
+## D-COR2-05 — Espace client : la commune du client sans lui ouvrir sa fiche (D-MAIN-02)
+Les pièces imprimées depuis l'espace client sortaient sans commune : le bloc « Client » prend code postal
+et ville sur la fiche, que le client ne lit pas (D-FAC-10) — et ne doit pas lire (SIRET, coordonnées de
+facturation, notes). Écartés : ouvrir `clients` en lecture (la fiche entière), une fonction dédiée (une
+surface de plus à garder). **Décision** : la vue qu'il lit déjà, `v_mes_acces_clients` (ses accès actifs,
+`auth.uid()`), rend en plus `client_code_postal` et `client_ville` de la fiche du client de l'accès — deux
+colonnes ajoutées en fin, rien d'autre (proposition 20260928213000, test RLS écrit, non lancé : la commune
+se lit, les autres colonnes n'existent pas, `clients` reste fermée, un membre n'en tire rien). web/ la lit
+par le NOM du document dans sa société, comme l'ancien retrouve la fiche (`communeDuClient`,
+`useCommuneClient`), et l'attend avant d'imprimer ; illisible (proposition absente, refus), la pièce sort
+avec la rue seule, comme avant, et l'échec est tracé. Test : `espace-client/components/document-client.essai.tsx`.
+
+## D-COR2-06 — Aucune lecture avec un identifiant vide (suite de `useInterlocuteurs`)
+Tous les hooks `useQuery` dont la clé ou la lecture dépend d'un identifiant passé en paramètre attendent
+qu'il soit connu (`enabled: … !== ""`) : DPGF et tâches planifiées (`useDpgf` était appelé avec `id ?? ""`
+par la situation de travaux), documents, comptes rendus, inspections, devis complémentaires, achats, to-do,
+affectations, factures et devis du chantier, lignes, photos et travaux supplémentaires d'un bon au planning,
+prêts, entretiens et documents d'un véhicule, usages d'un client. Là où `enabled` ne tenait qu'au droit, il
+teste aussi l'identifiant. Test générique `tests/requetes-sans-identifiant.essai.tsx` (état TanStack
+« idle » pour `""`, « fetching » pour un identifiant connu), et garde-fou `tests/garde-fous.essai.ts` : tout
+hook exporté dont un paramètre `id` / `…Id` de type chaîne sert une lecture doit le citer dans son `enabled`
+(capteur auto-testé sur un exemple fautif).
+
+## D-COR2-07 — Aucun test unitaire ne sort sur le réseau
+La simulation de CI du brief (sans `.env.local`, URL `127.0.0.1:1`) passe : aucun test ne dépendait d'une
+base joignable (les seuls échecs relevés venaient d'une régression en cours de travail, corrigée). Pour que
+cela reste vrai quelle que soit la machine, `src/test/setup.ts` remplace `fetch` par un refus immédiat
+(« test unitaire : réseau interdit ») : une lecture oubliée par un test échouait vite en CI mais réussissait
+en silence là où la base locale tourne. Un test qui a besoin de `fetch` le simule lui-même. Suite complète :
+même résultat, plus rapide (174 s contre 237 s).
