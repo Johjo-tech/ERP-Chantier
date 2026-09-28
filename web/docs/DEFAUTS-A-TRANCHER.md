@@ -1544,7 +1544,7 @@ faire si le client répond « on corrige ».
 - **Décision** : D-PDF-03 (DEV-52 écarté) — le client a exigé la pièce de l'ancien à l'identique.
   **Corriger** : la correction abandonnée est décrite en D-FAC-03 (avoir en négatif) et DEV-52
   (« 5,5 % »).
-- **État (28/09)** : corrigé dans web/ — commit 95cfb34 ; « 2,5 », « 5,5 % », avoir en négatif (`sens`), SAV intitulé « SAV » ; tests `tests/parite/impression.essai.ts` (« écarts voulus » + `ecartVoulu` sur 4 000 tirages), `commandes/domain/impression.essai.ts`, `facturation/domain/duplication.essai.ts`. **À recomparer** (PDF et aperçus) : `tests/visuel/pdf/README.md`. D-REP-04.
+- **État (28/09)** : corrigé dans web/ — commit 95cfb34 ; « 2,5 », « 5,5 % », avoir en négatif (`sens`), SAV intitulé « SAV » ; tests `tests/parite/impression.essai.ts` (« écarts voulus » + `ecartVoulu` sur 4 000 tirages), `commandes/domain/impression.essai.ts`, `facturation/domain/duplication.essai.ts`. Recomparé le 28/09 (PDF, aperçus, pré-facture) : seuils mesurés dans `tests/visuel/pdf/comparer-pdf.ts` ; la TVA de ligne prend une espace insécable, sans quoi « % » passait à la ligne dans la pré-facture (D-VIS3-01). D-REP-04.
 
 ### DEF-REP-05 — Le nom du client n'apparaît pas sur les chantiers
 - **Écran** : Chantiers › liste (cartes) et bandeau de la fiche.
@@ -1552,7 +1552,7 @@ faire si le client répond « on corrige ».
 - **Ancienne** : lit un champ texte `client` que la base ne remplit pas.
 - **Décision** : D-ECR-CHA-07 (révisée : l'affichage de `client_nom` a été retiré). **Corriger** :
   afficher `client_nom`.
-- **État (28/09)** : corrigé dans web/ — commit f38c3d4 ; `client_nom` sur la carte et dans le bandeau ; test `chantiers/components/fiche.essai.tsx`. Écart visuel : `tests/visuel/ecrans-chantiers.ts` (`avecNomDuClient`). D-REP-05.
+- **État (28/09)** : corrigé dans web/ — commit f38c3d4 ; `client_nom` sur la carte et dans le bandeau ; test `chantiers/components/fiche.essai.tsx`. Écart visuel : `tests/visuel/ecrans-chantiers.ts` (seuils mesurés par écran, D-VIS3-02). D-REP-05.
 
 ### DEF-REP-06 — Un sous-traitant ne peut pas recevoir de compte par invitation
 - **Écran** : Réglages › Comptes (et fiche RH).
@@ -1590,7 +1590,7 @@ faire si le client répond « on corrige ».
   `statut_workflow` dit où il en est.
 - **Décision** : D-BC-13, D-ECR-BC-01 (INVENTAIRE BC-99). **Corriger** : ne plus afficher `statut`, puis
   le retirer du schéma.
-- **État (28/09)** : corrigé dans web/ — commit 9b23235 ; pastille `statut` retirée des cartes ; tests `commandes/components/commandes.essai.tsx`, `circuit.essai.tsx` (« cartes des files »). Écart visuel : `tests/visuel/ecrans.ts` (`sansPastilleStatut`). Colonne gardée tant que l'application historique l'écrit (D-REP-10).
+- **État (28/09)** : corrigé dans web/ — commit 9b23235 ; pastille `statut` retirée des cartes ; tests `commandes/components/commandes.essai.tsx`, `circuit.essai.tsx` (« cartes des files »). Écart visuel : `tests/visuel/ecrans.ts` (`PASTILLES_LISTE`, seuils mesurés par écran, D-VIS3-02). Colonne gardée tant que l'application historique l'écrit (D-REP-10).
 
 ### DEF-REP-11 — `extraire-bc` ne vérifie ni l'utilisateur ni la société
 - **Gravité** : sécurité — un JWT `anon` suffit à consommer le quota Mistral (OCR-40).

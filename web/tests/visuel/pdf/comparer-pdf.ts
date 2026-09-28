@@ -38,21 +38,47 @@ const PAUSE_POLICES_MS = 2000;
 
 type Nature = "devis" | "facture" | "bonCommande" | "intervention";
 
+/**
+ * L'écart toléré sur une pièce : la part de pixels différents de la PIRE page du PDF et de
+ * l'aperçu à l'écran. Chaque valeur est MESURÉE (passes du 28/09 sur base neuve, D-VIS3-02),
+ * plus une petite tolérance pour le bruit du JPEG ; la raison de l'écart est écrite à côté.
+ * Le texte extrait doit être identique, et le nombre de pages aussi.
+ */
+interface Seuil {
+  pdf: number;
+  /** `null` : pas d'aperçu à comparer (le bon ne se lit que dans la pré-facture de l'ancien). */
+  apercu: number | null;
+}
+
 interface Cible {
   nom: string;
   nature: Nature;
   /** Numéro dans l'ancien `state` (numéro interne pour un bon, client pour un rapport sans numéro). */
   numero: string;
   route: (id: string) => string;
+  seuil: Seuil;
 }
 
+/** Le bruit du JPEG d'une passe à l'autre, sur une pièce identique par ailleurs : un centième de point. */
+const BRUIT = 0.0001;
+const mesure = (pdf: number, apercu: number | null): Seuil => ({ pdf: pdf + BRUIT, apercu: apercu === null ? null : apercu + BRUIT });
+
 const CIBLES: Cible[] = [
-  { nom: "devis DEV-2026-900001", nature: "devis", numero: "DEV-2026-900001", route: (id) => `/devis/${id}/apercu` },
-  { nom: "facture FAC-2026-000001 (chapitres, 2 taux, remise, acompte, retenue)", nature: "facture", numero: "FAC-2026-000001", route: (id) => `/factures/${id}/apercu` },
-  { nom: "avoir AV-2026-000001", nature: "facture", numero: "AV-2026-000001", route: (id) => `/factures/${id}/apercu` },
-  { nom: "facture longue FAC-2026-000002 (découpe en pages)", nature: "facture", numero: "FAC-2026-000002", route: (id) => `/factures/${id}/apercu` },
-  { nom: "bon de commande BC-2026-900001", nature: "bonCommande", numero: "BC-2026-900001", route: (id) => `/commandes/${id}/apercu` },
-  { nom: "rapport d'intervention INT-2026-000001", nature: "intervention", numero: "INT-2026-000001", route: (id) => `/rapports/${id}/apercu` },
+  // Chaque pièce : colonnes Qté et % TVA à la française (« 2,5 », « 10 % » — DEF-REP-04, D-REP-04),
+  // quelques cellules par ligne. Mesuré : 0,036 % (PDF), 0,041 % (aperçu).
+  { nom: "devis DEV-2026-900001", nature: "devis", numero: "DEV-2026-900001", route: (id) => `/devis/${id}/apercu`, seuil: mesure(0.00036, 0.00041) },
+  // Idem (DEF-REP-04). Mesuré : 0,045 %, 0,051 %.
+  { nom: "facture FAC-2026-000001 (chapitres, 2 taux, remise, acompte, retenue)", nature: "facture", numero: "FAC-2026-000001", route: (id) => `/factures/${id}/apercu`, seuil: mesure(0.00045, 0.00051) },
+  // DEF-REP-04 : l'avoir en négatif (lignes, totaux, net) ; les montants plus larges resserrent les
+  // colonnes, dont les en-têtes glissent. Mesuré : 0,215 %, 0,228 %.
+  { nom: "avoir AV-2026-000001", nature: "facture", numero: "AV-2026-000001", route: (id) => `/factures/${id}/apercu`, seuil: mesure(0.00215, 0.00228) },
+  // DEF-REP-04 : « 20 % » sur chacune des 45 lignes. Mesuré : 0,317 % (pire page), 0,326 %.
+  { nom: "facture longue FAC-2026-000002 (découpe en pages)", nature: "facture", numero: "FAC-2026-000002", route: (id) => `/factures/${id}/apercu`, seuil: mesure(0.00317, 0.00326) },
+  // DEF-REP-04 : « 10 % » sur ses deux lignes. Mesuré : 0,020 %.
+  { nom: "bon de commande BC-2026-900001", nature: "bonCommande", numero: "BC-2026-900001", route: (id) => `/commandes/${id}/apercu`, seuil: mesure(0.0002, null) },
+  // DEF-COR-28, D-PDF-09 : « Contrôles réalisés » imprimé depuis la base (l'ancien le perdait au
+  // rechargement) ; la section décale la suite (aperçu : 723 → 792 px de haut). Mesuré : 1,063 %, 11,67 %.
+  { nom: "rapport d'intervention INT-2026-000001", nature: "intervention", numero: "INT-2026-000001", route: (id) => `/rapports/${id}/apercu`, seuil: mesure(0.01063, 0.11670) },
 ];
 
 /* ── Les deux applications ─────────────────────────────────────────────── */
@@ -363,19 +389,33 @@ async function comparer(navigateur: Browser): Promise<Resultat[]> {
   return resultats;
 }
 
+/** Ce qui dépasse l'écart attendu d'une pièce, en clair ; vide : la pièce est conforme. */
+function depassements(r: Resultat): string[] {
+  if (r.erreur) return [`échec : ${r.erreur.split("\n")[0]}`];
+  const d: string[] = [];
+  if (r.pagesAncien !== r.pagesNouveau) d.push(`${r.pagesAncien} page(s) → ${r.pagesNouveau}`);
+  const pire = r.pages.reduce((m, p) => Math.max(m, p.part), 0);
+  if (pire > r.cible.seuil.pdf) d.push(`PDF ${(pire * 100).toFixed(4)} % > ${(r.cible.seuil.pdf * 100).toFixed(4)} %`);
+  if (r.pages.some((p) => p.texteManquant.length || p.texteEnTrop.length)) d.push("texte différent");
+  const { apercu } = r.cible.seuil;
+  if (apercu !== null && (!r.apercu || r.apercu.part > apercu)) d.push(`aperçu ${r.apercu ? (r.apercu.part * 100).toFixed(4) : "?"} % > ${(apercu * 100).toFixed(4)} %`);
+  return d;
+}
+
 function rapport(resultats: Resultat[]): string {
   const lignes = [`# Comparaison des PDF — ancienne (${ANCIENNE}) / nouvelle (${NOUVELLE})`, "", `Compte ${COMPTE}, rastérisation ×${ECHELLE}, tolérance ${TOLERANCE_CANAL}/255 par canal.`, ""];
-  lignes.push("| Pièce | Fichier (ancien → nouveau) | Pages | PDF : pixels différents (pire page) | Texte | Aperçu à l'écran |", "|---|---|---|---|---|---|");
+  lignes.push("| Pièce | Fichier (ancien → nouveau) | Pages | PDF : pixels différents (pire page) | Texte | Aperçu à l'écran | Verdict |", "|---|---|---|---|---|---|---|");
   for (const r of resultats) {
     if (r.erreur) {
-      lignes.push(`| ${r.cible.nom} | — | — | ÉCHEC : ${r.erreur.replace(/\|/g, "/").split("\n")[0]} | — | — |`);
+      lignes.push(`| ${r.cible.nom} | — | — | ÉCHEC : ${r.erreur.replace(/\|/g, "/").split("\n")[0]} | — | — | ✘ |`);
       continue;
     }
     const pire = r.pages.reduce((m, p) => Math.max(m, p.part), 0);
     const pixels = r.pages.reduce((m, p) => Math.max(m, p.pixelsDifferents), 0);
     const apercu = r.apercu ? `${r.apercu.pixels} px (${(r.apercu.part * 100).toFixed(4)} %), ${r.apercu.tailles}` : "sans objet";
     const texte = r.pages.every((p) => !p.texteManquant.length && !p.texteEnTrop.length) ? "identique" : `${r.pages.reduce((s, p) => s + p.texteManquant.length, 0)} fragment(s) différent(s)`;
-    lignes.push(`| ${r.cible.nom} | ${r.nomAncien} → ${r.nomNouveau} | ${r.pagesAncien} → ${r.pagesNouveau} | ${pixels} px (${(pire * 100).toFixed(4)} %) | ${texte} | ${apercu} |`);
+    const verdict = depassements(r);
+    lignes.push(`| ${r.cible.nom} | ${r.nomAncien} → ${r.nomNouveau} | ${r.pagesAncien} → ${r.pagesNouveau} | ${pixels} px (${(pire * 100).toFixed(4)} %) | ${texte} | ${apercu} | ${verdict.length ? `✘ ${verdict.join(" ; ")}` : "✓"} |`);
   }
   for (const r of resultats.filter((x) => x.pages.some((p) => p.texteManquant.length || p.texteEnTrop.length))) {
     lignes.push("", `## ${r.cible.nom} — texte`);
@@ -394,6 +434,8 @@ try {
   const md = rapport(resultats);
   writeFileSync(join(RAPPORT, "index.md"), md);
   process.stdout.write(md);
+  // Un écart au-delà de l'attendu fait échouer la passe, comme un écran de `npm run test:visuel`.
+  if (resultats.some((r) => depassements(r).length)) process.exitCode = 1;
 } finally {
   await navigateur.close();
 }

@@ -23,7 +23,7 @@ fenêtre (D-PDF-01).
 ```bash
 CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
 NOUVELLE_URL=http://127.0.0.1:5193 \
-node --experimental-strip-types tests/visuel/pdf/comparer-pdf.ts
+node --experimental-strip-types tests/visuel/pdf/comparer-pdf.ts   # code 1 si une pièce dépasse son seuil
 ```
 
 Pour chaque pièce (devis DEV-2026-900001, factures FAC-2026-000001 et
@@ -76,7 +76,12 @@ l'ancien (`ecartVoulu`) et exige l'identité pour tout le reste :
 - un **SAV** s'intitule « SAV » (le jeu n'en imprime pas : BC-2026-900001 garde
   « BON DE COMMANDE »).
 
-L'écart de pixels mesuré jusqu'ici sur les factures (mentions, D-CLI-12)
-s'augmente donc de ces cellules. À recomparer : devis DEV-2026-900001,
-FAC-2026-000001, FAC-2026-000002, AV-2026-000001, BC-2026-900001 (PDF et
-aperçu), plus la pré-facture d'un bon (fenêtre des Bons).
+Recomparé le 28/09 sur base neuve (D-VIS3-02) : ces écarts, et eux seuls. Chaque
+pièce porte dans `CIBLES` son seuil MESURÉ (PDF et aperçu, plus un centième de
+point pour le bruit du JPEG) ; la passe échoue (code 1, colonne « Verdict »)
+au-delà, si le texte extrait diffère, ou si le nombre de pages change. Le
+rapport INT-2026-000001 garde son écart décidé (« Contrôles réalisés »,
+DEF-COR-28, D-PDF-09). La pré-facture se compare dans `npm run test:visuel`
+(« Bons de commande › pré-facture », « … consulter un bon facturé ») : c'est là
+que « 10 % » passait à la ligne dans la colonne étroite, d'où l'espace
+insécable de la TVA de ligne (D-VIS3-01).

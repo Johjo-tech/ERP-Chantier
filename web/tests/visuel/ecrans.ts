@@ -122,9 +122,11 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   // référence de conducteur, « Sans conducteur » en plus, les graphies d'une même fiche réunies
   // (DEF-STA-08) ; chiffre d'affaires sans brouillon ni acompte (DEF-STA-01) ; retard sur les seuls
   // bons ouverts (DEF-STA-09), barre vide sans bon (DEF-STA-10), travaux supplémentaires réels
-  // (DEF-STA-11), parts sans négatif (DEF-STA-17), bons par date de commande (DEF-STA-18). Chaque
-  // ligne du tableau (9 cellules) et des trois graphiques peut changer : plafond, pas cible.
-  statistiques: { bureau: { pixels: 0.03, texte: 60 } },
+  // (DEF-STA-11), parts sans négatif (DEF-STA-17), bons par date de commande (DEF-STA-18). Mesuré sur
+  // base neuve (D-VIS3-02) : 18 lignes — la ligne « Sans conducteur » (4 bons, 25 844,29 €) dans le
+  // tableau, la répartition, le graphique des délais et les taux comparés, « Factures effectuées » à 4
+  // (sans brouillon, DEF-STA-01) ; 10,9 % de pixels, les blocs s'élargissent d'une ligne.
+  statistiques: { bureau: { pixels: 0.111, texte: 18 } },
   vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };
 
@@ -137,27 +139,26 @@ const TEMPS_RELATIF = [".activity-time"] as const;
 const PILOTAGE = [...TEMPS_RELATIF] as const;
 
 /**
- * Écart ATTENDU sur le pilotage depuis D-STA-B-01 (défauts corrigés), en lignes de texte (manquantes +
- * ajoutées) : la tuile « Encaissé ce mois (TTC) » remplace « CA encaissé ce mois (HT) », avec sa valeur
- * et son rappel N-1, et la ligne du résumé (DEF-STA-02, ~8) ; restant dû, nombre d'impayées, taux
- * d'encaissement sur le solde de la base (DEF-STA-03, 04, ~6) ; rappels et échues de « À traiter »
- * (DEF-STA-04, 05, ~4) ; « Total période » et « Facturé AAAA » sans brouillon ni acompte (DEF-STA-01,
- * ~6) ; les cinq lignes du classement par fiche client (DEF-STA-07, nom, rappel N-1, montant : ~30) ;
- * les six lignes du fil sans « · null » ni lettrage (DEF-STA-06, libellé, sous-titre, montant : ~36).
- * Un plafond qui couvre le jeu d'essai, pas une cible ; les pixels suivent (largeur des montants).
+ * Écart ATTENDU sur le pilotage depuis D-STA-B-01 (défauts corrigés), MESURÉ sur base neuve le 28/09
+ * (D-VIS3-02) : 14 lignes de texte. La tuile « Encaissé ce mois (TTC) » et la ligne du résumé remplacent
+ * « CA encaissé ce mois (HT) » (DEF-STA-02, 4 lignes) ; le restant dû sur le solde de la base (DEF-STA-03,
+ * 2) ; le classement par fiche client — « OPAC du Rhône » et son montant là où l'ancien classait deux
+ * étiquettes « PDF PARITÉ » et le rappel « rien en 2025 » (DEF-STA-07, 8). Pixels mesurés : 0,07 % (bureau),
+ * 0,27 % (téléphone, montants plus larges). Tolérance : 2 lignes, les montants « ce mois » suivent la date.
  */
-const ECART_DECIDE_PILOTAGE = 90;
-const PIXELS_DECIDES_PILOTAGE = 0.03;
+const ECART_DECIDE_PILOTAGE = 16;
+const PIXELS_DECIDES_PILOTAGE = 0.002;
 
 /**
  * DEF-REP-10, D-REP-10 : la carte d'un bon ne porte plus la pastille grise `statut` (« en attente »,
- * figée depuis la création) ; l'ancien l'affichait sur chaque carte, à côté de l'étape du circuit.
- * Par carte visible (repliée ou dépliée, fenêtre de pré-facture comprise : la liste reste dessous),
- * une ligne de texte change — « … Travaux à pointer en attente » devient « … Travaux à pointer » —,
- * soit une manquante et une ajoutée ; le jeu d'essai montre au plus dix cartes. Pixels : la pastille
- * seule. Marge PROVISOIRE ajoutée au seuil mesuré avant la correction : à relever puis abaisser.
+ * « en cours », figée depuis la création) ; l'ancien l'affichait sur chaque carte, à côté de l'étape du
+ * circuit. Chaque pastille absente est UNE ligne manquante : la liste des bons en montre 7 (1 « EN
+ * COURS », 6 « EN ATTENTE »), aussi sous la fenêtre d'un bon ; les pièces en commande 2 ou 3 ; le filtre
+ * « en attente de BC » 1. Sans elle, le montant tient souvent sur la ligne des contacts : la carte
+ * raccourcit et tout ce qui la suit remonte — jusqu'à 22 % de pixels sur téléphone. Seuils MESURÉS par
+ * écran (D-VIS3-02) : pixels arrondis au millième supérieur + 1 ‰, texte exact.
  */
-const MARGE_PASTILLE_STATUT: Record<Taille, Seuils> = { bureau: { pixels: 0.01, texte: 20 }, mobile: { pixels: 0.02, texte: 20 } };
+const PASTILLES_LISTE = 7;
 
 export const ECRANS: readonly Ecran[] = [
   // ── Le cadre ─────────────────────────────────────────────────────────────
@@ -198,8 +199,9 @@ export const ECRANS: readonly Ecran[] = [
       chemin: "/",
       gestes: cliquer(".planning-menu-toggle", "#sidebar .user-menu-btn"),
     },
-    // « Mon compte » : ouvert à tous les rôles depuis ce menu (AUTH-17, D-SOC-06), 1 ligne de plus.
-    seuils: { bureau: { pixels: PIXELS_DECIDES_PILOTAGE + 0.006, texte: ECART_DECIDE_PILOTAGE + 2 } },
+    // « Mon compte » : ouvert à tous les rôles depuis ce menu (AUTH-17, D-SOC-06), 2 lignes de plus
+    // (« Mon compteSe déconnecter » remplace « Se déconnecter »). Pixels mesurés : 0,58 %, le menu déplié.
+    seuils: { bureau: { pixels: 0.007, texte: ECART_DECIDE_PILOTAGE + 2 } },
     // La version construite diffère forcément : deux constructions, deux commits.
     masques: [...PILOTAGE, ".user-menu-version"],
   },
@@ -238,7 +240,7 @@ export const ECRANS: readonly Ecran[] = [
     nouveau: { chemin: "/" },
     seuils: {
       bureau: { pixels: PIXELS_DECIDES_PILOTAGE, texte: ECART_DECIDE_PILOTAGE },
-      mobile: { pixels: PIXELS_DECIDES_PILOTAGE + 0.002, texte: ECART_DECIDE_PILOTAGE },
+      mobile: { pixels: 0.004, texte: ECART_DECIDE_PILOTAGE },
     },
     masques: PILOTAGE,
   },
@@ -248,9 +250,10 @@ export const ECRANS: readonly Ecran[] = [
     compte: "conducteur",
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
-    // Écart ATTENDU (D-STA-B-01, DEF-STA-12) : un bon à trois tentatives sans rendez-vous s'annonce
-    // « injoignable » — tuile « À traiter » et sa ligne, au plus quelques lignes.
-    seuils: partout(0.01, 6),
+    // Correction DEF-STA-12 (D-STA-B-01) : un bon à trois tentatives sans rendez-vous s'annonce
+    // « injoignable ». Le jeu d'essai n'en a pas : mesuré identique (0 ligne, 0 %), D-VIS3-02 ; une ligne
+    // de tolérance, la tuile « À traiter » suit la date.
+    seuils: partout(0.001, 1),
   },
   {
     id: "tableau-de-bord-terrain",
@@ -258,10 +261,11 @@ export const ECRANS: readonly Ecran[] = [
     compte: "technicien",
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
-    // Le compte d'essai n'a pas d'équipe : les deux montrent alors tout (D-VIS-09). Écart ATTENDU
-    // (D-STA-B-01, DEF-STA-13) : les interventions se comptent en cartes du planning, journées
-    // supplémentaires comprises — les quatre tuiles et la liste du jour peuvent changer.
-    seuils: partout(0.02, 12),
+    // Le compte d'essai n'a pas d'équipe : les deux montrent alors tout (D-VIS-09). Correction DEF-STA-13
+    // (D-STA-B-01) : les interventions se comptent en cartes du planning, journées supplémentaires
+    // comprises. Le jeu d'essai n'en pose pas : mesuré identique (0 ligne, 0 %), D-VIS3-02 ; deux lignes
+    // de tolérance, les tuiles du jour suivent la date.
+    seuils: partout(0.001, 2),
   },
   {
     id: "tableau-de-bord-sous-traitant",
@@ -271,8 +275,10 @@ export const ECRANS: readonly Ecran[] = [
     nouveau: { chemin: "/" },
     // Écart ATTENDU (D-STA-B-01) : reconnu par son compte, salué au nom de son entreprise, sans le
     // bandeau « Réglages » (DEF-STA-19) ; sa journée — quatre tuiles et « Aujourd'hui » — remplace
-    // les trois tuiles de factures et de devis de sous-traitant (DEF-STA-14). Écran refait.
-    seuils: partout(0.2, 20),
+    // les trois tuiles de factures et de devis de sous-traitant (DEF-STA-14). Écran refait : 5 lignes
+    // manquantes, 8 ajoutées, mesuré sur base neuve (D-VIS3-02) ; pixels 23 % (bureau), 40,4 % (téléphone,
+    // quatre tuiles empilées au lieu de trois). Tolérance : 2 lignes, « Aujourd'hui » suit la date.
+    seuils: { bureau: { pixels: 0.231, texte: 15 }, mobile: { pixels: 0.405, texte: 15 } },
   },
   // ── Bons de commande et pièces (vague « écrans identiques », D-ECR-BC) ──
   ...ecransCommandes(),
@@ -295,8 +301,24 @@ export const ECRANS: readonly Ecran[] = [
  * réception d'une pièce lisible (D-ECR-PLN-05). La base d'essai est partagée :
  * quelques lignes de marge.
  */
+/**
+ * Ouvre l'assistant de rapport dans l'ANCIEN, puis laisse finir son défilement doux : `openForm`
+ * lance un `scrollIntoView({ behavior: "smooth" })` 50 ms après l'ouverture. Un clic d'étape tombé
+ * pendant ce défilement l'interrompait à mi-course — la page s'arrêtait 27 px plus bas une passe
+ * sur deux (étapes Photos et Rapport), sans aucun écart de rendu.
+ */
+async function ouvrirAssistantAncien(page: Page): Promise<void> {
+  await cliquer(".page-head .btn.primary")(page);
+  await attendre(DEFILEMENT_DOUX_MS)(page);
+}
+
+/** Plus long que le défilement doux de Chromium sur une page (≈ 500 ms), marge comprise. */
+const DEFILEMENT_DOUX_MS = 800;
+
 function ecransPlanning(): Ecran[] {
-  const ECART_DECIDE_PLANNING = 48;
+  // Mesuré sur base neuve (D-VIS3-02) : 12 lignes sur chaque écran du planning administrateur ; deux de
+  // tolérance, les cartes du jeu sont posées relativement à la semaine courante.
+  const ECART_DECIDE_PLANNING = 14;
   const sousOnglet = (n: number) => cliquer(`.plus-subnav-btn:nth-child(${n})`);
   return [
     {
@@ -411,7 +433,8 @@ function ecransPlanning(): Ecran[] {
         gestes: onglet("planning", { planningView: "soustraitant" }),
       },
       nouveau: { chemin: "/planning", gestes: sousOnglet(2) },
-      seuils: { bureau: { pixels: 0.002, texte: ECART_DECIDE_PLANNING + 8 } },
+      // Deux lignes de plus que les autres vues (mesuré : 14) — les sous-traitants de la colonne.
+      seuils: { bureau: { pixels: 0.002, texte: ECART_DECIDE_PLANNING + 2 } },
     },
     {
       id: "planning-attente",
@@ -460,11 +483,12 @@ function ecransPlanning(): Ecran[] {
         chemin: "/",
         gestes: async (page) => {
           await onglet("interventions")(page);
-          await cliquer(".page-head .btn.primary")(page);
+          await ouvrirAssistantAncien(page);
         },
       },
       nouveau: { chemin: "/rapports/nouveau" },
-      seuils: { bureau: { pixels: 0.01, texte: 4 } },
+      // Identique une fois le défilement de l'ancien fini (D-VIS3-03) : mesuré 0,01 %, 0 ligne.
+      seuils: { bureau: { pixels: 0.001, texte: 0 } },
     },
     {
       id: "rapport-nouveau-controles",
@@ -474,17 +498,15 @@ function ecransPlanning(): Ecran[] {
         chemin: "/",
         gestes: async (page) => {
           await onglet("interventions")(page);
-          await cliquer(
-            ".page-head .btn.primary",
-            ".step-item:nth-child(3)",
-          )(page);
+          await ouvrirAssistantAncien(page);
+          await cliquer(".step-item:nth-child(3)")(page);
         },
       },
       nouveau: {
         chemin: "/rapports/nouveau",
         gestes: cliquer(".step-item:nth-child(3)"),
       },
-      seuils: { bureau: { pixels: 0.01, texte: 4 } },
+      seuils: { bureau: { pixels: 0.001, texte: 0 } },
     },
     {
       id: "rapport-nouveau-photos",
@@ -494,17 +516,15 @@ function ecransPlanning(): Ecran[] {
         chemin: "/",
         gestes: async (page) => {
           await onglet("interventions")(page);
-          await cliquer(
-            ".page-head .btn.primary",
-            ".step-item:nth-child(5)",
-          )(page);
+          await ouvrirAssistantAncien(page);
+          await cliquer(".step-item:nth-child(5)")(page);
         },
       },
       nouveau: {
         chemin: "/rapports/nouveau",
         gestes: cliquer(".step-item:nth-child(5)"),
       },
-      seuils: { bureau: { pixels: 0.01, texte: 4 } },
+      seuils: { bureau: { pixels: 0.001, texte: 0 } },
     },
     {
       id: "rapport-nouveau-rapport",
@@ -514,17 +534,15 @@ function ecransPlanning(): Ecran[] {
         chemin: "/",
         gestes: async (page) => {
           await onglet("interventions")(page);
-          await cliquer(
-            ".page-head .btn.primary",
-            ".step-item:nth-child(7)",
-          )(page);
+          await ouvrirAssistantAncien(page);
+          await cliquer(".step-item:nth-child(7)")(page);
         },
       },
       nouveau: {
         chemin: "/rapports/nouveau",
         gestes: cliquer(".step-item:nth-child(7)"),
       },
-      seuils: { bureau: { pixels: 0.02, texte: 4 } },
+      seuils: { bureau: { pixels: 0.001, texte: 0 } },
     },
     {
       id: "rapports",
@@ -630,40 +648,39 @@ function ecransCommandes(): Ecran[] {
     nouveau: { chemin: route, ...(gestes ? { gestes } : {}) },
     seuils,
   });
-  return sansPastilleStatut([
+  return [
     // L'ancien lit les bons sans tri (l'ordre physique de la vue) ; web/ les range par date puis numéro (D-ECR-BC-09).
-    // Quand la base porte des bons de même date créés dans le désordre, les cartes du haut s'échangent : même texte, pixels décalés.
-    liste("bons-de-commande", "Bons de commande › liste", {}, "/commandes", undefined, { bureau: { pixels: 0.05, texte: 0 }, mobile: { pixels: 0.005, texte: 0 } }),
-    liste("bons-de-commande-carte-ouverte", "Bons de commande › carte dépliée (bon facturé)", {}, "/commandes", enchainer(cliquer(`${BON_FACTURE} .bc-chevron`), defiler(BON_FACTURE))),
-    liste("bons-de-commande-en-attente", "Bons de commande › filtre « En attente de bon de commande », carte dépliée", { bonCommandeCreationTypeFilter: "attenteBC" }, "/commandes?mode=attente_bc", cliquer(`${BON_EN_ATTENTE} .bc-chevron`)),
+    // Sur base neuve l'ordre coïncide ; restent les pastilles (1,9 % bureau, 0 % téléphone).
+    liste("bons-de-commande", "Bons de commande › liste", {}, "/commandes", undefined, { bureau: { pixels: 0.021, texte: PASTILLES_LISTE }, mobile: { pixels: 0.001, texte: PASTILLES_LISTE } }),
+    // Pastilles ; la carte dépliée raccourcit (téléphone : 22,3 %).
+    liste("bons-de-commande-carte-ouverte", "Bons de commande › carte dépliée (bon facturé)", {}, "/commandes", enchainer(cliquer(`${BON_FACTURE} .bc-chevron`), defiler(BON_FACTURE)), { bureau: { pixels: 0.027, texte: PASTILLES_LISTE }, mobile: { pixels: 0.225, texte: PASTILLES_LISTE } }),
+    // Une seule carte, une pastille (0,46 % bureau).
+    liste("bons-de-commande-en-attente", "Bons de commande › filtre « En attente de bon de commande », carte dépliée", { bonCommandeCreationTypeFilter: "attenteBC" }, "/commandes?mode=attente_bc", cliquer(`${BON_EN_ATTENTE} .bc-chevron`), { bureau: { pixels: 0.006, texte: 1 }, mobile: { pixels: 0.001, texte: 1 } }),
     liste("bons-de-commande-sans-resultat", "Bons de commande › recherche sans résultat", { bonCommandeSearch: "zzzz-introuvable" }, "/commandes?recherche=zzzz-introuvable"),
     // Le jeu tests/visuel/jeux/commandes.sql : une pièce à commander (contacts, logement occupé), une commandée chez Cedeo, un SAV.
-    liste("bons-de-commande-carte-contacts", "Bons de commande › carte dépliée (contacts, locataire, pièce)", {}, "/commandes", enchainer(cliquer(`${BON_PIECE} .bc-chevron`), defiler(BON_PIECE))),
-    liste("bons-de-commande-sav", "Bons de commande › SAV déplié", {}, "/commandes", enchainer(cliquer(`${SAV} .bc-chevron`), defiler(SAV))),
+    liste("bons-de-commande-carte-contacts", "Bons de commande › carte dépliée (contacts, locataire, pièce)", {}, "/commandes", enchainer(cliquer(`${BON_PIECE} .bc-chevron`), defiler(BON_PIECE)), { bureau: { pixels: 0.024, texte: PASTILLES_LISTE }, mobile: { pixels: 0.002, texte: PASTILLES_LISTE } }),
+    liste("bons-de-commande-sav", "Bons de commande › SAV déplié", {}, "/commandes", enchainer(cliquer(`${SAV} .bc-chevron`), defiler(SAV)), { bureau: { pixels: 0.028, texte: PASTILLES_LISTE }, mobile: { pixels: 0.19, texte: PASTILLES_LISTE } }),
     // Le formulaire : le même bouton l'ouvre des deux côtés ; la modification passe par « Modifier » sur la carte.
+    // La fenêtre couvre la liste : pas de pastille visible.
     liste("bons-de-commande-nouveau", "Bons de commande › nouveau bon (formulaire)", {}, "/commandes", enchainer(cliquer(".page-head .btn.primary"), attendre(800)), partout(0.001, LIGNES_PARTAGEES)),
     liste("bons-de-commande-nouveau-sans-bc", "Bons de commande › nouveau bon, « Sans bon de commande »", {}, "/commandes", enchainer(cliquer(".page-head .btn.primary"), attendre(800), cliquer(".plus-subnav-btn:nth-child(2)")), partout(0.001, LIGNES_PARTAGEES)),
     liste("bons-de-commande-modifier", "Bons de commande › modifier un bon (Sans BC)", {}, "/commandes", enchainer(cliquer("#bonCommande-card-a5000000-0000-0000-0000-000000000003 .bc-actions-bas .btn:nth-child(2)"), attendre(800)), partout(0.001, LIGNES_PARTAGEES + CIRCUIT)),
-    liste("bons-de-commande-consulter", "Bons de commande › consulter un bon facturé (verrou)", {}, "/commandes", enchainer(defiler(BON_FACTURE), cliquer(`${BON_FACTURE} .bc-actions-bas .btn:first-child`), attendre(800)), partout(0.001, 23 + CIRCUIT)),
+    // Pastilles de la liste sous la fenêtre, et la TVA des deux lignes de la pièce « 10 % » au lieu de
+    // « 10% » (DEF-REP-04 : 2 manquantes, 2 ajoutées) ; insécable, elle ne passe plus à la ligne (D-VIS3-01).
+    liste("bons-de-commande-consulter", "Bons de commande › consulter un bon facturé (verrou)", {}, "/commandes", enchainer(defiler(BON_FACTURE), cliquer(`${BON_FACTURE} .bc-actions-bas .btn:first-child`), attendre(800)), { bureau: { pixels: 0.003, texte: PASTILLES_LISTE + 4 }, mobile: { pixels: 0.002, texte: PASTILLES_LISTE + 4 } }),
     // La lecture automatique, lancée depuis la liste : sans service de lecture en local, elle échoue des deux côtés.
-    liste("bons-de-commande-lecture-echec", "Bons de commande › importer un BC : issue d'une lecture qui échoue", {}, "/commandes", enchainer(deposer(".page-head label.btn input[type=file]"), attendre(3000)), { bureau: { pixels: 0.05, texte: 4 }, mobile: { pixels: 0.04, texte: 4 } }),
     // Seul écart : le motif du refus — l'ancien affichait « Edge Function returned a non-2xx status code »,
     // la lecture de web/ le dit en français (D-ECR-BC-10) ; 2 lignes (écran et toast), de chaque côté.
-    // La pré-facture, fenêtre ouverte depuis la carte (bon « Sans BC » de Mme Durand, une tâche à pointer).
-    liste("bons-de-commande-prefacture", "Bons de commande › pré-facture (fenêtre)", {}, "/commandes", enchainer(cliquer("#bonCommande-card-a5000000-0000-0000-0000-000000000003 .bc-actions-bas .btn.primary"), attendre(1500))),
-    pieces("pieces-en-commande", "Pièces en commande"),
-    pieces("pieces-dossier-ouvert", "Pièces en commande › dossier fournisseur ouvert", cliquer(".dossier-header")),
-    // Téléphone : le champ date de la commande diffère d'un pixel sur son bord droit (rendu natif du sélecteur de date).
-    { ...pieces("pieces-carte-ouverte", "Pièces en commande › carte dépliée (commander, pièce arrivée)", cliquer(`${BON_PIECE} .bc-chevron`)), seuils: { bureau: { pixels: 0.001, texte: 0 }, mobile: { pixels: 0.002, texte: 0 } } },
-  ]);
-}
-
-function sansPastilleStatut(ecrans: Ecran[]): Ecran[] {
-  return ecrans.map((e) => {
-    const seuils: Partial<Record<Taille, Seuils>> = {};
-    for (const [taille, x] of Object.entries(e.seuils) as [Taille, Seuils][]) {
-      seuils[taille] = { pixels: x.pixels + MARGE_PASTILLE_STATUT[taille].pixels, texte: x.texte + MARGE_PASTILLE_STATUT[taille].texte };
-    }
-    return { ...e, seuils };
-  });
+    // Pixels mesurés : 4,4 % (bureau), 3,4 % (téléphone) — le message et le toast.
+    liste("bons-de-commande-lecture-echec", "Bons de commande › importer un BC : issue d'une lecture qui échoue", {}, "/commandes", enchainer(deposer(".page-head label.btn input[type=file]"), attendre(3000)), { bureau: { pixels: 0.046, texte: 4 }, mobile: { pixels: 0.036, texte: 4 } }),
+    // La pré-facture, fenêtre ouverte depuis la carte (bon « Sans BC » de Mme Durand, une tâche à pointer) :
+    // pastilles de la liste dessous, et la TVA de sa ligne « 10 % » (DEF-REP-04, 2 lignes).
+    liste("bons-de-commande-prefacture", "Bons de commande › pré-facture (fenêtre)", {}, "/commandes", enchainer(cliquer("#bonCommande-card-a5000000-0000-0000-0000-000000000003 .bc-actions-bas .btn.primary"), attendre(1500)), { bureau: { pixels: 0.004, texte: PASTILLES_LISTE + 2 }, mobile: { pixels: 0.002, texte: PASTILLES_LISTE + 2 } }),
+    // Deux cartes à commander, deux pastilles ; sur téléphone, les cartes raccourcissent (12 %).
+    { ...pieces("pieces-en-commande", "Pièces en commande"), seuils: { bureau: { pixels: 0.014, texte: 2 }, mobile: { pixels: 0.121, texte: 2 } } },
+    // Trois cartes visibles une fois le dossier Cedeo ouvert.
+    { ...pieces("pieces-dossier-ouvert", "Pièces en commande › dossier fournisseur ouvert", cliquer(".dossier-header")), seuils: { bureau: { pixels: 0.02, texte: 3 }, mobile: { pixels: 0.065, texte: 3 } } },
+    // Téléphone : le champ date de la commande diffère aussi d'un pixel sur son bord droit (rendu natif du sélecteur de date).
+    { ...pieces("pieces-carte-ouverte", "Pièces en commande › carte dépliée (commander, pièce arrivée)", cliquer(`${BON_PIECE} .bc-chevron`)), seuils: { bureau: { pixels: 0.017, texte: 2 }, mobile: { pixels: 0.114, texte: 2 } } },
+  ];
 }

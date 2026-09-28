@@ -2773,7 +2773,7 @@ La parité (`tests/parite/impression.essai.ts`) applique ces seules corrections 
 ## D-REP-05 — Le nom du client sur la carte et le bandeau du chantier (DEF-REP-05)
 Remplace D-ECR-CHA-07 (révisée) : `client_nom`, que la base tient, s'affiche dans `.chantier-a4-client`
 et après le type dans le bandeau de la fiche. Écart visuel attendu consigné dans
-`tests/visuel/ecrans-chantiers.ts` (`avecNomDuClient`, marge provisoire).
+`tests/visuel/ecrans-chantiers.ts` (seuils mesurés par écran, D-VIS3-02).
 
 ## D-REP-06 — Un sous-traitant reçoit un compte par invitation (DEF-REP-06)
 Remplace D-SOC-08. Réglages › Comptes : « Sous-traitants sans compte » (fiches sans
@@ -2875,3 +2875,34 @@ posé par le service seulement (déclencheur : un compte connecté ne le pose ni
 `niveau_suffisant()` (même table que `societes/domain/abonnement.ts`), politiques RESTRICTIVES sur
 articles (2), factures et lignes (2), bons et lignes (3) ; « ocr » (4) vérifié par `extraire-bc` proposée.
 Hors de portée, dit dans le fichier : les vues du terrain et les fonctions SECURITY DEFINER.
+
+## D-VIS3-01 — La TVA d'une ligne imprimée ne se coupe plus : espace insécable
+Passe visuelle du 28/09 sur base neuve (« Bons de commande › consulter un bon facturé ») : depuis
+DEF-REP-04, la colonne « % TVA » de la pièce écrit « 10 % » avec une espace ORDINAIRE ; dans la
+colonne étroite de l'aperçu de la pré-facture, « % » passait seul à la ligne et chaque ligne du bon
+doublait de hauteur, le total TTC sortait du cadre. Régression de mise en page, pas une correction
+voulue. `tvaImprimee` (`documents/impression/gabarit.ts`) écrit désormais « 10 % » avec une espace
+insécable (U+00A0) ; les totaux gardent l'espace ordinaire de l'ancien (ligne large). Tests :
+`tests/parite/impression.essai.ts` et `commandes/domain/impression.essai.ts` exigent l'insécable.
+
+## D-VIS3-02 — Seuils de la comparaison visuelle et des PDF : mesurés, pas estimés
+Après « corrige tout », les marges d'écart voulu avaient été ESTIMÉES (marge « pastille de statut »,
+« nom du client », pilotage, fiche article). Passe complète sur base neuve, puis chaque écran :
+(a) l'écart vient d'une correction décidée — seuil = valeur mesurée + petite tolérance (pixels : la
+mesure arrondie au millième supérieur, plus un ou deux millièmes ; texte : la mesure exacte, plus deux
+lignes sur les écrans qui dépendent du jour), commentaire qui cite la DEF ou la décision ;
+(b) l'écart ne vient d'aucune correction — l'application est corrigée (D-VIS3-01) ;
+(c) le test est instable — la cause est trouvée et le geste rendu déterministe (D-VIS3-03).
+Les marges globales (`MARGE_PASTILLE_STATUT`, `MARGE_NOM_DU_CLIENT`) disparaissent au profit d'un seuil
+par écran. `tests/visuel/pdf/comparer-pdf.ts` porte à son tour un seuil mesuré par pièce (PDF et aperçu)
+et échoue au-delà, texte et nombre de pages devant rester identiques.
+
+## D-VIS3-03 — Deux écrans instables rendus déterministes
+- « Catalogue › recherche sans résultat » (téléphone) : l'ancien catalogue charge sa page APRÈS s'être
+  dessiné et redessine sa zone ; une saisie tombée avant ce redessin était effacée (champ vide, liste
+  entière). Le geste `saisir` attend la fin du dessin, et ressaisit tant que le champ n'a pas gardé le
+  texte (trois essais, puis échec explicite).
+- « Rapports › assistant, étapes Photos et Rapport » : `openForm` de l'ancien lance un défilement doux
+  50 ms après l'ouverture ; le clic d'étape l'interrompait à mi-course, la page s'arrêtait 27 px plus bas
+  une passe sur deux (0 ligne de texte d'écart, 24 à 28 % de pixels). Le geste attend la fin du défilement
+  (800 ms) avant de cliquer l'étape.

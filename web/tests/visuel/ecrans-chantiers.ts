@@ -27,6 +27,8 @@ function puis(...gestes: Geste[]): Geste {
 const CALME_MS = 800;
 const PAS_MS = 100;
 const ATTENTE_MAX_MS = 8_000;
+/** Saisies tentées avant de conclure que l'écran efface le champ pour de bon (ce serait un défaut, pas une course). */
+const SAISIES_MAX = 3;
 
 async function attendreTexteStable(page: Page): Promise<void> {
   let precedent = "";
@@ -44,37 +46,35 @@ async function attendreTexteStable(page: Page): Promise<void> {
 /** Saisit un texte dans le champ désigné — le même sélecteur des deux côtés. */
 function saisir(selecteur: string, texte: string): Geste {
   return async (page) => {
-    await page.fill(selecteur, texte, { timeout: 5_000 });
-    // La recherche attend que la main s'arrête (250 ms), des deux côtés ; sous charge, le
-    // redessin arrive plus tard qu'une attente fixe (l'ancien montrait encore la liste
-    // entière) : on attend que le texte de la page cesse de changer.
+    // L'ancien catalogue charge sa page après s'être dessiné, puis redessine sa zone ; une saisie
+    // tombée avant ce redessin était effacée (champ vide, liste entière : « recherche sans
+    // résultat » sur téléphone, une passe sur deux). On attend la fin du dessin, et on ressaisit
+    // tant que le champ n'a pas gardé le texte.
     await attendreTexteStable(page);
+    for (let essai = 1; essai <= SAISIES_MAX; essai++) {
+      await page.fill(selecteur, texte, { timeout: 5_000 });
+      // La recherche attend que la main s'arrête (250 ms), des deux côtés ; sous charge, le
+      // redessin arrive plus tard qu'une attente fixe : on attend que le texte de la page cesse de changer.
+      await attendreTexteStable(page);
+      if ((await page.locator(selecteur).first().inputValue()) === texte) break;
+      if (essai === SAISIES_MAX) throw new Error(`[visuel] « ${texte} » effacé de ${selecteur} ${SAISIES_MAX} fois de suite`);
+    }
     // L'ancien redessinait la zone et perdait le focus ; le nouveau le garde (D-ECR-CHA-05) : on compare sans.
     await page.locator(selecteur).first().blur();
   };
 }
 
-/**
- * DEF-REP-05, D-REP-05 : le nom du client s'affiche sur chaque carte de chantier et dans le bandeau
- * de la fiche ; l'ancien lisait un champ `client` vide. Une ligne de texte de plus par carte (le jeu
- * d'essai en montre au plus six), une ligne changée dans le bandeau, et des cartes plus hautes sur
- * téléphone — 10 à 15 % d'écart mesuré quand un premier passage l'affichait (D-ECR-CHA-07).
- * Marge PROVISOIRE ajoutée au seuil mesuré avant la correction : à relever puis abaisser au prochain passage.
+/*
+ * DEF-REP-05, D-REP-05 : le nom du client s'affiche sur chaque carte de chantier et dans le bandeau de
+ * la fiche ; l'ancien lisait un champ `client` vide. Une ligne AJOUTÉE par carte (« OPAC du Rhône »,
+ * « Mme Durand »), une ligne CHANGÉE dans le bandeau (« Réhabilitation · » → « Réhabilitation · OPAC du
+ * Rhône » : une manquante, une ajoutée). Sur téléphone, les cartes s'allongent d'une ligne (10 %) et le
+ * bandeau de la fiche passe sur deux lignes, ce qui descend toute la fiche de 15 px (15,2 %). Les seuils
+ * de ces écrans sont MESURÉS sur base neuve (D-VIS3-02) : pixels arrondis au millième supérieur + 1 ‰,
+ * texte exact ; chaque commentaire dit d'où viennent ses lignes.
  */
-const MARGE_NOM_DU_CLIENT: Record<Taille, Seuils> = { bureau: { pixels: 0.03, texte: 6 }, mobile: { pixels: 0.15, texte: 6 } };
-const PORTE_LE_NOM_DU_CLIENT = /^(chantiers(-nouveau)?|chantier-fiche(-dpgf|-durand)?)(--|$)/;
-
-function avecNomDuClient(e: Ecran): Ecran {
-  if (!PORTE_LE_NOM_DU_CLIENT.test(e.id)) return e;
-  const seuils: Partial<Record<Taille, Seuils>> = {};
-  for (const [taille, s] of Object.entries(e.seuils) as [Taille, Seuils][]) {
-    seuils[taille] = { pixels: s.pixels + MARGE_NOM_DU_CLIENT[taille].pixels, texte: s.texte + MARGE_NOM_DU_CLIENT[taille].texte };
-  }
-  return { ...e, seuils };
-}
-
 export function ecransChantiersClientsCatalogue(): Ecran[] {
-  return ecransDuPerimetre().map(avecNomDuClient);
+  return ecransDuPerimetre();
 }
 
 function ecransDuPerimetre(): Ecran[] {
@@ -102,10 +102,11 @@ function ecransDuPerimetre(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("catalogue"), cliquer(".page-head .btn.primary")) },
       nouveau: { chemin: "/articles", gestes: cliquer(".page-head .btn.primary") },
-      // DEF-REP-03, D-REP-03 : la fiche gagne un champ « Métier » (sélecteur) après « Type » et « Unité » —
-      // 2 lignes de texte ajoutées (« Métier », « — ») et les champs suivants descendent d'un rang.
-      // Seuil PROVISOIRE (écran non mesuré depuis la correction) : à relever puis abaisser au prochain passage.
-      seuils: { bureau: { pixels: 0.15, texte: 2 }, mobile: { pixels: 0.25, texte: 2 } },
+      // DEF-REP-03, D-REP-03 : la fiche gagne un champ « Métier » (sélecteur) après « Type » et « Unité ».
+      // Mesuré (D-VIS3-02) : 10 lignes ajoutées — « Métier », « — » et les huit métiers de la société, que
+      // `innerText` lit dans les options — ; les champs suivants descendent d'un rang et « Géré en stock »
+      // passe sous « TVA » (5,8 % bureau ; sur téléphone la fiche déborde de l'écran : 0,25 %).
+      seuils: { bureau: { pixels: 0.06, texte: 10 }, mobile: { pixels: 0.004, texte: 10 } },
     },
     {
       id: "catalogue-modifier-article",
@@ -113,10 +114,10 @@ function ecransDuPerimetre(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("catalogue"), cliquer("#catalogueZone td .btn.small")) },
       nouveau: { chemin: "/articles", gestes: cliquer("#catalogueZone td .btn.small") },
-      // DEF-REP-03, D-REP-03 : la fiche gagne un champ « Métier » (sélecteur) après « Type » et « Unité » —
-      // 2 lignes de texte ajoutées (« Métier », « — ») et les champs suivants descendent d'un rang.
-      // Seuil PROVISOIRE (écran non mesuré depuis la correction) : à relever puis abaisser au prochain passage.
-      seuils: { bureau: { pixels: 0.15, texte: 2 }, mobile: { pixels: 0.25, texte: 2 } },
+      // DEF-REP-03, D-REP-03 : comme « nouvel article », plus une option : le métier enregistré de l'article
+      // (« electricite », graphie du jeu d'essai hors de la liste) est proposé pour ne pas être perdu à
+      // l'enregistrement. Mesuré : 11 lignes, 5,8 % (bureau), 0,36 % (téléphone).
+      seuils: { bureau: { pixels: 0.06, texte: 11 }, mobile: { pixels: 0.005, texte: 11 } },
     },
     {
       id: "catalogue-import",
@@ -216,8 +217,8 @@ function ecransDuPerimetre(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers") },
       nouveau: { chemin: "/chantiers" },
-      // Seul reste le DPGF de Durand, que l'ancien ne lit pas sur cette base (D-ECR-CHA-11) : 2 lignes remplacées.
-      seuils: { bureau: { pixels: 0.001, texte: 4 }, mobile: { pixels: 0.004, texte: 4 } },
+      // Le nom du client sur les deux cartes (DEF-REP-05) : 2 lignes ajoutées ; 2,8 % (bureau), 10,1 % (téléphone).
+      seuils: { bureau: { pixels: 0.03, texte: 2 }, mobile: { pixels: 0.102, texte: 2 } },
     },
     {
       id: "chantiers-nouveau",
@@ -225,8 +226,8 @@ function ecransDuPerimetre(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("chantiers"), cliquer(".page-head .btn.primary")) },
       nouveau: { chemin: "/chantiers", gestes: cliquer(".page-head .btn.primary") },
-      // Seul reste le DPGF de Durand, que l'ancien ne lit pas sur cette base (D-ECR-CHA-11), sous le formulaire.
-      seuils: partout(0.001, 4),
+      // Sous le formulaire, le nom du client sur les deux cartes (DEF-REP-05) : 2 lignes ajoutées.
+      seuils: partout(0.001, 2),
     },
     {
       id: "chantiers-recherche-vide",
@@ -242,8 +243,10 @@ function ecransDuPerimetre(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers", { viewingChantier: CHANTIER_C }) },
       nouveau: { chemin: `/chantiers/${CHANTIER_C}` },
-      // « Reprendre un devis » (D-CHA-06, 5 lignes) et la section Intervenants (D-ECR-CHA-09, 11 lignes), sous la ligne de flottaison.
-      seuils: partout(0.001, 16),
+      // « Reprendre un devis » (D-CHA-06, 5 lignes) et la section Intervenants (D-ECR-CHA-09, 11 lignes), sous la
+      // ligne de flottaison ; le bandeau porte le nom du client (DEF-REP-05, 2 lignes) et, sur téléphone, passe
+      // sur deux lignes (15,2 %).
+      seuils: { bureau: { pixels: 0.001, texte: 18 }, mobile: { pixels: 0.153, texte: 18 } },
     },
     {
       id: "chantier-modifier",
@@ -260,8 +263,9 @@ function ecransDuPerimetre(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("chantiers", { viewingChantier: CHANTIER_DURAND }) },
       nouveau: { chemin: `/chantiers/${CHANTIER_DURAND}` },
-      // Comme la fiche C, plus le DPGF de Durand, que l'ancien ne lit pas sur cette base (D-ECR-CHA-11) : montants, métiers proposés, « 📅 Planifier ».
-      seuils: { bureau: { pixels: 0.001, texte: 38 }, mobile: { pixels: 0.009, texte: 38 } },
+      // Comme la fiche C (D-CHA-06, D-ECR-CHA-09, DEF-REP-05) : 18 lignes. Le DPGF de Durand se lit désormais des
+      // deux côtés (mesuré : aucune ligne d'écart). « Mme Durand » tient sur la ligne du bandeau : 0,13 % sur téléphone.
+      seuils: { bureau: { pixels: 0.001, texte: 18 }, mobile: { pixels: 0.003, texte: 18 } },
     },
     ...ecransParRole(),
     ...ecransImports(),
@@ -316,10 +320,11 @@ function ecransImports(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("chantiers", { viewingChantier: CHANTIER_C }), dpgf) },
       nouveau: { chemin: `/chantiers/${CHANTIER_C}`, gestes: dpgf },
-      // La modale est identique ; restent, sous elle, « Reprendre un devis » (D-CHA-06) et Intervenants (D-ECR-CHA-09).
-      // Sur un DPGF non vide, la modale annonce en plus les lignes remplacées et conservées (DEF-COR-06, voulu) ;
-      // le chantier C n'en a pas : la phrase n'y paraît pas, seuil inchangé.
-      seuils: partout(0.001, 16),
+      // La modale est identique ; restent, sous elle, « Reprendre un devis » (D-CHA-06), Intervenants (D-ECR-CHA-09)
+      // et le nom du client dans le bandeau (DEF-REP-05, 2 lignes : l'écran manquait à la marge « nom du client »
+      // et échouait). Sur un DPGF non vide, la modale annonce en plus les lignes remplacées et conservées
+      // (DEF-COR-06, voulu) ; le chantier C n'en a pas : la phrase n'y paraît pas.
+      seuils: partout(0.001, 18),
     },
   ];
 }
@@ -373,14 +378,15 @@ const SEUILS_ROLES: Record<string, Partial<Record<Taille, Seuils>> | null | unde
   "chantier-fiche-durand--technicien": null,
   "chantier-fiche-durand--secretaire": null,
   // Les boutons et sections que la base refuse à ce rôle sont masqués ; l'ancien les montrait (D-ECR-CHA-06).
-  "chantiers--conducteur": { bureau: { pixels: 0.001, texte: 4 }, mobile: { pixels: 0.004, texte: 4 } }, // D-ECR-CHA-11
-  "chantiers--technicien": { bureau: { pixels: 0.031, texte: 1 }, mobile: { pixels: 0.12, texte: 1 } }, // « + Nouveau chantier » : D-ECR-CHA-06
-  "chantiers--soustraitant": { bureau: { pixels: 0.031, texte: 1 }, mobile: { pixels: 0.12, texte: 1 } }, // idem
-  "chantiers--secretaire": { bureau: { pixels: 0.057, texte: 1 }, mobile: { pixels: 0.167, texte: 1 } }, // idem
-  "chantier-fiche--conducteur": partout(0.001, 17), // « Facturer la sélection » (factures/créer), D-CHA-06, D-ECR-CHA-09
-  "chantier-fiche--technicien": { bureau: { pixels: 0.206, texte: 50 }, mobile: { pixels: 0.428, texte: 50 } }, // D-ECR-CHA-06, D-ECR-CHA-09
-  "chantier-fiche--secretaire": { bureau: { pixels: 0.212, texte: 53 }, mobile: { pixels: 0.429, texte: 53 } }, // D-ECR-CHA-06, D-ECR-CHA-09
-  "chantier-fiche-durand--soustraitant": { bureau: { pixels: 0.2, texte: 59 }, mobile: { pixels: 0.413, texte: 59 } }, // D-ECR-CHA-06, D-ECR-CHA-09
+  // Mesurés sur base neuve (D-VIS3-02) ; chaque liste porte en plus le nom du client de ses cartes (DEF-REP-05).
+  "chantiers--conducteur": { bureau: { pixels: 0.03, texte: 2 }, mobile: { pixels: 0.102, texte: 2 } }, // deux noms de client
+  "chantiers--technicien": { bureau: { pixels: 0.022, texte: 2 }, mobile: { pixels: 0.072, texte: 2 } }, // « + Nouveau chantier » (D-ECR-CHA-06), un nom
+  "chantiers--soustraitant": { bureau: { pixels: 0.022, texte: 2 }, mobile: { pixels: 0.072, texte: 2 } }, // idem
+  "chantiers--secretaire": { bureau: { pixels: 0.03, texte: 3 }, mobile: { pixels: 0.097, texte: 3 } }, // « + Nouveau chantier », deux noms
+  "chantier-fiche--conducteur": { bureau: { pixels: 0.001, texte: 19 }, mobile: { pixels: 0.153, texte: 19 } }, // « Facturer la sélection » (factures/créer), D-CHA-06, D-ECR-CHA-09, bandeau
+  "chantier-fiche--technicien": { bureau: { pixels: 0.207, texte: 52 }, mobile: { pixels: 0.418, texte: 52 } }, // D-ECR-CHA-06, D-ECR-CHA-09, bandeau
+  "chantier-fiche--secretaire": { bureau: { pixels: 0.214, texte: 55 }, mobile: { pixels: 0.421, texte: 55 } }, // D-ECR-CHA-06, D-ECR-CHA-09, bandeau
+  "chantier-fiche-durand--soustraitant": { bureau: { pixels: 0.202, texte: 61 }, mobile: { pixels: 0.414, texte: 61 } }, // D-ECR-CHA-06, D-ECR-CHA-09, bandeau
   "clients--conducteur": { bureau: { pixels: 0.195, texte: 10 }, mobile: { pixels: 0.466, texte: 10 } }, // D-ECR-CHA-06
   "clients--secretaire": partout(0.001, 0),
   "catalogue--conducteur": partout(0.001, 0),
