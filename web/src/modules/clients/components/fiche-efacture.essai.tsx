@@ -82,15 +82,27 @@ describe("fiche client : blocs par type (CLI-03, CLI-05, CLI-30)", () => {
   });
 });
 
-describe("ville proposée par le code postal (CLI-06)", () => {
-  it("5 chiffres : les communes se proposent et un clic remplit la ville", async () => {
-    geo.communesDuCodePostal.mockResolvedValue(["Villeurbanne"]);
+describe("la commune se cherche depuis le code postal (CLI-06, 97287c3)", () => {
+  it("5 chiffres : la ville se remplit de la première commune, comme dans le bon et la facture", async () => {
+    geo.communesDuCodePostal.mockImplementation(async (cp: string) => (cp === "69100" ? ["Villeurbanne", "Autre"] : []));
     await ouvrir();
-    await userEvent.type(screen.getAllByLabelText("Code postal")[0] as HTMLElement, "69100");
-    await userEvent.click(await screen.findByRole("button", { name: "Villeurbanne" }));
-    expect(screen.getAllByLabelText("Ville")[0] as HTMLElement).toHaveValue("Villeurbanne");
-    expect(geo.communesDuCodePostal).toHaveBeenCalledWith("69100", expect.anything());
+    const cp = screen.getAllByLabelText("Code postal")[0] as HTMLElement;
+    expect(cp).toHaveAttribute("maxlength", "5");
+    expect(cp).toHaveAttribute("inputmode", "numeric");
+    await userEvent.type(cp, "69100");
+    await waitFor(() => expect(screen.getAllByLabelText("Ville")[0] as HTMLElement).toHaveValue("Villeurbanne"));
+    expect(geo.communesDuCodePostal).toHaveBeenLastCalledWith("69100");
+    // Remplie d'office, comme l'ancien : aucune liste de villes à choisir.
     expect(screen.queryByRole("button", { name: "Villeurbanne" })).not.toBeInTheDocument();
+  });
+
+  it("un service muet laisse la ville telle quelle", async () => {
+    geo.communesDuCodePostal.mockResolvedValue([]);
+    await ouvrir();
+    await userEvent.type(screen.getAllByLabelText("Ville")[0] as HTMLElement, "Lieu-dit");
+    await userEvent.type(screen.getAllByLabelText("Code postal")[0] as HTMLElement, "69100");
+    await waitFor(() => expect(geo.communesDuCodePostal).toHaveBeenLastCalledWith("69100"));
+    expect(screen.getAllByLabelText("Ville")[0] as HTMLElement).toHaveValue("Lieu-dit");
   });
 });
 

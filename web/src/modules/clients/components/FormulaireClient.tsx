@@ -14,10 +14,10 @@ import { CADRES_FACTURATION, saisieDepuis, schemaSaisieClient, type Client } fro
 import { CLE_AUTRE, CLE_DELAI_PAR_CADRE, CLE_SOCIETE, cleDelai, DELAIS_PREREGLES } from "../domain/delais";
 import { adresseElectroniqueParDefaut, completudeClient, phraseManques, sectionsEfactureVisibles } from "../domain/efacture";
 import { chiffres, sirenDuSiret, tvaIntracomFr } from "../domain/identifiants";
+import { communesDuCodePostal } from "../api/communes";
 import { useClient, useEnregistrerClient } from "../hooks/useClients";
 import { ChampSiret, SuggestionsAdresse, SuggestionsEntreprise } from "./Annuaire";
 import { ChampsDelai } from "./ChampsDelai";
-import { VillesProposees } from "./VillesProposees";
 
 /** L'aide de chaque type de client, mot pour mot celle de l'ancien (`CADRES_FACTURATION[].aide`). */
 const AIDE_CADRE: Record<string, string> = {
@@ -287,9 +287,26 @@ function FormulaireClient({ client, reglages, onFermer }: { client: Client | nul
             </>
           )}
         </Champ>
-        <Champ libelle="Code postal">{(id) => <input type="text" id={id} {...texte("code_postal")} />}</Champ>
+        {/* Comme le bon et la facture (97287c3) : cinq chiffres, et la ville se remplit de
+            la première commune du code postal — une fiche saisie à la main restait sinon
+            sans ville, et le bloc « Client » des pièces imprimées sortait amputé. */}
+        <Champ libelle="Code postal">
+          {(id) => (
+            <input
+              type="text"
+              id={id}
+              maxLength={5}
+              inputMode="numeric"
+              value={valeurs.code_postal}
+              onChange={(e) => {
+                const cp = e.target.value;
+                changer("code_postal", cp);
+                void communesDuCodePostal(cp).then((c) => c[0] && changer("ville", c[0]));
+              }}
+            />
+          )}
+        </Champ>
         <Champ libelle="Ville">{(id) => <input type="text" id={id} {...texte("ville")} />}</Champ>
-        <VillesProposees codePostal={valeurs.code_postal} ville={valeurs.ville} onChoisir={(v) => changer("ville", v)} />
         {sections.includes("pays") && (
           <Champ libelle="Pays" erreur={erreurs.pays_code}>
             {(id) => <input type="text" id={id} maxLength={2} placeholder="FR" {...texte("pays_code")} />}
