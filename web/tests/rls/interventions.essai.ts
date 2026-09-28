@@ -126,3 +126,13 @@ describe("[proposition] un rapport par bon (PLN-20)", () => {
     expect(doublon.error?.code).toBe("23505");
   });
 });
+
+// Proposition 20260928212000 (DEF-ECR-01, D-COR2-01) : écrit, pas encore lancé — un autre agent le passe.
+describe("[proposition] un rapport écrit hors de l'écran naît « en cours » (DEF-ECR-01)", () => {
+  it("un INSERT qui n'envoie pas le statut le reçoit de la base", async () => {
+    const { data, error } = await admin.from("interventions").insert({ societe_id: ALPHA, client_nom: "Rapport repris sans statut", date: "2026-09-28" }).select("id, statut").single();
+    expect(error).toBeNull();
+    if (data) crees.push(data.id);
+    expect(data?.statut).toBe("en cours");
+  });
+});

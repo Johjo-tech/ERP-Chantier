@@ -502,7 +502,11 @@ function ecransPlanning(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: onglet("interventions") },
       nouveau: { chemin: "/rapports" },
-      seuils: partout(0.001, 0),
+      // Écart attendu, DEF-ECR-01 (corrigé, D-COR2-01) : le rapport sans statut du jeu des PDF
+      // (INT-2026-000001) porte « EN COURS » dans web/, une pastille grise VIDE dans l'ancien — une
+      // pastille plus large, qui pousse « LOGEMENT OCCUPÉ » à sa gauche, et une ligne de texte changée.
+      // Le reste de l'écran reste tenu au seuil d'avant (0,001 ; 0 ligne).
+      seuils: { bureau: { pixels: 0.004, texte: 2 }, mobile: { pixels: 0.012, texte: 2 } },
     },
   ];
 }
