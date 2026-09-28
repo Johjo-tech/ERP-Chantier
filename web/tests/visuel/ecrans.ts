@@ -596,7 +596,7 @@ function ecransCommandes(): Ecran[] {
     nouveau: { chemin: route, ...(gestes ? { gestes } : {}) },
     seuils,
   });
-  return [
+  return sansPastilleStatut([
     // L'ancien lit les bons sans tri (l'ordre physique de la vue) ; web/ les range par date puis numéro (D-ECR-BC-09).
     // Quand la base porte des bons de même date créés dans le désordre, les cartes du haut s'échangent : même texte, pixels décalés.
     liste("bons-de-commande", "Bons de commande › liste", {}, "/commandes", undefined, { bureau: { pixels: 0.05, texte: 0 }, mobile: { pixels: 0.005, texte: 0 } }),
@@ -621,5 +621,24 @@ function ecransCommandes(): Ecran[] {
     pieces("pieces-dossier-ouvert", "Pièces en commande › dossier fournisseur ouvert", cliquer(".dossier-header")),
     // Téléphone : le champ date de la commande diffère d'un pixel sur son bord droit (rendu natif du sélecteur de date).
     { ...pieces("pieces-carte-ouverte", "Pièces en commande › carte dépliée (commander, pièce arrivée)", cliquer(`${BON_PIECE} .bc-chevron`)), seuils: { bureau: { pixels: 0.001, texte: 0 }, mobile: { pixels: 0.002, texte: 0 } } },
-  ];
+  ]);
+}
+
+/**
+ * DEF-REP-10, D-REP-10 : la carte d'un bon ne porte plus la pastille grise `statut` (« en attente »,
+ * figée depuis la création) ; l'ancien l'affichait sur chaque carte, à côté de l'étape du circuit.
+ * Par carte visible (repliée ou dépliée, fenêtre de pré-facture comprise : la liste reste dessous),
+ * une ligne de texte change — « … Travaux à pointer en attente » devient « … Travaux à pointer » —,
+ * soit une manquante et une ajoutée ; le jeu d'essai montre au plus dix cartes. Pixels : la pastille
+ * seule. Marge PROVISOIRE ajoutée au seuil mesuré avant la correction : à relever puis abaisser.
+ */
+const MARGE_PASTILLE_STATUT: Record<Taille, Seuils> = { bureau: { pixels: 0.01, texte: 20 }, mobile: { pixels: 0.02, texte: 20 } };
+function sansPastilleStatut(ecrans: Ecran[]): Ecran[] {
+  return ecrans.map((e) => {
+    const seuils: Partial<Record<Taille, Seuils>> = {};
+    for (const [taille, x] of Object.entries(e.seuils) as [Taille, Seuils][]) {
+      seuils[taille] = { pixels: x.pixels + MARGE_PASTILLE_STATUT[taille].pixels, texte: x.texte + MARGE_PASTILLE_STATUT[taille].texte };
+    }
+    return { ...e, seuils };
+  });
 }

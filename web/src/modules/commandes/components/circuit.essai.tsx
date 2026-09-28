@@ -346,3 +346,16 @@ describe("Facturation › Validation et À facturer (BC-42, BC-96)", () => {
     api.listerBons.mockResolvedValue([]);
   });
 });
+
+// DEF-REP-10, D-REP-10 : les cartes des files de Facturation portaient aussi la pastille `statut` figée.
+describe("cartes des files de Facturation", () => {
+  it("l'étape seule, pas la pastille « en attente »", async () => {
+    const { PageAFacturer: FileAFacturer } = await import("@/modules/facturation/components/PagesFilesBons");
+    api.listerBons.mockResolvedValue([bonEssai({ id: "a1", numero_interne: "BC-A-FACTURER", statut_workflow: "chiffre", circuit: bonAvecTaches([], { statut_workflow: "chiffre" }).circuit })]);
+    const { container } = rendreAvecSession(<FileAFacturer />, { role: "admin", chemin: "/facturation/a-facturer" });
+    // Les dossiers de clients s'ouvrent d'un clic, comme dans l'ancien.
+    await userEvent.click(await screen.findByRole("button", { name: /OPAC du Rhône/ }));
+    await waitFor(() => expect(container.querySelector("#bonCommande-card-a1 .bc-etat-badges")).not.toBeNull());
+    expect(container.querySelector("#bonCommande-card-a1 .bc-etat-badges")).not.toHaveTextContent("en attente");
+  });
+});
