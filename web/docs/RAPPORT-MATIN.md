@@ -1,5 +1,24 @@
 # Rapport — réécriture React de l'ERP Chantier
 
+## État au 28 septembre 2026 (soir) — « corrige tout »
+
+- **Décision du client (28/09)** : tous les défauts du catalogue `DEFAUTS-A-TRANCHER.md` sont corrigés.
+  Remplace le choix « identiques, défauts compris » du 26/09 pour les statistiques (D-STA-B-01).
+- **129 défauts** : **89 corrigés dans `web/`** (chacun avec un test qui échoue sans la correction) ;
+  **40 corrections prêtes pour la production, jamais appliquées** : 36 migrations proposées
+  (n° 36 à 43 ajoutées ce soir), 3 fonctions de bord corrigées (`extraire-bc`, PDP, `inviter-salarie`),
+  1 procédure humaine (7 factures restées dans `kv_store`).
+- **Preuves des failles de base** : 29/30 prouvées (le test échoue sur une base construite sans la
+  proposition — `SANS_PROPOSITIONS=1 bash scripts/preparer-base-locale.sh` —, passe avec) ; DEF-BDD-15
+  en partie (fonctions créées en production hors dépôt).
+- **Corrections déjà actives** : 56 revérifiées, 3 défaites le 26/09 remises, 1 complétée.
+- **Reprise de `main`** : 2c21745, 97287c3, 3c6bc02…66ea9e1 portés à l'identique le 28/09.
+- **Capteurs sur base neuve** : `npm run check` 1 106 ✓ · build ✓ · `test:rls` 315 ✓ · `test:e2e` 11/11 ✓ ·
+  `test:visuel` 231/231 (chaque écran corrigé a sa marge MESURÉE et sa raison, DEF-xxx) · PDF comparés.
+- **Reste au client** : DEF-REP-18 (tables encore lisibles par le sous-traitant, dont ses écrans ont
+  besoin) à re-trancher ; appliquer en production les propositions (`scripts/deployer.sh`, essai à blanc
+  d'abord) ; `verify_jwt = false` pour `pdp-webhook` à déclarer au déploiement.
+
 ## État au 26 septembre 2026 (matin)
 
 - **Identique à l'ancienne** (exigence du client) : 228 écrans sur 229 comparés pixel et texte contre
