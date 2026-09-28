@@ -53,6 +53,19 @@ describe("inventaire du matériel (VEH-05)", () => {
     expect(screen.queryByText("Perforateur Hilti")).not.toBeInTheDocument();
     expect(screen.getByText("Échafaudage roulant")).toBeInTheDocument();
   });
+
+  // DEF-REP-07, D-REP-07 : l'ancien disait « Aucun matériel pour l'instant. » même quand la recherche écartait tout.
+  it("une recherche qui écarte tout le dit ; un inventaire vide aussi", async () => {
+    const { unmount } = rendreAvecSession(<PageMateriel />, { role: "lecture" });
+    await screen.findByText("Perforateur Hilti");
+    await userEvent.type(screen.getByLabelText("Rechercher du matériel"), "zzzz");
+    expect(screen.getByText("Aucun matériel ne correspond.")).toBeInTheDocument();
+    expect(screen.queryByText("Aucun matériel pour l'instant.")).not.toBeInTheDocument();
+    unmount();
+    api.materiels.listerMateriels.mockResolvedValue([]);
+    rendreAvecSession(<PageMateriel />, { role: "lecture" });
+    expect(await screen.findByText("Aucun matériel pour l'instant.")).toBeInTheDocument();
+  });
 });
 
 function fiche(role: RoleMembre) {
