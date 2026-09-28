@@ -5,6 +5,9 @@
  * modification de l'ancien écran fait donc échouer ce test au lieu de laisser
  * une recopie périmée.
  *
+ * Écarts voulus (DEF-REP-02, D-REP-02) : « 1.234 » et le séparateur du CSV,
+ * essayés à part — l'ancien y rend le défaut, le nouveau le juste.
+ *
  * Écart assumé (D-006) : montants en décimal exact côté web/, flottants côté
  * app.js ; on compare à 1e-9 près, et au centime pour ce qui s'affiche.
  */
@@ -108,8 +111,35 @@ describe("import de DPGF : mêmes lectures que l'ancien écran", () => {
 
   it("parseCSVText ↔ lireCsv (séparateur, guillemets, lignes vides)", () => {
     const { f } = ancienImport([], 0, []);
-    const textes = ['Désignation;Qté;PU\n"A;b";1;2\r\n\nB;3;4', 'a,b,"c,d"\n1,2,3', "x;y,z\n1;2", '"non fermé;1\n2;3', "  \n"];
+    const textes = ['Désignation;Qté;PU\n"A;b";1;2\r\n\nB;3;4', 'a,b,"c,d"\n1,2,3', '"non fermé;1\n2;3', "  \n", "x;y\n1;2,5"];
     for (const t of textes) expect(imp.lireCsv(t)).toEqual(f.parseCSVText(t));
+  });
+
+  // DEF-REP-02, D-REP-02 : deux lectures de l'ancien sont fausses. L'ancien, évalué tel
+  // quel, rend le défaut ; le nouveau rend le juste. Partout ailleurs, la parité tient.
+  it("écart voulu : « 1.234 » vaut 1 234, pas 1,234", () => {
+    const { f } = ancienImport([], 0, []);
+    for (const [cellule, juste] of [["1.234", 1234], ["12.345.678", 12345678], ["-1.500", -1500], ["1.234 €", 1234]] as const) {
+      expect(f.parseMontantCell(cellule), cellule).toBe(Number(cellule.replace(/[^\d.-]/g, "").split(".").slice(0, 2).join(".")));
+      expect(imp.lireMontantCellule(cellule), cellule).toBe(juste);
+    }
+    // Ce qui n'a pas la forme de milliers reste décimal, des deux côtés.
+    for (const cellule of ["0.125", "3.2", "1.23", "1.2345", "12.5"]) {
+      expect(imp.lireMontantCellule(cellule), cellule).toBe(f.parseMontantCell(cellule));
+    }
+  });
+
+  it("écart voulu : le séparateur se lit sur les premières lignes, pas sur la seule première", () => {
+    const { f } = ancienImport([], 0, []);
+    const fichier = "DPGF Lot 3, peinture\nDésignation;Qté;PU\nMurs;2;12,50\nPlafonds;1;8,00";
+    // L'ancien voit une virgule en 1re ligne : il découpe les prix sur leur virgule décimale.
+    expect(f.parseCSVText(fichier)[2]).toEqual(["Murs;2;12", "50"]);
+    expect(imp.lireCsv(fichier)[2]).toEqual(["Murs", "2", "12,50"]);
+    expect(imp.lireCsv(fichier)[0]).toEqual(["DPGF Lot 3, peinture"]);
+    expect(f.parseCSVText("x;y,z\n1;2")).toEqual([["x;y", "z"], ["1;2"]]);
+    expect(imp.lireCsv("x;y,z\n1;2")).toEqual([["x", "y,z"], ["1", "2"]]);
+    // Un vrai fichier à virgules reste lu à virgules, même avec un « ; » égaré dans un texte.
+    expect(imp.lireCsv("a,b,c\n1,2,3\n4,5;6,7\n8,9,10\n11,12,13")[2]).toEqual(["4", "5;6", "7"]);
   });
 
   it("rôles devinés, lignes d'en-tête et lignes importées : 800 tirages", () => {
