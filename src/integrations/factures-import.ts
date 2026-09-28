@@ -250,6 +250,7 @@ export async function previsualiserImportFactures(
   }
 
   const tous = [...clients.values()].sort((a, b) => Math.abs(b.ht) - Math.abs(a.ht));
+  const avoirsRetenus = retenues.filter((f) => f.typeDocument === "avoir").length;
 
   return {
     totaux: rapport.totaux,
@@ -259,7 +260,22 @@ export async function previsualiserImportFactures(
     clients: tous,
     clientsACreer: tous.filter((c) => c.rapprochement === "aucun" || c.rapprochement === "ambigu"),
     rejets: rapport.rejets,
-    signalements: rapport.signalements,
+    /* Dit AVANT d'écrire, et non découvert après : un avoir repris arrive déjà
+       imputé, son crédit ayant été consommé dans l'ancien logiciel. C'est ce
+       qui l'empêche de solder une facture d'aujourd'hui. */
+    signalements:
+      avoirsRetenus > 0
+        ? [
+            ...rapport.signalements,
+            {
+              ligne: 0,
+              motif:
+                `${avoirsRetenus} avoir${avoirsRetenus > 1 ? "s" : ""} ${avoirsRetenus > 1 ? "seront marqués" : "sera marqué"} ` +
+                `DÉJÀ IMPUTÉ${avoirsRetenus > 1 ? "S" : ""} : leur crédit a été consommé avant la reprise, ` +
+                `et ils ne pourront pas solder une facture d'aujourd'hui.`,
+            },
+          ]
+        : rapport.signalements,
     incoherent: rapport.incoherent,
     /* Tolérer un rejet reviendrait à importer un historique amputé sans que
        personne ne s'en aperçoive avant la révision des comptes. */

@@ -32,7 +32,16 @@
  */
 
 import { enLots, insertMany, insertOne, supabase, SupabaseError, updateOne } from "../client";
+import { estAvoir, MODE_REGLEMENT_IMPUTATION } from "../regles-avoir";
 import type { FactureInsert, FactureLigneInsert, FactureStatut, Uuid } from "../types";
+
+/**
+ * Ce qu'on lit dans le livre des règlements en face d'un avoir repris.
+ *
+ * En clair, et pas un code : quelqu'un relira cette ligne dans six mois en se
+ * demandant qui a imputé cet avoir, et la réponse doit être dans la ligne.
+ */
+export const REFERENCE_AVOIR_REPRIS = "Reprise d'historique — avoir déjà utilisé avant la reprise";
 
 /** Assez grand pour que 768 pièces tiennent en quatre requêtes de lecture. */
 const LOT_LECTURE = 200;
@@ -71,7 +80,7 @@ export interface PieceAEcrire {
 export interface EchecPiece {
   numero: string;
   /** À quelle étape, pour savoir ce qui reste en base. */
-  etape: "entete" | "lignes" | "numero";
+  etape: "entete" | "lignes" | "numero" | "imputation";
   motif: string;
 }
 
@@ -161,6 +170,42 @@ export async function importerFactures(
     } catch (err) {
       echecs.push({ numero: piece.numero, etape: "numero", motif: motifLisible(err) });
       brouillonsOrphelins.push({ numero: piece.numero, id });
+      onProgress?.(i + 1, pieces.length);
+      continue;
+    }
+
+    /* 4. UN AVOIR REPRIS EST DÉJÀ CONSOMMÉ.
+
+          Il a été établi, remis et imputé dans l'ancien logiciel : son crédit
+          n'existe plus. Sans cette imputation, la reprise le ferait réapparaître
+          comme disponible, et « Régler par un avoir » proposerait de solder une
+          facture d'aujourd'hui avec un avoir de 2025 déjà utilisé — le client
+          serait crédité deux fois, sur des pièces qu'on ne peut plus corriger.
+
+          L'imputation s'écrit comme les autres, dans le livre des règlements :
+          c'est ce que `resteAImputer` compte, et l'écran n'a donc aucune règle
+          de plus à connaître. Elle porte sa référence en clair, pour qu'on
+          sache d'où elle vient en la relisant.
+
+          Son échec ne défait rien : la pièce est écrite et numérotée, donc
+          indestructible. Il est NOMMÉ — un avoir resté disponible se rattrape
+          à la main, à condition de savoir lequel. */
+    if (estAvoir(piece.entete.type_document)) {
+      const credit = Math.abs(Number(piece.entete.total_ttc ?? 0));
+      if (credit > 0) {
+        try {
+          await insertOne("reglements", {
+            societe_id: societeId,
+            facture_id: id,
+            date: piece.entete.date,
+            montant: credit,
+            mode: MODE_REGLEMENT_IMPUTATION,
+            reference: REFERENCE_AVOIR_REPRIS,
+          } as never);
+        } catch (err) {
+          echecs.push({ numero: piece.numero, etape: "imputation", motif: motifLisible(err) });
+        }
+      }
     }
 
     onProgress?.(i + 1, pieces.length);
