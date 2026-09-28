@@ -948,6 +948,7 @@ brouillons exclus (P-19). Le résumé du mois ne répète plus « CA encaissé �
 la tuile le porte déjà.
 
 ## D-STA-A-01 — Décision du client : calculs identiques à l'ancienne, défauts compris
+**Remplacée par D-STA-B-01** (décision du client du 28/09 : défauts corrigés).
 Le client exige que les tableaux de bord (pilotage administrateur/secrétaire/lecture, conducteur,
 technicien, sous-traitant) et l'écran Statistiques calculent EXACTEMENT comme `app.js` : mêmes
 définitions, mêmes filtres, mêmes arrondis, même groupement, mêmes libellés, mêmes tuiles. Elle
@@ -1005,6 +1006,97 @@ source de `app.js` et compare au flottant près, à l'heure de Paris.
 **Retiré de l'écran Statistiques** (absent de l'ancien) : plage de dates libre, vues par métier et
 par client. **Inchangé** : recherche globale du tableau de bord (hors calculs), mesures du
 conducteur (déjà identiques), graphiques en SVG écrits à la main (D-STA-03).
+
+## D-STA-B-01 — Décision du client du 28/09 : défauts corrigés
+Remplace D-STA-A-01. Le client a tranché « corrige tout » : les tableaux de bord (pilotage, conducteur,
+technicien, sous-traitant) et l'écran Statistiques cessent de reproduire les défauts DEF-STA-01 à 19
+(et DEF-ECR-03, 04, qui en sont les doublons). Seuls ces défauts changent : HTML, classes, libellés,
+tuiles, graphiques et les nouveautés de production du 28/09 (D-MAIN-10 : historique repris comme
+référence N-1, tuile N-1, « Facturé AAAA (HT) », « Top clients AAAA (HT) » avec N-1, millésime propre à
+chaque barre, légende « Période / Un an plus tôt », fil rangé par date des pièces et ses libellés)
+restent ceux de l'ancien.
+
+**Voie retenue : (b), le calcul reste dans le navigateur, corrigé, en décimal exact — mais ses montants
+sont LUS dans les vues de la base.** Chaque pièce arrive avec le HT de `v_facture_totaux` /
+`v_devis_totaux` ; le restant dû, les impayées et les échues se lisent sur `v_facture_solde` (la même
+lecture, le même cache TanStack que l'écran des factures : `useSoldes`) ; l'encaissé est la somme des
+règlements. Rien n'est refait depuis les lignes, sauf le montant « À facturer » d'un bon, qui n'a pas
+de vue de totaux. Pourquoi pas la voie (a), les fonctions `stats_*` de la proposition retirée :
+- le critère du client — ne rien recalculer d'une manière qui contredise `v_facture_solde` et
+  `v_facture_totaux` — est tenu **par construction** : ce sont ces vues qu'on additionne, et le
+  tableau de bord ne peut plus dire autre chose que l'écran des factures (même source, même cache) ;
+- aucun objet de base en plus : la voie (a) ajoutait dix fonctions à appliquer en production, avec
+  une garde « statistiques / voir » nouvelle — une proposition de plus à faire valider et à tenir à
+  jour à chaque retouche des vues —, alors que la seule dépendance de la voie (b),
+  `v_facture_solde` refaite (proposition 20260926040000), est DÉJÀ celle de l'écran des factures ;
+- elle garde l'écran tel quel (mêmes collections, mêmes libellés, mêmes départages d'égalités),
+  donc l'écart avec l'ancien se limite aux défauts, ce que la parité prouve ligne à ligne ;
+- ses propres agrégats `stats_*` filtraient encore les bons sur `cree_le` (DEF-STA-18) et n'avaient
+  pas de correction pour DEF-STA-10 : ils auraient dû être refaits de toute façon.
+La proposition 20260926080000 reste donc dans `supabase/propositions/retirees/` (migrations-proposees.md,
+n° 22). Le dossier `domain/ancien/` (flottant, `Math.round`) est supprimé, et avec lui l'exception
+`CALCULS_DE_L_ANCIEN` du garde-fou : tout le domaine du module calcule en `@/lib/money`. Conséquence
+visible, voulue : un demi-centime s'arrondit désormais comme en base (10,005 € → « 10,01 € », l'ancien
+flottant écrivait « 10,00 € »).
+
+**Corrections** (détail et cas dans DEFAUTS-A-TRANCHER.md ; « juste » de chaque entrée) :
+1. DEF-STA-01 / DEF-ECR-03 — chiffre d'affaires (graphique, « Total période », plage libre, « Facturé
+   AAAA », top clients, colonne et répartition des Statistiques, CA par équipe, tuile « Factures
+   effectuées ») = pièces ÉMISES (ni brouillon sans numéro, définition de `v_facture_solde`), hors
+   facture d'ACOMPTE, avoir en négatif quel que soit le signe de ses lignes (`htCompte`). Un devis
+   n'est « transformé » que par une facture émise (le libellé de l'écran le dit).
+2. DEF-STA-02 — la tuile devient « Encaissé ce mois (TTC) » : Σ des règlements DATÉS du mois, hors
+   lettrage d'avoir (modes `avoir` / `imputation`, et tout règlement porté par un avoir). Même mesure
+   pour le rappel N-1 sous la tuile (une pièce reprise « payée » sans règlement n'a pas de date
+   d'encaissement : elle n'y figure pas) et pour la ligne du résumé, dont la jauge se mesure au plus
+   fort mois d'encaissement des six derniers (et de leurs N-1). La tuile ouvre les règlements.
+3. DEF-STA-03 — restant dû = Σ `v_facture_solde.du` ; taux d'encaissement (RM-70) = 1 − Σ `du` / Σ TTC
+   des pièces émises (avoirs en négatif, brouillons exclus).
+4. DEF-STA-04 — « Factures impayées » = pièces dont `du` > 0 (le critère du montant) ; « Factures
+   échues à relancer » = celles que la base dit `en_retard` — exactement ce qu'ouvre le lien « en
+   retard » de l'écran des règlements (échéance, ou date à défaut, dépassée à l'heure de Paris, reste
+   exigible hors retenue).
+5. DEF-STA-05 — « Locataires à rappeler » : bons encore ouverts seulement (règle du conducteur).
+6. DEF-STA-06 / DEF-ECR-04 — plus aucun « · null » : un devis sans numéro et le paiement d'une facture
+   en brouillon s'écrivent « brouillon », comme la facture depuis 0f6f60d ; un lettrage d'avoir ne
+   figure plus au fil (aucun argent n'est entré). Le fil garde tri, libellés et pastilles de 0f6f60d.
+7. DEF-STA-07 — top clients groupés par la FICHE (`client_id`, nom de la fiche lu par la jointure
+   `clients`), à défaut par le nom sans casse ni blancs ; le lien ouvre le dossier de règlements par le
+   nom porté sur les pièces (celui que groupe le module de facturation).
+8. DEF-STA-08 — une ligne par `conducteur_id` (fiches dans l'ordre de lecture, puis une référence sans
+   fiche lisible, nommée par l'étiquette de la pièce), plus « Sans conducteur » si une pièce n'en a pas.
+9. DEF-STA-09 — « En retard » = fin de travaux dépassée sur un bon OUVERT : ni chiffré, ni facturé, ni
+   clos, aucune facture ne le désigne, le terrain n'a pas tout pointé (tâches lues : `planning_taches`).
+10. DEF-STA-10 — un conducteur sans bon a une barre vide (ni verte ni rouge), « 0 / 0 ».
+11. DEF-STA-11 — travaux supplémentaires lus dans `tache_travaux_supplementaires` : nombre hors refusés,
+    montant des chiffrés et intégrés (quantité × prix de vente, quantité absente = 1), taux = bons en
+    ayant au moins un.
+12. DEF-STA-12 — la donnée existe (`tentatives_contact` est un tableau jsonb) : on la compte ; trois
+    tentatives sans rendez-vous font un « injoignable ».
+13. DEF-STA-13 — technicien : les CARTES du planning de son équipe (sur le bon ou sur une de ses
+    tâches, rendez-vous ou journée supplémentaire), comme « Ma journée ». Hors défaut, les règles de
+    l'ancien restent : à pointer par les métiers déclarés faits, pièce par la première tâche qui
+    l'attend, carte sans heure en dernier ; sans équipe connue, tout (D-VIS-09).
+14. DEF-STA-14 — le sous-traitant reçoit le tableau de sa journée (D-STA-09 remise), par son
+    entreprise : les trois tuiles de l'ancien comptaient des pièces que rien ne permet d'établir.
+15. DEF-STA-15 — déjà corrigé en production (66ea9e1) et repris : vérifié par la parité.
+16. DEF-STA-16 — reste masqué (TRV-05) : l'infobulle suit le mode discret ; vérifié.
+17. DEF-STA-17 — la répartition ne compte que les chiffres d'affaires non négatifs : un conducteur dont
+    les avoirs l'emportent en sort, un conducteur à zéro garde sa ligne à 0 %.
+18. DEF-STA-18 — un bon se range dans la période par sa DATE DE COMMANDE (`date`, celle du bon du
+    client, comme devis et factures par la date de la pièce), à défaut par sa réception, et seulement
+    faute des deux par sa saisie. Pas la fin de travaux : un bon sans travaux terminés sortirait de
+    toute période.
+19. DEF-STA-19 — le sous-traitant est reconnu par son compte (`mon_sous_traitant`, déjà lu par le
+    planning : `monSousTraitantId`) : salué au nom de son entreprise, sans le bandeau « Réglages ».
+
+**Preuves** : `tests/parite/statistiques.essai.ts` — sur un même cas, l'ancien évalué donne la valeur
+fausse et le nouveau la juste (un cas nommé par défaut) ; sur des sociétés tirées au hasard sans défaut
+en jeu, mêmes chiffres que l'ancien (au flottant près, au centime près par pièce pour le restant dû).
+`src/modules/statistiques/domain/domaine.essai.ts` (valeur juste de chaque DEF),
+`components/tableaux.essai.tsx` (écrans), `tests/rls/statistiques.essai.ts` (lectures sous RLS, écrit,
+lancé par un autre agent). Écarts d'écran attendus : `tests/visuel/ecrans.ts` (pilotage, statistiques,
+sous-traitant).
 
 ## D-VEH-01 — Les prêts du parc ont leur table et leur durée (proposition 20260926070000)
 L'ancien écran rangeait prêts et entretiens dans le JSON de la fiche, sans

@@ -31,29 +31,29 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 
 | Identifiant | Défaut (titre court) | État | Gravité |
 |---|---|---|---|
-| DEF-STA-01 | CA : brouillons et acomptes comptés | identique à l'ancienne | calcul |
-| DEF-STA-02 | « CA encaissé ce mois » ≠ encaissements | identique à l'ancienne | calcul |
-| DEF-STA-03 | Restant dû et taux d'encaissement : brouillons comptés | identique à l'ancienne | calcul |
-| DEF-STA-04 | Impayées / échues lues sur le statut stocké | identique à l'ancienne | calcul |
-| DEF-STA-05 | « Locataires à rappeler » : affaires closes | identique à l'ancienne | calcul |
-| DEF-STA-06 | Activité récente : « · null », lettrages en paiements | en partie corrigé en production (0f6f60d) ; le reste identique à l'ancienne | affichage |
-| DEF-STA-07 | Top clients par nom écrit | identique à l'ancienne | calcul |
-| DEF-STA-08 | Statistiques par étiquette du conducteur | identique à l'ancienne | calcul |
-| DEF-STA-09 | « En retard » : bons facturés, clos | identique à l'ancienne | calcul |
-| DEF-STA-10 | Barre rouge pleine « 0 / 0 » | identique à l'ancienne | affichage |
-| DEF-STA-11 | Travaux supplémentaires toujours à 0 | identique à l'ancienne | calcul |
-| DEF-STA-12 | Jamais « injoignable » | identique à l'ancienne | calcul |
-| DEF-STA-13 | Technicien : seul le jour du rendez-vous | identique à l'ancienne | calcul |
-| DEF-STA-14 | Sous-traitant : deux tuiles à zéro | identique à l'ancienne | calcul |
-| DEF-STA-15 | Infobulle 12 mois : année fausse | corrigé en production (66ea9e1), repris dans web/ | affichage |
-| DEF-STA-16 | Infobulle : montant en mode discret | corrigé dans web/ | affichage |
-| DEF-STA-17 | Part du CA négative ou > 100 % | identique à l'ancienne | calcul |
-| DEF-STA-18 | Bons rangés par date de saisie | identique à l'ancienne | calcul |
-| DEF-STA-19 | Sous-traitant : salutation et bandeau génériques | identique à l'ancienne | affichage |
+| DEF-STA-01 | CA : brouillons et acomptes comptés | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-01 ») | calcul |
+| DEF-STA-02 | « CA encaissé ce mois » ≠ encaissements | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-02 ») | calcul |
+| DEF-STA-03 | Restant dû et taux d'encaissement : brouillons comptés | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-03 ») | calcul |
+| DEF-STA-04 | Impayées / échues lues sur le statut stocké | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-04 ») | calcul |
+| DEF-STA-05 | « Locataires à rappeler » : affaires closes | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-05 ») | calcul |
+| DEF-STA-06 | Activité récente : « · null », lettrages en paiements | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-06 ») | affichage |
+| DEF-STA-07 | Top clients par nom écrit | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-07 ») | calcul |
+| DEF-STA-08 | Statistiques par étiquette du conducteur | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-08 ») | calcul |
+| DEF-STA-09 | « En retard » : bons facturés, clos | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-09 ») | calcul |
+| DEF-STA-10 | Barre rouge pleine « 0 / 0 » | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-10 ») | affichage |
+| DEF-STA-11 | Travaux supplémentaires toujours à 0 | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-11 ») | calcul |
+| DEF-STA-12 | Jamais « injoignable » | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-12 ») | calcul |
+| DEF-STA-13 | Technicien : seul le jour du rendez-vous | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-13 ») | calcul |
+| DEF-STA-14 | Sous-traitant : deux tuiles à zéro | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-14 et 19 ») | calcul |
+| DEF-STA-15 | Infobulle 12 mois : année fausse | corrigé en production (66ea9e1), repris dans web/ — vérifié (`tests/parite/statistiques.essai.ts` « DEF-STA-15 ») | affichage |
+| DEF-STA-16 | Infobulle : montant en mode discret | corrigé dans web/ (masqué, TRV-05) — vérifié (`tests/parite/statistiques.essai.ts` « DEF-STA-16 ») | affichage |
+| DEF-STA-17 | Part du CA négative ou > 100 % | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-17 ») | calcul |
+| DEF-STA-18 | Bons rangés par date de saisie | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-18 ») | calcul |
+| DEF-STA-19 | Sous-traitant : salutation et bandeau génériques | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-14 et 19 », `components/tableaux.essai.tsx`) | affichage |
 | DEF-ECR-01 | Rapport sans statut : pastille vide | identique à l'ancienne | affichage |
 | DEF-ECR-02 | « 📦 Commandé » n'enregistre pas la date | corrigé dans web/ | données perdues |
-| DEF-ECR-03 | Brouillon compté dans le CA (= STA-01) | identique à l'ancienne | calcul |
-| DEF-ECR-04 | « Mme Durand · null » (= STA-06) | corrigé en production (0f6f60d) pour la facture, repris dans web/ | affichage |
+| DEF-ECR-03 | Brouillon compté dans le CA (= STA-01) | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-01 / DEF-ECR-03 ») | calcul |
+| DEF-ECR-04 | « Mme Durand · null » (= STA-06) | corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-06 / DEF-ECR-04 ») | affichage |
 | DEF-BDD-01 | `prochain_numero` ouvert à une autre société | correction proposée en base | sécurité |
 | DEF-BDD-02 | Compte désactivé qui se réactive ; adresse d'un autre | correction proposée en base | sécurité |
 | DEF-BDD-03 | Suivi médical, notes et dossiers RH lisibles par tous | correction proposée en base | sécurité |
@@ -163,13 +163,15 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 
 ## Statistiques et tableaux de bord
 
-Décision : D-STA-A-01. Chaque défaut ci-dessous a son cas nommé dans
-`tests/parite/statistiques.essai.ts` (source de `app.js` évaluée, comparaison au flottant près) et
-dans `src/modules/statistiques/domain/domaine.essai.ts`. **Corrections disponibles** : l'état
-corrigé complet du module est celui du commit `3f534d0` (`git show 3f534d0:web/src/modules/statistiques/…`),
-avec la proposition `supabase/propositions/retirees/20260926080000_statistiques_de_pilotage.sql`
-(fonctions `stats_*`) à remettre dans `supabase/propositions/` ; les décisions D-STA-01 à D-STA-11
-décrivent chaque correction.
+**Tranché le 28/09 : tout est CORRIGÉ** (D-STA-B-01, qui remplace D-STA-A-01 ; commit e0002ce). La nouvelle
+application garde la forme de l'ancienne (HTML, libellés, tuiles, et les nouveautés de production du
+28/09, D-MAIN-10) mais ne reproduit plus ces défauts : montants lus dans les vues de la base
+(`v_facture_totaux`, `v_devis_totaux`, `v_facture_solde`) et additionnés en décimal exact dans le
+navigateur (voie b ; la proposition `retirees/20260926080000` n'est pas remise). Preuve, défaut par
+défaut : `tests/parite/statistiques.essai.ts` — sur un même cas, l'ancien évalué donne la valeur fausse et le nouveau la juste ; sur des
+sociétés sans défaut en jeu, mêmes chiffres. Valeur juste aussi dans
+`src/modules/statistiques/domain/domaine.essai.ts`. Chaque entrée garde sa description (reproduction,
+ancienne, juste) ; l'état dit ce qui est fait.
 
 ### DEF-STA-01 — Le chiffre d'affaires compte les brouillons et les factures d'acompte
 - **Écrans** : Accueil (admin, secrétaire, lecture) — graphique « Chiffre d'affaires (HT) », « Total
@@ -184,6 +186,7 @@ décrivent chaque correction.
 - **Juste** : seules les pièces émises ; l'acompte est déjà compris dans la facture de solde (le
   compter double le chiffre d'affaires).
 - **Correction existante** : D-STA-02 (`stats_ht_compte`, commit `3f534d0`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-01 ») — pièces émises hors acompte, avoir en négatif (`domain/pieces.ts#htCompte`, HT de `v_facture_totaux`), partout où l'écran liste ; un devis n'est transformé que par une facture émise.
 
 ### DEF-STA-02 — « CA encaissé ce mois (HT) » ne dit pas ce qui est entré en caisse
 - **Écrans** : Accueil — tuile « CA encaissé ce mois (HT) » et première ligne du « Résumé du mois »
@@ -195,6 +198,7 @@ décrivent chaque correction.
   acomptes compris ; la jauge compare à la plus grande valeur mensuelle des six derniers mois.
 - **Juste** : Σ des règlements datés du mois (TTC), hors lettrages d'avoir.
 - **Correction existante** : D-STA-04 (« Encaissé ce mois (TTC) », `stats_indicateurs.encaisse_mois`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-02 ») — tuile « Encaissé ce mois (TTC) » = règlements datés du mois hors lettrage (modes `avoir` / `imputation`, règlements portés par un avoir) ; même mesure pour son rappel N-1 et la ligne du résumé.
 
 ### DEF-STA-03 — Restant dû et taux d'encaissement comptent les brouillons
 - **Écrans** : Accueil — « Factures impayées … restant dû », « Taux d'encaissement » du résumé.
@@ -205,6 +209,7 @@ décrivent chaque correction.
   brouillons compris ; taux = 1 − restant dû / Σ TTC de TOUTES les pièces (brouillons, acomptes).
 - **Juste** : seules les pièces émises doivent ; dénominateur sur les pièces émises.
 - **Correction existante** : D-STA-11 (`v_facture_solde`, `stats_indicateurs.impayes / ttc_emis`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-03 ») — restant dû = Σ `v_facture_solde.du` ; taux d'encaissement sur le TTC des pièces émises.
 
 ### DEF-STA-04 — « Factures impayées » et « Factures échues » se lisent sur le statut stocké
 - **Écrans** : Accueil — nombre de la tuile « Factures impayées », ligne « Factures échues à relancer ».
@@ -216,6 +221,7 @@ décrivent chaque correction.
 - **Juste** : ce qui doit encore (reste > 0) et, pour « échue », dont l'échéance est passée — le même
   critère que le montant.
 - **Correction existante** : D-STA-11 (`stats_indicateurs.nb_impayees / nb_echues`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-04 ») — impayées = `du` > 0 ; échues = `en_retard` de la base (ce qu'ouvre le lien « en retard »).
 
 ### DEF-STA-05 — « Locataires à rappeler » relance des affaires closes
 - **Écran** : Accueil (pilotage) — « À traiter ».
@@ -225,6 +231,7 @@ décrivent chaque correction.
 - **Ancienne** : tout bon dont la date de rappel est passée ou du jour.
 - **Juste** : seulement un bon encore ouvert (même règle que le tableau du conducteur).
 - **Correction existante** : D-STA-06 (`aTraiterPilotage`, commit `3f534d0`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-05 ») — rappels des seuls bons ouverts, comme le conducteur.
 
 ### DEF-STA-06 — Activité récente : « · null » et lettrages présentés comme des paiements
 - **Écran** : Accueil — « Activité récente ».
@@ -240,6 +247,7 @@ décrivent chaque correction.
   écrit « brouillon » pour une facture sans numéro. Restent « null » : un devis sans numéro et le
   paiement qui cite une facture en brouillon ; et les lettrages restent des « Paiement reçu ».
   Repris à l'identique dans `web/` (D-MAIN-10, `activiteRecente`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-06 ») — plus de « · null » (devis sans numéro, paiement d'un brouillon : « brouillon ») ; un lettrage d'avoir ne figure plus au fil. Le reste de 0f6f60d est gardé.
 
 ### DEF-STA-07 — Top clients : par le nom écrit sur la facture
 - **Écran** : Accueil — « Top clients (HT) ».
@@ -251,6 +259,7 @@ décrivent chaque correction.
   nom — le groupement par nom écrit, lui, demeure. Repris dans `web/` (D-MAIN-10).
 - **Juste** : groupé par la fiche client (`client_id`), le nom à défaut.
 - **Correction existante** : D-STA-05 (`stats_par_client`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-07 ») — groupé par `client_id` (nom de la fiche), à défaut par le nom sans casse ni blancs ; borné à l'exercice avec N-1 (0f6f60d, gardé).
 
 ### DEF-STA-08 — Statistiques groupées par l'étiquette du conducteur
 - **Écran** : Statistiques — tableau et graphiques par conducteur.
@@ -261,6 +270,7 @@ décrivent chaque correction.
 - **Ancienne** : une ligne par NOM (fiches, puis étiquettes des bons, devis et factures de la période).
 - **Juste** : par la référence `conducteur_id`, le nom de la fiche, et une ligne « Sans conducteur ».
 - **Correction existante** : D-STA-05 (`stats_par_conducteur`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-08 ») — une ligne par `conducteur_id`, nom de la fiche, et « Sans conducteur ».
 
 ### DEF-STA-09 — « En retard » compte les bons facturés, clos ou terminés
 - **Écran** : Statistiques — colonnes « Dans les temps » / « En retard », graphique « dans les temps /
@@ -271,6 +281,7 @@ décrivent chaque correction.
   temps = tous les autres (bons sans date compris).
 - **Juste** : fin de travaux dépassée sur un bon encore ouvert.
 - **Correction existante** : D-STA-05 (`stats_bon_ouvert`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-09 ») — retard sur un bon ouvert (ni chiffré, ni facturé, ni clos, aucune facture, terrain pas tout pointé).
 
 ### DEF-STA-10 — Barre rouge pleine pour un conducteur sans bon
 - **Écran** : Statistiques — graphique « Bons de commande — dans les temps / en retard ».
@@ -279,6 +290,7 @@ décrivent chaque correction.
 - **Ancienne** : 0 dans les temps sur « 1 » → 0 %, donc 100 % en retard.
 - **Juste** : pas de barre (ou une barre neutre) quand il n'y a aucun bon.
 - **Correction existante** : aucune (la version précédente de `web/` avait le même défaut).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-10 ») — barre vide (ni verte ni rouge) pour un conducteur sans bon ; « 0 / 0 » reste écrit.
 
 ### DEF-STA-11 — Travaux supplémentaires toujours à zéro
 - **Écran** : Statistiques — colonne « Travaux supplémentaires », barre « Travaux suppl. ».
@@ -287,6 +299,7 @@ décrivent chaque correction.
 - **Ancienne** : lit `travauxSupplementaires` sur le bon, un champ qu'aucune colonne ne porte.
 - **Juste** : lire `tache_travaux_supplementaires` (nombre hors refusés, montant des chiffrés).
 - **Correction existante** : D-STA-05 (`stats_par_conducteur.travaux / travaux_ht`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-11 ») — lus dans `tache_travaux_supplementaires` (nombre hors refusés, montant des chiffrés et intégrés).
 
 ### DEF-STA-12 — Un locataire n'est jamais « injoignable »
 - **Écran** : Accueil du conducteur — « Locataires à contacter ».
@@ -295,6 +308,7 @@ décrivent chaque correction.
 - **Ancienne** : `parseInt` du tableau des tentatives → NaN → 0.
 - **Juste** : compter les tentatives du tableau.
 - **Correction existante** : STA-20 (`nombreDeTentatives` qui compte le tableau, commit `3f534d0`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-12 ») — la donnée existe : `tentatives_contact` se compte ; trois tentatives sans rendez-vous font un injoignable.
 
 ### DEF-STA-13 — Tableau du technicien : seul le jour du rendez-vous compte
 - **Écran** : Accueil du technicien — « Mes interventions aujourd'hui », « Les six prochains jours »,
@@ -306,6 +320,7 @@ décrivent chaque correction.
 - **Ancienne** : bons dont la colonne `technicien` désigne l'équipe ; seule `date_planifiee` compte.
 - **Juste** : les journées (tâches) de l'équipe, comme « Ma journée ».
 - **Correction existante** : `domain/terrain.ts` du commit `3f534d0` (cartes du planning).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-13 ») — les cartes du planning de son équipe, journées supplémentaires et tâches confiées sur le bon d'une autre équipe comprises (`domain/terrain.ts`).
 
 ### DEF-STA-14 — Tableau du sous-traitant : deux tuiles toujours à zéro
 - **Écran** : Accueil du sous-traitant.
@@ -316,6 +331,7 @@ décrivent chaque correction.
 - **Juste** : lui montrer sa journée (le tableau du terrain), puisque devis et factures de
   sous-traitant n'existent pas.
 - **Correction existante** : D-STA-09 (tableau du terrain pour le sous-traitant, commit `3f534d0`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-14 ») — le sous-traitant reçoit le tableau de sa journée, par son entreprise ; les trois tuiles de factures et devis sont retirées.
 
 ### DEF-STA-15 — Graphique sur 12 mois : l'année de l'infobulle est fausse
 - **Écran** : Accueil — graphique « Chiffre d'affaires (HT) », période « 12 mois ».
@@ -328,6 +344,7 @@ décrivent chaque correction.
 - **Corrigé en production (66ea9e1)** : chaque barre porte l'année de son mois, et la légende dit
   « Période » / « Un an plus tôt » quand la fenêtre est à cheval sur deux années. `web/` suit
   (`barresGraphique`, `legendeGraphique`, D-MAIN-10) : plus rien à trancher.
+- **État** : vérifié le 28/09 (`tests/parite/statistiques.essai.ts` « DEF-STA-15 ») : rien à changer.
 
 ### DEF-STA-16 — L'infobulle du graphique montre les montants en mode discret
 - **Écran** : Accueil — graphique, mode discret activé.
@@ -336,6 +353,7 @@ décrivent chaque correction.
 - **Juste** : « ••• € ».
 - **Dans `web/`** : NON reproduit — le mode discret masque tout montant d'écran (TRV-05, garde-fou
   `tests/garde-fous.essai.ts`). À trancher : reproduire le défaut ou garder le masque.
+- **État** : le masque reste (D-STA-B-01, point 16) ; vérifié (`tests/parite/statistiques.essai.ts` « DEF-STA-16 », `components/format.ts#formatMontant` suit le mode discret).
 
 ### DEF-STA-17 — La part du chiffre d'affaires ignore les avoirs… à l'envers
 - **Écran** : Statistiques — « Répartition du chiffre d'affaires ».
@@ -345,6 +363,7 @@ décrivent chaque correction.
 - **Ancienne** : `Math.round(ca / total × 100)` sur un total qui compte les négatifs.
 - **Juste** : ne répartir que les chiffres d'affaires positifs.
 - **Correction existante** : `repartition()` de `domain/statistiques.ts` du commit `3f534d0`.
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-17 ») — seuls les chiffres d'affaires non négatifs se répartissent.
 
 ### DEF-STA-18 — Les bons se rangent dans la période par leur date de SAISIE
 - **Écran** : Statistiques — tuile « Bons de commande », colonnes par conducteur, période « Cette année »
@@ -354,6 +373,7 @@ décrivent chaque correction.
 - **Ancienne** : bons filtrés sur `cree_le` ; devis et factures sur `date`.
 - **Juste** : à décider (date du bon ou de réception).
 - **Correction existante** : aucune (la proposition retirée filtrait elle aussi sur `cree_le`).
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-18 ») — rangés par la date de commande du bon, à défaut sa réception, à défaut sa saisie (D-STA-B-01, point 18).
 
 ### DEF-STA-19 — Sous-traitant : « Bonjour 👋 Sous-traitant » et « Sélectionnez votre nom dans Réglages »
 - **Écran** : Accueil du sous-traitant.
@@ -368,6 +388,7 @@ décrivent chaque correction.
   compte : `planning.data.monSousTraitantId`, à passer à `tableauSousTraitant`).
 
 ## Écrans
+- **État** : corrigé (commit e0002ce, `tests/parite/statistiques.essai.ts` « DEF-STA-19 ») — reconnu par son compte (`monSousTraitantId`) : son nom en salutation, plus de bandeau.
 
 ### DEF-ECR-01 — Rapports : un rapport sans statut porte une pastille vide
 - **Écran** : Rapports / recherche de fuite › liste.
@@ -400,15 +421,16 @@ décrivent chaque correction.
   sur ce point ; à confirmer par le client.
 
 ### DEF-ECR-03 — Tableau de bord et Statistiques : un brouillon compte dans le chiffre d'affaires
-Même défaut que **DEF-STA-01** (reproduction et correction y sont décrites). Depuis D-STA-A-01, la
-nouvelle le reproduit à l'identique : un brouillon chiffré augmente « Total période » et la colonne du
-mois de Statistiques dans les deux applications.
+Même défaut que **DEF-STA-01** (reproduction et correction y sont décrites). **Corrigé** (commit e0002ce,
+D-STA-B-01, `tests/parite/statistiques.essai.ts` « DEF-STA-01 / DEF-ECR-03 ») : un brouillon n'augmente plus « Total période » ni la
+colonne du mois de Statistiques ; l'ancienne, elle, le compte toujours.
 
 ### DEF-ECR-04 — Tableau de bord : la création d'un brouillon s'écrit « Mme Durand · null »
 Même défaut que **DEF-STA-06** (reproduction et correction y sont décrites). Depuis D-STA-A-01, la
 nouvelle écrivait elle aussi « Mme Durand · null ». **Corrigé en production (0f6f60d)** pour la
-facture — elle s'écrit « Mme Durand · brouillon » — et repris dans `web/` ; le paiement qui cite un
-brouillon garde « · null » dans les deux applications.
+facture — elle s'écrit « Mme Durand · brouillon » — et repris dans `web/`. **Corrigé pour le reste**
+(commit e0002ce, D-STA-B-01, `tests/parite/statistiques.essai.ts` « DEF-STA-06 / DEF-ECR-04 ») : le paiement qui cite un brouillon et le devis
+sans numéro s'écrivent « brouillon » ; l'ancienne garde « · null ».
 
 ## Base de données et sécurité (production)
 
