@@ -73,6 +73,34 @@ describe("[proposition] espace client : le solde de ses factures", () => {
   });
 });
 
+// Proposition 20260928213000 (D-MAIN-02, D-COR2-05) : écrit, pas encore lancé — un autre agent le passe.
+describe("[proposition] espace client : sa commune pour le bloc « Client », pas sa fiche", () => {
+  it("le client lit le code postal et la ville de SA fiche, par la vue qu'il lit déjà", async () => {
+    const { data, error } = await avecPropositions(client).from("v_mes_acces_clients").select("client_id, client_nom, client_code_postal, client_ville");
+    expect(error).toBeNull();
+    expect(data?.length).toBeGreaterThan(0);
+    for (const a of data ?? []) expect(a.client_id).toBe(OPAC);
+    expect(data?.[0]).toMatchObject({ client_nom: "OPAC du Rhône", client_code_postal: "69002", client_ville: "Lyon" });
+  });
+
+  it("rien d'autre de la fiche ne passe par la vue", async () => {
+    for (const colonne of ["client_siret", "client_email", "client_telephone", "client_adresse", "siret", "notes"]) {
+      const { error } = await client.from("v_mes_acces_clients" as "clients").select(colonne);
+      expect(error, colonne).not.toBeNull();
+    }
+  });
+
+  it("la table des clients lui reste fermée", async () => {
+    const { data } = await client.from("clients").select("id, code_postal, ville");
+    expect(data ?? []).toEqual([]);
+  });
+
+  it("un membre de la société n'y lit la commune d'aucun client", async () => {
+    const { data } = await avecPropositions(admin).from("v_mes_acces_clients").select("client_code_postal");
+    expect(data ?? []).toEqual([]);
+  });
+});
+
 describe("[proposition] espace client : accès nominatif (interlocuteur)", () => {
   it("un accès restreint à un interlocuteur ne montre que ses pièces", async () => {
     const maj = await avecPropositions(admin).from("acces_clients").update({ interlocuteur: "M. Chargé" }).eq("profile_id", PROFIL_CLIENT).select("id");

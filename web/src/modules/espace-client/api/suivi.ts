@@ -92,3 +92,27 @@ export async function emetteurPourClient(societeId: string): Promise<{ identite:
     },
   };
 }
+
+const schemaCommune = z.object({ client_code_postal: z.string().nullable(), client_ville: z.string().nullable() });
+
+/**
+ * La commune de la fiche du client, pour le bloc « Client » de ses pièces (D-MAIN-02, D-COR2-05) : la
+ * fiche elle-même lui est fermée ; la vue de ses accès rend son code postal et sa ville, rien d'autre
+ * (proposition 20260928213000). Retrouvée PAR LE NOM du document dans la société, comme l'ancien.
+ * Illisible (proposition pas encore en place, refus) : la rue seule, comme avant — l'impression n'est pas
+ * bloquée pour autant, et l'échec est tracé.
+ */
+export async function communeDuClient(societeId: string, clientNom: string): Promise<{ codePostal: string | null; ville: string | null } | null> {
+  const { data, error } = await supabasePropositions()
+    .from("v_mes_acces_clients")
+    .select("client_code_postal, client_ville")
+    .eq("societe_id", societeId)
+    .eq("client_nom", clientNom)
+    .limit(1);
+  if (error) {
+    console.warn("Commune du client illisible : la pièce sort avec la rue seule.", error);
+    return null;
+  }
+  const [ligne] = analyser(z.array(schemaCommune), data, "commune du client");
+  return ligne ? { codePostal: ligne.client_code_postal, ville: ligne.client_ville } : null;
+}

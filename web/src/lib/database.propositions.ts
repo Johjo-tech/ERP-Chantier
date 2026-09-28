@@ -72,6 +72,9 @@ type VueMesAcces = {
   societe_assurance_decennale_nom: string | null;
   societe_assurance_decennale_police: string | null;
   societe_regime_tva: string | null;
+  // Ajoutées en fin par 20260928213000 : la commune de la fiche du client, pour le bloc « Client » (D-COR2-05).
+  client_code_postal: string | null;
+  client_ville: string | null;
 };
 
 type VueChantierClient = {

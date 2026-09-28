@@ -2,7 +2,7 @@ import { FRAICHEUR_REFERENCE_MS } from "@/lib/durees";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/modules/auth-roles/hooks/useSession";
 import { chantiersDuClient, devisDuClient, facturesDuClient } from "../api/espace";
-import { bonsDuClient, emetteurPourClient, soldesDuClient } from "../api/suivi";
+import { bonsDuClient, communeDuClient, emetteurPourClient, soldesDuClient } from "../api/suivi";
 
 export function useAccesClients() {
   const { etat } = useSession();
@@ -30,4 +30,14 @@ export function useBonsClient() {
 
 export function useEmetteurClient(societeId: string | undefined) {
   return useQuery({ queryKey: ["espace-client", "emetteur", societeId], queryFn: () => emetteurPourClient(societeId as string), enabled: !!societeId, staleTime: FRAICHEUR_REFERENCE_MS });
+}
+
+/** La commune du client d'une pièce (bloc « Client ») : attendue avant d'imprimer, comme la fiche côté société (D-MAIN-02). */
+export function useCommuneClient(societeId: string | undefined, clientNom: string | undefined) {
+  return useQuery({
+    queryKey: ["espace-client", "commune", societeId, clientNom],
+    queryFn: () => communeDuClient(societeId as string, clientNom as string),
+    enabled: !!societeId && !!clientNom,
+    staleTime: FRAICHEUR_REFERENCE_MS,
+  });
 }
