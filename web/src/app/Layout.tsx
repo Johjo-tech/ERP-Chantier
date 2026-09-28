@@ -20,6 +20,9 @@ import { ecrireMenuEpingle, estEcranLarge, lireMenuEpingle, ouvreUnFormulaire } 
 import { entreeActive, NAVIGATION, NAVIGATION_MOBILE, type EntreeNavigation } from "./navigation";
 import { PageSansSociete } from "./PageSansSociete";
 
+/** Le pied du menu : ce qui est vrai des données depuis que la RLS les range par société. */
+export const PIED_DU_MENU = "Données réservées aux comptes de votre société.";
+
 /** L'ancien écran annonçait la bascule deux secondes. */
 const DUREE_ANNONCE_MS = 2000;
 
@@ -96,8 +99,10 @@ export function Layout() {
             </span>
             <span>Garder le menu ouvert</span>
           </label>
+          {/* L'ancien disait « Données partagées avec toute personne ayant ce lien. », phrase du temps
+              du kv_store ouvert : chaque compte ne lit plus que sa société (DEF-REP-09, D-REP-09). */}
           <div className="sidebar-foot" id="sidebarFoot">
-            Données partagées avec toute personne ayant ce lien.
+            {PIED_DU_MENU}
           </div>
         </aside>
         <div id="main">

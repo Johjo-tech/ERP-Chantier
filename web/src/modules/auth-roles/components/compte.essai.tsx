@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { rendreAvecSession } from "@/test/session-factice";
 import { PageConnexion } from "./PageConnexion";
 import { PageMonCompte } from "./PageMonCompte";
-import { FormulaireMotDePasse } from "./PageNouveauMotDePasse";
+import { FormulaireMotDePasse, PageNouveauMotDePasse } from "./PageNouveauMotDePasse";
 
 const compte = vi.hoisted(() => ({ demanderReinitialisation: vi.fn(), definirMotDePasse: vi.fn(), renommerMonCompte: vi.fn() }));
 vi.mock("../api/compte", () => compte);
@@ -33,6 +33,15 @@ async function connexionAnonyme() {
     </QueryClientProvider>
   );
 }
+
+// DEF-REP-09, D-REP-09 : l'ancienne carte ne portait que `login-card`, que sa feuille ne stylait pas.
+describe("page « nouveau mot de passe »", () => {
+  it("la carte porte la classe que sa feuille met en forme", () => {
+    const { container } = rendreAvecSession(<PageNouveauMotDePasse />, { role: "admin" });
+    const carte = container.querySelector(".login-card");
+    expect(carte).toHaveClass("login-container");
+  });
+});
 
 describe("mot de passe oublié (AUTH-03)", () => {
   it("demande l'adresse d'abord", async () => {

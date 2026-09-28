@@ -35,11 +35,19 @@ for (const ecran of ECRANS) {
   }
 }
 
+/**
+ * Masqués sur TOUS les écrans, des deux côtés. `#sidebarFoot` : le pied du menu dit désormais
+ * « Données réservées aux comptes de votre société. » là où l'ancien promettait un partage par
+ * lien (DEF-REP-09, D-REP-09) — écart voulu, présent sur chaque écran, qui ne doit masquer aucun
+ * autre écart (même bloc, même taille de police, une ligne des deux côtés).
+ */
+const MASQUES_COMMUNS: readonly string[] = ["#sidebarFoot"];
+
 async function comparer(browser: Browser, ecran: Ecran, taille: Taille, seuils: { pixels: number; texte: number }): Promise<Mesure> {
   const dossier = join(DOSSIER_RAPPORT, "images");
   mkdirSync(dossier, { recursive: true });
   const base = `${ecran.id}--${taille}`;
-  const masques = ecran.masques ?? [];
+  const masques = [...MASQUES_COMMUNS, ...(ecran.masques ?? [])];
   const captures = {} as Record<App, { png: Buffer; texte: string[] }>;
   for (const app of ["ancien", "nouveau"] as const) {
     const etat = ecran.compte ? await session(browser, app, ecran.compte) : undefined;

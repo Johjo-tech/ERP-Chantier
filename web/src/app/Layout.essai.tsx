@@ -6,7 +6,7 @@ import { definirModeDiscret, formatEurosEcran, useModeDiscret } from "@/lib/mode
 import { montant } from "@/lib/money";
 import { rendreAvecSession } from "@/test/session-factice";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
-import { Layout } from "./Layout";
+import { Layout, PIED_DU_MENU } from "./Layout";
 import { CLE_MENU_EPINGLE, replieAutomatiquement } from "./menu";
 
 function menu(role: RoleMembre, options: { simule?: RoleMembre; niveau?: number } = {}) {
@@ -20,6 +20,16 @@ function menu(role: RoleMembre, options: { simule?: RoleMembre; niveau?: number 
 // Attendus tirés de la matrice role_permissions réelle (fixture relevée en base), dans l'ordre
 // et sous les libellés de l'ancien menu (`NAV`, app.js l. 64) : Validation, À facturer et
 // l'import/export n'y sont pas — ils vivent sous Factures et Réglages (D-VIS-05).
+// DEF-REP-09, D-REP-09 : le pied de l'ancien menu parlait d'un lien partagé, du temps du kv_store.
+describe("pied du menu", () => {
+  it("ne promet plus un partage par lien", () => {
+    rendreAvecSession(<Layout />, { role: "admin" });
+    const pied = document.getElementById("sidebarFoot");
+    expect(pied).toHaveTextContent(PIED_DU_MENU);
+    expect(pied).not.toHaveTextContent("ayant ce lien");
+  });
+});
+
 describe("menu principal par rôle", () => {
   it("admin voit tout", () => {
     expect(menu("admin")).toEqual([
