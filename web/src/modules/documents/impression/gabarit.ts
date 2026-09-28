@@ -55,6 +55,10 @@ export interface DocImprimable {
   etage?: string | null;
   precisionCommune?: string | null;
   refBonCommandeClient?: string | null;
+  /** Où envoyer la pièce quand ce n'est pas le siège (bon de commande, facture) : l'emporte sur la fiche. */
+  facturationAdresse?: string | null;
+  facturationCodePostal?: string | null;
+  facturationVille?: string | null;
   dateFinExecution?: string | null;
   lignes?: LigneImprimable[] | null;
   remisePourcentage?: number | string | null;
@@ -135,6 +139,19 @@ export interface ContexteImpression {
   metiers?: string[];
   /** `window.mentionsLegales(s)` : lues seulement pour une facture. */
   mentions?: string[];
+  /**
+   * La fiche du client que l'ancien retrouvait PAR SON NOM dans la société
+   * (`adresseClientDuDocument`) : le code postal et la ville n'étant pas figés
+   * sur la pièce, c'est elle qui les donne. Absente : la rue seule.
+   */
+  ficheClient?: FicheClientImprimable | null;
+}
+
+/** Ce que le bloc « Client » lit de la fiche. */
+export interface FicheClientImprimable {
+  adresse?: string | null;
+  codePostal?: string | null;
+  ville?: string | null;
 }
 
 /* ── Formats de l'ancien (app.js l. 625, 800, 834) ─────────────────────── */
@@ -372,6 +389,28 @@ export function piedDePageHTML(em: { nom: string; siret: string | null | undefin
   return [em.nom, ...identifiants, em.adresse].filter(Boolean).join(" — ");
 }
 
+/**
+ * `adresseClientDuDocument` (app.js, 2c21745) : l'adresse ENTIÈRE du client.
+ * L'adresse de facturation du document l'emporte dès qu'un de ses champs est
+ * renseigné — elle dit où envoyer la pièce ; sinon la rue figée sur la pièce
+ * (ou celle de la fiche), et le code postal et la ville de la fiche, faute
+ * d'être figés : sans eux, toutes les pièces déjà établies sortaient sans commune.
+ */
+export function adresseClientDuDocument(doc: DocImprimable, fiche: FicheClientImprimable | null | undefined): { rue: string; cpVille: string } {
+  const f = [doc.facturationAdresse, doc.facturationCodePostal, doc.facturationVille].filter(Boolean);
+  if (f.length) {
+    return {
+      rue: doc.facturationAdresse || "",
+      cpVille: [doc.facturationCodePostal, doc.facturationVille].filter(Boolean).join(" "),
+    };
+  }
+  const c = fiche ?? {};
+  return {
+    rue: doc.adresse || c.adresse || "",
+    cpVille: [c.codePostal, c.ville].filter(Boolean).join(" "),
+  };
+}
+
 /* ── La pièce (app.js l. 4032-4118) ────────────────────────────────────── */
 
 export function renderPrintDoc(c: ContexteImpression): string {
@@ -393,6 +432,7 @@ export function renderPrintDoc(c: ContexteImpression): string {
     iban: doc.emetteurIban || s.iban,
   };
   const r = s.reglages?.documents ?? {};
+  const adrClient = adresseClientDuDocument(doc, c.ficheClient);
   const fisc = [em.siret ? `<b>Siret</b> ${esc(em.siret)}` : "", s.codeNaf ? `<b>APE</b> ${esc(s.codeNaf)}` : ""].filter(Boolean).join(" · ");
   const logo = logoHTML(s);
   return `
@@ -411,7 +451,7 @@ export function renderPrintDoc(c: ContexteImpression): string {
       ${carteChantierHTML(doc)}
       <div class="p-carte">
         <div class="p-carte-titre">Client</div>
-        <div class="p-line"><b>${esc(doc.client)}</b><br>${esc(doc.adresse)}${doc.clientSiret ? "<br>SIRET " + esc(doc.clientSiret) : ""}${doc.clientTvaIntracom ? "<br>TVA " + esc(doc.clientTvaIntracom) : ""}${doc.interlocuteur ? "<br>À l'attention de " + esc(doc.interlocuteur) : ""}</div>
+        <div class="p-line"><b>${esc(doc.client)}</b>${[adrClient.rue, adrClient.cpVille].filter(Boolean).map((v) => "<br>" + esc(v)).join("")}${doc.clientSiret ? "<br>SIRET " + esc(doc.clientSiret) : ""}${doc.clientTvaIntracom ? "<br>TVA " + esc(doc.clientTvaIntracom) : ""}${doc.interlocuteur ? "<br>À l'attention de " + esc(doc.interlocuteur) : ""}</div>
       </div>
     </div>
     <table class="p-lignes">

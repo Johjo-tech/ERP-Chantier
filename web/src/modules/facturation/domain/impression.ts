@@ -1,4 +1,4 @@
-import type { ContexteImpression } from "@/modules/documents/impression/gabarit";
+import type { ContexteImpression, FicheClientImprimable } from "@/modules/documents/impression/gabarit";
 import { lieuImprimable, lignesImprimables, type EmetteurImprimable } from "@/modules/documents/impression/pieces";
 import { libelleDocument } from "./avoir";
 import type { Facture } from "./facture";
@@ -17,7 +17,7 @@ export interface ContexteImpressionFacture {
  * Un avoir s'imprime avec ses montants POSITIFS, comme dans l'ancien : c'est
  * le titre qui dit le sens (D-PDF-03, remplace l'écart de D-FAC-03).
  */
-export function contexteFacture(f: Facture, ctx: ContexteImpressionFacture, e: EmetteurImprimable, mentions: string[]): ContexteImpression {
+export function contexteFacture(f: Facture, ctx: ContexteImpressionFacture, e: EmetteurImprimable, mentions: string[], ficheClient: FicheClientImprimable | null = null): ContexteImpression {
   return {
     type: "facture",
     titre: libelleDocument(f.type_document),
@@ -26,6 +26,7 @@ export function contexteFacture(f: Facture, ctx: ContexteImpressionFacture, e: E
     devisNumero: ctx.devisNumero,
     rectifiee: ctx.rectifiee,
     mentions,
+    ficheClient,
     doc: {
       ...lieuImprimable(f),
       numero: f.numero,
@@ -36,6 +37,9 @@ export function contexteFacture(f: Facture, ctx: ContexteImpressionFacture, e: E
       clientTvaIntracom: f.client_tva_intracom,
       interlocuteur: f.interlocuteur,
       refBonCommandeClient: f.ref_bon_commande_client,
+      facturationAdresse: f.facturation_adresse,
+      facturationCodePostal: f.facturation_code_postal,
+      facturationVille: f.facturation_ville,
       dateFinExecution: f.date_fin_execution,
       lignes: lignesImprimables(f.lignes),
       remisePourcentage: f.remise_pourcentage,

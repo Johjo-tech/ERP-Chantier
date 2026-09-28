@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router";
 import { Chargement, Erreur } from "@/components/etats/Etats";
 import { useVoitLesPrix } from "@/modules/auth-roles/hooks/useSession";
 import { ApercuPiece } from "@/modules/documents/components/ApercuPiece";
+import { useFicheClientImprimable } from "@/modules/documents/hooks/useFicheClient";
 import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { pieceImprimee } from "@/modules/documents/impression/pieces";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
@@ -22,12 +23,13 @@ export function PageApercuBon() {
   const bon = useBon(id);
   const documentaire = useIdentiteDocument();
   const prix = useVoitLesPrix();
-  if (bon.isPending || documentaire.isPending) return <Chargement />;
+  const client = useFicheClientImprimable(bon.data?.client_nom);
+  if (bon.isPending || documentaire.isPending || !client.pret) return <Chargement />;
   if (bon.isError) return <Erreur erreur={bon.error} reessayer={() => void bon.refetch()} />;
   if (documentaire.isError) return <Erreur erreur={documentaire.error} reessayer={() => void documentaire.refetch()} />;
   const b = bon.data;
   const e = documentaire.data.imprimable;
-  const piece = pieceImprimee(contexteBon(b, b.lignes.map(versLigneBase), e, !prix), e.variables);
+  const piece = pieceImprimee(contexteBon(b, b.lignes.map(versLigneBase), e, !prix, client.fiche), e.variables);
   return (
     <GardeSociete societeId={b.societe_id} retour="/commandes">
       <ApercuPiece piece={piece} fermer={() => void navigate(`/commandes/${b.id}`)} />

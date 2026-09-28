@@ -14,6 +14,7 @@ import { useReglages } from "@/modules/societes/hooks/useReglages";
 import type { Bon } from "../api/bons";
 import { versLigneBase } from "../domain/bon";
 import { actionsFacturation, BLOCAGES_ACCOMPLIS, blocagesChiffrage, peutEcrireTerrain, type Blocage } from "../domain/circuit";
+import { useFicheClientImprimable } from "@/modules/documents/hooks/useFicheClient";
 import { contexteBon } from "../domain/impression";
 import { apercuDe } from "../domain/pieceJointe";
 import { comptesRendus, depuisLignesAEnregistrer, documentDirecteur, travauxSaisis, versLignesAEnregistrer, type SaisieTravail, type Travail } from "../domain/prefacture";
@@ -81,9 +82,10 @@ function BonDuClient({ bon, classe }: { bon: Bon; classe: string }) {
 /** La fiche interne (`renderPrintDoc('bonCommande', id, !avecPrix)`) : le gabarit du PDF. */
 function FicheInterne({ bon, avecPrix }: { bon: Bon; avecPrix: boolean }) {
   const documentaire = useIdentiteDocument();
-  if (!documentaire.data) return null;
+  const client = useFicheClientImprimable(bon.client_nom);
+  if (!documentaire.data || !client.pret) return null;
   const e = documentaire.data.imprimable;
-  const piece = pieceImprimee(contexteBon(bon, bon.lignes.map(versLigneBase), e, !avecPrix), e.variables);
+  const piece = pieceImprimee(contexteBon(bon, bon.lignes.map(versLigneBase), e, !avecPrix, client.fiche), e.variables);
   return <div style={piece.variables as CSSProperties} dangerouslySetInnerHTML={{ __html: piece.html }} />;
 }
 

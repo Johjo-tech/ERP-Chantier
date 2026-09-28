@@ -10,6 +10,7 @@ import { enregistrerDevis, listerDevis, lireDevis, supprimerDevis, totauxDesDevi
 import { listerDevisEcran } from "../api/ecran";
 import { bonDepuisDevis } from "../api/operations";
 import type { Devis } from "../domain/devis";
+import { useFicheClientImprimable } from "@/modules/documents/hooks/useFicheClient";
 import { contexteDevis } from "../domain/impression";
 import type { EnteteAEnregistrer } from "../domain/devis";
 import type { LigneAEnregistrer } from "@/modules/documents/domain/lignes";
@@ -96,7 +97,8 @@ export function useBonDepuisDevis() {
 /** La pièce imprimée du devis — le HTML de l'ancien gabarit : un seul pour l'aperçu, le PDF et l'e-mail. */
 export function useModeleDevis(devis: Devis | null, validiteJours: number): PieceImprimee | null {
   const doc = useIdentiteDocument();
-  if (!devis || !doc.data) return null;
+  const client = useFicheClientImprimable(devis?.client_nom);
+  if (!devis || !doc.data || !client.pret) return null;
   const e = doc.data.imprimable;
-  return pieceImprimee(contexteDevis(devis, e, validiteJours), e.variables);
+  return pieceImprimee(contexteDevis(devis, e, validiteJours, client.fiche), e.variables);
 }

@@ -1,4 +1,4 @@
-import { metierDisplayLabel, type ContexteImpression } from "@/modules/documents/impression/gabarit";
+import { metierDisplayLabel, type ContexteImpression, type FicheClientImprimable } from "@/modules/documents/impression/gabarit";
 import { lieuImprimable, lignesImprimables, type EmetteurImprimable, type LigneDeBase, type LieuDeBase } from "@/modules/documents/impression/pieces";
 import { metiersDuBon } from "./metiers";
 
@@ -13,6 +13,9 @@ export interface BonImprimable extends LieuDeBase {
   conducteur: string | null;
   metiers: unknown;
   metier: string | null;
+  facturation_adresse: string | null;
+  facturation_code_postal: string | null;
+  facturation_ville: string | null;
 }
 
 /**
@@ -24,13 +27,14 @@ export interface BonImprimable extends LieuDeBase {
  *
  * `masquerPrix` : la fiche interne vue sans les prix (`!ctx.avecPrix`).
  */
-export function contexteBon(b: BonImprimable, lignes: readonly LigneDeBase[], e: EmetteurImprimable, masquerPrix = false): ContexteImpression {
+export function contexteBon(b: BonImprimable, lignes: readonly LigneDeBase[], e: EmetteurImprimable, masquerPrix = false, ficheClient: FicheClientImprimable | null = null): ContexteImpression {
   return {
     type: "bonCommande",
     titre: "BON DE COMMANDE",
     s: e.s,
     nomSociete: e.nomSociete,
     masquerPrix,
+    ficheClient,
     metiers: metiersDuBon(b).map((m) => metierDisplayLabel(m)).filter(Boolean),
     doc: {
       ...lieuImprimable(b),
@@ -39,6 +43,9 @@ export function contexteBon(b: BonImprimable, lignes: readonly LigneDeBase[], e:
       client: b.client_nom,
       adresse: b.adresse,
       interlocuteur: b.interlocuteur,
+      facturationAdresse: b.facturation_adresse,
+      facturationCodePostal: b.facturation_code_postal,
+      facturationVille: b.facturation_ville,
       numeroBC: b.numero_bc,
       conducteur: b.conducteur,
       lignes: lignesImprimables(lignes),

@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 import type { IdentiteEmettrice } from "../domain/identite";
-import { renderPrintDoc, NOM_FICHIER_DEFAUT, type ContexteImpression, type DocImprimable, type LigneImprimable, type SocieteImprimable } from "./gabarit";
+import { renderPrintDoc, NOM_FICHIER_DEFAUT, type ContexteImpression, type DocImprimable, type FicheClientImprimable, type LigneImprimable, type SocieteImprimable } from "./gabarit";
 import type { PieceImprimee } from "./zone";
 
 export interface LigneDeBase {
@@ -48,6 +48,25 @@ export function lieuImprimable(r: LieuDeBase): DocImprimable {
     ancienLocataire: r.ancien_locataire,
     telephoneLocataire: r.telephone_locataire,
   };
+}
+
+/** Une fiche client telle que la liste des clients de la société la lit. */
+export interface FicheClientDeBase {
+  nom: string;
+  adresse: string | null;
+  code_postal: string | null;
+  ville: string | null;
+}
+
+/**
+ * La fiche que le bloc « Client » lit : la PREMIÈRE de la société qui porte le
+ * nom du document, comme l'ancien (`state.clients.find(… x.nom===doc.client)`)
+ * — par le nom et non par `client_id`, pour qu'une même pièce imprime la même
+ * adresse dans les deux applications. La liste est déjà celle de la société.
+ */
+export function ficheClientDuDocument(clients: readonly FicheClientDeBase[] | null | undefined, nom: string | null | undefined): FicheClientImprimable | null {
+  const c = (clients ?? []).find((x) => x.nom === nom);
+  return c ? { adresse: c.adresse, codePostal: c.code_postal, ville: c.ville } : null;
 }
 
 /** Ce que l'émetteur apporte à toute pièce : `state.settings[societe]`, son nom d'usage, ses couleurs. */

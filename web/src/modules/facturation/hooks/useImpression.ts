@@ -1,4 +1,5 @@
 import { useClients } from "@/modules/clients/hooks/useClients";
+import { useFicheClientImprimable } from "@/modules/documents/hooks/useFicheClient";
 import { useIdentiteDocument } from "@/modules/documents/hooks/useIdentiteDocument";
 import { pieceImprimee } from "@/modules/documents/impression/pieces";
 import { showToast, type OptionsPiece, type PieceImprimee } from "@/modules/documents/impression/zone";
@@ -18,11 +19,12 @@ export function useModeleFacture(facture: Facture | null): { modele: PieceImprim
   const doc = useIdentiteDocument();
   const mentions = useIdentite();
   const contexte = useContexteImpression(facture);
+  const client = useFicheClientImprimable(facture?.client_nom);
   const erreur = doc.error ?? mentions.error ?? contexte.error;
-  if (!facture || !doc.data || !mentions.data || !contexte.data) return { modele: null, erreur, chargement: !erreur };
+  if (!facture || !doc.data || !mentions.data || !contexte.data || !client.pret) return { modele: null, erreur, chargement: !erreur };
   const e = doc.data.imprimable;
   return {
-    modele: pieceImprimee(contexteFacture(facture, contexte.data, e, mentionsLegales(mentions.data)), e.variables),
+    modele: pieceImprimee(contexteFacture(facture, contexte.data, e, mentionsLegales(mentions.data), client.fiche), e.variables),
     erreur: null,
     chargement: false,
   };

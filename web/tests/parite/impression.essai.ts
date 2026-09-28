@@ -17,6 +17,7 @@ import { finDeValidite } from "../../src/modules/devis/domain/validite";
 import { renderPrintDoc, type ContexteImpression, type DocImprimable, type SocieteImprimable, type TypeImprimable } from "../../src/modules/documents/impression/gabarit";
 import { renderPrintIntervention, type InterventionImprimable } from "../../src/modules/interventions/domain/gabarit-rapport";
 import { CONTROLES_PAR_METIER } from "../../src/modules/interventions/domain/rapport";
+import { ficheClientDuDocument } from "../../src/modules/documents/impression/pieces";
 import { generateur } from "./aleatoire";
 import { appJs, constanteDe, sourceDe } from "./source-app";
 
@@ -25,7 +26,7 @@ const FONCTIONS = [
   "metierLabel", "metierDisplayLabel", "bcMetiersDuBC", "bcNumeroDepuisId", "sousTotalChapitreHTML", "printableLignesRows",
   "bonCommandeDocMetaLignes", "validiteDevis", "metaDocHTML", "carteChantierHTML", "documentImprimable", "renderPrintDoc",
   "logoHTML", "libelleModePaiement", "blocTotauxHTML", "factureDocMetaLignes", "blocReglementHTML", "blocMentionsHTML",
-  "piedDePageHTML", "renderPrintIntervention",
+  "piedDePageHTML", "renderPrintIntervention", "adresseClientDuDocument",
 ];
 const CONSTANTES = ["METIERS", "CONTROLES_PAR_METIER", "LIBELLES_MODE_PAIEMENT"];
 
@@ -35,6 +36,8 @@ interface Etat {
   devis: Record<string, unknown>[];
   factures: Record<string, unknown>[];
   bonsCommande: Record<string, unknown>[];
+  /** `state.clients` : toutes sociétés confondues, comme dans l'ancien. */
+  clients?: { societeId: string; nom: string; adresse: string | null | ""; codePostal: string | null | ""; ville: string | null | "" }[];
 }
 
 interface Ancien {
@@ -141,6 +144,25 @@ function lieu(): DocImprimable {
   };
 }
 
+/**
+ * `state.clients` autour du document : parfois sa fiche (sous son nom exact),
+ * parfois un homonyme d'une AUTRE société, un voisin de nom, ou rien — le bloc
+ * « Client » ne doit lire que la première fiche de la société qui porte ce nom-là.
+ */
+function clients(nom: string): NonNullable<Etat["clients"]> {
+  const fiche = () => ({ societeId: SOCIETE.id, nom, adresse: peutEtre("5 rue de la Fiche"), codePostal: peutEtre("69007"), ville: peutEtre("Lyon 7e") });
+  const autres = [
+    { societeId: "soc-beta", nom, adresse: "Ailleurs", codePostal: "75001", ville: "Paris" },
+    { societeId: SOCIETE.id, nom: `${nom} bis`, adresse: "Voisin", codePostal: "38000", ville: "Grenoble" },
+  ];
+  return g.parmi([[], autres, [...autres, fiche()], [fiche(), fiche()]]);
+}
+
+/** L'adresse de facturation qu'un bon porte jusqu'à la facture : tout, une partie, ou des vides. */
+function adresseDeFacturation() {
+  return { facturationAdresse: peutEtre("3 quai de Facturation"), facturationCodePostal: peutEtre("69002"), facturationVille: peutEtre("Lyon 2e") };
+}
+
 /** Un document au format de l'ancien, et l'état qui l'entoure. */
 function tirage(sages: boolean) {
   const type = g.parmi<TypeImprimable>(["devis", "facture", "bonCommande"]);
@@ -155,7 +177,8 @@ function tirage(sages: boolean) {
     lignes: lignes(sages),
     remisePourcentage: sages ? g.parmi([0, 0, 10]) : g.parmi([0, 5, 12.5, 150, -3]),
   };
-  const etat: Etat = { societeId: SOCIETE.id, settings: { [SOCIETE.id]: s }, devis: [{ id: "dev-0", numero: "DEV-2026-000003" }], factures: [{ id: "fac-0", numero: "FAC-2026-000009", date: "2026-01-02" }], bonsCommande: [] };
+  const etat: Etat = { societeId: SOCIETE.id, settings: { [SOCIETE.id]: s }, devis: [{ id: "dev-0", numero: "DEV-2026-000003" }], factures: [{ id: "fac-0", numero: "FAC-2026-000009", date: "2026-01-02" }], bonsCommande: [], clients: clients(commun.client) };
+  const facturation = g.parmi([{}, {}, adresseDeFacturation()]);
   let doc: Record<string, unknown>;
   if (type === "devis") {
     doc = { ...commun, numero: "DEV-2026-900001" };
@@ -185,6 +208,7 @@ function tirage(sages: boolean) {
       motifRectification: peutEtre("Double facturation"),
       devisId: g.parmi([null, "dev-0", "dev-absent"]),
       factureRectifieeId: g.parmi([null, "fac-0"]),
+      ...facturation,
     };
     etat.factures.push(doc);
   } else {
@@ -196,6 +220,7 @@ function tirage(sages: boolean) {
       conducteur: peutEtre("Christophe"),
       metiers: g.parmi([[], ["plomberie", "PEINTURE"], ["etancheite"]]),
       metier: g.parmi(["", "electricite"]),
+      ...facturation,
     };
     etat.bonsCommande.push(doc);
   }
@@ -205,7 +230,9 @@ function tirage(sages: boolean) {
 /** Le contexte que web/ fabrique : ce que l'ancien allait chercher dans `state` ou `window`. */
 function contexteWeb(t: ReturnType<typeof tirage>): ContexteImpression {
   const d = t.doc as DocImprimable & Record<string, unknown>;
-  const base = { type: t.type, s: t.s, nomSociete: SOCIETE.nom, masquerPrix: t.masquer };
+  // Ce que `useClients` rend : la liste de la société active, sous les noms de la base.
+  const liste = (t.etat.clients ?? []).filter((c) => c.societeId === SOCIETE.id).map((c) => ({ nom: c.nom, adresse: c.adresse || null, code_postal: c.codePostal || null, ville: c.ville || null }));
+  const base = { type: t.type, s: t.s, nomSociete: SOCIETE.nom, masquerPrix: t.masquer, ficheClient: ficheClientDuDocument(liste, d.client) };
   if (t.type === "devis") {
     const fin = d.date ? finDeValidite(d.date, t.validiteJours) : null;
     return { ...base, titre: "DEVIS", doc: d, validite: fin ? { jours: t.validiteJours, date: fin } : null };
@@ -338,5 +365,43 @@ describe("la feuille des pièces est celle de l'ancien", () => {
       expect(nouveau).toBe(ancien);
       expect(nouveau).toContain("<dt>État</dt><dd>Brouillon — non émis</dd>");
     }
+  });
+});
+
+describe("le bloc « Client » porte son code postal et sa ville (2c21745)", () => {
+  const bloc = (html: string) => /<div class="p-carte-titre">Client<\/div>\s*<div class="p-line">(.*?)<\/div>/s.exec(html)?.[1] ?? "";
+  const ficheDe = (nom: string) => [{ societeId: SOCIETE.id, nom, adresse: "5 rue de la Fiche", codePostal: "69007", ville: "Lyon 7e" }];
+
+  it("sans adresse de facturation : la rue de la pièce, le code postal et la ville de la fiche", () => {
+    for (let i = 0; i < 200; i++) {
+      const t = tirage(true);
+      Object.assign(t.doc, { adresse: "1 place Bellecour", facturationAdresse: null, facturationCodePostal: "", facturationVille: null });
+      t.etat.clients = ficheDe(t.doc.client as string);
+      const nouveau = renderPrintDoc(contexteWeb(t));
+      expect(nouveau).toBe(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+      expect(bloc(nouveau)).toContain("<br>1 place Bellecour<br>69007 Lyon 7e");
+    }
+  });
+
+  it("l'adresse de facturation du bon ou de la facture l'emporte sur la fiche", () => {
+    for (let i = 0; i < 200; i++) {
+      const t = tirage(true);
+      if (t.type === "devis") continue;
+      Object.assign(t.doc, { facturationAdresse: "3 quai de Facturation", facturationCodePostal: "69002", facturationVille: "Lyon 2e" });
+      t.etat.clients = ficheDe(t.doc.client as string);
+      const nouveau = renderPrintDoc(contexteWeb(t));
+      expect(nouveau).toBe(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+      expect(bloc(nouveau)).toContain("<br>3 quai de Facturation<br>69002 Lyon 2e");
+      expect(bloc(nouveau)).not.toContain("69007");
+    }
+  });
+
+  it("sans rue ni fiche, aucun <br> vide sous le nom du client", () => {
+    const t = tirage(true);
+    Object.assign(t.doc, { adresse: "", facturationAdresse: null, facturationCodePostal: null, facturationVille: null, clientSiret: null, clientTvaIntracom: null, interlocuteur: null });
+    t.etat.clients = [];
+    const nouveau = renderPrintDoc(contexteWeb(t));
+    expect(nouveau).toBe(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+    expect(bloc(nouveau)).not.toContain("<br>");
   });
 });

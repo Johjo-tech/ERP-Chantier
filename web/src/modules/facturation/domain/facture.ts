@@ -49,6 +49,10 @@ export const schemaEnteteFacture = z.object({
   mode_paiement: modePaiement.nullable(),
   ref_marche: z.string().nullable(),
   ref_bon_commande_client: z.string().nullable(),
+  // Recopiée du bon par `bc_generer_facture` : là où la pièce s'envoie, imprimée à la place du siège (2c21745).
+  facturation_adresse: z.string().nullable(),
+  facturation_code_postal: z.string().nullable(),
+  facturation_ville: z.string().nullable(),
   cadre_facturation: z.enum(["B2C", "B2B_national", "B2G", "B2B_international"]),
   conducteur_id: z.string().nullable(),
   conducteur: z.string().nullable(),

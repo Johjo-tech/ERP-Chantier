@@ -16,6 +16,7 @@ const f = {
   emetteur_siret: "123", emetteur_tva_intracom: "FR1", emetteur_iban: "FR76", emetteur_siren: "123", emetteur_pays_code: "FR", tva_categorie: null,
   tva_motif_exoneration: null, ref_contrat: null, devise: "EUR", intervention_id: "i1", client_siret: "999", client_siren: null, client_tva_intracom: "FR9",
   client_pays_code: "FR", client_code_routage: null, client_code_service: null, statut_cycle: "deposee", pdp_identifiant: "P1", pdp_transmission_id: "T1",
+  facturation_adresse: null, facturation_code_postal: null, facturation_ville: null,
   lignes: [{ id: "l1", position: 0, type: "ligne", designation: "Pose", quantite: 1, prix_unitaire: 100, unite: "u", tva: 20, article_reference: null, commentaire: null, metier: null }],
 } satisfies Facture;
 
