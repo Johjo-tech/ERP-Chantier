@@ -84,62 +84,62 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-BDD-28 | Espace client inexistant en base | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
 | DEF-BDD-29 | Fériés d'Alsace-Moselle sans réglage | correction proposée en base — prouvée (échoue sans, passe avec) | affichage |
 | DEF-BDD-30 | « Fait » de la cloche réservé aux réglages | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
-| DEF-COR-01 | Achats du chantier jamais relus (erreur 42703) | corrigé dans web/ | données perdues |
-| DEF-COR-02 | DPGF, avancements et to-do perdus au rechargement | corrigé dans web/ | données perdues |
-| DEF-COR-03 | Bon né du DPGF : lien perdu, conducteur vide, tâche en double | corrigé dans web/ | données perdues |
-| DEF-COR-04 | Fichiers du chantier en data-URL | corrigé dans web/ | données perdues |
-| DEF-COR-05 | DPGF : saisies perdues, « Planifier » muet, « 2,5 » lu 2 | corrigé dans web/ | données perdues |
-| DEF-COR-06 | Ligne de DPGF facturée encore modifiable ou remplacée | corrigé dans web/ | calcul |
-| DEF-COR-07 | Achats, to-do : échecs d'écriture muets | corrigé dans web/ | données perdues |
-| DEF-COR-08 | Situation de travaux : flottant, avancement avant la facture | corrigé dans web/ | calcul |
-| DEF-COR-09 | Montants en flottant (1,005 € → 1,00 €) | corrigé dans web/ | calcul |
-| DEF-COR-10 | Reste d'une facture à acomptes ou d'un avoir | corrigé dans web/ | calcul |
-| DEF-COR-11 | Statut payé/impayé et règlement groupé tenus par l'écran | corrigé dans web/ | calcul |
-| DEF-COR-12 | Avoir, imputation, suppression de situation en plusieurs requêtes (ancien à vérifier) | corrigé dans web/ | données perdues |
-| DEF-COR-13 | « Émettre » enregistre d'abord la saisie (ancien à vérifier) | corrigé dans web/ | données perdues |
-| DEF-COR-14 | Acheteur rattaché par le nom ; SIRET d'un autre client gardé | corrigé dans web/ | données perdues |
-| DEF-COR-15 | Listes de règlement : brouillons à 0, « ✎ Modifier » muet | corrigé dans web/ | affichage |
-| DEF-COR-16 | Aucun geste pour changer le statut d'un devis | corrigé dans web/ | affichage |
-| DEF-COR-17 | Chapitres homonymes fusionnés | corrigé dans web/ | calcul |
-| DEF-COR-18 | Hors circuit : travaux chiffrés hors chapitre ; chiffrage sans quantité | corrigé dans web/ | calcul |
-| DEF-COR-19 | File Validation : compteur faux, circuits clos | corrigé dans web/ | affichage |
-| DEF-COR-20 | Pièce commandée : une seule tâche, échec ignoré | corrigé dans web/ | données perdues |
-| DEF-COR-21 | Case « Métiers réalisés » qui n'enregistre rien | corrigé dans web/ | données perdues |
-| DEF-COR-22 | Boutons proposés que la base refuse | corrigé dans web/ | affichage |
-| DEF-COR-23 | Téléphone du locataire écrit, jamais relu | corrigé dans web/ | données perdues |
-| DEF-COR-24 | « reçue le 25T16:29:20…/09/2026 » | corrigé dans web/ | affichage |
-| DEF-COR-25 | Planning : tâches et journées mal tenues au placement | corrigé dans web/ | données perdues |
-| DEF-COR-26 | « Date faite » sans colonne ; « Terminée le » jamais effacée | corrigé dans web/ | données perdues |
-| DEF-COR-27 | Photos du terrain perdues | corrigé dans web/ | données perdues |
-| DEF-COR-28 | Rapport : brouillon imprimé, contrôles perdus, IA sans clé | corrigé dans web/ | données perdues |
-| DEF-COR-29 | Prêts et entretiens perdus | corrigé dans web/ | données perdues |
-| DEF-COR-30 | Date de contrôle technique jamais conservée | corrigé dans web/ | données perdues |
-| DEF-COR-31 | Carte carburant : un code PIN fait refuser la fiche | corrigé dans web/ | données perdues |
-| DEF-COR-32 | Factures d'achat et d'entretien du véhicule perdues | corrigé dans web/ | données perdues |
-| DEF-COR-33 | Vente de véhicule : acheteur en texte libre | corrigé dans web/ | données perdues |
-| DEF-COR-34 | Absences perdues, solde faux | corrigé dans web/ | données perdues |
-| DEF-COR-35 | Documents de sous-traitant perdus | corrigé dans web/ | données perdues |
-| DEF-COR-36 | Fiche conducteur retirée réactivée | corrigé dans web/ | données perdues |
-| DEF-COR-37 | Seuils d'alerte codés en dur ; cloche en double | corrigé dans web/ | affichage |
-| DEF-COR-38 | Conducteur ou fournisseur supprimé au lieu d'être retiré | corrigé dans web/ | données perdues |
-| DEF-COR-39 | Logo et documents légaux en data-URL | corrigé dans web/ | données perdues |
-| DEF-COR-40 | Préfixe de numérotation à tiret accepté | corrigé dans web/ | affichage |
-| DEF-COR-41 | Code de référentiel sans accents | corrigé dans web/ | affichage |
-| DEF-COR-42 | « Fait » de la cloche refusé au terrain | corrigé dans web/ | données perdues |
-| DEF-COR-43 | « 1,5 » saisi lu 1 | corrigé dans web/ | calcul |
-| DEF-COR-44 | « …alors que le pays est . » | corrigé dans web/ | affichage |
-| DEF-COR-45 | Catalogue : virgule qui casse la recherche, familles tronquées | corrigé dans web/ | affichage |
-| DEF-COR-46 | Listes tronquées sans le dire | corrigé dans web/ | données perdues |
-| DEF-COR-47 | Messages d'erreur en anglais | corrigé dans web/ | affichage |
-| DEF-COR-48 | La recherche perd le focus | corrigé dans web/ | affichage |
-| DEF-COR-49 | Rapport de rejets nommé `.pdf` | corrigé dans web/ | affichage |
-| DEF-COR-50 | Import de clients qui efface des champs | corrigé dans web/ | données perdues |
-| DEF-COR-51 | Restauration de sauvegarde sans garde de rôle | corrigé dans web/ | sécurité |
-| DEF-COR-52 | Factures de sous-traitant hors série, payées sans règlement | corrigé dans web/ | calcul |
-| DEF-COR-53 | Portail client mort | corrigé dans web/ | sécurité |
-| DEF-COR-54 | Réf. de bon client figée vide sans avertissement | corrigé dans web/ | affichage |
-| DEF-COR-55 | « Mon nom » inaccessible au terrain | corrigé dans web/ | affichage |
-| DEF-COR-56 | Ordre des listes au gré de la base | corrigé dans web/ | affichage |
+| DEF-COR-01 | Achats du chantier jamais relus (erreur 42703) | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-02 | DPGF, avancements et to-do perdus au rechargement | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-03 | Bon né du DPGF : lien perdu, conducteur vide, tâche en double | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-04 | Fichiers du chantier en data-URL | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-05 | DPGF : saisies perdues, « Planifier » muet, « 2,5 » lu 2 | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-06 | Ligne de DPGF facturée encore modifiable ou remplacée | corrigé — confirmé par le client (28/09) — remis le 28/09 | calcul |
+| DEF-COR-07 | Achats, to-do : échecs d'écriture muets | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-08 | Situation de travaux : flottant, avancement avant la facture | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-09 | Montants en flottant (1,005 € → 1,00 €) | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-10 | Reste d'une facture à acomptes ou d'un avoir | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-11 | Statut payé/impayé et règlement groupé tenus par l'écran | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-12 | Avoir, imputation, suppression de situation en plusieurs requêtes | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-13 | « Émettre » enregistre d'abord la saisie | corrigé — confirmé par le client (28/09) — défaut absent de l'ancien (vérifié) | données perdues |
+| DEF-COR-14 | Acheteur rattaché par le nom ; SIRET d'un autre client gardé | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-15 | Listes de règlement : brouillons à 0, « ✎ Modifier » muet | corrigé — confirmé par le client (28/09) — remis le 28/09 | affichage |
+| DEF-COR-16 | Aucun geste pour changer le statut d'un devis | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-17 | Chapitres homonymes fusionnés | corrigé — confirmé par le client (28/09) — défaut absent de l'ancien (vérifié) | calcul |
+| DEF-COR-18 | Hors circuit : travaux chiffrés hors chapitre ; chiffrage sans quantité | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-19 | File Validation : compteur faux, circuits clos | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-20 | Pièce commandée : une seule tâche, échec ignoré | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-21 | Case « Métiers réalisés » qui n'enregistre rien | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-22 | Boutons proposés que la base refuse | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-23 | Téléphone du locataire écrit, jamais relu | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-24 | « reçue le 25T16:29:20…/09/2026 » | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-25 | Planning : tâches et journées mal tenues au placement | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-26 | « Date faite » sans colonne ; « Terminée le » jamais effacée | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-27 | Photos du terrain perdues | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-28 | Rapport : brouillon imprimé, contrôles perdus, IA sans clé | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-29 | Prêts et entretiens perdus | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-30 | Date de contrôle technique jamais conservée | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-31 | Carte carburant : un code PIN fait refuser la fiche | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-32 | Factures d'achat et d'entretien du véhicule perdues | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-33 | Vente de véhicule : acheteur en texte libre | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-34 | Absences perdues, solde faux | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-35 | Documents de sous-traitant perdus | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-36 | Fiche conducteur retirée réactivée | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-37 | Seuils d'alerte codés en dur ; cloche en double | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-38 | Conducteur ou fournisseur supprimé au lieu d'être retiré | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-39 | Logo et documents légaux en data-URL | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-40 | Préfixe de numérotation à tiret accepté | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-41 | Code de référentiel sans accents | corrigé — confirmé par le client (28/09) — défaut absent de l'ancien (vérifié) | affichage |
+| DEF-COR-42 | « Fait » de la cloche refusé au terrain | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-43 | « 1,5 » saisi lu 1 | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-44 | « …alors que le pays est . » | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-45 | Catalogue : virgule qui casse la recherche, familles tronquées | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-46 | Listes tronquées sans le dire | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-47 | Messages d'erreur en anglais | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-48 | La recherche perd le focus | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-49 | Rapport de rejets nommé `.pdf` | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-50 | Import de clients qui efface des champs | corrigé — confirmé par le client (28/09) | données perdues |
+| DEF-COR-51 | Restauration de sauvegarde sans garde de rôle | corrigé — confirmé par le client (28/09) | sécurité |
+| DEF-COR-52 | Factures de sous-traitant hors série, payées sans règlement | corrigé — confirmé par le client (28/09) | calcul |
+| DEF-COR-53 | Portail client mort | corrigé — confirmé par le client (28/09) | sécurité |
+| DEF-COR-54 | Réf. de bon client figée vide sans avertissement | corrigé — confirmé par le client (28/09) — remis le 28/09 | affichage |
+| DEF-COR-55 | « Mon nom » inaccessible au terrain | corrigé — confirmé par le client (28/09) | affichage |
+| DEF-COR-56 | Ordre des listes au gré de la base | corrigé — confirmé par le client (28/09) | affichage |
 | DEF-REP-01 | Import d'articles : `1e3`, `0x10`, « 1 200,00 » | identique à l'ancienne | calcul |
 | DEF-REP-02 | Import de DPGF : « 1.234 » lu 1,234 | identique à l'ancienne | calcul |
 | DEF-REP-03 | `articles.metier` ni saisi ni recopié | identique à l'ancienne | affichage |
@@ -755,6 +755,15 @@ Rappel : un geste de l'ancienne qui écrit dans un champ **sans colonne** semble
 valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonnesDe`, CLAUDE.md
 « Pièges rencontrés ») — d'où le geste de reproduction récurrent « recharger la page (F5) ».
 
+**Vérification du 28/09** (décision du client : « corrige tout », toutes ces corrections sont
+gardées). Chaque entrée a été relue sur le code du 28/09 et porte une ligne « État » : où vit la
+correction et le test qui la tient. Trois corrections avaient été défaites quand les écrans ont
+été refaits à l'identique le 26/09 et sont remises, chacune avec un test qui échoue sans elle
+(DEF-COR-06, 15, 54) ; une quatrième ne tenait pas ce que l'entrée annonçait (DEF-COR-56, ordre à
+date égale). Des tests ont été ajoutés là où une correction n'en avait pas (DEF-COR-07, 12, 15, 16,
+21, 28, 48). Les « à vérifier » sont tranchés par le code de l'ancien ; trois défauts n'existent pas
+dans l'ancien (DEF-COR-13, 17, 41 — D-BDD2-05).
+
 ### DEF-COR-01 — Les achats d'un chantier ne sont jamais relus (erreur 42703)
 - **Écran** : Chantiers › fiche › « Achats » (et totaux « facturé − achats »).
 - **Reproduire (ancienne)** : `admin.alpha` → Chantiers → une fiche (« Salle de bains Durand ») →
@@ -775,6 +784,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-ECR-CHA-11 (écart chiffré dans les seuils de la comparaison visuelle).
 - **Revenir à l'identique** : ne plus lire les achats dans `modules/chantiers/api/achats.ts`
   (liste vide) et faire afficher le bandeau d'échec de lecture pour `chantier_achats`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `modules/chantiers/api/achats.ts` lit `chantier_achats` (triés par `date_achat`, pas `cree_le`) ; tests `chantiers/components/fiche.essai.tsx` « l'admin voit DPGF chiffré et achats », `tests/rls/chantiers-api.essai.ts` (lecture des achats). **Tranché** : l'ancien trie les filles sur `position` (`src/integrations/html-adapter.ts:1644`) et `chantier_achats` n'a pas cette colonne en production (`src/api/columns.ts:14`, généré depuis elle) : la lecture tombe toujours (42703), `noterEchecDeLecture` affiche le bandeau (l. 1653). L'ajout s'écrit bien (`remplacerEnfants`, l. 1868) — mais sur la liste `achats: []` posée faute de lecture (l. 776), si bien qu'enregistrer le chantier REMPLACE les achats existants par ceux de la session.
 
 ### DEF-COR-02 — DPGF, avancements et to-do disparaissent au rechargement
 - **Écran** : Chantiers › fiche › DPGF chiffré, To-do.
@@ -789,6 +799,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Revenir à l'identique** : ne pas écrire ni lire ces tables (`modules/chantiers/api/dpgf.ts`,
   `todos.ts`, `planification.ts`), garder les saisies en mémoire jusqu'au rechargement — c'est-à-dire
   perdre les données. Déconseillé ; à trancher explicitement.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `chantiers/api/dpgf.ts`, `todos.ts`, `planification.ts` ; tests `tests/rls/chantiers-api.essai.ts` « import de DPGF, planification d'une part… », `tests/rls/chantiers.essai.ts` (to-do).
 
 ### DEF-COR-03 — Bon né du DPGF : lien perdu, conducteur vide, tâche en double
 - **Écran** : Chantiers › DPGF › « 📅 Planifier une quantité » ; Planning.
@@ -805,6 +816,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Revenir à l'identique** : dans `modules/chantiers/api/planification.ts`, ne plus créer la tâche
   liée ni poser `conducteur_id` ; dans `planning/domain/planification.ts#planPoser`, ne plus adopter
   la tâche sans date.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `chantiers/api/planification.ts` (conducteur du chantier, tâche liée), `planning/domain/planification.ts#planPoser` ; tests `tests/rls/transversal.essai.ts` « D-CHA-04 », `tests/rls/chantiers.essai.ts` « planifier une quantité », `planning/domain/planning.essai.ts` (D-CHA-04).
 
 ### DEF-COR-04 — Fichiers du chantier en data-URL dans le JSON
 - **Écran** : Chantiers › fiche › Documents.
@@ -817,6 +829,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-CHA-10, D-ECR-CHA-08.
 - **Revenir à l'identique** : `modules/chantiers/api/documents.ts` et `stockage.ts` — écrire le
   fichier en data-URL sur le chantier ; retirer la confirmation de `BlocDocuments.tsx`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : seau `terrain` (`chantiers/api/stockage.ts`), confirmation du retrait (`FichiersChantier.tsx`, `Fichiers.tsx`) ; tests `tests/rls/chantiers-api.essai.ts` « dépôt puis retrait d'un compte-rendu », `chantiers/domain/regles.essai.ts` (chemin des fichiers). **Tranché** : l'ancien pose le fichier en data-URL dans l'objet chantier (`handleChantierFileAdd`, `app.js:13694-13710`) puis `stSet('chantier:…')` ; `chantiers` n'a aucune colonne pour ces listes (`src/api/columns.ts:23`) et `colonnesDe()` les écarte : le fichier disparaît au `recharger('chantier')` qui suit. Retrait sans confirmation (`removeChantierFile`, l. 13711).
 
 ### DEF-COR-05 — Saisie du DPGF : saisies perdues, « Planifier » muet, « 2,5 » lu 2
 - **Écran** : Chantiers › DPGF chiffré, fenêtre « Planifier une quantité ».
@@ -831,6 +844,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-CHA-03, D-ECR-CHA-11 ; INVENTAIRE CHA-52, CHA-53.
 - **Revenir à l'identique** : lire la saisie par `parseFloat` dans `DialoguePlanifier.tsx`, vider les
   saisies en cours à l'ajout d'une ligne ; le bouton muet ne se reproduit pas sans casser le geste.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `chantiers/components/fiche.essai.tsx` « une saisie en place survit à « + Ligne » », `chantiers/domain/regles.essai.ts` « une virgule française est lue » (« 2,5 »).
 
 ### DEF-COR-06 — Une ligne de DPGF facturée reste modifiable, ou remplacée
 - **Écran** : Chantiers › DPGF (modification, « Reprendre un devis », import).
@@ -846,6 +860,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Revenir à l'identique** : retirer les gardes de `modules/chantiers/domain/dpgf.ts`,
   `devis-vers-dpgf.ts`, `saisie-dpgf.ts` et de `ImportDpgf.tsx` / `RepriseDevis.tsx` ; recopier les
   lignes du devis à chaque enregistrement du devis (geste qui n'existe plus dans `web/`).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — **défaite au passage « identique » du 26/09, remise le 28/09** pour une part : l'annonce « L'import remplace les N ligne(s) actuelle(s) du DPGF ; M ligne(s) déjà facturée(s) ou planifiée(s) sont conservées » (D-CHA-07) avait disparu de la modale refaite à l'identique (dbdd146). Remise dans `ImportDpgf.tsx`, seulement quand le DPGF a des lignes (sur un DPGF vide la modale reste celle de l'ancien). Test qui échoue sans : `chantiers/components/import-dpgf.essai.tsx`. Les gardes (lignes figées, reprise refusée) étaient en place : `chantiers/domain/regles.essai.ts` « DPGF : lignes figées… », « reprise d'un devis… (D-CHA-06) ».
 
 ### DEF-COR-07 — Achats, to-do : un échec d'écriture ne se dit pas
 - **Écran** : Chantiers › fiche (achats, to-do…).
@@ -856,6 +871,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : INVENTAIRE CHA-54 (règle du dépôt : aucun `catch` muet).
 - **Revenir à l'identique** : non recommandé ; il faudrait taire les erreurs dans
   `modules/chantiers/hooks`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place (`onError` de chaque écriture, `BlocTodo.tsx`, `BlocAchats.tsx`, `DetailTodo.tsx`) ; test ajouté le 28/09, qui échoue sans : `chantiers/components/fiche.essai.tsx` « un ajout refusé par la base se dit, et la saisie n'est pas perdue ».
 
 ### DEF-COR-08 — Situation de travaux : montant flottant, avancement écrit avant la facture
 - **Écran** : Chantiers › DPGF › « Facturer la sélection » (page Situation de travaux).
@@ -874,6 +890,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-027, D-FAC-13 ; D-R4-03 pour la suppression (DEF-BDD-18).
 - **Revenir à l'identique** : écrire l'avancement avant la facture, en flottant, sans condition, et
   laisser l'échéance vide — soit rouvrir la double facturation. À trancher explicitement.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `facturation/api/operations.ts#facturerSituation` (facture d'abord, avancement écrit sous condition de l'avancement lu, échéance calculée) ; tests `tests/parite/facturation.essai.ts` « au centime là où l'ancien rendait 4074.0710999999997 (D-027) », `facturation/hooks/suppression-situation.essai.tsx`, `tests/rls/transactions-facturation.essai.ts`.
 
 ### DEF-COR-09 — Montants en flottant : 1,005 € s'affiche 1,00 €
 - **Écran** : tous (lignes, totaux, bons, règlements, facture électronique, PDF).
@@ -889,6 +906,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-006, D-044, D-EFA-02, D-CLI-12, D-PDF-03 (« Restent »).
 - **Revenir à l'identique** : remplacer `lib/money.ts` par le calcul flottant de l'ancien et lever le
   garde-fou « pas de flottant pour l'argent » (`tests/garde-fous.essai.ts`). Changement transverse.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `src/lib/money.essai.ts` « arrondit le demi-centime en s'éloignant de zéro, comme Postgres », `tests/parite/totaux.essai.ts`, `efacture.essai.ts`, garde-fou `tests/garde-fous.essai.ts`.
 
 ### DEF-COR-10 — Reste d'une facture à acomptes, d'un avoir
 - **Écran** : Factures (liste, fiche), Règlements (par facture, dossiers), espace client.
@@ -903,6 +921,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   la production renvoie les colonnes d'avant.
 - **Revenir à l'identique** : recalculer le solde à l'écran comme `calculerSoldeFacture`
   (`src/api/operations/workflows.ts`), ou ne pas appliquer la proposition n° 12.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : tout solde lu dans `v_facture_solde` (`facturation/api/soldes.ts`, `efacture/api/emission.ts`) ; tests `tests/rls/facturation.essai.ts` « v_facture_solde dit vrai » (prouvé contre la base sans proposition, DEF-BDD-16).
 
 ### DEF-COR-11 — Statut payé/impayé et règlement groupé tenus par l'écran
 - **Écran** : Règlements (unitaire, groupé, imputation d'avoir).
@@ -916,6 +935,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-FAC-02 ; dépend de la proposition n° 13 (DEF-BDD-17).
 - **Revenir à l'identique** : réinsérer facture par facture et réécrire le statut depuis l'écran dans
   `facturation/api/reglements.ts`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `facturation/api/reglements.ts` (`enregistrer_reglement_groupe`, `imputer_avoir`), aucun statut écrit par l'écran ; tests `tests/rls/facturation.essai.ts`, `facturation/components/reglements.essai.tsx` « règlement groupé : la répartition se voit avant de valider, la base impute ».
 
 ### DEF-COR-12 — Avoir, imputation, suppression d'un brouillon de situation : plusieurs requêtes
 - **Écran** : Factures (« Créer un avoir », « Supprimer »), Règlements (« Retirer »).
@@ -933,6 +953,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-R4-03, D-R4-04, D-R4-05 ; propositions n° 32 à 34 (DEF-BDD-18 à 20).
 - **Revenir à l'identique** : rétablir les gestes de l'ancien dans ces deux fichiers (à relever dans
   `app.js` d'abord) et le libellé « Retirer ».
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : un appel chacun (`etablir_avoir`, `annuler_imputation`, `supprimer_brouillon_facture`). Le libellé est revenu à celui de l'ancien au passage du 26/09 (« Supprimer » / « ✕ », avec sa confirmation), le geste reste d'un seul appel. Tests : `facturation/hooks/suppression-situation.essai.tsx` (suppression refusée sans toucher au DPGF ; et, ajouté le 28/09, « une moitié d'imputation part par un seul appel… », qui échoue sans), `tests/rls/transactions-facturation.essai.ts`. **Tranché** sur l'ancien : l'avoir passe par `createAvoir` → `createFacture` (`src/api/queries/factures.ts:259`, puis l. 150-163 : en-tête, lignes, émission — trois requêtes) sans aucune borne sur le cumul ; retirer une moitié d'imputation est un `deleteItem('reglement')` d'une seule ligne (`app.js:3722-3758`), la jumelle reste ; supprimer un brouillon de situation est un simple `stDelete` de la facture, sans rendre l'avancement (que l'ancien ne conserve de toute façon pas, DEF-COR-02).
 
 ### DEF-COR-13 — « Émettre » enregistre d'abord la saisie en cours
 - **Écran** : Factures › fiche d'un brouillon (« Émettre »).
@@ -947,6 +968,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-028, D-FAC-05, D-R4-07.
 - **Revenir à l'identique** : selon le constat dans l'ancien ; les gardes de D-R4-07 n'ont pas
   d'effet visible tant qu'un seul onglet travaille.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — **Tranché : le défaut n'existe pas dans l'ancien, aucun écart.** « 🧾 Émettre » y est sur la carte de la liste (`boutonsFactureHTML`, `app.js:6092`) et la liste disparaît dès que le formulaire est ouvert (`app.js:5341-5342`) : on ne peut pas émettre avec une saisie en cours. `web/` fait de même depuis le 26/09 (l'émission est revenue sur la carte, `ActionsCarteFacture.tsx`, et `PageFacture.tsx` montre le formulaire À LA PLACE de la liste). Restent les gardes de D-R4-07, sans effet visible : `emettreFacture` n'agit que sur un brouillon (`facturation/api/factures.ts:173`), test `facturation/api/gardes-facture.essai.ts`.
 
 ### DEF-COR-14 — Acheteur rattaché par le nom ; le SIRET d'un autre client survit
 - **Écran** : Devis, Factures (en-tête client).
@@ -960,6 +982,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-CLI-03 ; INVENTAIRE CLI-50.
 - **Revenir à l'identique** : rattacher par le nom et ne recopier que les valeurs non vides dans
   `clients/api/clients.ts#identiteDuClient`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `clients/api/clients.ts#identiteDuClient`, recopiée à chaque enregistrement (`facturation/api/factures.ts:115, 149`) ; test `tests/rls/clients-api.essai.ts` (identité suivie au changement de client : le SIRET de l'ancien client s'efface).
 
 ### DEF-COR-15 — Listes de règlement : brouillons à 0, « ✎ Modifier » sans effet, « ✕ Effacer » en retard
 - **Écran** : Factures › Règlements (« Par facture », dossiers, « Tous les règlements »).
@@ -981,6 +1004,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   dossier avec sa case et son bouton, reprend le correctif à l'identique
   (`facturation/components/PageDossierClient.tsx`, test `reglements.essai.tsx` « un brouillon ne
   s'encaisse pas ») : plus d'écart ici, rien à trancher.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — **défaite au passage « identique » du 26/09, remise le 28/09** pour une part : « Par facture » listait de nouveau les brouillons (la liste de l'écran, `domain/reglementsEcran.ts`, avait repris le filtre de l'ancien). Remis ; test qui échoue sans : `facturation/domain/reglementsEcran.essai.ts`. En place : « ✎ Modifier » de « Tous les règlements » ouvre la saisie (test ajouté dans `reglements.essai.tsx` « Tous les règlements… »), « ✕ Effacer » paraît aussitôt (état React). Écart visuel attendu sur « Par facture » : `tests/visuel/ecrans-facturation.ts`.
 
 ### DEF-COR-16 — Aucun geste pour passer un devis à « envoyé », « accepté », « refusé »
 - **Écran** : Devis › formulaire d'un devis existant.
@@ -990,6 +1014,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : champ « Statut » dans la grille « Client & contact », sous `devis / modifier`.
 - **Décision** : D-021, D-ECR-FAC-10.
 - **Revenir à l'identique** : retirer le champ de `devis/components/PageEditionDevis.tsx`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : champ « Statut » de `devis/components/PageEditionDevis.tsx` ; test ajouté le 28/09 : `devis/components/devis.essai.tsx` « un devis existant porte un champ Statut ; un devis neuf, non ».
 
 ### DEF-COR-17 — Deux chapitres homonymes n'ont qu'un sous-total
 - **Écran** : Devis, Factures, Bons (lignes et pièces imprimées).
@@ -999,6 +1024,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : sous-totaux par position (`documents/domain/totaux.ts#sousTotauxChapitres`).
 - **Décision** : INVENTAIRE DEV-53 (pas de D- dédiée — à vérifier si une décision doit la porter).
 - **Revenir à l'identique** : grouper par nom dans `sousTotauxChapitres`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — **Tranché : le défaut n'existe pas à l'écran de l'ancien, aucun écart.** Ses sous-totaux de chapitre sont PAR POSITION (`computeChapterSubtotals` → `sousTotauxChapitres` de `src/api/regles-totaux.ts`, `app.js:3344-3360`), comme ceux de `web/` — `tests/parite/totaux.essai.ts` compare les deux. `devisChapterTotals` (groupé par nom, `app.js:2919`) ne sert qu'à préremplir le montant par métier d'un bon depuis son devis (`app.js:18775`), où additionner deux chapitres « Plomberie » est le résultat voulu ; `web/` y fait de même (`commandes/domain/metiers.ts#totauxDesChapitres`).
 
 ### DEF-COR-18 — Hors circuit, les travaux chiffrés tombent hors chapitre ; chiffrage sans quantité
 - **Écran** : Bons › pré-facture (validation directeur).
@@ -1011,6 +1037,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   prix, quantité et unité toujours envoyés (`commandes/api/circuit.ts`).
 - **Décision** : D-BC-05 ; INVENTAIRE BC-92.
 - **Revenir à l'identique** : ne pas intégrer les travaux hors circuit et n'envoyer que le prix.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `commandes/api/circuit.ts` ; tests `tests/rls/circuit.essai.ts` « …chiffre prix + quantité + unité… », « hors circuit : … les travaux chiffrés sont intégrés aussi ».
 
 ### DEF-COR-19 — File « Validation » : compteur faux, circuits clos affichés
 - **Écran** : Factures › Validation.
@@ -1023,6 +1050,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-BC-11, D-R4-02.
 - **Revenir à l'identique** : recompter comme l'ancien et ne plus écarter les circuits clos dans
   `files.ts`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `commandes/domain/files.ts#fileValidation` ; tests `commandes/domain/circuit.essai.ts` « file de validation : compteur et filtre lisent la même règle ; clos gratuit… exclus », `commandes/components/circuit.essai.tsx` « le compteur de chaque filtre est celui de sa liste ».
 
 ### DEF-COR-20 — Pièce commandée : une seule tâche écrite, échec ignoré
 - **Écran** : Pièces en commande.
@@ -1034,6 +1062,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   qui portent la pièce ; un échec (0 ligne écrite) remonte (`commandes/api/pieces.ts`).
 - **Décision** : D-043, D-ECR-BC-03 ; DEF-ECR-02.
 - **Revenir à l'identique** : écrire une seule tâche et taire l'échec.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `commandes/api/pieces.ts` (toutes les tâches du bon qui portent la pièce ; 0 ligne écrite = refus) ; test `tests/rls/commandes.essai.ts` « pièces (BC-19, BC-21) » (la secrétaire est refusée, en clair).
 
 ### DEF-COR-21 — Case « Métiers réalisés » qui n'enregistre rien
 - **Écran** : Bons › carte dépliée.
@@ -1042,6 +1071,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : pas de case ; l'état par métier se lit sur les tâches (panneau du circuit).
 - **Décision** : D-BC-08.
 - **Revenir à l'identique** : remettre une case sans effet durable.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : aucune case ; l'état de chaque métier se lit sur ses tâches (`planning/components/EnAttente.tsx`) ; test ajouté le 28/09 : `planning/components/planning.essai.tsx` « la carte dépliée dit l'état de chaque tâche, et n'offre aucune case sans effet ».
 
 ### DEF-COR-22 — Des boutons que la base refuse sont proposés
 - **Écrans** : Bons (pré-facture), Planning (cartes), Clients, Factures (sous-onglets), barre mobile.
@@ -1060,6 +1090,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   toujours de supprimer. L'ancienne ne l'affiche plus du tout ; `web/`, qui le grisait comme elle,
   fait de même (`commandes/components/CarteBon.tsx`, test `commandes.essai.tsx` « un bon facturé
   n'affiche pas « Supprimer » ») : pas d'écart.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `clients/components/clients.essai.tsx` « bouton « + Nouveau client » pour %s », `planning/components/planning.essai.tsx` « le rôle lecture voit le planning sans aucun réglage », `commandes/components/pieces.essai.tsx` « la secrétaire voit les pièces sans pouvoir agir », `devis/components/devis.essai.tsx` « le rôle lecture… », `app/Layout.essai.tsx` (menus par rôle), `commandes.essai.tsx` « un bon facturé n'affiche pas « Supprimer » ».
 
 ### DEF-COR-23 — Téléphone du locataire : écrit par l'ancienne, jamais relu
 - **Écran** : Bons › formulaire, section « Lieu & locataire ».
@@ -1072,6 +1103,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-041, D-ECR-BC-04, D-PLN-10.
 - **Revenir à l'identique** : envoyer `telephone_locataire` à l'enregistrement du bon (avec le risque
   d'effacement ci-dessus).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : la colonne n'est jamais envoyée ; test `commandes/domain/enregistrement.essai.ts` (`telephone_locataire` absent de l'en-tête écrit), lecture par `telephones_locataires` (`tests/rls/planning.essai.ts`).
 
 ### DEF-COR-24 — « reçue le 25T16:29:20.875085+00:00/09/2026 »
 - **Écran** : Planning › colonne « Non planifiés » (pièce reçue).
@@ -1082,6 +1114,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : « reçue le 25/09/2026 ».
 - **Décision** : D-ECR-PLN-05.
 - **Revenir à l'identique** : formater l'horodatage brut comme l'ancien.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `planning/components/InfosCarte.tsx` passe par `formatDateFr`, qui lit le jour d'un horodatage ; test `src/lib/dates.essai.ts` « formatDateFr » (« 2026-09-24T10:00:00Z » → « 24/09/2026 »).
 
 ### DEF-COR-25 — Planning : tâches et journées mal tenues au placement
 - **Écran** : Planning (glisser-déposer, « + Autre date », « Non planifiés »). D-PLN-16 ne dit pas si l'équipe
@@ -1101,6 +1134,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-PLN-02, D-PLN-03, D-PLN-04, D-PLN-08, D-PLN-15, D-PLN-16, D-PLN-17 ; INVENTAIRE PLN-50.
 - **Revenir à l'identique** : une par une dans `planning/domain/planification.ts`, `grille.ts`,
   `cartes.ts` ; chacune est indépendante.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `planning/domain/planning.essai.ts` (D-PLN-02 à 04, D-PLN-08, PLN-50, `affectationConnue`), `planning/components/planning.essai.tsx` « une carte faite ne se retire pas du planning ». **Tranché** (D-PLN-16) : c'est bien l'ancien — `dropOnHour` ouvre le choix de l'équipe dès que la colonne n'en désigne pas (`if(assigneeField && !assigneeValue)`, `app.js:10501`), sans regarder l'équipe que la carte porte déjà.
 
 ### DEF-COR-26 — « Date faite » sans colonne ; « Terminée le » jamais effacée
 - **Écran** : Planning › fiche d'intervention (technicien), fenêtre « Valider les travaux »
@@ -1117,6 +1151,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   de la proposition n° 16 (DEF-BDD-23).
 - **Revenir à l'identique** : rendre la case active et l'écrire dans un champ qui ne persiste pas ;
   écrire « Terminée le » à la main.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; test `planning/domain/planning.essai.ts` (PLN-54) ; pointage du sous-traitant : `tests/rls/planning.essai.ts` (DEF-BDD-23).
 
 ### DEF-COR-27 — Photos du terrain perdues à l'enregistrement
 - **Écran** : Planning › fiche d'intervention (photos).
@@ -1127,6 +1162,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-PLN-06, D-ECR-PLN-06 ; proposition n° 17 (DEF-BDD-24) pour que le terrain relise ses
   photos.
 - **Revenir à l'identique** : ne plus écrire les photos (les garder en mémoire).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : photo écrite dès l'ajout (`planning/api/planning.ts#ajouterPhoto`) ; test `tests/rls/planning.essai.ts` « le technicien dépose et lit une photo du bon ».
 
 ### DEF-COR-28 — Rapport : brouillon imprimé, contrôles perdus au rechargement, IA sans clé
 - **Écran** : Rapports › assistant et aperçu.
@@ -1140,6 +1176,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-ECR-PLN-08, D-PDF-09, D-PLN-11, D-ECR-PLN-09.
 - **Revenir à l'identique** : imprimer sans enregistrer, ne pas relire les contrôles au PDF ; l'appel
   sans clé ne se reproduit pas utilement.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests ajoutés le 28/09 : `interventions/components/etape-rapport.essai.tsx` (impression et e-mail passent par l'enregistrement ; le bouton IA le dit). Contrôles relus au PDF : `tests/rls/interventions.essai.ts` « le technicien rédige… contrôles… ».
 
 ### DEF-COR-29 — Prêts et entretiens (véhicules, matériel) perdus au rechargement
 - **Écran** : Véhicules › fiche (prêts, entretiens) ; Matériel › fiche (prêts).
@@ -1151,6 +1188,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   (`vehicules/api/prets.ts`, `entretiens.ts`, `materiel/api/materiels.ts`).
 - **Décision** : D-VEH-01, D-VEH-02 ; proposition n° 21 (DEF-BDD-27).
 - **Revenir à l'identique** : ne plus écrire ces tables — soit perdre les prêts. À trancher explicitement.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `tests/rls/vehicules.essai.ts`, `tests/rls/vehicules-api.essai.ts` (prêts, entretiens, prêts de matériel).
 
 ### DEF-COR-30 — Date de contrôle technique jamais conservée
 - **Écran** : Véhicules › formulaire, liste (« EXPIRÉ », « DANS n J »).
@@ -1161,6 +1199,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : écrit et lit `date_controle_technique` ; l'étiquette suit le seuil des réglages.
 - **Décision** : INVENTAIRE VEH-21, D-VEH-04 (pas de D- dédiée pour la colonne).
 - **Revenir à l'identique** : ne plus écrire la colonne — la date se perd.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `vehicules/domain/vehicules.essai.ts`, `tests/parite/vehicules.essai.ts`, `tests/rls/vehicules.essai.ts` (VEH-21). **Tranché** : le formulaire de l'ancien écrit `prochainCT`, que `toSnake` (`src/integrations/html-adapter.ts:59`) rend `prochain_c_t` — colonne absente de `vehicules` en production (`src/api/columns.ts:79`, qui a `date_controle_technique`) : `colonnesDe()` l'écarte, la date se perd ; la liste lit `v.prochainCT` (`app.js:15114-15124`) et affiche « — ». L'ancien le reconnaît lui-même pour ses alertes (`app.js:631`).
 
 ### DEF-COR-31 — Carte carburant : un code PIN fait refuser toute la fiche
 - **Écran** : Véhicules › fiche › carte carburant.
@@ -1169,6 +1208,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : champ date.
 - **Décision** : D-VEH-05.
 - **Revenir à l'identique** : champ texte libre « Validité / code PIN ».
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; test `vehicules/domain/vehicules.essai.ts` (D-VEH-05).
 
 ### DEF-COR-32 — Factures d'achat et d'entretien du véhicule perdues
 - **Écran** : Véhicules › fiche (« + Ajouter » facture d'achat, facture d'entretien).
@@ -1178,6 +1218,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : `vehicule_documents` + seau, `vehicule_entretiens.fichier_chemin`.
 - **Décision** : D-VEH-03 ; politiques Storage de la proposition n° 21.
 - **Revenir à l'identique** : ne plus déposer ces fichiers.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `tests/rls/vehicules.essai.ts` « la secrétaire dépose la facture d'achat d'un véhicule », `tests/rls/vehicules-api.essai.ts` « entretien avec facture jointe ».
 
 ### DEF-COR-33 — Vente de véhicule : acheteur en texte libre, phrase inexacte
 - **Écran** : Véhicules › « Vendre ce véhicule ».
@@ -1189,6 +1230,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   vendu → émission par la base, une seule fois ; phrase exacte.
 - **Décision** : D-FAC-11, D-VEH-06, D-ECR-PAR-02.
 - **Revenir à l'identique** : texte libre et taux 20/0 dans `vehicules/api/vente.ts` et la fenêtre.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `vehicules/domain/vehicules.essai.ts` (D-VEH-06), `tests/rls/vehicules-api.essai.ts` « la vente émet une facture numérotée par la base, et ne se fait qu'une fois ».
 
 ### DEF-COR-34 — Absences perdues, solde de congés faux
 - **Écran** : RH › fiche salarié › congés.
@@ -1199,6 +1241,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   enregistré avec la fiche.
 - **Décision** : D-RH-02 ; contrainte `fin >= début` de la proposition n° 20.
 - **Revenir à l'identique** : ne plus écrire `salarie_absences`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `rh/domain/rh.essai.ts`, `tests/rls/rh.essai.ts` (RH-20).
 
 ### DEF-COR-35 — Documents de sous-traitant perdus
 - **Écran** : Réglages › Intervenants › sous-traitant (documents à échéance).
@@ -1208,6 +1251,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : `sous_traitant_documents` + `<société>/sous-traitants/<id>/`.
 - **Décision** : D-RH-08, D-SOC-14.
 - **Revenir à l'identique** : ne plus écrire la table.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `tests/rls/auth-roles.essai.ts` « sous-traitant et son document », `tests/rls/rh.essai.ts` « le rôle lecture n'efface plus les documents d'un sous-traitant ».
 
 ### DEF-COR-36 — Une fiche conducteur retirée se réactive ; le rôle est redemandé
 - **Écran** : RH › fiche salarié › « Conducteur de travaux ».
@@ -1219,6 +1263,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-RH-09, D-RH-10.
 - **Revenir à l'identique** : cocher dès qu'une fiche existe, redemander à chaque enregistrement
   (`rh/domain/intervenants.ts#planConducteur`, `PageFicheSalarie.tsx`).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; test `rh/domain/rh.essai.ts` (`planConducteur` : fiche retirée, rien à faire).
 
 ### DEF-COR-37 — Seuils d'alerte codés en dur ; cloche en double ou pour des bons facturés
 - **Écrans** : RH (liste), Véhicules (liste, échéances), cloche.
@@ -1232,6 +1277,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-RH-04, D-VEH-04, D-CLI-06.
 - **Revenir à l'identique** : remettre les 30 jours en dur et les règles de l'ancienne cloche
   (`notifications`, `rh`, `vehicules/domain/echeances.ts`).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `rh/domain/rh.essai.ts` (D-RH-04), `vehicules/domain/vehicules.essai.ts` et `tests/parite/vehicules.essai.ts` (D-VEH-04), `tests/parite/notifications.essai.ts` (D-CLI-06).
 
 ### DEF-COR-38 — Conducteur ou fournisseur supprimé au lieu d'être retiré
 - **Écran** : Réglages › Intervenants (conducteurs, fournisseurs).
@@ -1240,6 +1286,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : « Retirer » (`actif = false`), « Retiré », remise d'un clic.
 - **Décision** : D-ECR-PAR-12.
 - **Revenir à l'identique** : bouton « Supprimer » qui efface la fiche.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `reglages/domain/reglages.essai.ts`, `rh/components/rh.essai.tsx`, `tests/rls/rh.essai.ts` (PAR-06).
 
 ### DEF-COR-39 — Logo et documents légaux en data-URL dans les réglages
 - **Écran** : Réglages › Identité visuelle, Documents légaux.
@@ -1250,6 +1297,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   `documents_legaux`, `societes.logo_url` ; les pièces héritées restent visibles en lecture.
 - **Décision** : D-SOC-02, D-SOC-05.
 - **Revenir à l'identique** : écrire les data-URL dans `infos_entreprise`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `reglages/domain/reglages.essai.ts`, `societes/domain/societe.essai.ts` (SOC-51), `tests/rls/reglages.essai.ts` (documents légaux au seau).
 
 ### DEF-COR-40 — Préfixe de numérotation à tiret accepté
 - **Écran** : Réglages › Numérotation.
@@ -1259,6 +1307,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : lettres, chiffres, `_` ; une confirmation groupée.
 - **Décision** : D-SOC-10.
 - **Revenir à l'identique** : accepter tout préfixe, une confirmation par série.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; test `reglages/domain/reglages.essai.ts` « un préfixe porte lettres et chiffres, sans tiret ».
 
 ### DEF-COR-41 — Code de référentiel sans accents
 - **Écran** : Réglages › Listes de choix.
@@ -1268,6 +1317,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : « location_de_materiel » (`reglages/domain/listes.ts#codeDepuisLibelle`).
 - **Décision** : INVENTAIRE PAR-21 (pas de D- dédiée).
 - **Revenir à l'identique** : retirer `normaliserEntree` du repli.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — **Tranché : le défaut n'existe pas en pratique, aucun écart.** L'ancien calcule le code par `window.normaliserEntree(libelle)` (`app.js:17930-17932`), que la couche TypeScript pose toujours (`src/integrations/session.ts:726`) et qui retire les accents (`src/api/regles-referentiels.ts:36`) : « location_de_materiel ». Le repli sans accents n'est pris que si cette fonction manquait. `web/` donne le même code : `reglages/domain/reglages.essai.ts` (`codeDepuisLibelle`).
 
 ### DEF-COR-42 — « Fait » de la cloche refusé au conducteur et au technicien
 - **Écran** : cloche de l'en-tête.
@@ -1277,6 +1327,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : table `notifications_traitees` (`notifications/api/notifications.ts`).
 - **Décision** : D-CLI-05 ; proposition n° 31 (DEF-BDD-30).
 - **Revenir à l'identique** : écrire `notifsTraitees` dans les réglages.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `notifications/api/notifications.ts` ; test `tests/rls/notifications.essai.ts` (prouvé contre la base sans proposition, DEF-BDD-30).
 
 ### DEF-COR-43 — Saisie : « 1,5 » lu 1
 - **Écran** : tout champ numérique (quantités, prix, pourcentages).
@@ -1285,6 +1336,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : virgule française comme séparateur décimal (`lib/money.ts#montant`).
 - **Décision** : D-013, D-CHA-03.
 - **Revenir à l'identique** : lire par `parseFloat`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `src/lib/money.essai.ts` « admet la virgule française et les espaces de milliers », `src/lib/nombres.essai.ts`. Les champs `type="number"` des règlements rendent toujours un point : `parseFloat` y reste juste.
 
 ### DEF-COR-44 — « …alors que le pays est . »
 - **Écran** : Clients, Réglages › Organisation (contrôle du n° de TVA).
@@ -1294,6 +1346,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : pays vide = France (`tests/parite/identifiants.essai.ts`).
 - **Décision** : D-012.
 - **Revenir à l'identique** : comparer à `paysCode ?? "FR"`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; test `tests/parite/identifiants.essai.ts` (D-012).
 
 ### DEF-COR-45 — Catalogue : une virgule casse la recherche ; familles tronquées
 - **Écran** : Catalogue.
@@ -1307,6 +1360,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-023, D-024, D-ECR-CHA-03.
 - **Revenir à l'identique** : filtre sans guillemets, une page de familles, message « Le catalogue est
   vide ».
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `articles/domain/article.essai.ts` « une virgule ou une parenthèse ne casse pas le filtre PostgREST », `tests/rls/articles.essai.ts` « …supporte virgules et parenthèses », `articles/components/articles.essai.tsx` (« Aucun article ne correspond. ») ; familles lues par pages (`articles/api`).
 
 ### DEF-COR-46 — Listes tronquées sans le dire
 - **Écrans** : clients, chantiers, devis, factures, règlements, salariés, cloche.
@@ -1317,6 +1371,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : `lib/lecture.ts#lireTout` (compte exact, pages ; sinon erreur `ListeTronquee`).
 - **Décision** : D-CLI-07, D-R4-08 ; INVENTAIRE TRV-10.
 - **Revenir à l'identique** : sans objet côté affichage tant que les listes tiennent sous le plafond.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `lib/lecture.ts#lireTout` ; tests `src/lib/lecture.essai.ts`, `src/lib/listes-tronquees.essai.ts`, `tests/rls/clients-api.essai.ts` (TRV-10). **Tranché** : le pont de l'ancien refuse déjà une collection ou une fille tronquée (`refuserSiTronque`, `html-adapter.ts:679`, appelé l. 758 et 1659) ; le défaut ne vaut que pour ses lectures hors du pont — les familles du catalogue (DEF-COR-45).
 
 ### DEF-COR-47 — Messages d'erreur en anglais
 - **Écrans** : Connexion, lecture automatique d'un bon, refus de la base.
@@ -1326,12 +1381,14 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : messages en français ; motif rédigé par la base affiché (`details`, `hint`, `message`).
 - **Décision** : D-AUTH-04, D-VIS-03, D-ECR-BC-10.
 - **Revenir à l'identique** : afficher `error.message` brut.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `lib/erreurs.ts` ; tests `src/lib/erreurs.essai.ts`, `tests/e2e/parcours.e2e.ts` (« Adresse e-mail ou mot de passe incorrect. »), `ocr/components/lecture.essai.tsx`.
 
 ### DEF-COR-48 — La recherche perd le focus à chaque frappe
 - **Écrans** : listes avec recherche (chantiers, clients, catalogue…).
 - **Reproduire (ancienne)** : taper dans la recherche : la zone se redessine, le champ perd le focus.
 - **Décision** : D-ECR-CHA-05.
 - **Revenir à l'identique** : redessiner le champ (non recommandé).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place (champs React contrôlés, jamais redessinés) ; test ajouté le 28/09 : `facturation/components/recherche-croisee.essai.tsx` (le champ garde le focus et sa saisie).
 
 ### DEF-COR-49 — Rapport de rejets d'import nommé `.pdf`
 - **Écrans** : imports (catalogue, clients, factures).
@@ -1340,6 +1397,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : `.csv`.
 - **Décision** : D-PDF-07.
 - **Revenir à l'identique** : nommer le fichier `.pdf`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : `import-articles-rapport.csv`, `import-clients-rapport.csv`, `import-factures-rapport.csv` (`PageImportArticles.tsx:14`, `PageImportClients.tsx:51`, `PageImportFactures.tsx:69`).
 
 ### DEF-COR-50 — Import de clients : une mise à jour efface les champs absents
 - **Écran** : Clients › import.
@@ -1350,6 +1408,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   (`tests/rls/import-export.essai.ts`).
 - **Décision** : D-EFA-07.
 - **Revenir à l'identique** : envoyer toute la ligne à la mise à jour.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `tests/parite/import-clients.essai.ts`, `tests/rls/import-export.essai.ts` (D-EFA-07).
 
 ### DEF-COR-51 — Restauration de sauvegarde sans garde de rôle
 - **Écran** : Réglages › « ⬆ Importer une sauvegarde ».
@@ -1359,6 +1418,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-EFA-08, D-ECR-PAR-09.
 - **Revenir à l'identique** : réintroduire la restauration par écrasement (la base refuse désormais de
   modifier les pièces figées).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `import-export/components/import.essai.tsx`, `tests/rls/import-export.essai.ts` (IMP-40).
 
 ### DEF-COR-52 — Factures de sous-traitant : numéros hors série, « payées » sans règlement
 - **Écrans** : Factures (« Mes factures / Factures <société> » du sous-traitant).
@@ -1369,6 +1429,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : pas de facture de sous-traitant (facture d'achat, relève de la réception PDP).
 - **Décision** : D-FAC-09 ; tableau du sous-traitant : DEF-STA-14.
 - **Revenir à l'identique** : recréer ces vues et la numérotation à l'écran.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place (aucune facture de sous-traitant) ; tests `statistiques/domain/domaine.essai.ts`, `tests/parite/statistiques.essai.ts` (tuiles du sous-traitant, STA-14). **Tranché**, chemin exact dans l'ancien : `soustraitant.alpha` → Factures → « Factures <société> » (`renderFacturesKTAHTML`) → « ➕ Récupérer ma facture pré-remplie » (`creerFactureDepuisBCKTA`, `app.js:5976`, numéro `FST-<n° BC>`) ou sélection + « 🧾 Facturer la sélection (facture mensuelle regroupée) » (`creerFactureGroupeeST`, `app.js:5907`, numéro `FST-M<AAAAMM>` compté à l'écran) : la pièce naît `impayée`, numérotée par l'écran ; « Marquer payée » : `marquerFactureSTPayee` (l. 6022). Les numéros de ligne cités plus haut ont glissé.
 
 ### DEF-COR-53 — Portail client mort
 - **Écran** : espace client.
@@ -1377,6 +1438,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : espace client en lecture seule sur la RLS (`client.opac@erp.local`).
 - **Décision** : D-008, D-029, D-FAC-10, D-ECR-PAR-14 ; propositions n° 4, 14, 29 (DEF-BDD-28).
 - **Revenir à l'identique** : ne pas ouvrir l'espace client.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place ; tests `tests/rls/espace-client.essai.ts`, `espace-client-bons.essai.ts` (prouvés contre la base sans proposition, DEF-BDD-28).
 
 ### DEF-COR-54 — Réf. de bon de commande client figée vide sans avertissement
 - **Écran** : Factures › « Émettre ».
@@ -1386,6 +1448,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   client ? Elle sera figée vide ».
 - **Décision** : INVENTAIRE FAC-100 (pas de D- dédiée).
 - **Revenir à l'identique** : retirer la confirmation de `FormulaireFacture.tsx`.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — **défaite au passage « identique » du 26/09, remise le 28/09** : l'avertissement de la réf. figée vide était dans le bouton « Émettre » du formulaire, que d6a2283 a retiré (l'émission est revenue sur la carte, comme dans l'ancien). Remis dans la question de l'ancien, gardée mot pour mot, seulement quand la référence manque (`ActionsCarteFacture.tsx`, `AVERTISSEMENT_REF_VIDE`) ; boîte du navigateur, hors captures. Test qui échoue sans : `facturation/components/recherche-croisee.essai.tsx` « émettre sans réf. de bon de commande client ». **Tranché** sur l'ancien : `emettreLaFacture` (`app.js:6483-6491`) ne dit rien de la référence.
 
 ### DEF-COR-55 — « Mon nom » inaccessible au technicien et au sous-traitant
 - **Écran** : Réglages › Mon compte / `/mon-compte`.
@@ -1393,6 +1456,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : `/mon-compte` (nom, mot de passe) ouvert à tous.
 - **Décision** : D-SOC-06, D-ECR-PAR-08.
 - **Revenir à l'identique** : retirer « Mon compte » du menu du nom pour ces rôles.
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place : route `/mon-compte` hors de toute garde de module, « Mon compte » dans le menu du nom pour tous (`MenuUtilisateur.tsx`) ; test `auth-roles/components/compte.essai.tsx` « ouvert au technicien : il renomme son compte ».
 
 ### DEF-COR-56 — L'ordre des listes suit l'ordre physique de la base
 - **Écrans** : Bons (cartes), fiche chantier (devis, factures), « Tous les règlements ».
@@ -1401,6 +1465,7 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Nouvelle** : ordre stable (date décroissante, numéro, identifiant).
 - **Décision** : D-ECR-BC-09, D-ECR-CHA-10, D-ECR-FAC-06.
 - **Revenir à l'identique** : non reproductible de façon fiable (ordre non déterminé).
+- **État (28/09)** : corrigé — confirmé par le client (28/09). Vérifié sur le code actuel — en place pour les bons (date, numéro interne) et les règlements (identifiant, D-ECR-FAC-06) ; la fiche chantier ne triait que par date : départage par numéro puis identifiant ajouté le 28/09 (`chantiers/api/liens.ts`), test qui échoue sans : `chantiers/api/liens.essai.ts`.
 
 ## Défauts de l'ancienne reproduits sans correction
 

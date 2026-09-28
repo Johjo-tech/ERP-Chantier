@@ -2534,3 +2534,20 @@ droit. Le relevé ajouté (`transversal.essai.ts`) passe donc des deux côtés :
 propositions (qui créent des déclencheurs), il ne prouve pas le défaut. On le dit plutôt que de
 fabriquer une fonction ouverte pour le faire échouer. La barrière de `v_salaries_annuaire`, elle,
 est prouvée (vide sans la proposition).
+
+## D-BDD2-04 — Corrections DEF-COR défaites le 26/09 : remises dans l'habit de l'ancien
+La relecture des 56 entrées DEF-COR sur le code du 28/09 a trouvé trois corrections perdues quand
+les écrans ont été refaits à l'identique : l'annonce de ce que remplace l'import d'un DPGF
+(DEF-COR-06), l'absence des brouillons dans « Par facture » (DEF-COR-15), l'avertissement de la
+réf. de bon client figée vide (DEF-COR-54). Elles reviennent sans rien changer d'autre à l'écran :
+l'annonce est une ligne `card-sub` qui ne paraît que sur un DPGF non vide ; l'avertissement
+s'ajoute à la question de l'ancien, gardée mot pour mot, dans la boîte du navigateur. Un départage
+(numéro, identifiant) est ajouté aux listes de la fiche chantier, que l'entrée DEF-COR-56 disait
+stables et qui ne l'étaient pas à date égale.
+
+## D-BDD2-05 — Trois « défauts de l'ancien » n'en sont pas
+Vérifiés dans `app.js` : « Émettre » ne peut pas perdre une saisie en cours (la liste, où est le
+bouton, disparaît quand le formulaire s'ouvre) — DEF-COR-13 ; les sous-totaux de chapitres
+homonymes sont par position à l'écran, la fusion par nom ne sert qu'au montant par métier d'un bon,
+où elle est voulue — DEF-COR-17 ; le code d'une liste de choix est déjà sans accents, la branche de
+repli n'étant jamais prise — DEF-COR-41. Rien n'est changé ; les entrées le disent.
