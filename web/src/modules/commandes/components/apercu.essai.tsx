@@ -10,6 +10,11 @@ vi.mock("../api/bons", () => ({ ...bons, listerBons: vi.fn(async () => []), Enre
 vi.mock("@/modules/societes/api/identite", () => ({
   lireIdentite: vi.fn(async () => ({ nom: "ALPHA", raison_sociale_legale: "ALPHA Rénovation SAS", adresse: "1 rue A", code_postal: "69001", ville: "Lyon", telephone: null, email: null, siret: null })),
 }));
+// L'aperçu attend la liste des clients pour imprimer la commune du bloc « Client » (2c21745) :
+// sans ce double, le test dépendait d'une base joignable et restait sur « Chargement… » en CI.
+vi.mock("@/modules/clients/api/clients", () => ({
+  listerClients: vi.fn(async () => [{ nom: "OPAC du Rhône", adresse: "33 rue de la République", code_postal: "69002", ville: "Lyon", interlocuteurs: [] }]),
+}));
 const documents = vi.hoisted(() => ({ lireIdentiteDocument: vi.fn() }));
 vi.mock("@/modules/documents/api/identite", () => documents);
 
@@ -44,6 +49,13 @@ describe("aperçu imprimable du bon (le gabarit de l'ancien, D-PDF-01)", () => {
     // La référence du client est toujours imprimée (BC-80).
     expect(screen.getByText("Réf. client")).toBeInTheDocument();
     expect(screen.getByText("Validation de la pré-facture :")).toBeInTheDocument();
+  });
+
+  it("le bloc « Client » porte le code postal et la ville de la fiche (2c21745)", async () => {
+    documents.lireIdentiteDocument.mockResolvedValue(emetteur(null));
+    const { container } = ouvrir();
+    await screen.findByText("BON DE COMMANDE");
+    expect(container.ownerDocument.body.textContent).toContain("69002 Lyon");
   });
 
   it("sans logo, l'en-tête glisse (p-sans-logo) au lieu de s'ouvrir sur un vide", async () => {
