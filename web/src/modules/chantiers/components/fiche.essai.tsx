@@ -108,6 +108,16 @@ describe("liste des chantiers (CHA-01) — les cartes de l'ancien", () => {
     expect(screen.getByRole("link", { name: "Salle de bains Durand" })).toBeInTheDocument();
   });
 
+  // DEF-REP-05, D-REP-05 : l'ancien lisait un champ `client` vide ; la carte et le bandeau restaient muets.
+  it("la carte et le bandeau portent le nom du client", async () => {
+    const { container } = ouvrir("admin", "/chantiers");
+    const carte = await screen.findByRole("link", { name: "Résidence Les Tilleuls" });
+    expect(carte.querySelector(".chantier-a4-client")).toHaveTextContent("Office HLM");
+    container.ownerDocument.body.innerHTML = "";
+    ouvrir("admin", "/chantiers/ch1");
+    expect(await screen.findByText("Chantier neuf · Office HLM")).toBeInTheDocument();
+  });
+
   it("« + Nouveau chantier » ouvre le formulaire en place et masque les filtres", async () => {
     ouvrir("admin", "/chantiers");
     await userEvent.click(await screen.findByRole("button", { name: "+ Nouveau chantier" }));

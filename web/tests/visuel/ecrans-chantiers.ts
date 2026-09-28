@@ -54,7 +54,30 @@ function saisir(selecteur: string, texte: string): Geste {
   };
 }
 
+/**
+ * DEF-REP-05, D-REP-05 : le nom du client s'affiche sur chaque carte de chantier et dans le bandeau
+ * de la fiche ; l'ancien lisait un champ `client` vide. Une ligne de texte de plus par carte (le jeu
+ * d'essai en montre au plus six), une ligne changée dans le bandeau, et des cartes plus hautes sur
+ * téléphone — 10 à 15 % d'écart mesuré quand un premier passage l'affichait (D-ECR-CHA-07).
+ * Marge PROVISOIRE ajoutée au seuil mesuré avant la correction : à relever puis abaisser au prochain passage.
+ */
+const MARGE_NOM_DU_CLIENT: Record<Taille, Seuils> = { bureau: { pixels: 0.03, texte: 6 }, mobile: { pixels: 0.15, texte: 6 } };
+const PORTE_LE_NOM_DU_CLIENT = /^(chantiers(-nouveau)?|chantier-fiche(-dpgf|-durand)?)(--|$)/;
+
+function avecNomDuClient(e: Ecran): Ecran {
+  if (!PORTE_LE_NOM_DU_CLIENT.test(e.id)) return e;
+  const seuils: Partial<Record<Taille, Seuils>> = {};
+  for (const [taille, s] of Object.entries(e.seuils) as [Taille, Seuils][]) {
+    seuils[taille] = { pixels: s.pixels + MARGE_NOM_DU_CLIENT[taille].pixels, texte: s.texte + MARGE_NOM_DU_CLIENT[taille].texte };
+  }
+  return { ...e, seuils };
+}
+
 export function ecransChantiersClientsCatalogue(): Ecran[] {
+  return ecransDuPerimetre().map(avecNomDuClient);
+}
+
+function ecransDuPerimetre(): Ecran[] {
   return [
     // ── Catalogue ───────────────────────────────────────────────────────────
     {
