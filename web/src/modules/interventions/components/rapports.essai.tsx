@@ -203,6 +203,33 @@ describe("fiche du rapport : créer le devis ou la facture (DEV-17, FAC-15)", ()
     await waitFor(() => expect(toast.afficherToast).toHaveBeenCalledWith(expect.stringMatching(/déjà été transformé en devis \(DEV-2026-000004\)/)));
   });
 
+  it("l'aperçu a le squelette de l'ancien : ✕, puis la barre « Imprimer » « Enregistrer », puis la pièce ; les gestes de web/ SOUS la pièce (D-COR2-04)", async () => {
+    api.lireRapport.mockResolvedValue(complet({}));
+    transfo.courrielDuClient.mockResolvedValue("contact@opac.fr");
+    ouvrir();
+    await screen.findByRole("button", { name: "Transformer en facture" });
+    const panneau = document.querySelector("#viewInterventionModal.view-modal.open > .view-modal-panel") as HTMLElement;
+    expect(panneau).not.toBeNull();
+    // index.html l. 1808-1817 : les trois premiers enfants, dans cet ordre et avec ces classes.
+    const [croix, barre, contenu, gestes, ...reste] = [...panneau.children] as HTMLElement[];
+    expect(croix).toHaveClass("view-modal-close");
+    expect(croix?.textContent).toBe("✕");
+    expect(barre?.className).toBe("view-modal-actions no-print");
+    expect([...(barre?.children ?? [])].map((b) => [b.tagName, b.className, b.textContent])).toEqual([["BUTTON", "btn small", "Imprimer"], ["BUTTON", "btn small primary", "Enregistrer"]]);
+    expect(contenu?.id).toBe("viewInterventionContent");
+    expect(within(contenu as HTMLElement).getByText("RAPPORT D'INTERVENTION")).toBeInTheDocument();
+    // Les gestes propres à web/ : une rangée de l'ancien (`btn small`), après la pièce — jamais au-dessus.
+    expect(gestes?.className).toBe("view-modal-actions no-print gestes-web");
+    expect([...(gestes?.children ?? [])].map((b) => [b.className, b.textContent])).toEqual([["btn small", "Envoyer par email"], ["btn small", "Transformer en devis"], ["btn small", "Transformer en facture"]]);
+    expect(reste).toEqual([]);
+    expect(panneau.querySelector(".actions-web, [class*='flex-wrap']")).toBeNull();
+    // « Envoyer par email » ouvre la fenêtre de l'ancien (`openEmailComposeModal`), destinataire et objet remplis.
+    await userEvent.click(within(gestes as HTMLElement).getByRole("button", { name: "Envoyer par email" }));
+    expect(await screen.findByLabelText("2. Destinataire")).toHaveValue("contact@opac.fr");
+    expect(screen.getByLabelText("Objet")).toHaveValue("Rapport d'intervention — OPAC du Rhône");
+    expect(screen.getByRole("button", { name: "Copier le texte" })).toBeInTheDocument();
+  });
+
   it("le rôle lecture ne voit aucun des deux gestes", async () => {
     api.lireRapport.mockResolvedValue(complet({}));
     rendreAvecSession(

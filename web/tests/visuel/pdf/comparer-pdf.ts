@@ -244,8 +244,15 @@ function comparerPage(a: PageRendue, b: PageRendue, fabrique: (w: number, h: num
 const FENETRE_APERCU = { width: FENETRE.width, height: 2600 };
 /* Ce qui passe par-dessus sans appartenir à l'aperçu : l'avis de fabrication du
    PDF, et le bandeau de lecture en échec que l'ancien affiche sur la base
-   locale (chantier_achats.position, colonne absente). */
-const HORS_APERCU = "#toastBox, #bandeauEchecLecture { display: none !important; }";
+   locale (chantier_achats.position, colonne absente). Et, sur le rapport
+   d'intervention de la nouvelle, la rangée `.gestes-web` (« Envoyer par email »,
+   « Transformer en devis / facture ») : des gestes que l'ancien n'a pas sur cet
+   aperçu (PLN-20, D-CLI-09), posés SOUS la pièce depuis D-COR2-04 — ils
+   allongeaient le panneau sans rien dire de la fidélité de la pièce. Écart
+   attendu, pas un seuil relâché : le haut du panneau (✕, « Imprimer »,
+   « Enregistrer ») et la pièce restent comparés. Écran : aperçu du rapport
+   INT-2026-000001 (`/rapports/:id/apercu`). */
+const HORS_APERCU = "#toastBox, #bandeauEchecLecture, .gestes-web { display: none !important; }";
 
 async function capturePanneau(page: Page, panneau: ReturnType<Page["locator"]>): Promise<Buffer> {
   await page.setViewportSize(FENETRE_APERCU);

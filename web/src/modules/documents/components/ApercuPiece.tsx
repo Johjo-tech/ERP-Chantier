@@ -5,7 +5,7 @@ import { assurerPolices, type OptionsPiece, type PieceImprimee } from "../impres
 interface Props {
   piece: PieceImprimee;
   fermer: () => void;
-  /** Gestes propres à web/ (envoi, transformation d'un rapport), au-dessus de la barre de l'ancien (D-PDF-06). */
+  /** Gestes propres à web/ (envoi, transformation d'un rapport), sous la pièce (D-PDF-06, D-COR2-04). */
   actions?: ReactNode;
   options?: OptionsPiece;
 }
@@ -32,13 +32,15 @@ export function ApercuPiece({ piece, fermer, actions, options }: Props) {
     <div id="viewInterventionModal" className="view-modal open" style={piece.variables as CSSProperties} onClick={surVoile} role="dialog" aria-modal="true" aria-label={piece.nomFichier}>
       <div className="view-modal-panel">
         <button className="view-modal-close" onClick={fermer} aria-label="Fermer">✕</button>
-        {/* Au-dessus de la barre de l'ancien, qui reste telle quelle : « Imprimer », « Enregistrer ». */}
-        {actions && <div className="actions-web no-print mr-11 mb-3 flex flex-wrap justify-end gap-2">{actions}</div>}
         <div className="view-modal-actions no-print">
           <button className="btn small" disabled={imprimer.isPending} onClick={() => lancer("open")}>Imprimer</button>
           <button className="btn small primary" disabled={imprimer.isPending} onClick={() => lancer("save")}>Enregistrer</button>
         </div>
         <div id="viewInterventionContent" dangerouslySetInnerHTML={{ __html: piece.html }} />
+        {/* SOUS la pièce, dans l'habit de la barre de l'ancien : le haut de la fenêtre reste celui de
+            l'ancien au pixel près — une rangée ajoutée au-dessus passait à la ligne et décalait toute la
+            pièce (D-COR2-04). */}
+        {actions && <div className="view-modal-actions no-print gestes-web" style={{ margin: "10mm 0 0" }}>{actions}</div>}
       </div>
     </div>
   );
