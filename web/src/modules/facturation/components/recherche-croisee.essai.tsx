@@ -95,6 +95,9 @@ describe("recherche croisée des factures et des bons (TRV-06, TRV-07)", () => {
     await screen.findByText("FAC-2026-000011");
     await userEvent.type(screen.getByLabelText("Rechercher"), "étanchéité");
     await waitFor(() => expect(screen.queryByText("FAC-2026-000011")).not.toBeInTheDocument());
+    // DEF-COR-48 (D-ECR-CHA-05) : l'ancien redessinait la zone, champ compris, à chaque frappe — le focus se perdait.
+    expect(screen.getByLabelText("Rechercher")).toHaveFocus();
+    expect(screen.getByLabelText("Rechercher")).toHaveValue("étanchéité");
     const carteF1 = document.getElementById("facture-card-f1") as HTMLElement;
     expect(within(carteF1).getByText(/🔎 Nature Étanchéité terrasse/)).toBeInTheDocument();
   });

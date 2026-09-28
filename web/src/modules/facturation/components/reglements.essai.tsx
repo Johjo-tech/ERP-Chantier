@@ -175,6 +175,10 @@ describe("vues des règlements (FAC-30 à FAC-32)", () => {
     expect(screen.getByText("Total des règlements affichés").parentElement?.nextSibling).toHaveTextContent("50,00 €");
     expect(screen.getByText("Rapproché")).toBeInTheDocument();
     expect(screen.getByText("🏗️ Les Tilleuls")).toBeInTheDocument();
+    // DEF-COR-15 : dans l'ancien, « ✎ Modifier » posait `formOpen.reglement` sans zone où l'afficher — rien ne s'ouvrait.
+    expect(document.getElementById("formZoneReglement")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "✎ Modifier" }));
+    expect(document.getElementById("formZoneReglement")).not.toBeNull();
   });
 });
 

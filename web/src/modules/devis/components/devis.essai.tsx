@@ -95,4 +95,23 @@ describe("édition d'un devis", () => {
     expect(screen.queryByRole("button", { name: "Enregistrer le devis" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Désignation, ligne 1").closest("[aria-disabled]")).toHaveAttribute("aria-disabled", "true");
   });
+
+  // DEF-COR-16 (D-021, D-ECR-FAC-10) : l'ancien n'offrait aucun geste pour changer le statut d'un
+  // devis ; il restait « brouillon » alors que le tableau de bord compte les devis « envoyé ».
+  it("un devis existant porte un champ Statut ; un devis neuf, non", async () => {
+    api.lireDevis.mockResolvedValue({
+      id: "d1", societe_id: "alpha", numero: "DEV-2026-000001", client_id: "c1", client_nom: "OPAC du Rhône", interlocuteur: null,
+      chantier_id: null, adresse: null, adresse_locataire: null, code_postal: null, ville: null, logement_statut: null, occupant: null,
+      etage: null, numero_logement: null, precision_commune: null, ancien_locataire: null, telephone_locataire: null, date: "2026-09-24",
+      remise_pourcentage: 0, statut: "envoyé", conducteur_id: null, conducteur: null, lignes: [],
+    });
+    const { unmount } = ouvrir("secretaire", "/devis/d1");
+    const statut = await screen.findByLabelText("Statut");
+    expect(statut).toHaveValue("envoyé");
+    expect(within(statut).getByRole("option", { name: /accept/i })).toBeInTheDocument();
+    unmount();
+    ouvrir("secretaire");
+    await screen.findByRole("button", { name: "Enregistrer le devis" });
+    expect(screen.queryByLabelText("Statut")).not.toBeInTheDocument();
+  });
 });
