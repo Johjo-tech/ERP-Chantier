@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
+import { definirModeDiscret, MONTANT_MASQUE } from "@/lib/modeDiscret";
 import { rendreAvecSession } from "@/test/session-factice";
 import { bonAvecTaches, bonEssai, tacheEssai, travailEssai } from "../essai-fixtures";
 import { PageBonCommande } from "./PageBonCommande";
@@ -250,6 +251,22 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     const c = circuit.validerPrefacture.mock.calls[0]?.[0] as { lignes: { designation: string }[]; integres: string[]; prix: unknown[]; montant: number; horsCircuit: boolean };
     expect(c.lignes.map((l) => l.designation)).toEqual(["PEINTURE", "Murs", "Reprise plinthes"]);
     expect(c).toMatchObject({ integres: ["w1"], prix: [{ id: "w1", prix: 15, quantite: 4, unite: "ml" }], montant: 260, horsCircuit: false });
+  });
+
+  // DEF-REP-08, D-REP-08 : l'ancien laissait les montants de la fenêtre en clair en mode discret.
+  it("en mode discret, les totaux de la fenêtre sont masqués", async () => {
+    definirModeDiscret(true);
+    try {
+      api.lireBon.mockResolvedValue(bonAvecTaches(validees, { lignes }));
+      circuit.listerTaches.mockResolvedValue(validees);
+      circuit.listerTravaux.mockResolvedValue([]);
+      ouvrir("admin", "/commandes/b1/prefacture");
+      const totaux = await screen.findByLabelText("Totaux de la pré-facture");
+      expect(totaux).toHaveTextContent(MONTANT_MASQUE);
+      expect(totaux).not.toHaveTextContent("200,00");
+    } finally {
+      definirModeDiscret(false);
+    }
   });
 
   it("hors circuit : offert à l'admin quand seul le terrain manque, avec le TTC ; refermé après un refus (BC-71)", async () => {

@@ -1,5 +1,6 @@
 import { Fragment, useContext } from "react";
-import { formatEuros, somme } from "@/lib/money";
+import { somme } from "@/lib/money";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { ligneVide, type LigneEdition } from "@/modules/documents/domain/lignes";
 import { memeMetier, METIER_AUCUN, metierAffiche, metierChoisi, montantsParMetier } from "../domain/metiers";
 import { badgeOrigine, metierDuTravail, placerTravaux, UNITE_DEFAUT, type LigneDocument, type SaisieTravail, type TacheDuTravail, type Travail } from "../domain/prefacture";
@@ -60,6 +61,8 @@ function LigneTravail({ t, metier, saisie, onSaisie, actif }: { t: Travail; meti
 
 /** Ce que chaque métier pèse (`sousTotauxMetiersHTML`), sur le document fusionné, dès deux groupes. */
 function SousTotaux({ document }: { document: readonly LigneDocument[] }) {
+  // Masqués en mode discret, comme tout montant à l'écran (DEF-REP-08, D-REP-08).
+  useModeDiscret();
   const connus = useContext(MetiersConnus);
   const groupes = montantsParMetier(document, connus);
   if (groupes.length < 2) return null;
@@ -73,10 +76,10 @@ function SousTotaux({ document }: { document: readonly LigneDocument[] }) {
             <tr key={g.metier ?? "sans"}>
               <td>{g.metier ? <span className="badge" style={{ background: "var(--accent-soft)", color: "var(--accent-2)" }}>{g.metier}</span> : <span className="card-sub">Hors chapitre nommé</span>}</td>
               <td className="card-sub">{g.nbLignes} ligne{g.nbLignes > 1 ? "s" : ""}</td>
-              <td className="num mono" style={{ fontWeight: 600 }}>{formatEuros(g.montantHt)} HT</td>
+              <td className="num mono" style={{ fontWeight: 600 }}>{formatEurosEcran(g.montantHt)} HT</td>
             </tr>
           ))}
-          <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total HT</td><td className="num mono" style={{ fontWeight: 700 }}>{formatEuros(total)}</td></tr>
+          <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total HT</td><td className="num mono" style={{ fontWeight: 700 }}>{formatEurosEcran(total)}</td></tr>
         </tbody>
       </table>
     </div>

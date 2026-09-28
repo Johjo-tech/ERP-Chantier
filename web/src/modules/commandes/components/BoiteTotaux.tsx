@@ -1,12 +1,17 @@
-import { formatEuros, formatTaux } from "@/lib/money";
+import { formatEuros as formatEurosPiece, formatTaux, type Montant } from "@/lib/money";
+import { formatEurosEcran, useModeDiscret } from "@/lib/modeDiscret";
 import { totauxDocument, type LigneMontant } from "@/modules/documents/domain/totaux";
 
 /**
  * La boîte des totaux (`totalsBoxInnerHTML`) : HT, TVA — détaillée par taux
  * s'il y en a plusieurs —, TTC. Les montants y sont écrits comme `money()`,
- * hors mode discret, comme dans l'ancien.
+ * hors mode discret, comme dans l'ancien — sauf `masquable` : la pré-facture
+ * s'ouvre devant un client comme le reste de l'écran, et l'ancien y laissait
+ * les montants en clair en mode discret (DEF-REP-08, D-REP-08).
  */
-export function BoiteTotaux({ lignes, id, label }: { lignes: readonly LigneMontant[]; id: string; label?: string }) {
+export function BoiteTotaux({ lignes, id, label, masquable = false }: { lignes: readonly LigneMontant[]; id: string; label?: string; masquable?: boolean }) {
+  useModeDiscret();
+  const formatEuros = (m: Montant) => (masquable ? formatEurosEcran(m) : formatEurosPiece(m));
   const t = totauxDocument(lignes, 0);
   const v = t.ventilation;
   const tva =
