@@ -44,8 +44,14 @@ Ils sont un **prérequis** à la mise en service de `web/` (DECISIONS D-018).
 | 33 | `20260926131000_l_avoir_s_etablit_d_un_seul_geste.sql` | **Intégrité** | `etablir_avoir(p_facture, p_motif)` : créer puis émettre en deux appels laissait un avoir brouillon orphelin à chaque échec d'émission, et rien ne bornait le cumul des avoirs (deux onglets = deux avoirs totaux). Copie de l'en-tête et des lignes, émission par le déclencheur, refus si un avoir non nul rectifie déjà la facture ; contrôles et mots de `refusAvoir`. SECURITY INVOKER. Utilise `montant_fr` (n° 13). Essai à blanc : `select count(*) from factures a where type_document = 'avoir' and facture_rectifiee_id is not null group by facture_rectifiee_id having count(*) > 1;` (cumuls existants, à examiner avant). D-R4-04. | `tests/rls/transactions-facturation.essai.ts` (« [proposition] établir un avoir … ») |
 | 34 | `20260926132000_une_imputation_s_annule_entiere.sql` | **Intégrité** | `annuler_imputation(p_reglement)` : « Retirer » ne supprimait qu'une des deux écritures d'`imputer_avoir` (facture redevenue due, crédit resté consommé, ou l'inverse). Retrouve la jumelle (références croisées, même montant, même date) et supprime les deux, ou rien. SECURITY INVOKER (« reglements / supprimer »). Après le n° 13. D-R4-05. | `tests/rls/transactions-facturation.essai.ts` (« [proposition] annuler une imputation … ») |
 | 35 | `20260926133000_le_bon_ne_se_facture_qu_une_fois.sql` | **Intégrité** | `bc_generer_facture` refaite depuis sa définition VIVANTE (locale, après la chaîne de facturation) : `SELECT … FOR UPDATE` sur le bon (deux appels simultanés se suivent) et refus si une facture porte déjà ce `bon_commande_id`. Relecture 4, I9. **Relever `pg_get_functiondef` en production avant d'appliquer** : si elle diffère du corps local, reporter seulement les deux changements. Essai à blanc : `select bon_commande_id from factures where bon_commande_id is not null group by 1 having count(*) > 1;` (doublons existants). D-R4-06. | `tests/rls/transactions-facturation.essai.ts` (« [proposition] un bon ne se facture qu'une fois ») — **le cas déterministe échoue contre la fonction actuelle (vérifié)** |
-| 36 | `20260928212000_un_rapport_nait_en_cours.sql` | **Défaut** | DEF-ECR-01 : `interventions.statut` sans défaut — un rapport repris ou écrit hors de l'écran naît sans statut (pastille vide dans l'ancien). Défaut `'en cours'`, le statut que l'écran donne à tout rapport neuf. Les rapports déjà sans statut ne sont PAS réécrits (relevé dans l'en-tête : `select count(*) from interventions where statut is null or btrim(statut) = '';`, à trancher par un humain) ; web/ les affiche « en cours ». Essai à blanc : `select column_default from information_schema.columns where table_name = 'interventions' and column_name = 'statut';` → `'en cours'::text`. D-COR2-01. | `tests/rls/interventions.essai.ts` (« [proposition] un rapport écrit hors de l'écran naît « en cours » ») — **écrit, non lancé** |
-| 37 | `20260928213000_l_espace_client_lit_sa_commune.sql` | Fonction | D-MAIN-02 : les pièces ouvertes depuis l'espace client sortaient sans commune (le bloc « Client » lit code postal et ville sur la fiche, fermée au client). `v_mes_acces_clients` refaite (définition de 20260926042000, APRÈS le n° 14) avec deux colonnes AJOUTÉES EN FIN : `client_code_postal`, `client_ville` — la commune de la fiche du client de SES accès actifs, rien d'autre de la fiche ; `clients` reste fermée. **Repartir de `pg_get_viewdef` en production** : si la définition vivante diffère, le `create or replace` échoue au lieu d'effacer une colonne. Essai à blanc : sous un compte client, `select count(*), count(client_code_postal) from v_mes_acces_clients;`. Sans elle, web/ imprime la rue seule (comme avant) et trace l'échec. D-COR2-05. | `tests/rls/espace-client-bons.essai.ts` (« [proposition] espace client : sa commune pour le bloc « Client », pas sa fiche ») — **écrit, non lancé** |
+| 36 | `20260928200001_la_facture_du_bon_reprend_le_client.sql` | Fonction | DEF-REP-14 : `bc_generer_facture` posait « virement » en dur, ne recopiait pas `conducteur_id`, chiffrait le forfait à 10 %. Reprend `clients.mode_paiement` (« virement » à défaut), le conducteur du bon, la TVA par défaut des Réglages (10 si illisible). **Après le n° 35**, dont il reprend le corps : garde qui s'arrête si la fonction en place n'est pas celle du n° 35 — relever alors `pg_get_functiondef` et reporter les trois changements. Essai à blanc : `select count(*) from clients where mode_paiement is not null and mode_paiement <> 'virement';` (clients dont les prochaines factures changent de mode). D-REP-14. | `tests/rls/corrections-reproduites.essai.ts` (« [proposition] la facture du bon reprend le client ») — écrit, non lancé |
+| 37 | `20260928200002_un_devis_un_bon.sql` | **Intégrité** | DEF-REP-15 : deux onglets créaient deux bons du même devis. Index unique partiel `bons_commande(devis_id)` (hors SAV). La garde NOMME les doublons existants et s'arrête : un humain choisit lequel garder. Essai à blanc : `select devis_id, count(*) from bons_commande where devis_id is not null and bon_commande_parent_id is null group by 1 having count(*) > 1;` → aucune ligne. web/ traduit le 23505 en « déjà lié au bon … ». D-REP-15. | idem (« [proposition] un devis, un bon ») + `src/modules/devis/api/bon-depuis-devis-course.essai.ts` |
+| 38 | `20260928200003_un_document_reste_dans_sa_societe.sql` | **Sécurité** | DEF-REP-16 : un bon ou un devis acceptait le client ou le conducteur d'une autre société. Déclencheur SECURITY DEFINER (EXECUTE retiré à tous — **rejouer le n° 27 ensuite** n'est pas nécessaire, le fichier le fait lui-même). Essai à blanc : `select 'bon', b.id from bons_commande b join clients c on c.id = b.client_id where c.societe_id <> b.societe_id union all select 'bon', b.id from bons_commande b join conducteurs k on k.id = b.conducteur_id where k.societe_id <> b.societe_id union all select 'devis', d.id from devis d join clients c on c.id = d.client_id where c.societe_id <> d.societe_id union all select 'devis', d.id from devis d join conducteurs k on k.id = d.conducteur_id where k.societe_id <> d.societe_id;` → aucune ligne (sinon les corriger d'abord : leur prochaine modification serait refusée). D-REP-16. | idem (« [proposition] un document reste dans sa société ») |
+| 39 | `20260928200004_le_terrain_ne_cree_ni_conducteur_ni_fournisseur.sql` | **Sécurité** | DEF-REP-17 : insert et update de `conducteurs` et `fournisseurs` par la matrice SEULE (`peut_ecrire()` retiré ; la suppression y était déjà). Vérifié : aucun geste du terrain n'en dépend (D-AUTH-06). **Après le n° 30.** La garde s'arrête si une autre politique permissive d'écriture existe. Essai à blanc : `select polname, polcmd, pg_get_expr(polwithcheck, polrelid) from pg_policy where polrelid in ('public.conducteurs'::regclass, 'public.fournisseurs'::regclass);` avant / après. D-REP-17. | idem (« [proposition] le terrain ne crée ni conducteur ni fournisseur ») |
+| 40 | `20260928200005_le_sous_traitant_ne_lit_pas_la_gestion.sql` | **Sécurité** | DEF-REP-18 : politique RESTRICTIVE « pas au sous-traitant » sur `fournisseurs`, `factures_entrantes`, `vehicules`, `workflow_journal` (aucun de ses écrans ne les lit). Gardés, lus par ses écrans : `clients`, `conducteurs`, `techniciens`, `materiels`, `referentiels`, `societe_settings`, `v_salaries_annuaire`. Essai à blanc : `set local role authenticated; set local request.jwt.claims = '{"sub":"<profil d'un sous-traitant>","role":"authenticated"}'; select count(*) from vehicules;` → 0 après, n avant. D-REP-18. | idem (« [proposition] le sous-traitant ne lit pas la gestion ») |
+| 41 | `20260928200007_le_niveau_d_abonnement_est_opposable.sql` | **Sécurité** | DEF-REP-20 : `societes.niveau_abonnement` (1-5, NULL = tout), posé par le service seulement (déclencheur), `niveau_suffisant()` et politiques RESTRICTIVES articles (2), factures + lignes (2), bons + lignes (3). **Aucun effet tant qu'aucun niveau n'est posé.** Essai à blanc : `select count(*) from societes where niveau_abonnement is not null;` → 0 ; `select niveau_suffisant(id, 'factures') from societes;` → tout vrai. Poser un niveau : `update societes set niveau_abonnement = 3 where id = '…';` (console ou clé de service). D-REP-20. | idem (« [proposition] niveau d'abonnement opposable ») |
+| 42 | `20260928212000_un_rapport_nait_en_cours.sql` | **Défaut** | DEF-ECR-01 : `interventions.statut` sans défaut — un rapport repris ou écrit hors de l'écran naît sans statut (pastille vide dans l'ancien). Défaut `'en cours'`, le statut que l'écran donne à tout rapport neuf. Les rapports déjà sans statut ne sont PAS réécrits (relevé dans l'en-tête : `select count(*) from interventions where statut is null or btrim(statut) = '';`, à trancher par un humain) ; web/ les affiche « en cours ». Essai à blanc : `select column_default from information_schema.columns where table_name = 'interventions' and column_name = 'statut';` → `'en cours'::text`. D-COR2-01. | `tests/rls/interventions.essai.ts` (« [proposition] un rapport écrit hors de l'écran naît « en cours » ») — **écrit, non lancé** |
+| 43 | `20260928213000_l_espace_client_lit_sa_commune.sql` | Fonction | D-MAIN-02 : les pièces ouvertes depuis l'espace client sortaient sans commune (le bloc « Client » lit code postal et ville sur la fiche, fermée au client). `v_mes_acces_clients` refaite (définition de 20260926042000, APRÈS le n° 14) avec deux colonnes AJOUTÉES EN FIN : `client_code_postal`, `client_ville` — la commune de la fiche du client de SES accès actifs, rien d'autre de la fiche ; `clients` reste fermée. **Repartir de `pg_get_viewdef` en production** : si la définition vivante diffère, le `create or replace` échoue au lieu d'effacer une colonne. Essai à blanc : sous un compte client, `select count(*), count(client_code_postal) from v_mes_acces_clients;`. Sans elle, web/ imprime la rue seule (comme avant) et trace l'échec. D-COR2-05. | `tests/rls/espace-client-bons.essai.ts` (« [proposition] espace client : sa commune pour le bloc « Client », pas sa fiche ») — **écrit, non lancé** |
 
 ## Comment les appliquer (par un humain)
 
@@ -137,10 +143,79 @@ lui ouvre — la restriction RH l'emporte, à trancher par le métier).
 Rejouabilité : le n° 4 ne recrée plus `v_mes_acces_clients` quand le n° 14
 l'a déjà prolongée (« cannot drop columns from view » au second passage).
 
+## Défauts reproduits corrigés en base (28/09, DEF-REP)
+
+Le client a demandé de tout corriger (28/09). Les n° 36 à 41 ci-dessus (préfixe `202609282000xx` ; le
+`…200006` est volontairement vide : la reprise du `kv_store` n'a pas de fichier, voir plus bas), les
+fonctions de bord et la procédure de reprise ci-dessous. **Les tests RLS sont écrits, non lancés** (brief
+du 28/09) : `tests/rls/corrections-reproduites.essai.ts`, `tests/rls/fonctions-proposees.essai.ts`.
+
+Essai à blanc sur la production, par un humain, avant d'appliquer :
+
+```sql
+begin;
+\i 20260928200001_la_facture_du_bon_reprend_le_client.sql
+\i 20260928200002_un_devis_un_bon.sql
+\i 20260928200003_un_document_reste_dans_sa_societe.sql
+\i 20260928200004_le_terrain_ne_cree_ni_conducteur_ni_fournisseur.sql
+\i 20260928200005_le_sous_traitant_ne_lit_pas_la_gestion.sql
+\i 20260928200007_le_niveau_d_abonnement_est_opposable.sql
+-- Contrôles : chaque garde s'arrête d'elle-même (fonction du n° 35 absente, doublons de devis,
+-- politique d'écriture inattendue) ; puis :
+select polname, polpermissive from pg_policy
+ where polname like '%\_pas\_au\_sous\_traitant' or polname like '%\_niveau\_abonnement';
+select count(*) from societes where niveau_abonnement is not null;  -- attendu : 0
+rollback;
+```
+
+### Fonctions de bord proposées
+
+`web/supabase/functions/` n'existe pas : les copies corrigées vivent dans
+`web/supabase/propositions/fonctions/<nom>/index.ts` (et `_shared/`, recopié entier), jamais déployées
+d'ici. Chaque fichier modifié porte en tête « PROPOSITION » et ce qui change. Pour déployer (un
+humain) : comparer chaque copie à `supabase/functions/<nom>` racine (`diff -u`), reporter, puis
+`supabase functions deploy <nom>` depuis la racine.
+
+| Fonction | Défaut | Ce qui change | Test (écrit, non lancé) |
+|---|---|---|---|
+| `extraire-bc` | DEF-REP-11 | `auth.getUser()` puis, dans une de ses sociétés, `a_permission(…, 'bons_commande', 'creer')` (et `niveau_suffisant(…, 'ocr')` si le n° 41 est appliqué), AVANT la clé Mistral : clé anon → 401, compte lecture → 403. Aucun changement de contrat : l'écran historique continue de fonctionner. D-REP-11. | `fonctions-proposees.essai.ts` (« extraire-bc ») |
+| `pdp-emit-invoice`, `pdp-post-lifecycle` | DEF-REP-12 | `droitRefuse(…, 'factures', 'modifier')` | idem (« fonctions PDP ») |
+| `pdp-sync-events`, `pdp-invoice-file` | DEF-REP-12 | « factures / voir » (facture fournisseur : « controle_fournisseurs / voir ») | — |
+| `pdp-receive` | DEF-REP-12 | « controle_fournisseurs / créer » | — |
+| `pdp-check-eligibility` | DEF-REP-12 | « clients / modifier » dans la société du client | — |
+| `pdp-ereporting`, `pdp-oauth-start`, `pdp-disconnect` | DEF-REP-12 | « facturation_electronique / modifier » | idem (déconnexion par un technicien → 403) |
+| `pdp-webhook` | DEF-REP-12 | secret comparé par `egauxATempsConstant` ; **ajouter à `supabase/config.toml` racine** : `[functions.pdp-webhook]` / `verify_jwt = false` (aujourd'hui non déclaré : un redéploiement le perdrait) | idem (« webhook ») |
+| `inviter-salarie` | DEF-REP-06, DEF-REP-13 | `sous_traitant_id` + rôle `sous_traitant` (invitation rattachée à la fiche) ; compte existant cherché par le profil puis toutes les pages d'Auth | idem (« inviter-salarie ») |
+
+`tests/rls/bord/charger.ts` sait désormais charger ces copies (`RACINE_PROPOSITIONS`), servir
+`Deno.serve` et passer des secrets (`autres`).
+
+### Reprise des sept factures du kv_store (DEF-REP-19)
+
+Pas de migration (D-REP-19) : les données ne sont lisibles qu'en production. Procédure, par un humain :
+
+1. Relever, en lecture seule :
+   ```sql
+   begin transaction read only;
+   select key, value->>'numero' as numero, value->>'date' as date, value->>'client' as client, value
+     from kv_store
+    where value->>'numero' between 'FAC-2026-0007' and 'FAC-2026-0013'
+       or key like 'facture:%'
+    order by 2;
+   select numero from factures where numero like 'FAC-2026-%' order by 1;  -- le trou
+   rollback;
+   ```
+2. Pour chaque pièce, vérifier qu'aucune facture relationnelle ne porte déjà ce numéro.
+3. Les écrire au format de l'import d'historique comptable (Réglages › Import, administrateur) : il pose
+   `legacy_id` « compta: », que seule la proposition `20260925040000` laisse fournir un numéro, et
+   reprend le statut « payée » sans règlement (n° 12).
+4. Contrôle : `select numero from factures where numero between 'FAC-2026-0007' and 'FAC-2026-0013';`
+   → sept lignes ; puis refermer le trou dans le registre des pièces.
+
 ## Migrations à écrire ensuite (non rédigées)
 
 - *(Équipes et sous-traitants par la secrétaire, D-RH-05 : rédigée, n° 30.)*
-- **Écriture des référentiels au terrain** : le n° 30 AJOUTE la matrice sans retirer `peut_ecrire()` ; un technicien peut donc toujours CRÉER une fiche conducteur ou un fournisseur par l'API (plus les supprimer). Retirer `peut_ecrire()` de ces insertions demande de vérifier qu'aucun geste de l'écran historique n'en dépend (D-AUTH-06).
+- *(Écriture des référentiels au terrain : rédigée, n° 39.)* ~~ le n° 30 AJOUTE la matrice sans retirer `peut_ecrire()` ; un technicien peut donc toujours CRÉER une fiche conducteur ou un fournisseur par l'API (plus les supprimer). Retirer `peut_ecrire()` de ces insertions demande de vérifier qu'aucun geste de l'écran historique n'en dépend (D-AUTH-06).~~
 - **Habilitations** (D-RH-03) : migrer les `salarie_documents` de type `habilitation` vers `salarie_habilitations` (ou supprimer cette table inutilisée).
 
 - *(Planning restreint au terrain : rédigée, n° 25. Réglage Alsace-Moselle : rédigée, n° 28.)*
@@ -149,10 +224,10 @@ l'a déjà prolongée (« cannot drop columns from view » au second passage).
   sous `est_membre()` — relevé automatisé par `tests/rls/auth-roles.essai.ts`
   ; les dernières, trop larges sous `peut_ecrire()`, alignées par le n° 30.)*
 - *(Lecture et écriture du seau `terrain` par chantier : rédigée, n° 23.)*
-- **Niveau d'abonnement** : `alter table societes add column niveau_abonnement smallint check (niveau_abonnement between 1 and 5)` — lu par `select *`, pris en compte sans changer le code (D-009). Opposable seulement quand une RLS ou une fonction le vérifie.
-- **Bon depuis un devis atomique** (relecture 4, I7) : `bon_depuis_devis(devis)` qui crée le bon et ses lignes d'une transaction, avec un index unique partiel sur `bons_commande(devis_id)` après examen des doublons existants. Aujourd'hui l'écran rattrape l'échec des lignes (le bon s'ouvre, D-R4-07) mais deux onglets peuvent encore créer deux bons.
+- *(Niveau d'abonnement : rédigée, n° 41.)* ~~ `alter table societes add column niveau_abonnement smallint check (niveau_abonnement between 1 and 5)` — lu par `select *`, pris en compte sans changer le code (D-009). Opposable seulement quand une RLS ou une fonction le vérifie.~~
+- *(Bon depuis un devis : index unique rédigé, n° 37 ; pas de RPC, D-REP-15.)* ~~ `bon_depuis_devis(devis)` qui crée le bon et ses lignes d'une transaction, avec un index unique partiel sur `bons_commande(devis_id)` après examen des doublons existants. Aujourd'hui l'écran rattrape l'échec des lignes (le bon s'ouvre, D-R4-07) mais deux onglets peuvent encore créer deux bons.~~
 - **Situation de travaux atomique** : une RPC `facturer_situation(chantier, lignes jsonb)` qui crée la facture, la trace et le cumul dans une seule transaction (aujourd'hui trois écritures successives, dans l'ordre le moins risqué — FAC-97).
-- **Client et conducteur d'une autre société** : un bon (comme un devis) accepte un `client_id` ou un `conducteur_id` d'une autre société ; l'écran ne les propose pas, la base devrait le refuser (relecture 3, M1).
-- **Facture née du bon** (`bc_generer_facture`, BC-95, D-BC-14) : reprendre le mode de paiement du client (`clients.mode_paiement`) au lieu de « virement », recopier `conducteur_id`, et la TVA par défaut de la société pour la ligne forfait (10 en dur). À écrire avec la chaîne de facturation, qui vient de reprendre cette fonction.
-- **`extraire-bc` authentifiée** (OCR-40, D-BC-15) : l'Edge Function doit vérifier le JWT de l'utilisateur et son appartenance à une société dont l'abonnement ouvre la lecture ; aujourd'hui un JWT `anon` consomme le quota Mistral. Hors `web/` (`supabase/functions/`).
+- *(Client et conducteur d'une autre société : rédigée, n° 38.)* ~~ un bon (comme un devis) accepte un `client_id` ou un `conducteur_id` d'une autre société ; l'écran ne les propose pas, la base devrait le refuser (relecture 3, M1).~~
+- *(Facture née du bon : rédigée, n° 36.)* ~~ reprendre le mode de paiement du client (`clients.mode_paiement`) au lieu de « virement », recopier `conducteur_id`, et la TVA par défaut de la société pour la ligne forfait (10 en dur). À écrire avec la chaîne de facturation, qui vient de reprendre cette fonction.~~
+- *(`extraire-bc` authentifiée : copie corrigée proposée, « Fonctions de bord proposées ».)* ~~ l'Edge Function doit vérifier le JWT de l'utilisateur et son appartenance à une société dont l'abonnement ouvre la lecture ; aujourd'hui un JWT `anon` consomme le quota Mistral. Hors `web/` (`supabase/functions/`).~~
 - **Travaux supplémentaires par la secrétaire** (D-BC-06) : si le métier veut qu'elle chiffre les travaux de la pré-facture, la politique de `tache_travaux_supplementaires` doit suivre `a_permission(…, 'bons_commande', 'modifier')` plutôt que `peut_ecrire`.

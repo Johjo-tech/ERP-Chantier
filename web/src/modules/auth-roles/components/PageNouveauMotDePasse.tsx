@@ -22,9 +22,10 @@ type Message = { genre: "erreur" | "succes"; texte: string } | null;
 /**
  * Choisir un nouveau mot de passe (AUTH-04), au HTML près la page autonome de
  * l'ancienne application (`src/pages/nouveau-mot-de-passe.html`) et sa feuille
- * copiée telle quelle — y compris la classe `login-card`, que sa feuille ne
- * stylait pas (elle visait `.login-container`) : on reproduit l'écran, défaut
- * compris. Le lien du courriel ouvre cette page avec une session « recovery »,
+ * copiée telle quelle. L'ancienne carte portait la seule classe `login-card`,
+ * que sa feuille ne stylait pas (elle visait `.login-container`) : le
+ * formulaire flottait sans fond ni ombre. Elle porte ici les deux (DEF-REP-09,
+ * D-REP-09). Le lien du courriel ouvre cette page avec une session « recovery »,
  * posée par supabase-js ; sans elle, le lien est expiré ou déjà servi.
  */
 export function PageNouveauMotDePasse() {
@@ -58,7 +59,7 @@ export function PageNouveauMotDePasse() {
   }
 
   return (
-    <div className="login-card">
+    <div className="login-container login-card">
       <div className="login-header">
         <h1>Nouveau mot de passe</h1>
         <p>Choisissez un mot de passe d'au moins 8 caractères.</p>

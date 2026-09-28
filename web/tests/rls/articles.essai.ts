@@ -24,7 +24,7 @@ import { ALPHA, BETA, COMPTES, connecte, type Client } from "./cible";
 
 const PREFIXE = "ESSAI-RLS";
 const saisie = (code: string, extra: Partial<SaisieArticle> = {}): SaisieArticle => ({
-  code, designation: `Essai ${code}`, famille: "Essais RLS", description: null, type_article: "service", unite: "u",
+  code, designation: `Essai ${code}`, famille: "Essais RLS", metier: null, description: null, type_article: "service", unite: "u",
   prix_unitaire: 10, prix_achat: null, tva: 20, gere_en_stock: false, ...extra,
 });
 const importe = (code: string): ArticleImporte => ({

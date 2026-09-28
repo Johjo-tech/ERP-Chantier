@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { verifierCibleLocale } from "../cible";
-import { gestionnaireBord } from "./deno-std";
+import { gestionnaireBord, serve } from "./deno-std";
 
 /**
  * Charge une fonction de bord de l'application historique (`../supabase/functions`,
@@ -17,6 +17,12 @@ import { gestionnaireBord } from "./deno-std";
  * Le corps de la fonction, lui, est exécuté sans une virgule de changée.
  */
 const RACINE_BORD = join(import.meta.dirname, "../../../../supabase/functions");
+
+/**
+ * Les copies CORRIGÉES proposées par web/ (DEF-REP-06, 11, 12, 13), jamais déployées :
+ * les tests « [proposition] » les chargent d'ici, comme les originales.
+ */
+export const RACINE_PROPOSITIONS = join(import.meta.dirname, "../../../supabase/propositions/fonctions");
 const require = createRequire(import.meta.url);
 
 const IMPORTS: [RegExp, string][] = [
@@ -36,23 +42,30 @@ export interface EnvBord {
   cleAnon: string;
   cleService: string;
   site: string;
+  /** Secrets propres à une fonction (ex. SUPERPDP_WEBHOOK_SECRET). */
+  autres?: Record<string, string>;
 }
 
-export async function chargerFonctionDeBord(nom: string, env: EnvBord) {
+export async function chargerFonctionDeBord(nom: string, env: EnvBord, racine: string = RACINE_BORD) {
   verifierCibleLocale();
   const variables: Record<string, string> = {
     SUPABASE_URL: env.url,
     SUPABASE_ANON_KEY: env.cleAnon,
     SUPABASE_SERVICE_ROLE_KEY: env.cleService,
     SITE_URL: env.site,
+    ...env.autres,
   };
-  (globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => variables[k] } };
+  // `Deno.serve` (fonctions récentes) confie son gestionnaire comme `serve` de la bibliothèque std.
+  (globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => variables[k] }, serve };
 
   const dossier = mkdtempSync(join(tmpdir(), "bord-"));
   mkdirSync(join(dossier, nom));
   mkdirSync(join(dossier, "_shared"));
-  writeFileSync(join(dossier, "_shared", "supabase.ts"), reecrire(readFileSync(join(RACINE_BORD, "_shared", "supabase.ts"), "utf8")));
-  writeFileSync(join(dossier, nom, "index.ts"), reecrire(readFileSync(join(RACINE_BORD, nom, "index.ts"), "utf8")));
+  // Tout `_shared` : les fonctions PDP et la lecture des bons importent pdp.ts, oauth-core.ts, contrat-bc.ts.
+  for (const partage of readdirSync(join(racine, "_shared")).filter((f) => f.endsWith(".ts"))) {
+    writeFileSync(join(dossier, "_shared", partage), reecrire(readFileSync(join(racine, "_shared", partage), "utf8")));
+  }
+  writeFileSync(join(dossier, nom, "index.ts"), reecrire(readFileSync(join(racine, nom, "index.ts"), "utf8")));
   await import(/* @vite-ignore */ join(dossier, nom, "index.ts"));
   return gestionnaireBord();
 }

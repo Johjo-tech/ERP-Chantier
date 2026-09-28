@@ -15,7 +15,7 @@ import type { Apport } from "@/modules/facturation/domain/croisement";
 import type { BonDeLaListe } from "../api/bons";
 import { champsCherchesDuBon } from "../domain/filtres";
 import { estSav } from "../domain/bon";
-import { avecVille, classeLogement, classeStatut, libelleLogement, ligneDates, ligneInterlocuteurMetiers, ligneLocataire, messageAttenteFacturation, pieceAttendue, type ContexteCarte } from "../domain/carte";
+import { avecVille, classeLogement, libelleLogement, ligneDates, ligneInterlocuteurMetiers, ligneLocataire, messageAttenteFacturation, pieceAttendue, type ContexteCarte } from "../domain/carte";
 import { circuitTermine, MOTIF_CLOTURE_DEFAUT } from "../domain/circuit";
 import { verrouBonCommande } from "../domain/verrou";
 import { etapeWorkflow } from "../domain/workflow";
@@ -264,7 +264,8 @@ export function CarteBon({ bon, contexte, ouverte, onBasculer, liens, lienOuvert
           <div className="bc-etat-badges">
             {bon.logement_statut && <span className={`badge ${classeLogement(bon.logement_statut)}`}>{libelleLogement(bon.logement_statut)}</span>}
             {!sav && <span className={`badge ${classeEtape}`} title="Étape du circuit de validation">{etape.libelle}</span>}
-            <span className={`badge ${classeStatut(bon.statut)}`}>{bon.statut}</span>
+            {/* Plus de pastille `statut` : figée à « en attente » depuis la création, elle contredisait
+                l'étape du circuit, seule à dire où en est le bon (DEF-REP-10, D-REP-10). */}
           </div>
         </div>
       </div>

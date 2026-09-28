@@ -11,7 +11,11 @@ export type TypeArticle = (typeof TYPES_ARTICLE)[number]["code"];
 /** L'unité d'un article neuf, comme l'ancien catalogue. */
 export const UNITE_DEFAUT = "u";
 
-/** Un article tel que la base le rend (ART-30). `metier` n'est ni saisi ni recopié (ART-50). */
+/**
+ * Un article tel que la base le rend (ART-30). `metier` se saisit sur la fiche et se recopie
+ * sur la ligne (DEF-REP-03, D-REP-03) : l'ancien ne le lisait nulle part, et un article
+ * « plomberie » arrivait sur un bon sans métier.
+ */
 export const schemaArticle = z.object({
   id: z.string(),
   societe_id: z.string(),
@@ -25,6 +29,7 @@ export const schemaArticle = z.object({
   // Une contrainte CHECK borne la colonne ; un texte inattendu signalerait un schéma qui a bougé.
   type_article: z.enum(["bien", "service"]),
   famille: z.string().nullable(),
+  metier: z.string().nullable(),
   actif: z.boolean(),
   gere_en_stock: z.boolean(),
 });
@@ -43,6 +48,7 @@ export const schemaSaisieArticle = z.object({
   code: z.string().trim().min(1, "Le code article est obligatoire."),
   designation: z.string().trim().min(1, "La désignation est obligatoire."),
   famille: texte,
+  metier: texte,
   description: texte,
   type_article: z.enum(["bien", "service"], { message: "Type d'article inconnu." }),
   unite: texte,
@@ -63,7 +69,7 @@ const enTexte = (n: number) => String(n).replace(".", ",");
 export function valeursDepuis(a: Article | null, tvaDefaut: number, brouillon: Partial<ValeursArticle> = {}): ValeursArticle {
   if (!a) {
     return {
-      code: "", designation: "", famille: "", description: "", type_article: "service", unite: UNITE_DEFAUT,
+      code: "", designation: "", famille: "", metier: "", description: "", type_article: "service", unite: UNITE_DEFAUT,
       prix_unitaire: "0", prix_achat: "", tva: enTexte(tvaDefaut), gere_en_stock: "", ...brouillon,
     };
   }
@@ -71,6 +77,7 @@ export function valeursDepuis(a: Article | null, tvaDefaut: number, brouillon: P
     code: a.code,
     designation: a.designation,
     famille: a.famille ?? "",
+    metier: a.metier ?? "",
     description: a.description ?? "",
     type_article: a.type_article,
     unite: a.unite ?? "",

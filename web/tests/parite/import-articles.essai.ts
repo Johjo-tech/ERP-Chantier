@@ -1,6 +1,7 @@
 /**
  * Parité de l'import d'articles (ART-05, ART-21, IMP-01 à IMP-06, RM-06) : le
  * port de web/ doit lire chaque fichier EXACTEMENT comme le module historique,
+ * à une correction près — les prix (DEF-REP-01, D-REP-01), essayés à part —
  * importé tel quel — mêmes articles, mêmes rejets, mêmes signalements, même
  * encodage constaté, même rapport CSV.
  *
@@ -22,7 +23,9 @@ const INCONNUES = ["Remarque", "CodeBarre", "PVHT2", "", " ", "codearticle"];
 const CODES_TVA = ["INTER", "inter", "Norma", "NORMA", "EXO", "exo", "0", " 0 ", "", "TVA55", "5.5", "norma "];
 const MESURES = ["UNI", "uni", "M", "M2", "m3", "HR", "PC", "MM", "JOUR", "jour", "ML", "", " M2 ", "KG"];
 const MOTS = ["Réfection", "Tube 1/2\"", "Évier", "Plâtre", "Cloison \"BA13\"", "Œuvre", "Prix 12€", "Façade", "Ragréage", "câble 2,5mm²"];
-const PRIX = ["12,50", "12.50", "0", "", " 7 ", "abc", "1e3", "1 200,00", "-4,2", "3,14,15", "0x10"];
+// Les prix que l'ancien lisait de travers (DEF-REP-01 : « 1e3 », « 0x10 », « 1 200,00 ») ne sont
+// plus tirés ici : ils ont leur propre essai, qui prouve l'écart voulu.
+const PRIX = ["12,50", "12.50", "0", "", " 7 ", "abc", "12.", "1,5 €", "-4,2", "3,14,15", ",5"];
 
 function valeur(colonne: string, i: number, codes: string[]): string {
   switch (colonne) {
@@ -176,6 +179,41 @@ describe("parité de l'import d'articles", () => {
       expect(nouveau.decoderTexte(o)).toEqual(ancienEncodage.decoderTexte(o));
       expect(nouveau.lireFichierArticles(o).articles[0]?.designation).toBe("Réfection façade 12€");
     }
+  });
+});
+
+describe("prix lus de travers par l'ancien (DEF-REP-01) : l'écart est voulu", () => {
+  const lireAncien = (prix: string) => ancien.analyserExportArticles(`CodeArticle;Libelle1;PVHT\nA1;Tube;${prix}`).articles[0]?.prix_unitaire;
+  const lireNouveau = (prix: string) => nouveau.analyserExportArticles(`CodeArticle;Libelle1;PVHT\nA1;Tube;${prix}`);
+
+  it.each([
+    ["1e3", 1000, 0],
+    ["0x10", 16, 0],
+    ["1 200,00", 0, 1200],
+    ["1\u00a0200,50", 0, 1200.5],
+    ["12 345 678,9", 0, 12345678.9],
+  ])("« %s » : l'ancien lit %d, le nouveau %d", (prix, parAncien, juste) => {
+    expect(lireAncien(prix)).toBe(parAncien);
+    const r = lireNouveau(prix);
+    expect(r.articles[0]?.prix_unitaire).toBe(juste);
+    // Illisible : dit au rapport, jamais pris en silence.
+    const signale = r.signalements.some((s) => s.motif.startsWith("Prix de vente absent"));
+    expect(signale).toBe(juste === 0);
+  });
+
+  it.each(["1e3", "0x10", "1,2,3", "12 34", "1 2345", "Infinity", "12abc"])("« %s » est illisible", (prix) => {
+    expect(nouveau.lirePrix(prix)).toBeNull();
+  });
+
+  it.each([
+    ["12,50", 12.5],
+    ["-4,2", -4.2],
+    ["+3", 3],
+    ["12.", 12],
+    [",5", 0.5],
+    ["1 000", 1000],
+  ])("« %s » vaut %d", (prix, valeur) => {
+    expect(nouveau.lirePrix(prix)).toBe(valeur);
   });
 });
 

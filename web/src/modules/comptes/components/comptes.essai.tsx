@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   inviterSalarie: vi.fn(),
   listerSalaries: vi.fn(),
   listerConducteursSuivis: vi.fn(),
+  listerSousTraitants: vi.fn(),
+  inviterSousTraitant: vi.fn(),
 }));
 vi.mock("../api/comptes", () => api);
 
@@ -31,6 +33,36 @@ beforeEach(() => {
   api.definirRole.mockResolvedValue("change");
   api.definirAcces.mockResolvedValue(undefined);
   api.inviterSalarie.mockResolvedValue({ etat: "invitee", email: "paul@erp.local" });
+  api.listerSousTraitants.mockResolvedValue([{ id: "st1", nom: "Plomberie Martin — Luc Martin", email: "luc@martin.fr", profileId: null }]);
+  api.inviterSousTraitant.mockResolvedValue({ etat: "invitee", email: "luc@martin.fr" });
+});
+
+// DEF-REP-06, D-REP-06 : l'ancien écran n'offrait pas d'invitation au sous-traitant.
+describe("invitation d'un sous-traitant", () => {
+  it("l'administrateur invite le contact d'un sous-traitant sans compte, rôle fixé", async () => {
+    rendreAvecSession(<SectionComptes />, { role: "admin" });
+    const section = await screen.findByRole("region", { name: "Sous-traitants sans compte" });
+    await userEvent.click(within(section).getByRole("button", { name: "Inviter (sous-traitant)" }));
+    await waitFor(() => expect(api.inviterSousTraitant).toHaveBeenCalledWith("st1", "luc@martin.fr"));
+    expect(await screen.findByText("Invitation envoyée à luc@martin.fr.")).toBeInTheDocument();
+  });
+
+  it("une adresse invalide ne part pas", async () => {
+    rendreAvecSession(<SectionComptes />, { role: "admin" });
+    const champ = await screen.findByLabelText("Adresse e-mail de Plomberie Martin — Luc Martin");
+    await userEvent.clear(champ);
+    await userEvent.type(champ, "pas-une-adresse");
+    await userEvent.click(screen.getByRole("button", { name: "Inviter (sous-traitant)" }));
+    expect(api.inviterSousTraitant).not.toHaveBeenCalled();
+    expect(screen.getByText("Indiquez une adresse e-mail valide.")).toBeInTheDocument();
+  });
+
+  it("un sous-traitant déjà relié à un compte n'est pas proposé", async () => {
+    api.listerSousTraitants.mockResolvedValue([{ id: "st1", nom: "Plomberie Martin", email: "", profileId: "u9" }]);
+    rendreAvecSession(<SectionComptes />, { role: "admin" });
+    await screen.findByText("Paul Durand");
+    expect(screen.queryByRole("region", { name: "Sous-traitants sans compte" })).not.toBeInTheDocument();
+  });
 });
 
 describe("comptes et accès (AUTH-18 à 20, 40)", () => {

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
+import { definirModeDiscret, MONTANT_MASQUE } from "@/lib/modeDiscret";
 import { rendreAvecSession } from "@/test/session-factice";
 import { bonAvecTaches, bonEssai, tacheEssai, travailEssai } from "../essai-fixtures";
 import { PageBonCommande } from "./PageBonCommande";
@@ -252,6 +253,22 @@ describe("pré-facture (BC-17, BC-18, BC-47, BC-71, BC-91)", () => {
     expect(c).toMatchObject({ integres: ["w1"], prix: [{ id: "w1", prix: 15, quantite: 4, unite: "ml" }], montant: 260, horsCircuit: false });
   });
 
+  // DEF-REP-08, D-REP-08 : l'ancien laissait les montants de la fenêtre en clair en mode discret.
+  it("en mode discret, les totaux de la fenêtre sont masqués", async () => {
+    definirModeDiscret(true);
+    try {
+      api.lireBon.mockResolvedValue(bonAvecTaches(validees, { lignes }));
+      circuit.listerTaches.mockResolvedValue(validees);
+      circuit.listerTravaux.mockResolvedValue([]);
+      ouvrir("admin", "/commandes/b1/prefacture");
+      const totaux = await screen.findByLabelText("Totaux de la pré-facture");
+      expect(totaux).toHaveTextContent(MONTANT_MASQUE);
+      expect(totaux).not.toHaveTextContent("200,00");
+    } finally {
+      definirModeDiscret(false);
+    }
+  });
+
   it("hors circuit : offert à l'admin quand seul le terrain manque, avec le TTC ; refermé après un refus (BC-71)", async () => {
     api.lireBon.mockResolvedValue(bonEssai({ lignes }));
     circuit.listerTaches.mockResolvedValue([]);
@@ -327,5 +344,18 @@ describe("Facturation › Validation et À facturer (BC-42, BC-96)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Créer la facture" }));
     expect(await screen.findByText("Facture ouverte")).toBeInTheDocument();
     api.listerBons.mockResolvedValue([]);
+  });
+});
+
+// DEF-REP-10, D-REP-10 : les cartes des files de Facturation portaient aussi la pastille `statut` figée.
+describe("cartes des files de Facturation", () => {
+  it("l'étape seule, pas la pastille « en attente »", async () => {
+    const { PageAFacturer: FileAFacturer } = await import("@/modules/facturation/components/PagesFilesBons");
+    api.listerBons.mockResolvedValue([bonEssai({ id: "a1", numero_interne: "BC-A-FACTURER", statut_workflow: "chiffre", circuit: bonAvecTaches([], { statut_workflow: "chiffre" }).circuit })]);
+    const { container } = rendreAvecSession(<FileAFacturer />, { role: "admin", chemin: "/facturation/a-facturer" });
+    // Les dossiers de clients s'ouvrent d'un clic, comme dans l'ancien.
+    await userEvent.click(await screen.findByRole("button", { name: /OPAC du Rhône/ }));
+    await waitFor(() => expect(container.querySelector("#bonCommande-card-a1 .bc-etat-badges")).not.toBeNull());
+    expect(container.querySelector("#bonCommande-card-a1 .bc-etat-badges")).not.toHaveTextContent("en attente");
   });
 });

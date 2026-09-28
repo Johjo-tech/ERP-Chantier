@@ -11,7 +11,7 @@ import type { ArticleImporte } from "../domain/import";
  * des requêtes filtrées et paginées côté base, que les index trigrammes sur
  * `code` et `designation` rendent instantanées même en recherche partielle.
  */
-const COLONNES = "id, societe_id, code, designation, description, unite, prix_unitaire, prix_achat, tva, type_article, famille, actif, gere_en_stock";
+const COLONNES = "id, societe_id, code, designation, description, unite, prix_unitaire, prix_achat, tva, type_article, famille, metier, actif, gere_en_stock";
 const schemaListe = z.array(schemaArticle);
 
 /** Taille d'un lot d'import (ART-22) : au-delà, la requête devient trop lourde. */

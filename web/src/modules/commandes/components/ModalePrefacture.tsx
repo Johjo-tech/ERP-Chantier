@@ -210,7 +210,7 @@ function CorpsPrefacture({ bon, taches, travaux, reglages, onFermer, onEnregistr
           <div className="pf-travail">
             <div className="section-title" style={{ marginTop: 0 }}>💶 Les prix — chaque poste, commandé ou ajouté</div>
             <TableauPrefacture lignes={lignes} onLignes={setLignes} travaux={saisis.travaux} taches={taches} saisies={saisies} onSaisie={(id, s) => setSaisies((avant) => ({ ...avant, [id]: s }))} document={document} tvaDefaut={reglages.tvaDefaut} chiffrageTravaux={chiffrageTravaux} desactive={!droits.peutModifierPrefacture} />
-            <BoiteTotaux id="validationDirecteurTotal" label="Totaux de la pré-facture" lignes={document} />
+            <BoiteTotaux id="validationDirecteurTotal" label="Totaux de la pré-facture" lignes={document} masquable />
             <div className="section-title" style={{ marginTop: "18px" }}>💬 Ce que le terrain a rapporté</div>
             <ComptesRendus taches={taches} />
           </div>

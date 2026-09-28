@@ -129,8 +129,8 @@ function Bandeau({ c }: { c: Chantier }) {
       <div className="chantier-hero-top">
         <div>
           <div className="card-sub">
-            {/* Sans le nom du client, comme l'ancien (D-ECR-CHA-07). */}
-            {libelleTypeChantier(c.type)} ·{" "}
+            {/* L'ancien laissait le client vide après le point (DEF-REP-05, D-REP-05). */}
+            {libelleTypeChantier(c.type)} · {c.client_nom ?? ""}
           </div>
           <div className="card-sub">{adresseComplete(c)}</div>
           <div className="card-sub">

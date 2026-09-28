@@ -14,7 +14,7 @@ import { useBons, useGenererFacture } from "@/modules/commandes/hooks/useBons";
 import { showToast } from "@/modules/documents/impression/zone";
 import { messageErreur } from "@/lib/erreurs";
 import { DUREE_AVIS } from "../domain/avis";
-import { avecVille, badgeLogement, classeStatut } from "../domain/carte";
+import { avecVille, badgeLogement } from "../domain/carte";
 import { criteresDeLaVue, filtrageActif, grouperParClient, retenu, type DocumentFiltrable } from "../domain/filtresEcran";
 import { useCroisement } from "../hooks/useCroisement";
 import { useFiltresFacturation } from "../hooks/useEcranFactures";
@@ -154,7 +154,7 @@ function CarteBonFile({ bon, attente, file, enEvidence }: { bon: BonDeLaListe; a
           <div className="bc-etat-badges">
             {logement && <span className={`badge ${logement.classe}`}>{logement.libelle}</span>}
             {!sav && <BadgeEtape bon={bon} />}
-            <span className={`badge ${classeStatut(bon.statut)}`}>{bon.statut ?? ""}</span>
+            {/* Pas de pastille `statut` : figée à « en attente », elle contredisait l'étape (DEF-REP-10, D-REP-10). */}
           </div>
         </div>
       </div>

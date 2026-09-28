@@ -6,8 +6,10 @@
  * niveau connu est traitée comme ayant TOUT : un client existant ne doit rien
  * perdre le jour où ce code part en production.
  *
- * Comme les droits, c'est un masquage d'affichage ; le jour où un niveau
- * devra être opposable, il se vérifiera en base (RLS ou fonction), pas ici.
+ * Comme les droits, c'est un masquage d'affichage. La proposition
+ * `20260928200007` (DEF-REP-20) rend le niveau opposable en base par
+ * `niveau_suffisant()`, qui recopie la table `FONCTIONNALITES` ci-dessous :
+ * toute modification ici se reporte là-bas, sinon l'écran et la base divergent.
  */
 export const NIVEAUX = [
   { niveau: 1, nom: "Découverte" },

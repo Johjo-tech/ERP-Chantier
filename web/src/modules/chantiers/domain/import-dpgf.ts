@@ -26,16 +26,52 @@ export function lireMontantCellule(brut: Cellule): number {
     else s = s.replace(/,/g, "");
   } else if (s.includes(",")) {
     s = s.replace(",", ".");
+  } else if (MILLIERS_A_POINTS.test(s)) {
+    // « 1.234 » : un DPGF français écrit ainsi 1 234, jamais 1,234 — l'ancien
+    // y lisait une quantité mille fois trop petite (DEF-REP-02).
+    s = s.replace(/\./g, "");
   }
   const n = parseFloat(s);
   return isNaN(n) ? NaN : n;
 }
 
-/** Séparateur `;` si la première ligne en a et n'a aucune virgule, `,` sinon. Guillemets basculants. */
+/** Des groupes de trois chiffres séparés par des points, sans zéro de tête : « 1.234 », « 12.345.678 ». */
+const MILLIERS_A_POINTS = /^-?[1-9]\d{0,2}(\.\d{3})+$/;
+
+/** Les rangées lues pour choisir le séparateur : assez pour qu'une ligne de titre ne décide pas seule. */
+const RANGEES_POUR_LE_SEPARATEUR = 10;
+
+/** Les séparateurs présents dans une ligne, hors guillemets. */
+function separateursHorsGuillemets(ligne: string): { pointVirgule: boolean; virgule: boolean } {
+  let entreGuillemets = false;
+  let pointVirgule = false;
+  let virgule = false;
+  for (const ch of ligne) {
+    if (ch === '"') entreGuillemets = !entreGuillemets;
+    else if (!entreGuillemets && ch === ";") pointVirgule = true;
+    else if (!entreGuillemets && ch === ",") virgule = true;
+  }
+  return { pointVirgule, virgule };
+}
+
+/**
+ * `;` dès que la moitié des premières lignes en portent un hors guillemets, `,` sinon.
+ * L'ancien ne lisait que la 1re ligne, et une virgule dans un titre (« Lot 3, peinture »)
+ * faisait découper tout un fichier `;` sur les virgules décimales (DEF-REP-02). En France
+ * la virgule est décimale : à égalité, le point-virgule l'emporte.
+ */
+export function devinerSeparateur(lignes: readonly string[]): ";" | "," {
+  const echantillon = lignes.slice(0, RANGEES_POUR_LE_SEPARATEUR).map(separateursHorsGuillemets);
+  const avecPointVirgule = echantillon.filter((l) => l.pointVirgule).length;
+  const avecVirgule = echantillon.filter((l) => l.virgule).length;
+  if (avecPointVirgule === 0) return ",";
+  return avecPointVirgule * 2 >= echantillon.length || avecPointVirgule >= avecVirgule ? ";" : ",";
+}
+
+/** Séparateur deviné sur les premières lignes (`devinerSeparateur`). Guillemets basculants. */
 export function lireCsv(texte: string): string[][] {
   const lignes = texte.split(/\r\n|\n|\r/).filter((l) => l.trim().length);
-  const premiere = lignes[0];
-  const separateur = premiere && premiere.includes(";") && !premiere.includes(",") ? ";" : ",";
+  const separateur = devinerSeparateur(lignes);
   return lignes.map((ligne) => {
     const cellules: string[] = [];
     let courante = "";

@@ -17,12 +17,21 @@ const SENTINELLE_ATTENTE = "En attente de BC";
  * comme la colonne. Le bon naît « en attente de BC » — le numéro du client
  * n'existe pas encore — puis s'ouvre pour relecture (D-FAC-08).
  */
-export async function bonDepuisDevis(societeId: string, devisId: string): Promise<string> {
-  const db = supabase();
+/** Le refus « déjà lié », avec le numéro du bon qui porte ce devis — ou `null` si aucun ne le porte. */
+async function refusDejaLie(db: ReturnType<typeof supabase>, devisId: string): Promise<{ code: string; message: string } | null> {
   const deja = await db.from("v_bons_commande_terrain").select("id, numero_bc, numero_interne").eq("devis_id", devisId).limit(1);
   if (deja.error) throw deja.error;
   const lie = deja.data?.[0];
-  if (lie) throw { code: "P0001", message: `Ce devis est déjà lié au bon de commande ${lie.numero_interne ?? lie.numero_bc ?? ""}. Ouvrez-le directement pour le modifier.` };
+  return lie ? { code: "P0001", message: `Ce devis est déjà lié au bon de commande ${lie.numero_interne ?? lie.numero_bc ?? ""}. Ouvrez-le directement pour le modifier.` } : null;
+}
+
+/** L'index unique proposé `bons_commande_un_par_devis` (20260928200002) : un devis, un bon. */
+const VIOLATION_D_UNICITE = "23505";
+
+export async function bonDepuisDevis(societeId: string, devisId: string): Promise<string> {
+  const db = supabase();
+  const avant = await refusDejaLie(db, devisId);
+  if (avant) throw avant;
   const [d, totaux] = await Promise.all([lireDevis(devisId), db.from("v_devis_totaux").select("ht").eq("devis_id", devisId).maybeSingle()]);
   if (totaux.error) throw totaux.error;
   const aujourdhui = todayISO();
@@ -51,7 +60,12 @@ export async function bonDepuisDevis(societeId: string, devisId: string): Promis
     })
     .select("id")
     .single();
-  if (error) throw error;
+  if (error) {
+    // Deux onglets : les deux passent le contrôle ci-dessus, l'index de la base n'en laisse
+    // créer qu'un (DEF-REP-15). Le second reçoit le même refus que s'il était arrivé après.
+    if ((error as { code?: string }).code === VIOLATION_D_UNICITE) throw (await refusDejaLie(db, devisId)) ?? error;
+    throw error;
+  }
   const { lignes } = lignesPourEnregistrement(d.lignes.map(depuisBase).map((l) => ({ ...l, id: null })));
   try {
     await synchroniserLignes("bon_commande_lignes", "bon_commande_id", data.id, lignes);

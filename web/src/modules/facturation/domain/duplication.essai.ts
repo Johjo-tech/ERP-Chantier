@@ -58,13 +58,13 @@ describe("la facture imprimée (FAC-10)", () => {
     expect(html).toContain("TVA FR9");
   });
 
-  it("un avoir cite la facture qu'il rectifie et son motif, sous le titre AVOIR, montants positifs comme l'ancien (D-PDF-03)", () => {
+  it("un avoir cite la facture qu'il rectifie et son motif, sous le titre AVOIR, en négatif (DEF-REP-04, D-REP-04)", () => {
     const c = contexteFacture({ ...f, type_document: "avoir", motif_rectification: "Double facturation" }, { devisNumero: null, rectifiee: { numero: "FAC-2026-000009", date: "2026-01-02" } }, emetteur, []);
     const html = renderPrintDoc(c);
     expect(c.titre).toBe("AVOIR");
     expect(meta(html)).toContainEqual(["Rectifie la facture", "FAC-2026-000009 du 02/01/2026"]);
     expect(meta(html)).toContainEqual(["Motif", "Double facturation"]);
-    // Aucun montant négatif : ni dans les lignes, ni dans les totaux (seules les déductions portent un « - »).
-    expect(html).toContain('<div class="p-kv p-ttc"><span>Total TTC</span><em>114,00\u00a0€</em></div>');
+    // Stocké positif, imprimé négatif : l'ancien sortait « 114,00 € », une pièce qui se lisait comme une dette.
+    expect(html).toContain('<div class="p-kv p-ttc"><span>Total TTC</span><em>-114,00\u00a0€</em></div>');
   });
 });

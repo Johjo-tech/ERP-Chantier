@@ -47,8 +47,10 @@ export function PageMateriel() {
       </div>
       {materiels.isPending && <Chargement />}
       {materiels.isError && <Erreur erreur={materiels.error} reessayer={() => void materiels.refetch()} />}
-      {/* L'ancien disait « pour l'instant » même quand la recherche écartait tout : repris tel quel. */}
-      {materiels.isSuccess && liste.length === 0 && <div className="empty">Aucun matériel pour l&apos;instant.</div>}
+      {/* L'ancien disait « pour l'instant » même quand la recherche écartait tout (DEF-REP-07, D-REP-07). */}
+      {materiels.isSuccess && liste.length === 0 && (
+        <div className="empty">{(materiels.data ?? []).length > 0 ? "Aucun matériel ne correspond." : "Aucun matériel pour l'instant."}</div>
+      )}
       {liste.length > 0 && <TableauMateriel liste={liste} annuaire={personnes.data ?? []} />}
     </>
   );

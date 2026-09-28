@@ -1,6 +1,6 @@
 import type { ContexteImpression, FicheClientImprimable } from "@/modules/documents/impression/gabarit";
 import { lieuImprimable, lignesImprimables, type EmetteurImprimable } from "@/modules/documents/impression/pieces";
-import { libelleDocument } from "./avoir";
+import { estAvoir, libelleDocument } from "./avoir";
 import type { Facture } from "./facture";
 
 /** Ce que la pièce cite d'autres pièces : son devis d'origine, la facture qu'un avoir rectifie. */
@@ -14,13 +14,15 @@ export interface ContexteImpressionFacture {
  * l'ancien gabarit la lit (`documentImprimable`, app.js l. 4020) : « AVOIR »
  * et non « FACTURE » sur un avoir, l'identité FIGÉE de l'émetteur d'abord.
  *
- * Un avoir s'imprime avec ses montants POSITIFS, comme dans l'ancien : c'est
- * le titre qui dit le sens (D-PDF-03, remplace l'écart de D-FAC-03).
+ * Un avoir s'imprime en NÉGATIF, comme à l'écran : l'ancien l'imprimait positif
+ * sous le titre AVOIR, et la pièce se lisait comme une dette (DEF-REP-04, D-REP-04 —
+ * remplace le rendu de l'ancien gardé par D-PDF-03).
  */
 export function contexteFacture(f: Facture, ctx: ContexteImpressionFacture, e: EmetteurImprimable, mentions: string[], ficheClient: FicheClientImprimable | null = null): ContexteImpression {
   return {
     type: "facture",
     titre: libelleDocument(f.type_document),
+    sens: estAvoir(f.type_document) ? -1 : 1,
     s: e.s,
     nomSociete: e.nomSociete,
     devisNumero: ctx.devisNumero,

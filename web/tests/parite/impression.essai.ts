@@ -8,6 +8,12 @@
  * l'ancien, qui additionnait des flottants, tombait sur un demi-centime
  * (0,055 € s'écrivait 0,05 €) ; web/ arrondit au bord en décimal exact
  * (D-006). Sur des données sans demi-centime, l'égalité est stricte.
+ *
+ * Écarts VOULUS (DEF-REP-04, D-REP-04) : quantité et TVA des lignes à la
+ * française, avoir en négatif, SAV intitulé « SAV ». L'ancien, évalué tel quel,
+ * imprime le défaut ; `ecartVoulu` y applique ces seules corrections avant de
+ * comparer — tout autre écart fait toujours échouer la parité — et un essai à
+ * part montre le défaut de l'ancien et le juste du nouveau.
  */
 import { describe, expect, it } from "vitest";
 import * as ancienAvoir from "../../../src/api/regles-avoir";
@@ -220,6 +226,7 @@ function tirage(sages: boolean) {
       conducteur: peutEtre("Christophe"),
       metiers: g.parmi([[], ["plomberie", "PEINTURE"], ["etancheite"]]),
       metier: g.parmi(["", "electricite"]),
+      bonCommandeParentId: g.parmi([null, null, "bc-origine"]),
       ...facturation,
     };
     etat.bonsCommande.push(doc);
@@ -243,6 +250,7 @@ function contexteWeb(t: ReturnType<typeof tirage>): ContexteImpression {
     return {
       ...base,
       titre: ancienAvoir.libelleDocument(d.typeDocument as ancienAvoir.TypeDocument),
+      sens: d.typeDocument === "avoir" ? -1 : 1,
       doc: d,
       devisNumero: devis?.numero ?? null,
       rectifiee: rect ?? null,
@@ -253,7 +261,7 @@ function contexteWeb(t: ReturnType<typeof tirage>): ContexteImpression {
   const labels: Record<string, string> = { plomberie: "Plomberie", electricite: "Électricité", etancheite: "Étanchéité" };
   return {
     ...base,
-    titre: "BON DE COMMANDE",
+    titre: d.bonCommandeParentId ? "SAV" : "BON DE COMMANDE",
     doc: { ...d, numero: (d.numeroInterne as string) || (d.numeroBC as string) || "", date: (d.dateReception as string) || d.date },
     metiers: metiers.map((m) => labels[m] || m).filter(Boolean),
   };
@@ -262,6 +270,29 @@ function contexteWeb(t: ReturnType<typeof tirage>): ContexteImpression {
 /* Un montant de l'ancien (Intl fr-FR, espaces fines insécables) — ou « ••• » en mode sans prix. */
 const MONTANT = /-?\d{1,3}(?:[\u202F\u00A0]\d{3})*,\d{2}\u00A0\u20AC/g;
 const enNombre = (m: string) => Number(m.replace(/[\u202F\u00A0\u20AC]/g, "").replace(",", "."));
+
+/**
+ * Les corrections voulues de DEF-REP-04 appliquées au HTML de l'ancien — et elles
+ * seules : la quantité « 2.5 » → « 2,5 », la TVA « 5.5% » → « 5,5 % », les montants
+ * d'un avoir changés de signe (une déduction « -x » y devient « x »), le titre
+ * d'un SAV. Tout le reste doit rester identique au caractère près.
+ */
+const MONTANT_SIGNE = /(-?)(\d{1,3}(?:[\u202F\u00A0]\d{3})*,\d{2}\u00A0\u20AC)/g;
+function ecartVoulu(html: string, t: ReturnType<typeof tirage>): string {
+  let h = html
+    .replace(/<td class="num">(-?\d+)\.(\d+)<\/td><td class="unite">/g, '<td class="num">$1,$2</td><td class="unite">')
+    .replace(/<td class="num">(-?\d+(?:\.\d+)?)%<\/td><\/tr>/g, (_m, taux: string) => `<td class="num">${taux.replace(".", ",")} %</td></tr>`);
+  if (t.type === "facture" && t.doc.typeDocument === "avoir") {
+    h = h.replace(MONTANT_SIGNE, (_m, signe: string, valeur: string) => (signe || /^0,00/.test(valeur) ? valeur : `-${valeur}`)).replace(/<em>-•••<\/em>/g, "<em>•••</em>");
+  }
+  if (t.type === "bonCommande" && t.doc.bonCommandeParentId) h = h.replace('<div class="p-doctitre-grand">BON DE COMMANDE<span>', '<div class="p-doctitre-grand">SAV<span>');
+  return h;
+}
+
+/** L'ancien gabarit, évalué tel quel, puis les seules corrections voulues. */
+function ancienCorrige(t: ReturnType<typeof tirage>): string {
+  return ecartVoulu(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer), t);
+}
 
 /** Le HTML, montants remplacés par un repère, et les montants à part. */
 function separer(html: string): { gabarit: string; montants: number[] } {
@@ -276,7 +307,7 @@ describe("parité du gabarit des pièces commerciales (renderPrintDoc)", { timeo
   it("données sans demi-centime : HTML strictement identique (2 000 tirages)", () => {
     for (let i = 0; i < 2000; i++) {
       const t = tirage(true);
-      const ancien = ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer);
+      const ancien = ancienCorrige(t);
       expect(ancien).toContain('<div class="p-page p-doc">');
       expect(renderPrintDoc(contexteWeb(t)), `tirage ${i} (${t.type})`).toBe(ancien);
     }
@@ -286,7 +317,7 @@ describe("parité du gabarit des pièces commerciales (renderPrintDoc)", { timeo
     let ecarts = 0;
     for (let i = 0; i < 2000; i++) {
       const t = tirage(false);
-      const ancien = separer(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+      const ancien = separer(ancienCorrige(t));
       const nouveau = separer(renderPrintDoc(contexteWeb(t)));
       expect(nouveau.gabarit, `tirage ${i} (${t.type})`).toBe(ancien.gabarit);
       expect(nouveau.montants.length).toBe(ancien.montants.length);
@@ -298,6 +329,52 @@ describe("parité du gabarit des pièces commerciales (renderPrintDoc)", { timeo
     }
     // L'écart existe bien (sinon ce test ne prouverait rien) et reste rare.
     expect(ecarts).toBeGreaterThan(0);
+  });
+});
+
+describe("écarts voulus des pièces imprimées (DEF-REP-04, D-REP-04)", () => {
+  /** Un tirage sage, forcé sur ce que l'essai veut montrer. */
+  function piece(type: TypeImprimable, doc: Record<string, unknown>) {
+    for (;;) {
+      const t = tirage(true);
+      if (t.type !== type) continue;
+      t.masquer = false;
+      Object.assign(t.doc, { lignes: [{ type: "ligne", designation: "Peinture", qte: 2.5, unite: "m²", prixUnitaire: 40, tva: 5.5 }], remisePourcentage: 0, ...doc });
+      return { t, ancien: ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", false), nouveau: renderPrintDoc(contexteWeb(t)) };
+    }
+  }
+  const ligne = (html: string) => /<tr class="[^"]*"><td>Peinture<\/td>(.*?)<\/tr>/s.exec(html)?.[1] ?? "";
+
+  it("quantité et TVA d'une ligne : l'ancien « 2.5 » et « 5.5% », le nouveau « 2,5 » et « 5,5 % »", () => {
+    const { ancien, nouveau } = piece("devis", {});
+    expect(ligne(ancien)).toContain('<td class="num">2.5</td>');
+    expect(ligne(ancien)).toContain('<td class="num">5.5%</td>');
+    expect(ligne(nouveau)).toContain('<td class="num">2,5</td>');
+    expect(ligne(nouveau)).toContain('<td class="num">5,5 %</td>');
+  });
+
+  it("un avoir : l'ancien imprime des montants positifs, le nouveau des montants négatifs", () => {
+    const { ancien, nouveau } = piece("facture", { typeDocument: "avoir", acomptesDeduits: 0, retenueGarantiePourcentage: 0 });
+    expect(ancien).toContain(">AVOIR<span>");
+    expect(ancien).not.toMatch(/-\d{1,3},\d{2}\u00A0€/);
+    expect(nouveau).toContain(">AVOIR<span>");
+    // 2,5 × 40 = 100 HT, 5,5 % de TVA : 105,50 TTC.
+    expect(nouveau).toContain("-100,00\u00A0€");
+    expect(nouveau).toContain("-105,50\u00A0€");
+    expect(nouveau).not.toMatch(/[^-\d\u202F]\d{1,3},\d{2}\u00A0€/);
+  });
+
+  it("une facture ordinaire reste positive", () => {
+    const { nouveau } = piece("facture", { typeDocument: "facture", acomptesDeduits: 0, retenueGarantiePourcentage: 0 });
+    expect(nouveau).toContain("105,50\u00A0€");
+    expect(nouveau).not.toContain("-105,50");
+  });
+
+  it("un SAV : l'ancien l'intitule « BON DE COMMANDE », le nouveau « SAV »", () => {
+    const { ancien, nouveau } = piece("bonCommande", { bonCommandeParentId: "bc-origine" });
+    expect(ancien).toContain(">BON DE COMMANDE<span>");
+    expect(nouveau).toContain(">SAV<span>");
+    expect(piece("bonCommande", { bonCommandeParentId: null }).nouveau).toContain(">BON DE COMMANDE<span>");
   });
 });
 
@@ -360,7 +437,7 @@ describe("la feuille des pièces est celle de l'ancien", () => {
       const t = tirage(true);
       t.doc.numero = g.parmi([null, "", "   "]);
       if (t.type === "bonCommande") Object.assign(t.doc, { numeroInterne: null, numeroBC: g.parmi([null, ""]) });
-      const ancien = ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer);
+      const ancien = ancienCorrige(t);
       const nouveau = renderPrintDoc(contexteWeb(t));
       expect(nouveau).toBe(ancien);
       expect(nouveau).toContain("<dt>État</dt><dd>Brouillon — non émis</dd>");
@@ -378,7 +455,7 @@ describe("le bloc « Client » porte son code postal et sa ville (2c21745)", () 
       Object.assign(t.doc, { adresse: "1 place Bellecour", facturationAdresse: null, facturationCodePostal: "", facturationVille: null });
       t.etat.clients = ficheDe(t.doc.client as string);
       const nouveau = renderPrintDoc(contexteWeb(t));
-      expect(nouveau).toBe(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+      expect(nouveau).toBe(ancienCorrige(t));
       expect(bloc(nouveau)).toContain("<br>1 place Bellecour<br>69007 Lyon 7e");
     }
   });
@@ -390,7 +467,7 @@ describe("le bloc « Client » porte son code postal et sa ville (2c21745)", () 
       Object.assign(t.doc, { facturationAdresse: "3 quai de Facturation", facturationCodePostal: "69002", facturationVille: "Lyon 2e" });
       t.etat.clients = ficheDe(t.doc.client as string);
       const nouveau = renderPrintDoc(contexteWeb(t));
-      expect(nouveau).toBe(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+      expect(nouveau).toBe(ancienCorrige(t));
       expect(bloc(nouveau)).toContain("<br>3 quai de Facturation<br>69002 Lyon 2e");
       expect(bloc(nouveau)).not.toContain("69007");
     }
@@ -401,7 +478,7 @@ describe("le bloc « Client » porte son code postal et sa ville (2c21745)", () 
     Object.assign(t.doc, { adresse: "", facturationAdresse: null, facturationCodePostal: null, facturationVille: null, clientSiret: null, clientTvaIntracom: null, interlocuteur: null });
     t.etat.clients = [];
     const nouveau = renderPrintDoc(contexteWeb(t));
-    expect(nouveau).toBe(ancienEcran(t.etat, t.validiteJours).renderPrintDoc(t.type, "doc-1", t.masquer));
+    expect(nouveau).toBe(ancienCorrige(t));
     expect(bloc(nouveau)).not.toContain("<br>");
   });
 });

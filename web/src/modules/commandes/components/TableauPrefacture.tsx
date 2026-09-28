@@ -1,10 +1,10 @@
 import { Fragment, useContext } from "react";
-import { formatEuros, somme } from "@/lib/money";
 import { ligneVide, type LigneEdition } from "@/modules/documents/domain/lignes";
-import { metierAffiche, montantsParMetier } from "../domain/metiers";
+import { metierAffiche } from "../domain/metiers";
 import { badgeOrigine, metierDuTravail, placerTravaux, UNITE_DEFAUT, type LigneDocument, type SaisieTravail, type TacheDuTravail, type Travail } from "../domain/prefacture";
 import { SelectMetierChapitre } from "./MetierChapitreAncien";
 import { MetiersConnus } from "./metiersConnus";
+import { SousTotaux } from "./SousTotauxMetiers";
 
 interface Props {
   lignes: readonly LigneEdition[];
@@ -46,31 +46,6 @@ function LigneTravail({ t, metier, saisie, onSaisie, actif }: { t: Travail; meti
       <td className="num pf-col-pu"><input type="number" step="0.01" min="0" aria-label={`Prix unitaire HT de « ${t.libelle} »`} value={s.prix.replace(",", ".")} placeholder="prix" disabled={!actif} onChange={(e) => maj("prix", e.target.value)} /></td>
       <td />
     </tr>
-  );
-}
-
-/** Ce que chaque métier pèse (`sousTotauxMetiersHTML`), sur le document fusionné, dès deux groupes. */
-function SousTotaux({ document }: { document: readonly LigneDocument[] }) {
-  const connus = useContext(MetiersConnus);
-  const groupes = montantsParMetier(document, connus);
-  if (groupes.length < 2) return null;
-  const total = somme(groupes.map((g) => g.montantHt));
-  return (
-    <div className="pf-sous-totaux">
-      <div className="section-title" style={{ margin: "14px 0 6px" }}>Sous-total par métier</div>
-      <table className="lignes-table">
-        <tbody>
-          {groupes.map((g) => (
-            <tr key={g.metier ?? "sans"}>
-              <td>{g.metier ? <span className="badge" style={{ background: "var(--accent-soft)", color: "var(--accent-2)" }}>{g.metier}</span> : <span className="card-sub">Hors chapitre nommé</span>}</td>
-              <td className="card-sub">{g.nbLignes} ligne{g.nbLignes > 1 ? "s" : ""}</td>
-              <td className="num mono" style={{ fontWeight: 600 }}>{formatEuros(g.montantHt)} HT</td>
-            </tr>
-          ))}
-          <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total HT</td><td className="num mono" style={{ fontWeight: 700 }}>{formatEuros(total)}</td></tr>
-        </tbody>
-      </table>
-    </div>
   );
 }
 

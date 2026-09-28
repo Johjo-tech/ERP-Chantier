@@ -82,6 +82,15 @@ describe("liste des bons — selon le rôle", () => {
     expect(within(carte("BC-2026-900002")).getByText("📄 Le bon de commande est arrivé ?")).toBeInTheDocument();
   });
 
+  // DEF-REP-10, D-REP-10 : l'ancienne carte portait aussi la pastille grise `statut`, figée à « en attente ».
+  it("la carte ne montre que l'étape du circuit, pas la pastille « en attente »", async () => {
+    ouvrir("conducteur", "/commandes");
+    await screen.findByText("CMD-OPAC-7781");
+    const badges = carte("BC-2026-900001").querySelector(".bc-etat-badges");
+    expect(badges).toHaveTextContent("Travaux à pointer");
+    expect(badges).not.toHaveTextContent("en attente");
+  });
+
   it("la secrétaire ne crée pas (droit « creer » absent en base) ; le filtre de mode trie", async () => {
     ouvrir("secretaire", "/commandes");
     await screen.findByText("CMD-OPAC-7781");

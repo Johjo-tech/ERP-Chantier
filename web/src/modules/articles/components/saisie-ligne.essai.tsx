@@ -12,7 +12,7 @@ vi.mock("../api/articles", async (original) => ({ ...(await original<typeof impo
 function article(code: string, designation: string): Article {
   return {
     id: code, societe_id: "alpha", code, designation, description: null, unite: "u", prix_unitaire: 10, prix_achat: null,
-    tva: 20, type_article: "service", famille: null, actif: true, gere_en_stock: false,
+    tva: 20, type_article: "service", famille: null, metier: null, actif: true, gere_en_stock: false,
   };
 }
 
