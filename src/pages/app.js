@@ -3138,6 +3138,38 @@ function resolveClientAdresse(nom){
   const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===nom);
   return c ? (c.adresse||'') : '';
 }
+/**
+ * L'adresse du client, ENTIÈRE, pour un document imprimé.
+ *
+ * `doc.adresse` ne porte que la rue : `resolveClientAdresse` ne remonte que
+ * celle-là au moment de l'enregistrement, et le code postal comme la ville
+ * restaient sur la fiche. Le bloc « Client » sortait donc sans eux — une
+ * adresse de facturation sans commune, sur une pièce qu'on envoie par la
+ * poste. Le bloc ÉMETTEUR, lui, imprime son adresse entière depuis qu'on l'a
+ * corrigé ; c'est le même défaut, de l'autre côté de la page.
+ *
+ * L'adresse de FACTURATION l'emporte quand elle est renseignée : c'est celle
+ * que le bon de commande porte jusqu'à la facture, et elle dit où la pièce
+ * doit être envoyée — ce qui n'est pas toujours le siège du client.
+ *
+ * Le code postal et la ville se lisent sur la FICHE, faute d'être figés sur le
+ * document : mieux vaut l'adresse d'aujourd'hui que pas d'adresse du tout. La
+ * rue, elle, reste celle qu'on a figée.
+ */
+function adresseClientDuDocument(doc){
+  const f = [doc.facturationAdresse, doc.facturationCodePostal, doc.facturationVille].filter(Boolean);
+  if(f.length){
+    return {
+      rue: doc.facturationAdresse || '',
+      cpVille: [doc.facturationCodePostal, doc.facturationVille].filter(Boolean).join(' '),
+    };
+  }
+  const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===doc.client) || {};
+  return {
+    rue: doc.adresse || c.adresse || '',
+    cpVille: [c.codePostal, c.ville].filter(Boolean).join(' '),
+  };
+}
 function logementLabel(statut){
   if(statut === 'occupé') return 'Logement occupé';
   if(statut === 'vacant') return 'Logement vacant';
@@ -4098,6 +4130,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     iban: doc.emetteurIban || s.iban,
   };
   const r = (s.reglages && s.reglages.documents) || {};
+  const adrClient = adresseClientDuDocument(doc);
   const fisc = [em.siret? `<b>Siret</b> ${esc(em.siret)}`:'', s.codeNaf? `<b>APE</b> ${esc(s.codeNaf)}`:''].filter(Boolean).join(' · ');
   const logo = logoHTML(s);
   return `
@@ -4116,7 +4149,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       ${carteChantierHTML(doc)}
       <div class="p-carte">
         <div class="p-carte-titre">Client</div>
-        <div class="p-line"><b>${esc(doc.client)}</b><br>${esc(doc.adresse)}${doc.clientSiret? '<br>SIRET '+esc(doc.clientSiret):''}${doc.clientTvaIntracom? '<br>TVA '+esc(doc.clientTvaIntracom):''}${doc.interlocuteur? "<br>À l'attention de "+esc(doc.interlocuteur):''}</div>
+        <div class="p-line"><b>${esc(doc.client)}</b>${[adrClient.rue, adrClient.cpVille].filter(Boolean).map(v=>'<br>'+esc(v)).join('')}${doc.clientSiret? '<br>SIRET '+esc(doc.clientSiret):''}${doc.clientTvaIntracom? '<br>TVA '+esc(doc.clientTvaIntracom):''}${doc.interlocuteur? "<br>À l'attention de "+esc(doc.interlocuteur):''}</div>
       </div>
     </div>
     <table class="p-lignes">
@@ -7059,8 +7092,12 @@ function bonCommandeCardHTML(b, workflowCtx){
       ${cloturable? `<button class="btn small primary" onclick="event.stopPropagation(); cloturerSansFacturation('${jsAttr(b.id)}')" title="Un SAV est une reprise sous garantie : il se clôt, il ne se facture pas">✓ Clôturer sans facturation</button>`:''}
       ${(savLie||isSAV)? '' : `<button class="btn small" onclick="transformerBonCommandeEnSAV('${jsAttr(b.id)}')">Créer un SAV</button>`}
       ${rapportLie? `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Modifier le lien rapport</button><button class="btn small ghost" onclick="event.stopPropagation(); delierLien('${jsAttr(rapportLie.id)}')" title="Retirer le lien entre ce bon de commande et son rapport">✂️ Délier</button>` : `<button class="btn small ghost" onclick="event.stopPropagation(); toggleLienZone('bonCommande:${jsAttr(b.id)}')">🔗 Lier un rapport</button>`}
+      ${/* Comme sur les factures : ce que la base refusera toujours ne
+            s'affiche pas. Un bon facturé ne se supprimera jamais — le bandeau
+            du haut dit déjà par quelle facture il est tenu, et un bouton
+            grisé dont personne n'ouvre le `title` n'apprenait rien. */''}
       ${verrou
-        ? `<button class="btn small danger" disabled title="${esc(verrou.libelle)}">Supprimer</button>`
+        ? ''
         : `<button class="btn small danger" onclick="deleteItem('bonCommande','${jsAttr(b.id)}')">Supprimer</button>`}
     </div>
     ${ouverte? `
@@ -11178,8 +11215,16 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
       const regs = reglementsForFacture(f.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
       /* « Payable » veut dire « on peut y poser un encaissement ». Un avoir a un
          reste, mais ce reste est un CRÉDIT à donner : ni case à cocher, ni
-         bouton « + Règlement », ni retard — on ne réclame pas un avoir. */
-      const payable = st.reste > 0.01 && !st.avoir;
+         bouton « + Règlement », ni retard — on ne réclame pas un avoir.
+
+         Et il faut un NUMÉRO. Sans lui, saisir un encaissement faisait basculer
+         le statut, et le déclencheur numérotait la pièce : le numéro légal
+         attribué par un règlement, hors de tout ordre chronologique — ce que
+         l'article 242 nonies A de l'annexe II au CGI interdit, et ce que la
+         migration de numérotation avait justement fermé partout ailleurs.
+         Cette porte-là restait ouverte. L'émission se demande depuis la liste
+         des factures, par le bouton « 🧾 Émettre ». */
+      const payable = st.reste > 0.01 && !st.avoir && !!f.numero;
       /* L'avoir se coche aussi, désormais : c'est ce qui permet de le mettre
          en face d'une facture et de lettrer les deux d'un geste. Il reste
          sans « + Règlement » — on ne l'encaisse pas, on l'impute. */
@@ -11189,7 +11234,7 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
         <div class="card-row">
           <div style="display:flex; align-items:flex-start; gap:10px;">
             ${cochable? `<input type="checkbox" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;" ${selection.includes(f.id)?'checked':''} onchange="toggleReglementSelection('${jsAttr(f.id)}')" title="${lettrable? 'Cocher cet avoir et une facture pour les lettrer' : 'Cocher pour un règlement groupé'}">` : `<span style="width:17px; flex-shrink:0;"></span>`}
-            <div><div class="card-title">${esc(f.numero)}</div><div class="card-sub">${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance):''}</div></div>
+            <div><div class="card-title">${f.numero? esc(f.numero) : 'Brouillon — non émise'}</div><div class="card-sub">${fmtDate(f.date)}${f.echeance? ' · échéance '+fmtDate(f.echeance):''}</div></div>
           </div>
           <div style="text-align:right;"><div class="amount">${moneyDisplay(st.ttc)}</div><span class="badge ${st.cls}" style="margin-top:5px;display:inline-block;">${st.label}</span></div>
         </div>
@@ -11201,6 +11246,9 @@ const listeFacturesReglementsHTML = declarerListing('reglementFacture',
                 et l'avoir se font face, rien ne permettait de les rapprocher. */''}
           ${(!st.avoir && peutReglerParAvoir(f))? `<button class="btn small" style="${payable?'':'margin-left:auto;'}" onclick="event.stopPropagation(); reglerParAvoir('${jsAttr(f.id)}')" title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>`:''}
           ${payable? `<button class="btn small primary" style="margin-left:auto;" onclick="event.stopPropagation(); ouvrirReglementFacture('${jsAttr(f.id)}')">+ Règlement</button>`:''}
+          ${/* Un brouillon perdrait sa case, son bouton et son clic sans un mot :
+                on dit pourquoi, et où se fait le geste qui l'ouvrira. */''}
+          ${(!f.numero && !st.avoir)? `<span style="margin-left:auto;">Pas encore émise : elle ne s'encaisse pas tant qu'elle n'a pas de numéro. L'émission se fait dans <b>Factures</b>.</span>`:''}
         </div>
         ${regs.length? `<div class="card-sub" style="margin-top:10px; font-weight:600;">Historique des règlements</div>`:''}
         ${regs.map(r=>`
@@ -17162,7 +17210,10 @@ function clientForm(){
                onblur="setTimeout(()=>{const b=document.getElementById('clientAdresseSuggestions'); if(b) b.style.display='none';},150)">
         <div id="clientAdresseSuggestions" class="suggest-box"></div>
       </div>
-      <div class="field"><label>Code postal</label><input type="text" id="c_codePostal" value="${esc(e.codePostal)}"></div>
+      ${/* Seul formulaire des trois à ne pas chercher sa commune : une fiche
+            saisie à la main y restait sans ville, et le bloc « Client » des
+            documents imprimés sortait amputé sans qu'on sache pourquoi. */''}
+      <div class="field"><label>Code postal</label><input type="text" id="c_codePostal" value="${esc(e.codePostal)}" maxlength="5" inputmode="numeric" oninput="lookupVilleParCodePostal(this.value,'c_ville')"></div>
       <div class="field"><label>Ville</label><input type="text" id="c_ville" value="${esc(e.ville)}"></div>
       <div class="field" id="sec_pays"><label>Pays</label><input type="text" id="c_paysCode" value="${esc(e.paysCode||paysDefaut())}" maxlength="2" placeholder="${esc(paysDefaut())}" onchange="majSectionsEfacture()"></div>
     </div>
