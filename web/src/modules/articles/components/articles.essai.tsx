@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   changerActif: vi.fn(),
 }));
 vi.mock("../api/articles", async (original) => ({ ...(await original<typeof import("../api/articles")>()), ...api }));
+vi.mock("@/modules/chantiers/api/liens", () => ({ listerMetiers: vi.fn(async () => ["Peinture", "Plomberie"]) }));
 vi.mock("@/modules/societes/api/reglages", () => ({
   chargerReglages: vi.fn(async () => ({ validiteDevisJours: 30, tvaDefaut: 20, delaiPaiementJours: 30, modeDelaiPaiement: "net", unites: ["u", "m²"], tauxTva: [5.5, 10, 20] })),
 }));
@@ -24,7 +25,7 @@ vi.mock("@/modules/societes/api/reglages", () => ({
 function article(code: string, extra: Partial<Article> = {}): Article {
   return {
     id: code, societe_id: "alpha", code, designation: `Article ${code}`, description: null, unite: "u", prix_unitaire: 12.5,
-    prix_achat: null, tva: 10, type_article: "service", famille: "Plomberie", actif: true, gere_en_stock: false, ...extra,
+    prix_achat: null, tva: 10, type_article: "service", famille: "Plomberie", metier: null, actif: true, gere_en_stock: false, ...extra,
   };
 }
 
@@ -182,10 +183,23 @@ describe("fiche article (ART-02, ART-04)", () => {
     const [societe, saisie] = api.creerArticle.mock.calls[0] as [string, Record<string, unknown>];
     expect(societe).toBe("alpha");
     expect(saisie).toEqual({
-      code: "PLB-9", designation: "Coude cuivre", famille: null, description: null, type_article: "service", unite: "u",
+      code: "PLB-9", designation: "Coude cuivre", famille: null, metier: null, description: null, type_article: "service", unite: "u",
       prix_unitaire: 4.9, prix_achat: null, tva: 20, gere_en_stock: false,
     });
     expect(await screen.findByText("liste ouverte")).toBeInTheDocument();
+  });
+
+  // DEF-REP-03, D-REP-03 : l'ancien formulaire n'avait pas de métier.
+  it("le métier se choisit parmi ceux de la société et part avec la fiche", async () => {
+    api.creerArticle.mockResolvedValue(article("PLB-9"));
+    formulaire();
+    await userEvent.type(await screen.findByLabelText(/Code article/), "PLB-9");
+    await userEvent.type(screen.getByLabelText(/Désignation/), "Coude cuivre");
+    await screen.findByRole("option", { name: "Plomberie" });
+    await userEvent.selectOptions(screen.getByLabelText("Métier"), "Plomberie");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(api.creerArticle).toHaveBeenCalled());
+    expect((api.creerArticle.mock.calls[0] as [string, Record<string, unknown>])[1].metier).toBe("Plomberie");
   });
 
   it("code en double : le message de l'ancien écran, sous le champ", async () => {

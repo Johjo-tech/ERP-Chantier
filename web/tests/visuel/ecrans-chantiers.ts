@@ -79,7 +79,10 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("catalogue"), cliquer(".page-head .btn.primary")) },
       nouveau: { chemin: "/articles", gestes: cliquer(".page-head .btn.primary") },
-      seuils: partout(0.001, 0),
+      // DEF-REP-03, D-REP-03 : la fiche gagne un champ « Métier » (sélecteur) après « Type » et « Unité » —
+      // 2 lignes de texte ajoutées (« Métier », « — ») et les champs suivants descendent d'un rang.
+      // Seuil PROVISOIRE (écran non mesuré depuis la correction) : à relever puis abaisser au prochain passage.
+      seuils: { bureau: { pixels: 0.15, texte: 2 }, mobile: { pixels: 0.25, texte: 2 } },
     },
     {
       id: "catalogue-modifier-article",
@@ -87,7 +90,10 @@ export function ecransChantiersClientsCatalogue(): Ecran[] {
       compte: "admin",
       ancien: { chemin: "/", gestes: puis(onglet("catalogue"), cliquer("#catalogueZone td .btn.small")) },
       nouveau: { chemin: "/articles", gestes: cliquer("#catalogueZone td .btn.small") },
-      seuils: partout(0.001, 0),
+      // DEF-REP-03, D-REP-03 : la fiche gagne un champ « Métier » (sélecteur) après « Type » et « Unité » —
+      // 2 lignes de texte ajoutées (« Métier », « — ») et les champs suivants descendent d'un rang.
+      // Seuil PROVISOIRE (écran non mesuré depuis la correction) : à relever puis abaisser au prochain passage.
+      seuils: { bureau: { pixels: 0.15, texte: 2 }, mobile: { pixels: 0.25, texte: 2 } },
     },
     {
       id: "catalogue-import",

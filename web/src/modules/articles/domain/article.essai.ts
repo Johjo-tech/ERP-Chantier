@@ -7,7 +7,7 @@ import { appliquerArticle, brouillonDepuisLigne } from "./ligne";
 const ARTICLE: Article = {
   id: "a1", societe_id: "alpha", code: "PLB-001", designation: "Robinet d'arrêt 1/2", description: "Fourni et posé",
   unite: "pièce", prix_unitaire: 12.5, prix_achat: 7.25, tva: 10, type_article: "bien", famille: "Robinetterie",
-  actif: true, gere_en_stock: true,
+  metier: null, actif: true, gere_en_stock: true,
 };
 
 describe("saisie d'un article (ART-02)", () => {
@@ -36,7 +36,7 @@ describe("saisie d'un article (ART-02)", () => {
 
   it("une fiche relue redonne les mêmes valeurs", () => {
     expect(schemaSaisieArticle.parse(valeursDepuis(ARTICLE, 20))).toEqual({
-      code: "PLB-001", designation: "Robinet d'arrêt 1/2", famille: "Robinetterie", description: "Fourni et posé",
+      code: "PLB-001", designation: "Robinet d'arrêt 1/2", famille: "Robinetterie", metier: null, description: "Fourni et posé",
       type_article: "bien", unite: "pièce", prix_unitaire: 12.5, prix_achat: 7.25, tva: 10, gere_en_stock: true,
     });
   });
@@ -76,6 +76,22 @@ describe("appliquer un article à une ligne (DEV-10, DEV-43, ART-10)", () => {
       article_reference: "PLB-001",
       commentaire: "Fourni et posé",
     });
+  });
+
+  // DEF-REP-03, D-REP-03 : l'ancien ne recopiait pas le métier de l'article.
+  it("recopie le métier de l'article ; un article sans métier garde celui de la ligne", () => {
+    expect(appliquerArticle(ligne, { ...ARTICLE, metier: "Plomberie" }).metier).toBe("Plomberie");
+    expect(appliquerArticle({ ...ligne, metier: "Peinture" }, { ...ARTICLE, metier: "Plomberie" }).metier).toBe("Plomberie");
+    expect(appliquerArticle({ ...ligne, metier: "Peinture" }, ARTICLE).metier).toBe("Peinture");
+    expect(appliquerArticle(ligne, ARTICLE).metier).toBeNull();
+  });
+
+  it("le métier se saisit sur la fiche, vide = null, et se relit", () => {
+    const valeurs = { ...valeursDepuis(null, 20), code: "PLB-9", designation: "Coude" };
+    expect(valeurs.metier).toBe("");
+    expect(schemaSaisieArticle.parse({ ...valeurs, metier: "Plomberie" }).metier).toBe("Plomberie");
+    expect(schemaSaisieArticle.parse({ ...valeurs, metier: "" }).metier).toBeNull();
+    expect(valeursDepuis({ ...ARTICLE, metier: "Plomberie" }, 20).metier).toBe("Plomberie");
   });
 
   it("ne touche JAMAIS la quantité ni l'identifiant", () => {

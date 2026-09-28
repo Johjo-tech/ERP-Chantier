@@ -4,7 +4,7 @@ import { UNITE_DEFAUT, type Article, type ValeursArticle } from "./article";
 const enTexte = (n: number) => String(n).replace(".", ",");
 
 /** Ce qu'une ligne a besoin de connaître d'un article pour se remplir. */
-export type ArticlePourLigne = Pick<Article, "code" | "designation" | "description" | "unite" | "prix_unitaire" | "tva">;
+export type ArticlePourLigne = Pick<Article, "code" | "designation" | "description" | "unite" | "prix_unitaire" | "tva" | "metier">;
 
 /**
  * Recopie l'article dans la ligne (DEV-10, DEV-43, ART-10), comme
@@ -14,7 +14,8 @@ export type ArticlePourLigne = Pick<Article, "code" | "designation" | "descripti
  * changer à un devis déjà établi. La quantité n'est jamais touchée — c'est la
  * seule valeur que l'utilisateur a saisie lui-même — ni l'identifiant, qui
  * rattache la ligne à celle déjà en base. Une description ne remplace pas un
- * commentaire déjà écrit à la main.
+ * commentaire déjà écrit à la main. Le métier de l'article suit (DEF-REP-03) ;
+ * un article sans métier ne retire pas celui que la ligne portait déjà.
  */
 export function appliquerArticle(ligne: LigneEdition, article: ArticlePourLigne): LigneEdition {
   return {
@@ -26,6 +27,7 @@ export function appliquerArticle(ligne: LigneEdition, article: ArticlePourLigne)
     unite: article.unite || ligne.unite || UNITE_DEFAUT,
     prix_unitaire: enTexte(article.prix_unitaire),
     tva: enTexte(article.tva),
+    metier: article.metier ?? ligne.metier,
   };
 }
 

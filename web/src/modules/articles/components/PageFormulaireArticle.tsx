@@ -6,6 +6,7 @@ import { messageErreur } from "@/lib/erreurs";
 import { montant } from "@/lib/money";
 import { afficherToast as toast } from "@/lib/toast";
 import { useFormulaire } from "@/lib/useFormulaire";
+import { useMetiers } from "@/modules/chantiers/hooks/useFiche";
 import { useUnitesLignes } from "@/modules/documents/hooks/useUnites";
 import { GardeSociete } from "@/modules/societes/components/GardeSociete";
 import { useReglages } from "@/modules/societes/hooks/useReglages";
@@ -76,6 +77,7 @@ function FormulaireArticle({ article, reglages, brouillon, retour }: Props) {
   const navigate = useNavigate();
   const enregistrer = useEnregistrerArticle(article?.id);
   const familles = useFamillesArticles();
+  const referentielMetiers = useMetiers().data ?? [];
   const { valeurs, erreurs, changer, valider } = useFormulaire(valeursDepuis(article, reglages.tvaDefaut, brouillon));
   const doublon = enregistrer.error instanceof CodeEnDouble ? `Le code « ${valeurs.code} » existe déjà dans le catalogue.` : undefined;
   const idListe = useId();
@@ -102,6 +104,8 @@ function FormulaireArticle({ article, reglages, brouillon, retour }: Props) {
   // Les unités d'une ligne (référentiel, sinon la liste de repli) : la fiche propose ce que la ligne proposera.
   const referentiel = useUnitesLignes();
   const unites = valeurs.unite && !referentiel.includes(valeurs.unite) ? [valeurs.unite, ...referentiel] : referentiel;
+  // Comme l'unité : un métier retiré des réglages reste proposé sur la fiche qui le porte.
+  const metiers = valeurs.metier && !referentielMetiers.includes(valeurs.metier) ? [valeurs.metier, ...referentielMetiers] : referentielMetiers;
   const tauxCourant = Number(montant(valeurs.tva));
   const taux = reglages.tauxTva.includes(tauxCourant) ? reglages.tauxTva : [...reglages.tauxTva, tauxCourant].sort((a, b) => a - b);
 
@@ -151,6 +155,18 @@ function FormulaireArticle({ article, reglages, brouillon, retour }: Props) {
               {unites.map((u) => (
                 <option key={u} value={u}>
                   {u}
+                </option>
+              ))}
+            </select>
+          )}
+        </Champ>
+        <Champ libelle="Métier">
+          {(id) => (
+            <select id={id} value={valeurs.metier} onChange={(e) => changer("metier", e.target.value)}>
+              <option value="">—</option>
+              {metiers.map((m) => (
+                <option key={m} value={m}>
+                  {m}
                 </option>
               ))}
             </select>
