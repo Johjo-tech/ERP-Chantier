@@ -120,10 +120,12 @@ async function connexionAncienne(page: Page): Promise<void> {
 
 async function connexionNouvelle(page: Page): Promise<void> {
   await page.goto(`${NOUVELLE}/connexion`);
-  await page.getByLabel("Adresse e-mail").fill(COMPTE);
-  await page.getByLabel("Mot de passe").fill(MOT_DE_PASSE);
-  await page.getByRole("button", { name: "Se connecter" }).click();
-  await page.getByRole("navigation", { name: "Menu principal" }).waitFor({ timeout: ATTENTE_MS });
+  // L'écran de connexion est celui de l'ancien (« Identifiant », `#btnLogin`) : mêmes sélecteurs des deux côtés.
+  await page.fill("#email", COMPTE);
+  await page.fill("#password", MOT_DE_PASSE);
+  await page.click("#btnLogin");
+  await page.waitForURL((u) => !/connexion/.test(u.pathname), { timeout: ATTENTE_MS });
+  await page.waitForLoadState("networkidle");
 }
 
 /** L'identifiant de la pièce, lu dans l'état de l'ancien : c'est l'uuid de la base. */

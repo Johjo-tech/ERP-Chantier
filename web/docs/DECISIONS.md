@@ -2440,3 +2440,24 @@ bon de commande l'a, `ChampMetierChapitre`). Écart d'application relevé, non t
   (comptes, réglages, pièce), une fois par pièce.
 - Code article des lignes (`ChoixArticle`) : sans `type="text"` ni `art-pick`, l'ancienne feuille ne
   l'habillait pas (bordure du navigateur, police Arial, pas de « Code… »). Il porte les attributs de l'ancien.
+
+## D-MAIN-01 — Fiche client : le code postal remplit la ville, les villes proposées disparaissent
+La production (97287c3) aligne le « Code postal » de la fiche client sur ceux du bon et de la facture :
+`maxlength="5"`, `inputmode="numeric"`, et `lookupVilleParCodePostal` écrit la PREMIÈRE commune dans
+« Ville ». `web/` proposait jusqu'ici les communes en boutons à choisir (`VillesProposees`), ce que
+l'ancien ne fait pas. **Décision** : identique à l'ancien — même remplissage d'office que `SectionsBon`,
+les boutons sont retirés. Les codes postaux de facturation et de livraison de la fiche ne cherchent rien,
+comme dans l'ancien. Un service muet laisse la ville saisie (`communesDuCodePostal` trace l'échec).
+
+## D-MAIN-02 — Bloc « Client » des pièces : la fiche se retrouve par le nom, et on l'attend
+`adresseClientDuDocument` (production, 2c21745) imprime l'adresse de facturation de la pièce si l'un de
+ses champs est renseigné (bon de commande, facture — un devis n'en a pas), sinon la rue figée sur la
+pièce (ou celle de la fiche) et le code postal et la ville de la FICHE, retrouvée par
+`societeId` + `nom === doc.client`. **Décision** : port littéral dans `documents/impression/gabarit.ts`
+(parité évaluée sur la source de l'ancien) ; la fiche vient de `useClients` (la liste de la société), par
+le nom et non par `client_id`, pour que les deux applications impriment la même adresse. L'aperçu et le
+PDF attendent la liste des clients (sans quoi un PDF partirait sans commune) ; une liste illisible ne
+bloque pas l'impression : la rue seule, comme l'ancien quand `state.clients` ne porte pas le client. La
+facture lit désormais `facturation_adresse`, `facturation_code_postal`, `facturation_ville`. L'espace
+client (absent de l'ancien) ne lit pas les fiches (D-FAC-10) : ses pièces sortent avec la rue et, pour
+une facture, son adresse de facturation.

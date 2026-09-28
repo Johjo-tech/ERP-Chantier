@@ -927,6 +927,14 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
 - **Décision** : D-FAC-17, D-ECR-FAC-05, D-ECR-FAC-07.
 - **Revenir à l'identique** : relister les brouillons, retirer l'ouverture de la saisie depuis « Tous
   les règlements », n'afficher « ✕ Effacer » qu'au rendu suivant.
+- **Corrigé en production (97287c3, 28/09/2026)** — le dossier d'un client : une facture SANS
+  NUMÉRO y recevait un encaissement, et le déclencheur la numérotait alors hors de tout ordre
+  chronologique (art. 242 nonies A, annexe II du CGI). L'ancienne ne la rend plus « payable » (ni
+  case, ni « + Règlement », ni clic), la titre « Brouillon — non émise » (au lieu d'un titre vide) et
+  dit en une ligne pourquoi et où l'émettre. `web/`, qui listait lui aussi le brouillon dans le
+  dossier avec sa case et son bouton, reprend le correctif à l'identique
+  (`facturation/components/PageDossierClient.tsx`, test `reglements.essai.tsx` « un brouillon ne
+  s'encaisse pas ») : plus d'écart ici, rien à trancher.
 
 ### DEF-COR-16 — Aucun geste pour passer un devis à « envoyé », « accepté », « refusé »
 - **Écran** : Devis › formulaire d'un devis existant.
@@ -1001,6 +1009,11 @@ valeur disparaît au rechargement (le pont filtre les champs inconnus : `colonne
   fait que masquer ce qui serait de toute façon refusé »).
 - **Décision** : D-BC-06, D-PLN-13, D-ECR-PLN-03, D-ECR-CHA-06, D-ECR-CHA-14, D-ECR-FAC-01, D-014.
 - **Revenir à l'identique** : retirer les conditions `usePermission` / `<Can>` de ces écrans.
+- **Corrigé en production (97287c3, 28/09/2026)** — même règle, côté bons : « Supprimer » restait
+  affiché, grisé, sur la carte d'un bon facturé que `bons_commande_facture_indelebile` refusera
+  toujours de supprimer. L'ancienne ne l'affiche plus du tout ; `web/`, qui le grisait comme elle,
+  fait de même (`commandes/components/CarteBon.tsx`, test `commandes.essai.tsx` « un bon facturé
+  n'affiche pas « Supprimer » ») : pas d'écart.
 
 ### DEF-COR-23 — Téléphone du locataire : écrit par l'ancienne, jamais relu
 - **Écran** : Bons › formulaire, section « Lieu & locataire ».
