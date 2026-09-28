@@ -273,7 +273,8 @@ const enNombre = (m: string) => Number(m.replace(/[\u202F\u00A0\u20AC]/g, "").re
 
 /**
  * Les corrections voulues de DEF-REP-04 appliquées au HTML de l'ancien — et elles
- * seules : la quantité « 2.5 » → « 2,5 », la TVA « 5.5% » → « 5,5 % », les montants
+ * seules : la quantité « 2.5 » → « 2,5 », la TVA « 5.5% » → « 5,5 % » (espace insécable,
+ * D-VIS3-01), les montants
  * d'un avoir changés de signe (une déduction « -x » y devient « x »), le titre
  * d'un SAV. Tout le reste doit rester identique au caractère près.
  */
@@ -281,7 +282,7 @@ const MONTANT_SIGNE = /(-?)(\d{1,3}(?:[\u202F\u00A0]\d{3})*,\d{2}\u00A0\u20AC)/g
 function ecartVoulu(html: string, t: ReturnType<typeof tirage>): string {
   let h = html
     .replace(/<td class="num">(-?\d+)\.(\d+)<\/td><td class="unite">/g, '<td class="num">$1,$2</td><td class="unite">')
-    .replace(/<td class="num">(-?\d+(?:\.\d+)?)%<\/td><\/tr>/g, (_m, taux: string) => `<td class="num">${taux.replace(".", ",")} %</td></tr>`);
+    .replace(/<td class="num">(-?\d+(?:\.\d+)?)%<\/td><\/tr>/g, (_m, taux: string) => `<td class="num">${taux.replace(".", ",")}\u00A0%</td></tr>`);
   if (t.type === "facture" && t.doc.typeDocument === "avoir") {
     h = h.replace(MONTANT_SIGNE, (_m, signe: string, valeur: string) => (signe || /^0,00/.test(valeur) ? valeur : `-${valeur}`)).replace(/<em>-•••<\/em>/g, "<em>•••</em>");
   }
@@ -350,7 +351,9 @@ describe("écarts voulus des pièces imprimées (DEF-REP-04, D-REP-04)", () => {
     expect(ligne(ancien)).toContain('<td class="num">2.5</td>');
     expect(ligne(ancien)).toContain('<td class="num">5.5%</td>');
     expect(ligne(nouveau)).toContain('<td class="num">2,5</td>');
-    expect(ligne(nouveau)).toContain('<td class="num">5,5 %</td>');
+    // Espace INSÉCABLE : dans la colonne étroite « % TVA », une espace ordinaire renvoyait « % » à la
+    // ligne et chaque ligne de la pièce doublait de hauteur (D-VIS3-01).
+    expect(ligne(nouveau)).toContain('<td class="num">5,5\u00A0%</td>');
   });
 
   it("un avoir : l'ancien imprime des montants positifs, le nouveau des montants négatifs", () => {

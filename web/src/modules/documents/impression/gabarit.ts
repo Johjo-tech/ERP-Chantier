@@ -198,10 +198,15 @@ export function quantiteImprimee(q: number | string | null | undefined): string 
   return Number.isFinite(n) ? String(n).replace(".", ",") : String(q);
 }
 
-/** La TVA d'une ligne comme celle des totaux : « 5,5 % », pas « 5.5% » (DEF-REP-04). */
+/**
+ * La TVA d'une ligne à la française : « 5,5 % », pas « 5.5% » (DEF-REP-04). L'espace est
+ * INSÉCABLE, contrairement à celle des totaux (reprise de l'ancien, sur une ligne large) : la
+ * colonne « % TVA » est étroite, une espace ordinaire y renvoyait « % » à la ligne et chaque
+ * ligne de la pièce doublait de hauteur (D-VIS3-01).
+ */
 export function tvaImprimee(t: number | string | null | undefined): string {
   const n = typeof t === "number" ? t : t === null || t === undefined || String(t).trim() === "" ? NaN : Number(String(t).replace(",", "."));
-  return Number.isFinite(n) ? formaterTaux(n) : "";
+  return Number.isFinite(n) ? formaterTaux(n).replace(" %", " %") : "";
 }
 
 export function fmtDate(d: string | null | undefined): string {

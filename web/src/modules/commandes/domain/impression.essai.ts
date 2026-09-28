@@ -31,7 +31,8 @@ describe("la pièce d'un bon", () => {
   it("quantité et TVA de la ligne à la française", () => {
     const html = renderPrintDoc(contexteBon(BON, LIGNES, EMETTEUR));
     expect(html).toContain('<td class="num">2,5</td><td class="unite">ml</td>');
-    expect(html).toContain('<td class="num">5,5 %</td></tr>');
+    // Insécable : « % » ne part pas seul à la ligne dans la colonne étroite (D-VIS3-01).
+    expect(html).toContain('<td class="num">5,5\u00A0%</td></tr>');
     expect(html).not.toContain("5.5%");
   });
 });
