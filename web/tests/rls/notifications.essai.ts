@@ -47,9 +47,11 @@ describe("[proposition] notifications traitées par société", () => {
 
   it("l'auteur est posé par la base : un `traitee_par` fourni est remplacé", async () => {
     const c = cle("auteur");
-    await nt(admin).insert({ societe_id: ALPHA, cle: c, traitee_par: "a1000000-0000-0000-0000-000000000004" });
+    const pose = await nt(admin).insert({ societe_id: ALPHA, cle: c, traitee_par: "a1000000-0000-0000-0000-000000000004" });
+    expect(pose.error).toBeNull();
     const vue = await nt(admin).select("traitee_par").eq("cle", c).single();
-    expect(vue.data?.traitee_par).not.toBe("a1000000-0000-0000-0000-000000000004");
+    // L'auteur réel (l'admin), et non « autre chose que le technicien » : sans la table, `undefined` passait.
+    expect(vue.data?.traitee_par).toBe("a1000000-0000-0000-0000-000000000001");
   });
 
   it("marquer deux fois n'est pas une erreur (upsert sans doublon)", async () => {

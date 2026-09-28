@@ -54,36 +54,36 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-ECR-02 | « 📦 Commandé » n'enregistre pas la date | corrigé dans web/ | données perdues |
 | DEF-ECR-03 | Brouillon compté dans le CA (= STA-01) | identique à l'ancienne | calcul |
 | DEF-ECR-04 | « Mme Durand · null » (= STA-06) | corrigé en production (0f6f60d) pour la facture, repris dans web/ | affichage |
-| DEF-BDD-01 | `prochain_numero` ouvert à une autre société | correction proposée en base | sécurité |
-| DEF-BDD-02 | Compte désactivé qui se réactive ; adresse d'un autre | correction proposée en base | sécurité |
-| DEF-BDD-03 | Suivi médical, notes et dossiers RH lisibles par tous | correction proposée en base | sécurité |
-| DEF-BDD-04 | Seau `terrain` : fichiers d'autrui lisibles et inscriptibles | correction proposée en base | sécurité |
-| DEF-BDD-05 | Facture numérotée à la main, hors série et sans ligne | correction proposée en base | sécurité |
-| DEF-BDD-06 | Lignes d'un bon facturé modifiables | correction proposée en base | sécurité |
-| DEF-BDD-07 | Bon créé directement « chiffré » | correction proposée en base | sécurité |
-| DEF-BDD-08 | Un bon facturé deux fois | correction proposée en base | sécurité |
-| DEF-BDD-09 | Le rôle lecture supprime dans les tables filles | correction proposée en base | sécurité |
-| DEF-BDD-10 | La secrétaire exclue de ce que la matrice lui donne (devis compris) | correction proposée en base | données perdues |
-| DEF-BDD-11 | Le technicien écrit achats, affectations, DPGF, référentiels | correction proposée en base | sécurité |
-| DEF-BDD-12 | L'admin ne relit pas le chantier qu'il crée | correction proposée en base | données perdues |
-| DEF-BDD-13 | Le sous-traitant lit les tâches et bons de ses confrères | correction proposée en base | sécurité |
-| DEF-BDD-14 | Journal du circuit falsifiable | correction proposée en base | sécurité |
-| DEF-BDD-15 | Fonctions de déclencheur exécutables par tous ; annuaire sans barrière | correction proposée en base | sécurité |
-| DEF-BDD-16 | `v_facture_solde` : avoirs dus, acomptes ignorés | correction proposée en base | calcul |
-| DEF-BDD-17 | Règlements imputés par l'écran, pas par la base | correction proposée en base | calcul |
-| DEF-BDD-18 | Supprimer un brouillon de situation : DPGF rendu, facture debout | correction proposée en base | données perdues |
-| DEF-BDD-19 | Avoir en deux appels, cumul non borné | correction proposée en base | calcul |
-| DEF-BDD-20 | Imputation d'avoir retirée à moitié | correction proposée en base | calcul |
-| DEF-BDD-21 | Préfixes « BON-2027 » et « NOT- » | correction proposée en base | affichage |
-| DEF-BDD-22 | Champs du chantier sans colonne | correction proposée en base | données perdues |
-| DEF-BDD-23 | Le sous-traitant ne peut pointer aucune tâche | correction proposée en base | données perdues |
-| DEF-BDD-24 | Photos du terrain illisibles, effaçables par le rôle lecture | correction proposée en base | données perdues |
-| DEF-BDD-25 | Rapports : sous-traitant lit les internes ; lien au bon sans colonne | correction proposée en base | sécurité |
-| DEF-BDD-26 | Téléphone de l'occupant jamais servi au terrain | correction proposée en base | affichage |
-| DEF-BDD-27 | Prêts sans durée, deux prêts en cours, suppression par lecture | correction proposée en base | données perdues |
-| DEF-BDD-28 | Espace client inexistant en base | correction proposée en base | sécurité |
-| DEF-BDD-29 | Fériés d'Alsace-Moselle sans réglage | correction proposée en base | affichage |
-| DEF-BDD-30 | « Fait » de la cloche réservé aux réglages | correction proposée en base | données perdues |
+| DEF-BDD-01 | `prochain_numero` ouvert à une autre société | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-02 | Compte désactivé qui se réactive ; adresse d'un autre | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-03 | Suivi médical, notes et dossiers RH lisibles par tous | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-04 | Seau `terrain` : fichiers d'autrui lisibles et inscriptibles | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-05 | Facture numérotée à la main, hors série et sans ligne | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-06 | Lignes d'un bon facturé modifiables | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-07 | Bon créé directement « chiffré » | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-08 | Un bon facturé deux fois | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-09 | Le rôle lecture supprime dans les tables filles | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-10 | La secrétaire exclue de ce que la matrice lui donne (devis compris) | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-11 | Le technicien écrit achats, affectations, DPGF, référentiels | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-12 | L'admin ne relit pas le chantier qu'il crée | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-13 | Le sous-traitant lit les tâches et bons de ses confrères | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-14 | Journal du circuit falsifiable | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-15 | Fonctions de déclencheur exécutables par tous ; annuaire sans barrière | correction proposée en base — en partie prouvée (échoue sans / passe avec) | sécurité |
+| DEF-BDD-16 | `v_facture_solde` : avoirs dus, acomptes ignorés | correction proposée en base — prouvée (échoue sans, passe avec) | calcul |
+| DEF-BDD-17 | Règlements imputés par l'écran, pas par la base | correction proposée en base — prouvée (échoue sans, passe avec) | calcul |
+| DEF-BDD-18 | Supprimer un brouillon de situation : DPGF rendu, facture debout | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-19 | Avoir en deux appels, cumul non borné | correction proposée en base — prouvée (échoue sans, passe avec) | calcul |
+| DEF-BDD-20 | Imputation d'avoir retirée à moitié | correction proposée en base — prouvée (échoue sans, passe avec) | calcul |
+| DEF-BDD-21 | Préfixes « BON-2027 » et « NOT- » | correction proposée en base — prouvée (échoue sans, passe avec) | affichage |
+| DEF-BDD-22 | Champs du chantier sans colonne | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-23 | Le sous-traitant ne peut pointer aucune tâche | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-24 | Photos du terrain illisibles, effaçables par le rôle lecture | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-25 | Rapports : sous-traitant lit les internes ; lien au bon sans colonne | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-26 | Téléphone de l'occupant jamais servi au terrain | correction proposée en base — prouvée (échoue sans, passe avec) | affichage |
+| DEF-BDD-27 | Prêts sans durée, deux prêts en cours, suppression par lecture | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
+| DEF-BDD-28 | Espace client inexistant en base | correction proposée en base — prouvée (échoue sans, passe avec) | sécurité |
+| DEF-BDD-29 | Fériés d'Alsace-Moselle sans réglage | correction proposée en base — prouvée (échoue sans, passe avec) | affichage |
+| DEF-BDD-30 | « Fait » de la cloche réservé aux réglages | correction proposée en base — prouvée (échoue sans, passe avec) | données perdues |
 | DEF-COR-01 | Achats du chantier jamais relus (erreur 42703) | corrigé dans web/ | données perdues |
 | DEF-COR-02 | DPGF, avancements et to-do perdus au rechargement | corrigé dans web/ | données perdues |
 | DEF-COR-03 | Bon né du DPGF : lien perdu, conducteur vide, tâche en double | corrigé dans web/ | données perdues |
@@ -423,13 +423,16 @@ actives sont toutes rattachées ci-dessous (la n° 22, statistiques, est retiré
 
 **Comment constater en local.** La base locale de `web/` reçoit toutes les propositions
 (`npm run base:locale`) : les tests RLS marqués `[proposition]` y **passent**, et prouvent la
-correction. Le défaut lui-même se voit en faisant tourner le même test contre une base qui n'a pas
-la proposition — il échoue. Cela n'a été **vérifié** que pour les n° 2, 8, 21, 30 (insert … select
-d'un chantier) et 35 (mentions « échoue contre la base actuelle (vérifié) » de
-`migrations-proposees.md`) ; pour les autres, l'échec sans la proposition est annoncé par l'en-tête
-des fichiers de test mais **à vérifier** (tâche « Faire tourner les tests RLS aussi SANS les
-propositions » du rapport, non faite). Commande : `npm run test:rls` (dans `web/`, base locale
-démarrée).
+correction. Le défaut lui-même se voit en faisant tourner les mêmes tests contre une base construite
+**sans** les propositions, à l'image de la production :
+`npx supabase stop --no-backup && SANS_PROPOSITIONS=1 npm run base:locale && npm run test:rls`.
+**Fait le 28/09 pour les trente entrées** (ligne « Preuve » de chacune ; détail et chiffres dans
+`docs/tests-rls.md`, « Écart avec la production ») : sans les propositions, 127 cas échouent et
+30 ne démarrent pas (espace client, statistiques) ; avec, les 287 passent. Vingt-neuf défauts sont
+prouvés ; un seul ne l'est qu'en partie (DEF-BDD-15 : le droit EXECUTE des fonctions de déclencheur
+n'existe qu'en production et ne se reproduit pas en local). Trois tests qui passaient des deux côtés
+alors qu'ils devaient prouver un défaut ont été renforcés (DEF-BDD-09, 25, 30) ; deux ont été
+ajoutés (DEF-BDD-15).
 
 ### DEF-BDD-01 — `prochain_numero()` sert une autre société
 - **Risque** : `peut_ecrire()` rend NULL pour un non-membre ; `if not peut_ecrire(...)` laisse alors
@@ -437,6 +440,7 @@ démarrée).
 - **Constater** : `tests/rls/numerotation.essai.ts`, « [proposition] prochain_numero ne sert que les
   membres autorisés » (échoue contre la fonction actuelle — vérifié).
 - **Proposition** : n° 2, `20260925015000_peut_ecrire_ne_rend_jamais_null.sql`.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`numerotation.essai.ts`, les trois cas de « prochain_numero ne sert que les membres autorisés »), passe avec.
 
 ### DEF-BDD-02 — Un compte désactivé se réactive ; chacun prend l'adresse d'un autre
 - **Risque** : `profiles_update_self` sans restriction de colonne : un compte coupé
@@ -446,6 +450,7 @@ démarrée).
   `actif`… », « [proposition] un compte ne s'attribue pas l'adresse d'un autre… » (échouent contre
   la base actuelle — vérifié).
 - **Proposition** : n° 8, `20260926010000_profil_seul_le_nom_se_modifie.sql` — D-SOC-09.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`comptes.essai.ts`, « un compte ne touche pas à son propre `actif` » et « un compte ne s'attribue pas l'adresse d'un autre »), passe avec.
 
 ### DEF-BDD-03 — Données de santé et dossiers RH lisibles par tout membre
 - **Risque** : `v_salaries_annuaire` montre à tout membre (technicien, sous-traitant, lecture) les
@@ -458,6 +463,7 @@ démarrée).
 - **Proposition** : n° 20, `20260926060000_les_donnees_rh_restent_aux_rh.sql` — D-RH-01. **Effet sur
   l'ancien écran** : le conducteur n'y voit plus le badge de visite (D-RH-01). Non tranché : M8 (le
   technicien et son propre dossier, `migrations-proposees.md`, relecture 4).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`rh.essai.ts`, « l'annuaire tait aussi le suivi médical et les notes hors RH », « une absence qui finit avant de commencer est refusée », « la secrétaire dépose et retire une pièce du dossier », « le technicien et le sous-traitant ne lisent ni ne déposent sous `salaries/` »), passe avec.
 
 ### DEF-BDD-04 — Seau `terrain` : le terrain lit et dépose hors de ses affaires
 - **Risque** : la lecture du seau ne se juge que par société : un technicien ou un sous-traitant qui
@@ -467,6 +473,7 @@ démarrée).
   que ses fichiers » ; `tests/rls/politiques.essai.ts`, « relecture 4 — I3 ».
 - **Proposition** : n° 23, `20260926100000_le_terrain_ne_lit_que_ses_fichiers.sql` (dépend des n° 16
   et 18) — D-TRV-02, D-SQL-06.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transversal.essai.ts`, les quatre cas de « seau terrain : le terrain ne lit que ses fichiers » ; `politiques.essai.ts`, les deux cas de « relecture 4 — I3 »), passe avec.
 
 ### DEF-BDD-05 — Une facture qui fournit son numéro est acceptée hors série et sans ligne
 - **Risque** : un INSERT (ou l'UPDATE d'un brouillon) qui fournit `numero` crée une facture émise hors
@@ -478,6 +485,7 @@ démarrée).
 - **Proposition** : n° 5, `20260925040000_le_numero_ne_se_fournit_pas.sql` — D-SQL-02, D-FAC-12.
   **Effet sur l'ancien écran** : « Reprendre un historique » échoue désormais pour la secrétaire,
   motif de la base affiché (D-SQL-02, décision métier à valider).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`numerotation.essai.ts`, les trois cas de « le numéro d'une facture ne se fournit pas » ; `import-export.essai.ts`, « la secrétaire… ne pose pas le marqueur « compta: » » ; `politiques.essai.ts`, les deux cas de « relecture 4 — I1 »), passe avec.
 
 ### DEF-BDD-06 — Les lignes d'un bon facturé restent modifiables
 - **Risque** : `bon_commande_facture_fige` protège l'en-tête d'un bon facturé, pas ses lignes : un
@@ -487,6 +495,7 @@ démarrée).
 - **Proposition** : n° 6, `20260925050000_les_lignes_d_un_bon_facture_sont_figees.sql` — D-SQL-07.
   **À contrôler avant** : la requête des positions non contiguës (`migrations-proposees.md`, n° 6) —
   l'enregistrement de ces bons échouerait dans l'ancien écran.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`commandes.essai.ts`, « les lignes d'un bon dont la facture est émise sont figées » ; `politiques.essai.ts`, « relecture 4 — I8 » (la suppression d'une ligne passe sans la proposition)), passe avec.
 
 ### DEF-BDD-07 — Un bon peut naître directement « chiffré »
 - **Risque** : `circuit_etat_reserve` ne veille qu'à l'UPDATE : un INSERT saute le circuit.
@@ -494,6 +503,7 @@ démarrée).
   du circuit (I4) ».
 - **Proposition** : n° 7, `20260925060000_un_bon_nait_au_debut_du_circuit.sql` — D-051 (ramené à
   `en_cours`, pas refusé : l'ancien écran envoie la clé).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`commandes.essai.ts`, « un bon créé « chiffré » naît quand même au début du circuit »), passe avec.
 
 ### DEF-BDD-08 — Deux onglets facturent deux fois le même bon
 - **Risque** : `bc_generer_facture` ne verrouille pas le bon et ne refuse pas un bon déjà facturé.
@@ -502,6 +512,7 @@ démarrée).
   course elle-même n'est pas reproduite de façon fiable, D-R4-06).
 - **Proposition** : n° 35, `20260926133000_le_bon_ne_se_facture_qu_une_fois.sql` — D-R4-06. Relever
   `pg_get_functiondef` en production avant d'appliquer.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transactions-facturation.essai.ts`, « une facture porte déjà ce bon : la base refuse d'en créer une seconde » et « deux « Créer la facture » simultanés : une seule facture » (la course a donné deux factures cette fois-ci ; elle reste non déterministe, D-R4-06)), passe avec.
 
 ### DEF-BDD-09 — Le rôle lecture supprime dans les tables filles
 - **Risque** : politiques DELETE sous `est_membre()` : le rôle **lecture** (et tout membre) supprime
@@ -515,6 +526,7 @@ démarrée).
   = « module / supprimer » (AUTH-71) » (relevé automatique de `pg_policy`) ;
   `tests/rls/vehicules.essai.ts` et `rh.essai.ts` (cas « le rôle lecture ne supprime pas… »).
 - **Propositions** : n° 1, 10, 17, 20, 21, 24, 30 — D-TRV-03, D-AUTH-06, D-VEH-01.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`filles.essai.ts`, « le rôle lecture ne supprime pas un interlocuteur » ; `chantiers.essai.ts`, « le rôle lecture ne supprime ni un point de to-do, ni un document » ; `transversal.essai.ts`, « suppression des filles restantes » ; `auth-roles.essai.ts`, « aucune politique de suppression n'est ouverte à « tout membre » » (23 politiques relevées sans la proposition) et « plus de suppression par peut_ecrire() » ; `vehicules.essai.ts`, « le rôle lecture ne supprime pas un entretien » et « …pas un prêt de matériel » ; `rh.essai.ts`, « le rôle lecture n'efface plus les documents d'un sous-traitant ». Le cas du prêt de matériel passait AUSSI sans la proposition : il n'y avait aucun prêt à effacer — renforcé le 28/09 (le prêt est posé avec les seules colonnes de production, puis relu)), passe avec.
 
 ### DEF-BDD-10 — La secrétaire ne peut pas ce que la matrice lui donne (devis compris)
 - **Risque** : la secrétaire n'est pas dans `peut_ecrire()` : elle a `devis / creer` mais
@@ -528,6 +540,7 @@ démarrée).
 - **Propositions** : n° 1, 3 (`20260925020000_la_secretaire_numerote_ses_devis.sql`), 30 — D-018,
   D-AUTH-05. Reproduire dans l'ancienne : `secretaire.alpha` → Devis → nouveau devis → enregistrer :
   refus à l'enregistrement (à vérifier à l'écran ; le refus de `prochain_numero` est prouvé par le test).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`filles.essai.ts`, « la secrétaire obtient un numéro de devis » et « la secrétaire (clients/modifier) ajoute un interlocuteur » ; `auth-roles.essai.ts`, les quatre cas de « la secrétaire écrit ce que la matrice lui donne » (42501 sans la proposition) ; `rh.essai.ts`, « l'administrateur crée une équipe… ; la secrétaire… »), passe avec.
 
 ### DEF-BDD-11 — Le terrain écrit ce que la matrice ne lui donne pas
 - **Risque** : le technicien écrit dans le DPGF, ajoute un interlocuteur, une dépense qu'il ne peut
@@ -540,6 +553,7 @@ démarrée).
   « [proposition] le technicien (voir) ne note pas d'entretien ».
 - **Propositions** : n° 1, 10, 21, 30 — D-AUTH-06. Reste ouvert : la CRÉATION par le terrain
   (DEF-REP-17).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`filles.essai.ts`, « le technicien n'écrit pas dans le DPGF », « le technicien n'ajoute pas d'interlocuteur » ; `chantiers.essai.ts`, « le technicien n'ajoute pas de dépense », « le technicien n'affecte personne » ; `auth-roles.essai.ts`, « ni le technicien ni le conducteur n'effacent une fiche conducteur ou un métier » ; `vehicules.essai.ts`, « le technicien (voir) ne note pas d'entretien »), passe avec.
 
 ### DEF-BDD-12 — L'administrateur se voit refuser le chantier qu'il vient de créer
 - **Risque** : `chantiers_select` appelle `est_affecte_au_chantier(id)`, qui relit la ligne — invisible
@@ -551,6 +565,7 @@ démarrée).
   — D-AUTH-07. L'ancien écran enregistre aussi par `upsert(row).select().single()`
   (`src/integrations/html-adapter.ts:1837-1841`) : il devrait subir le même refus — **à vérifier**
   sur la production, qui a divergé de la base locale.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`auth-roles.essai.ts`, « l'administrateur relit le chantier qu'il crée, dans la même requête (insert … select) »), passe avec. Le refus de l'ancien écran en production reste à constater là-bas (base divergente).
 
 ### DEF-BDD-13 — Le sous-traitant lit les tâches et les bons de ses confrères
 - **Risque** : `planning_taches`, `v_bons_commande_terrain`, `v_bon_commande_lignes_terrain` et
@@ -560,6 +575,7 @@ démarrée).
   `tests/rls/politiques.essai.ts`, « relecture 4 — I4 et I5 ».
 - **Proposition** : n° 25, `20260926102000_le_sous_traitant_ne_lit_que_ses_taches.sql` — D-TRV-04,
   D-SQL-06. Ce qu'elle laisse ouvert : DEF-REP-18.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transversal.essai.ts`, « le sous-traitant ne lit que SES tâches » ; `politiques.essai.ts`, « relecture 4 — I4 et I5 » ; `commandes.essai.ts`, « le sous-traitant ne lit pas un bon qui ne lui est pas confié »), passe avec.
 
 ### DEF-BDD-14 — Le journal du circuit accepte de fausses transitions
 - **Risque** : `workflow_journal` accepte l'INSERT de tout membre (AUTH-73).
@@ -567,14 +583,17 @@ démarrée).
   `tests/rls/circuit.essai.ts` (les RPC écrivent toujours).
 - **Proposition** : n° 26, `20260926103000_le_journal_du_circuit_ne_s_ecrit_que_par_le_circuit.sql` —
   D-TRV-05.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transversal.essai.ts`, « aucun membre n'y écrit une transition à la main, pas même l'administrateur »), passe avec.
 
 ### DEF-BDD-15 — Fonctions de déclencheur exécutables par tous ; annuaire sans `security_barrier`
 - **Risque** : EXECUTE rendu à PUBLIC sur les fonctions de déclencheur créées après le 24/09
   (AUTH-75) ; `v_salaries_annuaire` a perdu `security_barrier` (AUTH-76, constaté : `reloptions` vide).
-- **Constater** : non observable par l'API — contrôle SQL de l'en-tête du fichier (0 ligne attendue)
-  et `select reloptions from pg_class where relname = 'v_salaries_annuaire'`.
+- **Constater** : non observable par l'API — `tests/rls/transversal.essai.ts`, « [proposition]
+  fonctions de déclencheur et annuaire » (relevé du catalogue du conteneur local, en lecture seule :
+  requête de l'en-tête du fichier, 0 ligne attendue, et `reloptions` de `v_salaries_annuaire`).
 - **Proposition** : n° 27, `20260926104000_fonctions_de_declencheur_sans_execute_public.sql` —
   D-TRV-06 (à rejouer après toute proposition qui crée un déclencheur ou refait la vue).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : **en partie prouvé.** Barrière de l'annuaire : échoue sans (`transversal.essai.ts`, « l'annuaire des salariés garde sa barrière de sécurité », test ajouté le 28/09 : `reloptions` vide), passe avec. EXECUTE des fonctions de déclencheur : **non prouvé** — le test ajouté (« aucune fonction de déclencheur du schéma public n'est exécutable par anon ou authenticated ») passe des deux côtés : les 21 fonctions de déclencheur de la base reconstruite viennent des migrations du dépôt, qui retirent déjà ce droit ; celles qu'AUTH-75 vise ont été créées en production par le tableau de bord et n'ont pas de fichier. Le défaut ne se reproduit donc pas en local ; le test garde les propositions elles-mêmes (qui créent des déclencheurs), et le constat en production se fait par la requête de l'en-tête de la proposition.
 
 ### DEF-BDD-16 — `v_facture_solde` fait d'un avoir une dette et ignore les acomptes
 - **Risque** : la vue ignore le signe des avoirs (un crédit y est « Impayée » et s'additionne aux
@@ -585,6 +604,7 @@ démarrée).
   `tests/rls/politiques.essai.ts`, « relecture 4 — B3 », « relecture 4 — I2 ».
 - **Proposition** : n° 12, `20260926040000_le_solde_d_une_facture_dit_vrai.sql` (s'arrête d'elle-même
   si la définition vivante diffère) — D-FAC-01, D-SQL-03, D-SQL-04. Côté écran de `web/` : DEF-COR-10.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`facturation.essai.ts`, les cinq cas de « v_facture_solde dit vrai » ; `politiques.essai.ts`, les deux cas de « relecture 4 — B3 » et « relecture 4 — I2 »), passe avec.
 
 ### DEF-BDD-17 — Les règlements sont imputés par l'écran, pas par la base
 - **Risque** : statut payé/impayé recalé par l'écran après chaque règlement ; règlement groupé
@@ -595,6 +615,7 @@ démarrée).
   imputer_avoir… » ; `tests/rls/politiques.essai.ts`, « M6 ».
 - **Proposition** : n° 13, `20260926041000_les_reglements_s_imputent_en_base.sql` — D-FAC-02. Côté
   écran de `web/` : DEF-COR-11.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`facturation.essai.ts`, « réglée → payée ; règlement retiré → impayée », les trois cas d'« enregistrer_reglement_groupe » qui écrivent, les deux cas d'« imputer_avoir » ; `politiques.essai.ts`, « M6 »), passe avec. Le cas « le rôle lecture n'écrit aucun règlement » passe des deux côtés : c'est une garde de non-régression, pas une preuve.
 
 ### DEF-BDD-18 — Supprimer un brouillon de situation rend l'avancement même si la suppression échoue
 - **Risque** : l'écran rend l'avancement au DPGF PUIS supprime la facture ; un refus de la seconde
@@ -606,6 +627,7 @@ démarrée).
   brouillon de situation : tout ou rien (B2, I2) ».
 - **Proposition** : n° 32, `20260926130000_supprimer_un_brouillon_de_facture_d_un_seul_geste.sql` —
   D-R4-03.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transactions-facturation.essai.ts`, les cinq cas de « supprimer un brouillon de situation : tout ou rien »), passe avec.
 
 ### DEF-BDD-19 — L'avoir s'établit en deux appels, sans borne
 - **Risque** : créer puis émettre en deux appels laisse un avoir brouillon orphelin à chaque échec
@@ -615,6 +637,7 @@ démarrée).
 - **Constater** : `tests/rls/transactions-facturation.essai.ts`, « [proposition] établir un avoir
   d'un seul geste (I6) ».
 - **Proposition** : n° 33, `20260926131000_l_avoir_s_etablit_d_un_seul_geste.sql` — D-R4-04.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transactions-facturation.essai.ts`, les deux cas d'« établir un avoir d'un seul geste »), passe avec.
 
 ### DEF-BDD-20 — « Retirer » une imputation d'avoir n'en supprime qu'une moitié
 - **Risque** : facture redevenue due avec le crédit resté consommé, ou l'inverse.
@@ -623,6 +646,7 @@ démarrée).
 - **Constater** : `tests/rls/transactions-facturation.essai.ts`, « [proposition] annuler une
   imputation : les deux moitiés ensemble (I8) ».
 - **Proposition** : n° 34, `20260926132000_une_imputation_s_annule_entiere.sql` — D-R4-05.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transactions-facturation.essai.ts`, les deux cas d'« annuler une imputation : les deux moitiés ensemble »), passe avec.
 
 ### DEF-BDD-21 — Bons « BON-2027-… », notes de frais « NOT-… »
 - **Risque** : le préfixe « BC » n'existe que par une ligne `compteurs` de 2026 : en 2027 les bons
@@ -632,6 +656,7 @@ démarrée).
   locale le montre déjà : un bon créé localement reçoit `BON-2026-…` (D-046).
 - **Propositions** : n° 11 et 15 (`20260926030000`, `20260926043000`, appliquer la 15 APRÈS la 11) —
   D-FAC-07.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`circuit.essai.ts`, « un bon créé reçoit un numéro « BC- » » ; `facturation.essai.ts`, « une note de frais sort « NDF-… » »), passe avec.
 
 ### DEF-BDD-22 — Ce que l'écran chantier saisit n'a pas de colonne
 - **Risque** : `chantiers.statut`, `notes`, cinq champs PPSPS, `chantier_comptes_rendus.vu`,
@@ -639,6 +664,7 @@ démarrée).
 - **Constater** : `tests/rls/chantiers.essai.ts`, « [proposition] les champs saisis ont leur colonne ».
 - **Proposition** : n° 9, `20260926020000_le_chantier_garde_ce_que_l_ecran_saisit.sql` — D-CHA-09
   (côté ancien : une entrée `SNAKE_OVERRIDES` pour `ppspsCoordinateurSPS`).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`chantiers.essai.ts`, les quatre cas de « les champs saisis ont leur colonne » (colonnes absentes : `chantiers.statut`, `chantier_dpgf_lignes.metier`…) ; aussi `chantiers-api.essai.ts` (trois cas), `transversal.essai.ts` « D-CHA-04 » et `chantiers.essai.ts` « planifier une quantité », qui écrivent ces colonnes), passe avec.
 
 ### DEF-BDD-23 — Le sous-traitant ne peut pointer aucune de ses tâches
 - **Risque** : `est_de_l_equipe` ignore le sous-traitant : « Valider les travaux » lui est proposé,
@@ -649,6 +675,7 @@ démarrée).
   « …signale un travail supplémentaire sur son bon… ») ; `tests/rls/politiques.essai.ts`,
   « relecture 4 — B2 ».
 - **Proposition** : n° 16, `20260926050000_le_sous_traitant_pointe_ses_taches.sql` — D-PLN-05, D-SQL-05.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`planning.essai.ts`, « le sous-traitant pointe les tâches de SON entreprise », « …lit SON montant », « …signale un travail supplémentaire sur son bon » ; `politiques.essai.ts`, les deux premiers cas de « relecture 4 — B2 »), passe avec.
 
 ### DEF-BDD-24 — Photos du terrain illisibles au terrain, effaçables par le rôle lecture
 - **Risque** : `bon_commande_photos` vérifie la société par une sous-requête sur `bons_commande`,
@@ -656,6 +683,7 @@ démarrée).
 - **Constater** : `tests/rls/planning.essai.ts`, « le technicien dépose et lit une photo du bon ; le
   rôle lecture ne peut pas l'effacer ».
 - **Proposition** : n° 17, `20260926051000_les_photos_du_terrain.sql` — D-PLN-06. Côté écran : DEF-COR-27.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`planning.essai.ts`, « le technicien dépose et lit une photo du bon ; le rôle lecture ne peut pas l'effacer » (refus RLS au dépôt sans la proposition)), passe avec.
 
 ### DEF-BDD-25 — Rapports : le sous-traitant lit les rapports internes
 - **Risque** : aucun filtre sous-traitant (PLN-52) ; lien au bon, émetteur sous-traitant, signature
@@ -665,6 +693,7 @@ démarrée).
   rédige… » ; `tests/rls/politiques.essai.ts`, « M3 ».
 - **Proposition** : n° 18, `20260926052000_rapports_d_intervention_complets.sql` (dépend du n° 16) —
   D-PLN-07 (sans elle, `web/` lit sans ces colonnes et refuse le lien au bon en le disant).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`interventions.essai.ts`, « un rapport interne, écrit avec les seules colonnes de production, reste invisible au sous-traitant » — ajouté le 28/09 : les autres cas du fichier tombent sans la proposition sur la colonne `bon_commande_id` absente avant d'avoir rien dit de la visibilité ; ils prouvent le lien au bon manquant, pas la fuite — ; plus les cinq autres cas du fichier et `politiques.essai.ts` « M3 »), passe avec.
 
 ### DEF-BDD-26 — Le téléphone de l'occupant n'arrive jamais au terrain
 - **Risque** : la vue terrain ne sert pas `telephone_locataire` (BC-93) : le lien `tel:` de la carte
@@ -672,6 +701,7 @@ démarrée).
 - **Constater** : `tests/rls/planning.essai.ts`, « le terrain lit le téléphone de l'occupant, que la
   vue ne sert pas ».
 - **Proposition** : n° 19, `20260926053000_le_terrain_joint_le_locataire.sql` — D-PLN-10.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`planning.essai.ts`, « le terrain lit le téléphone de l'occupant, que la vue ne sert pas »), passe avec.
 
 ### DEF-BDD-27 — Prêts sans durée, deux prêts en cours, droits des filles du parc
 - **Risque** : aucune colonne de durée prévue ; deux prêts en cours possibles pour un même objet ;
@@ -683,6 +713,7 @@ démarrée).
   refusé ») et `tests/rls/vehicules-api.essai.ts` — échouent contre la base actuelle (vérifié).
 - **Proposition** : n° 21, `20260926070000_vehicules_et_materiel_gardent_leurs_prets.sql` —
   D-VEH-01 à 03. Côté écran : DEF-COR-29.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`vehicules.essai.ts`, les neuf cas `[proposition]` ; `vehicules-api.essai.ts`, quatre cas sur cinq), passe avec. « La vente émet une facture numérotée… » passe des deux côtés (non-régression).
 
 ### DEF-BDD-28 — Pas d'espace client en base
 - **Risque** : aucun rôle ni politique pour un client ; le portail de l'ancien écran est mort
@@ -693,11 +724,13 @@ démarrée).
   `tests/rls/politiques.essai.ts` (« relecture 4 — B1 »).
 - **Propositions** : n° 4, 14, 29 — D-008, D-029, D-FAC-10, D-TRV-08, D-SQL-01. Non tranchés : M4, M7
   (`migrations-proposees.md`, relecture 4).
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans, passe avec — `transversal.essai.ts`, les trois cas d'« accès clients gérés par l'administrateur » ; `politiques.essai.ts`, « relecture 4 — B1 » ; `numerotation.essai.ts`, « un compte client (non membre) n'obtient aucun numéro ». `espace-client.essai.ts` (11 cas) et `espace-client-bons.essai.ts` (8 cas) échouent sans la proposition **au démarrage du fichier** : le compte client ne peut pas exister sans `acces_clients` (le jeu d'essai le signale : « acces_clients absente »), aucun cas ne s'exécute ; avec, les 19 passent.
 
 ### DEF-BDD-29 — Rien ne dit qu'une société est en Alsace-Moselle
 - **Risque** : Vendredi saint et 26 décembre absents du planning (PLN-53).
 - **Constater** : `tests/rls/transversal.essai.ts`, « [proposition] Alsace-Moselle ».
 - **Proposition** : n° 28, `20260926105000_jours_feries_d_alsace_moselle.sql` — D-TRV-07.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`transversal.essai.ts`, « la colonne existe, faux par défaut ; seul l'administrateur la change »), passe avec.
 
 ### DEF-BDD-30 — « Fait » de la cloche réservé à qui modifie les réglages
 - **Risque** : l'ancien range `notifsTraitees` dans `societe_settings.infos_entreprise`, que seul
@@ -707,6 +740,7 @@ démarrée).
   société ».
 - **Proposition** : n° 31, `20260926120000_notifications_traitees_par_societe.sql` (reprise des clés
   existantes par un INSERT) — D-CLI-05. Côté écran : DEF-COR-42.
+- **Preuve (28/09, `SANS_PROPOSITIONS=1` puis base complète)** : prouvé : échoue sans (`notifications.essai.ts`, les cinq cas de « notifications traitées par société »), passe avec. « L'auteur est posé par la base » passait AUSSI sans la table (il comparait `undefined` à l'identifiant du technicien) — renforcé le 28/09 : il exige l'auteur réel.
 
 ## Corrections déjà actives dans web/
 

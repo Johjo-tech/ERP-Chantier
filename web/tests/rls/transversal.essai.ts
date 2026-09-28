@@ -13,6 +13,7 @@ import { construireCartes } from "../../src/modules/planning/domain/cartes";
 import { planPoser } from "../../src/modules/planning/domain/planification";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DatabaseTransversal } from "../../src/lib/database.propositions";
+import { lireCatalogue } from "./catalogue";
 import { ALPHA, COMPTES, avecPropositions, connecte, type Client } from "./cible";
 
 const trv = (c: Client) => c as unknown as SupabaseClient<DatabaseTransversal>;
@@ -228,6 +229,25 @@ describe("[proposition] journal du circuit (20260926103000)", () => {
       const { error } = await c.from("workflow_journal").insert({ societe_id: ALPHA, entite: "bon_commande", entite_id: bcId, ancien_statut: "chiffre", nouveau_statut: "facture", motif: MARQUE });
       expect(error?.code).toBe("42501");
     }
+  });
+});
+
+// Ni l'un ni l'autre ne s'observe par l'API : relevé du catalogue du conteneur local,
+// en lecture seule (catalogue.ts). Sans la proposition, les deux relevés sont non vides
+// (DEF-BDD-15, AUTH-75 et AUTH-76).
+describe("[proposition] fonctions de déclencheur et annuaire (20260926104000)", () => {
+  it("aucune fonction de déclencheur du schéma public n'est exécutable par anon ou authenticated", () => {
+    const ouvertes = lireCatalogue(`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prorettype = 'trigger'::regtype
+        and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+      order by 1`).map(([nom]) => nom);
+    expect(ouvertes).toEqual([]);
+  });
+
+  it("l'annuaire des salariés garde sa barrière de sécurité", () => {
+    // Crochets : une option vide rendrait une ligne blanche, que le relevé écarte.
+    const [[options]] = lireCatalogue(`select '[' || coalesce(array_to_string(reloptions, ','), '') || ']' from pg_class where relname = 'v_salaries_annuaire' and relnamespace = 'public'::regnamespace`);
+    expect(options).toContain("security_barrier=true");
   });
 });
 

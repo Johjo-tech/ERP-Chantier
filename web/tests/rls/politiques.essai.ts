@@ -43,7 +43,6 @@ let admin: Client;
 let conducteur: Client;
 let technicien: Client;
 let sousTraitant: Client;
-let client: Client;
 let adminBeta: Client;
 const ids = { st: "", autreSt: "", bons: [] as string[], fichiers: [] as string[] };
 
@@ -110,9 +109,12 @@ async function statut(id: string): Promise<string | undefined> {
 }
 
 beforeAll(async () => {
-  [admin, conducteur, technicien, sousTraitant, client, adminBeta] = await Promise.all([
+  // Le compte client n'est pas connecté ici : sans la proposition de l'espace client il
+  // n'existe pas, et son absence ferait sauter tout le fichier — donc toutes les preuves
+  // « échoue sans la proposition » des autres constats (docs/tests-rls.md). B1 le connecte.
+  [admin, conducteur, technicien, sousTraitant, adminBeta] = await Promise.all([
     connecte(COMPTES.adminAlpha), connecte(COMPTES.conducteurAlpha), connecte(COMPTES.technicienAlpha),
-    connecte(COMPTES.sousTraitantAlpha), connecte("client.opac@erp.local"), connecte(COMPTES.adminBeta),
+    connecte(COMPTES.sousTraitantAlpha), connecte(COMPTES.adminBeta),
   ]);
   const sts = await admin
     .from("sous_traitants")
@@ -140,6 +142,7 @@ describe("[proposition] relecture 4 — B1 : les vues de l'espace client ne s'é
   it("ni le client ni une autre société n'insèrent, ne modifient ou ne suppriment par une vue", async () => {
     const intrusion = await libre(adminBeta).from("v_espace_client_chantiers").insert({ id: crypto.randomUUID(), societe_id: ALPHA, nom: "INTRUSION BETA" });
     expect(intrusion.error?.code).toBe("42501");
+    const client = await connecte("client.opac@erp.local");
     const avant = (await avecPropositions(client).from("v_espace_client_chantiers").select("id")).data ?? [];
     const renomme = await libre(client).from("v_espace_client_chantiers").update({ nom: "RENOMMÉ PAR LE CLIENT" }).neq("id", "00000000-0000-0000-0000-000000000000");
     expect(renomme.error?.code).toBe("42501");

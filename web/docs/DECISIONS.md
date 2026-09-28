@@ -2511,3 +2511,26 @@ importés tels quels (`tests/parite/import-factures.essai.ts`, `tests/parite/rep
 `scripts/vider-documents-production.sql` est un script d'exploitation de la base de production, hors
 application. `web/` n'a pas à le reprendre (règle : rien hors de `web/`, aucune connexion à la
 production) ; la base locale se reconstruit par `scripts/preparer-base-locale.sh`.
+
+## D-BDD2-01 — Une proposition n'est prouvée que si son test échoue sans elle
+`preparer-base-locale.sh` accepte `SANS_PROPOSITIONS=1` : la base est reconstruite comme celle que
+`comparer-a-la-production.sh` confronte à la production (migrations du dépôt + rattrapage), sans
+les propositions. Les tests RLS y tournent tels quels ; la ligne « Preuve » de chaque DEF-BDD
+(`docs/DEFAUTS-A-TRANCHER.md`) nomme ceux qui échouent sans et passent avec. Relevé du 28/09 :
+sans, 130 / 287 passent, 127 échouent, 30 ne démarrent pas ; avec, 287 / 287. Un test qui passait
+des deux côtés alors qu'il devait prouver un défaut a été renforcé plutôt que cité (prêt de
+matériel effacé par le rôle lecture, auteur d'une notification, rapport interne vu du
+sous-traitant) — sinon la preuve était fausse.
+
+## D-BDD2-02 — `politiques.essai.ts` ne dépend plus du compte client pour démarrer
+Le compte `client.opac` n'existe qu'avec la proposition de l'espace client. Connecté dans le
+`beforeAll`, il faisait sauter les dix-sept cas du fichier sur une base sans propositions : aucune
+preuve de B2, B3, I1 à I8, M1, M3, M6 n'était possible. Seul le cas B1 le connecte désormais.
+
+## D-BDD2-03 — DEF-BDD-15 : le droit EXECUTE des déclencheurs n'est pas reproductible en local
+Les fonctions de déclencheur qu'AUTH-75 vise ont été créées en production par le tableau de bord ;
+les 21 que la base reconstruite contient viennent des migrations du dépôt, qui retirent déjà ce
+droit. Le relevé ajouté (`transversal.essai.ts`) passe donc des deux côtés : il garde les
+propositions (qui créent des déclencheurs), il ne prouve pas le défaut. On le dit plutôt que de
+fabriquer une fonction ouverte pour le faire échouer. La barrière de `v_salaries_annuaire`, elle,
+est prouvée (vide sans la proposition).

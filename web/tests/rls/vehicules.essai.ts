@@ -126,9 +126,16 @@ describe("prêts de matériel : « matériel / modifier »", () => {
   });
 
   it("[proposition] le rôle lecture ne supprime pas un prêt de matériel", async () => {
+    // Le prêt est posé ici, avec les seules colonnes de production (rendu, pour ne pas gêner
+    // la règle « un prêt en cours ») : sans prêt à effacer, le refus ne prouverait rien.
+    const admin = await connecte(COMPTES.adminAlpha);
+    const { data: pret, error } = await admin.from("materiel_prets").insert({ materiel_id: materielId, date_debut: "2026-09-01", date_fin: "2026-09-02" }).select("id").single();
+    expect(error).toBeNull();
     const lecture = await connecte(COMPTES.lectureAlpha);
-    const { data } = await lecture.from("materiel_prets").delete().eq("materiel_id", materielId).select("id");
+    const { data } = await lecture.from("materiel_prets").delete().eq("id", pret?.id ?? "").select("id");
     expect(data ?? []).toEqual([]);
+    const { data: reste } = await admin.from("materiel_prets").select("id").eq("id", pret?.id ?? "");
+    expect(reste?.length).toBe(1);
   });
 });
 
