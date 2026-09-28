@@ -210,11 +210,12 @@ function ActionsBas({ bon, liens, contexte, onLien, lienOuvert, onPrefacture }: 
       ) : (
         <button type="button" className="btn small ghost" onClick={(e) => { arreter(e); onLien(!lienOuvert); }}>🔗 Lier un rapport</button>
       )}
-      {peutSupprimer && (verrou ? (
-        <button type="button" className="btn small danger" disabled title={verrou.libelle}>Supprimer</button>
-      ) : (
+      {/* Comme l'ancien (97287c3) et les factures : un bon facturé ne se supprimera jamais
+          (`bons_commande_facture_indelebile`), le bouton ne s'affiche donc pas — le bandeau
+          du haut dit déjà par quelle facture il est tenu. */}
+      {peutSupprimer && !verrou && (
         <button type="button" className="btn small danger" disabled={supprimer.isPending} onClick={effacer}>Supprimer</button>
-      ))}
+      )}
     </div>
   );
 }

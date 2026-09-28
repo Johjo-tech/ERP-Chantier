@@ -100,6 +100,18 @@ describe("liste des bons — selon le rôle", () => {
     expect(screen.queryByRole("button", { name: /Ouvrir la pré-facture/ })).not.toBeInTheDocument();
   });
 
+  it("un bon facturé n'affiche pas « Supprimer », pas même grisé (97287c3) ; un bon libre le garde", async () => {
+    api.listerBons.mockResolvedValue([
+      bon(),
+      bon({ id: "b2", numero_interne: "BC-2026-900002", numero_bc: "CMD-2", factures: [{ id: "f1", numero: "FAC-2026-000007", bon_commande_id: "b2" }] }),
+    ]);
+    ouvrir("admin", "/commandes");
+    await screen.findByText("CMD-2");
+    expect(within(carte("BC-2026-900001")).getByRole("button", { name: "Supprimer" })).toBeEnabled();
+    expect(within(carte("BC-2026-900002")).queryByRole("button", { name: "Supprimer" })).not.toBeInTheDocument();
+    expect(within(carte("BC-2026-900002")).getByRole("button", { name: "👁 Consulter" })).toBeInTheDocument();
+  });
+
   it("une carte se déplie, une seule à la fois ; la pré-facture affiche le TTC des lignes", async () => {
     api.listerBons.mockResolvedValue([
       bon({ lignesMontant: [{ bon_commande_id: "b1", type: "ligne", quantite: 1, prix_unitaire: 95, tva: 10 }] }),
