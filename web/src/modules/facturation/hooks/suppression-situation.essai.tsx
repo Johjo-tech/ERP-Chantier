@@ -51,8 +51,12 @@ vi.mock("@/modules/facturation/api/factures", () => ({
   verrouillerBrouillon: vi.fn(),
 }));
 
+const reglements = vi.hoisted(() => ({ annulerImputation: vi.fn(async () => undefined), enregistrerReglementGroupe: vi.fn(), imputerAvoir: vi.fn(), modifierReglement: vi.fn() }));
+vi.mock("@/modules/facturation/api/reglements", () => reglements);
+
 import { messageErreur } from "@/lib/erreurs";
-import { useSupprimerBrouillon } from "@/modules/facturation/hooks/useFactures";
+import { supprimerReglement } from "@/modules/facturation/api/factures";
+import { useSupprimerBrouillon, useSupprimerReglement } from "@/modules/facturation/hooks/useFactures";
 
 function enveloppe({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -72,5 +76,21 @@ describe("supprimer le brouillon d'une situation", () => {
     expect(dpgf.avancement).toBe(50);
     // Et le motif lu est celui de la base, pas « une situation plus récente… ».
     expect(messageErreur(result.current.error)).toBe(refus.message);
+  });
+});
+
+// DEF-COR-12 (relecture 4, I8) : retirer l'une des deux moitiés d'une imputation d'avoir en
+// supprimait une seule ; le crédit restait consommé, ou la facture redevenait due. Un seul
+// appel à la base (`annuler_imputation`) emporte les deux.
+describe("retirer une imputation d'avoir", () => {
+  it("une moitié d'imputation part par un seul appel qui emporte sa jumelle ; un règlement ordinaire, par la suppression", async () => {
+    const { result } = renderHook(() => useSupprimerReglement(), { wrapper: enveloppe });
+    act(() => result.current.mutate({ id: "moitie-avoir", mode: "avoir" }));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(reglements.annulerImputation).toHaveBeenCalledExactlyOnceWith("moitie-avoir");
+    expect(supprimerReglement).not.toHaveBeenCalled();
+    act(() => result.current.mutate({ id: "virement", mode: "virement" }));
+    await waitFor(() => expect(supprimerReglement).toHaveBeenCalledWith("virement"));
+    expect(reglements.annulerImputation).toHaveBeenCalledTimes(1);
   });
 });

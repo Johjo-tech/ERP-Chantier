@@ -288,6 +288,8 @@ function ecransImports(): Ecran[] {
       ancien: { chemin: "/", gestes: puis(onglet("chantiers", { viewingChantier: CHANTIER_C }), dpgf) },
       nouveau: { chemin: `/chantiers/${CHANTIER_C}`, gestes: dpgf },
       // La modale est identique ; restent, sous elle, « Reprendre un devis » (D-CHA-06) et Intervenants (D-ECR-CHA-09).
+      // Sur un DPGF non vide, la modale annonce en plus les lignes remplacées et conservées (DEF-COR-06, voulu) ;
+      // le chantier C n'en a pas : la phrase n'y paraît pas, seuil inchangé.
       seuils: partout(0.001, 16),
     },
   ];

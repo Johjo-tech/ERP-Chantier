@@ -22,6 +22,14 @@ import { PdfFactureDiffere } from "./PdfFactureDiffere";
 type Ouverte = "avoir" | "imputation" | "email" | null;
 
 /**
+ * DEF-COR-54 (FAC-100) : la base fige tout l'en-tête à l'émission, la réf. de bon de commande
+ * du client comprise — vide, elle le reste. L'ancien émettait sans le dire ; le client
+ * découvrait ensuite qu'il ne pouvait plus la saisir. La question de l'ancien est gardée
+ * mot pour mot, l'avertissement s'y ajoute seulement quand la référence manque.
+ */
+export const AVERTISSEMENT_REF_VIDE = "\n\nAucune réf. de bon de commande client : elle sera figée vide, comme tout l'en-tête.";
+
+/**
  * La barre d'actions d'une carte (`boutonsFactureHTML`, app.js l. 5922) : ce
  * que l'état de la pièce et le rôle laissent faire, RIEN d'autre — un geste
  * indisponible ne s'affiche pas. Mêmes libellés, même ordre, mêmes titres ;
@@ -54,7 +62,8 @@ export function ActionsCarteFacture({ f, ttc, actions, verrou, plateforme, imput
   const ouvrirFiche = () => void navigate(`/factures/${f.id}`);
 
   function emettreLaFacture() {
-    if (!window.confirm(`Émettre la facture de ${f.client_nom} pour ${formatEurosEcran(ttc)} TTC ?\n\nElle recevra son numéro définitif. Son contenu ne pourra plus être modifié, et une correction devra passer par un avoir.`)) return;
+    const avertissement = f.ref_bon_commande_client?.trim() ? "" : AVERTISSEMENT_REF_VIDE;
+    if (!window.confirm(`Émettre la facture de ${f.client_nom} pour ${formatEurosEcran(ttc)} TTC ?\n\nElle recevra son numéro définitif. Son contenu ne pourra plus être modifié, et une correction devra passer par un avoir.${avertissement}`)) return;
     emettre.mutate(f.id, {
       onSuccess: (numero) => showToast(`Facture émise sous le n° ${numero || "—"}.`, "success"),
       onError: (err) => {
