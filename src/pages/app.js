@@ -5350,6 +5350,22 @@ async function lancerImportFactures(){
     console.error('Import factures : écriture refusée', err);
     i.erreur = err.message || 'import refusé';
   }
+  /* L'import écrit en base, et l'écran continuait de lire la mémoire d'AVANT :
+     ni les pièces reprises, ni les fiches clients créées au passage, ni les
+     imputations qui consomment les avoirs n'y étaient. Les avoirs s'affichaient
+     donc « À imputer » alors que la base les donnait imputés — on cherchait le
+     défaut dans l'import, il était dans ce qu'on regardait.
+
+     Les trois collections que l'import touche, et elles seules : recharger tout
+     redescendrait seize tables pour rien. */
+  i.progres = 'Rechargement…';
+  const z = document.getElementById('importFacturesProgres');
+  if(z) z.textContent = i.progres;
+  await recharger('facture', 'reglement', 'client');
+  /* `recharger` ne lève pas : il garde la collection précédente et note
+     l'échec. C'est cette fonction-ci qui le dit à l'utilisateur — sans elle,
+     un rechargement raté laisserait l'écran mentir une seconde fois. */
+  signalerEchecsDeChargement();
   i.enCours = false; i.progres = '';
   renderTab();
 }
