@@ -4,8 +4,9 @@ import { estAvoir, pourcentageAncien, statutReglementFacture, totauxLignes, tota
 /**
  * Le tableau de bord de pilotage — administrateur, secrétaire, lecture —
  * calculé comme `renderDashboard`, `computeMonthSummary`, `computeDashTraiter`,
- * `computeRevenuePeriod`, `computeCustomRevenue`, `buildActivityFeed` et
- * `computeTopClients` (app.js l. 1403-1655, 2051-2155), DÉFAUTS COMPRIS
+ * `computeRevenuePeriod`, `computeCustomRevenue`, `buildActivityFeed`,
+ * `computeTopClients` et `comparaisonN1HTML` (app.js, état de main au
+ * 66ea9e1), DÉFAUTS COMPRIS
  * (D-STA-A-01, liste des défauts dans docs/DEFAUTS-A-TRANCHER.md).
  */
 
@@ -38,6 +39,8 @@ export interface DevisPilotage extends PieceChiffree {
 export interface ReglementPilotage extends ReglementMontant {
   id: string;
   montant: number;
+  /** Le jour du règlement : c'est lui que le fil d'activité range (0f6f60d), plus `cree_le`. */
+  date: string | null;
   cree_le: string | null;
 }
 
@@ -45,6 +48,7 @@ export interface RapportPilotage {
   id: string;
   numero: string | null;
   client_nom: string | null;
+  date: string | null;
   cree_le: string | null;
 }
 
@@ -75,6 +79,8 @@ const MOIS = { debut: "AAAA-".length, fin: "AAAA-MM".length } as const;
 const DECIMAL = 10;
 
 export interface PointRevenu {
+  /** L'année de CE mois (66ea9e1) : sur une fenêtre glissante, ce n'est pas celle de la dernière barre. */
+  annee: number;
   current: number;
   previous: number;
 }
@@ -107,7 +113,7 @@ export function revenuPeriode(factures: readonly FacturePilotage[], mois: readon
   }
   const lastYear = mois.length ? (mois[mois.length - 1]?.year ?? anneeParDefaut) : anneeParDefaut;
   return {
-    data: mois.map((_, i) => ({ current: current[i] ?? 0, previous: previous[i] ?? 0 })),
+    data: mois.map((mo, i) => ({ annee: mo.year, current: current[i] ?? 0, previous: previous[i] ?? 0 })),
     total: current.reduce((a, b) => a + b, 0),
     currentYear: lastYear,
     prevYear: lastYear - 1,
@@ -129,12 +135,21 @@ export interface ResumeMois {
   devisCount: number;
   tauxEncaisse: number;
   impayeesMontant: number;
+  /** L'exercice du jour, à Paris. */
+  annee: number;
+  /** Le même mois un an plus tôt, même filtre que `caMois` (« payée ») : de l'encaissé face à de l'encaissé. */
+  caMoisN1: number;
+  /** Le FACTURÉ de l'exercice (tout statut, avoirs en négatif), et celui du précédent. */
+  cumulAnnee: number;
+  cumulAnneeN1: number;
 }
 
 /**
  * `computeMonthSummary`. « CA encaissé » = HT des factures au statut STOCKÉ
  * « payée » datées du mois de la FACTURE ; sa jauge se mesure au plus grand
  * mois des six derniers (N et N-1), quelle que soit la période du graphique.
+ * Depuis 0f6f60d, l'historique repris sert de référence N-1 : même mois un an
+ * plus tôt, et facturé de l'exercice face au précédent.
  */
 export function resumeDuMois(
   factures: readonly FacturePilotage[],
@@ -156,6 +171,10 @@ export function resumeDuMois(
     return s + (st.cle === "reglee" ? 0 : st.reste);
   }, 0);
   const totalFacture = factures.reduce((s, f) => s + totauxPiece(f).ttc, 0) || 1;
+  const annee = parseInt(ym.slice(ANNEE.debut, ANNEE.fin), DECIMAL);
+  const ymN1 = `${annee - 1}${ym.slice(ANNEE.fin)}`;
+  const caMoisN1 = factures.filter((f) => f.statut === "payée" && (f.date || "").slice(0, MOIS.fin) === ymN1).reduce((s, f) => s + totauxPiece(f).ht, 0);
+  const cumulDe = (a: number) => factures.filter((f) => (f.date || "").slice(ANNEE.debut, ANNEE.fin) === String(a)).reduce((s, f) => s + totauxPiece(f).ht, 0);
   return {
     caMois,
     caMoisPct: Math.min(100, pourcentageAncien(caMois, maxMois)),
@@ -163,7 +182,27 @@ export function resumeDuMois(
     devisCount: devisDuMois.length,
     tauxEncaisse: Math.max(0, Math.round((1 - impayeesMontant / totalFacture) * 100)),
     impayeesMontant,
+    annee,
+    caMoisN1,
+    cumulAnnee: cumulDe(annee),
+    cumulAnneeN1: cumulDe(annee - 1),
   };
+}
+
+// ---------- Rappel de l'exercice précédent ----------
+
+const POURCENT = 100;
+
+/**
+ * `comparaisonN1HTML` : le montant N-1 et l'écart en pour cent arrondi, ou
+ * rien à comparer — un précédent nul (ou absent) ne donne pas « +100 % » : on
+ * ne compare pas à une absence, et un client nouveau n'a pas progressé.
+ */
+export type ComparaisonN1 = { type: "rien"; anneePrecedente: number } | { type: "ecart"; anneePrecedente: number; precedent: number; ecart: number };
+
+export function comparaisonN1(courant: number, precedent: number, anneePrecedente: number): ComparaisonN1 {
+  if (!precedent) return { type: "rien", anneePrecedente };
+  return { type: "ecart", anneePrecedente, precedent, ecart: Math.round(((courant - precedent) / Math.abs(precedent)) * POURCENT) };
 }
 
 function reglementsParFacture(reglements: readonly ReglementPilotage[]): Map<string, ReglementPilotage[]> {
@@ -239,17 +278,23 @@ export interface Activite {
   montant: number | null;
   /** La facture qu'ouvre la ligne (un paiement ouvre sa facture ; sans facture retrouvée, rien). */
   factureId: string | null;
+  /** Un avoir : pastille orangée au lieu de bleue, comme l'ancien. */
+  avoir: boolean;
 }
 
 /** Les six dernières lignes (`buildActivityFeed`). */
 export const ACTIVITE_VISIBLE = 6;
 
 /**
- * `buildActivityFeed` : devis, factures, rapports créés et TOUS les
+ * `buildActivityFeed` (depuis 0f6f60d) : devis, factures, rapports et TOUS les
  * règlements (lettrages d'avoir compris, montrés comme « Paiement reçu »),
- * du plus récent au plus ancien. Le sous-titre est écrit comme l'ancien :
- * `client · numéro`, où un numéro absent s'écrit « null » (facture en
- * brouillon) — sauf pour un rapport, qui écrit une chaîne vide.
+ * rangés sur la DATE DE LA PIÈCE et non plus sur leur saisie — une reprise
+ * d'historique annonçait sinon « aujourd'hui » des factures de l'an passé.
+ * Tri de l'ancien : dates comparées en texte (`localeCompare`), les égalités
+ * gardant l'ordre devis → factures → rapports → règlements. Sous-titre écrit
+ * comme l'ancien : `client · numéro`, où le numéro absent d'une facture
+ * s'écrit « brouillon », celui d'un devis ou de la facture d'un paiement
+ * « null », celui d'un rapport une chaîne vide. Un avoir se nomme « Avoir ».
  */
 export function activiteRecente(
   devis: readonly DevisPilotage[],
@@ -258,15 +303,19 @@ export function activiteRecente(
   reglements: readonly ReglementPilotage[]
 ): Activite[] {
   const evts: Activite[] = [];
-  for (const d of devis) if (d.cree_le) evts.push({ nature: "devis", id: d.id, quand: d.cree_le, libelle: "Devis créé", sous: `${client(d)} · ${String(d.numero)}`, montant: totauxPiece(d).ht, factureId: null });
-  for (const f of factures) if (f.cree_le) evts.push({ nature: "facture", id: f.id, quand: f.cree_le, libelle: "Facture créée", sous: `${client(f)} · ${String(f.numero)}`, montant: totauxPiece(f).ht, factureId: f.id });
-  for (const i of rapports) if (i.cree_le) evts.push({ nature: "rapport", id: i.id, quand: i.cree_le, libelle: "Rapport créé", sous: `${client(i)} · ${i.numero || ""}`, montant: null, factureId: null });
-  for (const r of reglements) {
-    if (!r.cree_le) continue;
-    const f = factures.find((x) => x.id === r.facture_id);
-    evts.push({ nature: "reglement", id: r.id, quand: r.cree_le, libelle: "Paiement reçu", sous: f ? `${client(f)} · ${String(f.numero)}` : "", montant: r.montant, factureId: f ? f.id : null });
+  for (const d of devis) if (d.date) evts.push({ nature: "devis", id: d.id, quand: d.date, libelle: "Devis", sous: `${client(d)} · ${String(d.numero)}`, montant: totauxPiece(d).ht, factureId: null, avoir: false });
+  for (const f of factures) {
+    if (!f.date) continue;
+    const avoir = estAvoir(f.type_document);
+    evts.push({ nature: "facture", id: f.id, quand: f.date, libelle: avoir ? "Avoir" : "Facture", sous: `${client(f)} · ${f.numero || "brouillon"}`, montant: totauxPiece(f).ht, factureId: f.id, avoir });
   }
-  return evts.sort((a, b) => new Date(b.quand).getTime() - new Date(a.quand).getTime()).slice(0, ACTIVITE_VISIBLE);
+  for (const i of rapports) if (i.date) evts.push({ nature: "rapport", id: i.id, quand: i.date, libelle: "Rapport d'intervention", sous: `${client(i)} · ${i.numero || ""}`, montant: null, factureId: null, avoir: false });
+  for (const r of reglements) {
+    if (!r.date) continue;
+    const f = factures.find((x) => x.id === r.facture_id);
+    evts.push({ nature: "reglement", id: r.id, quand: r.date, libelle: "Paiement reçu", sous: f ? `${client(f)} · ${String(f.numero)}` : "", montant: r.montant, factureId: f ? f.id : null, avoir: false });
+  }
+  return evts.sort((a, b) => String(b.quand).localeCompare(String(a.quand))).slice(0, ACTIVITE_VISIBLE);
 }
 
 // ---------- Top clients ----------
@@ -277,20 +326,41 @@ export const TOP_CLIENTS = 5;
 export interface LigneTopClient {
   client: string;
   total: number;
-  /** Largeur de la barre : `Math.round(total / max × 100)`, NaN quand le premier vaut 0 (comme l'ancien). */
+  /** Le même client sur l'exercice précédent (0 quand il n'y figure pas). */
+  precedent: number;
+  /** Largeur de la barre : `Math.round(total / max × 100)`. */
   largeur: number;
 }
 
-/** `computeTopClients` + `renderTopClientsHTML` : par NOM porté sur la facture, toutes factures comprises. */
-export function topClients(factures: readonly FacturePilotage[]): LigneTopClient[] {
+/** `cumulParClient` : le HT par NOM porté sur la facture, pour les pièces datées de l'exercice. */
+function cumulParClient(factures: readonly FacturePilotage[], annee: number): Record<string, number> {
   // Un objet, comme l'ancien, et non une Map : `Object.entries` range d'abord les noms
   // qui ressemblent à des entiers, ce qui départage autrement deux clients à égalité.
-  const totals: Record<string, number> = {};
-  for (const f of factures) totals[client(f)] = (totals[client(f)] ?? 0) + totauxPiece(f).ht;
-  const top = Object.entries(totals).map(([nom, total]) => ({ client: nom, total })).sort((a, b) => b.total - a.total).slice(0, TOP_CLIENTS);
+  const totaux: Record<string, number> = {};
+  for (const f of factures) {
+    if (String(f.date || "").slice(ANNEE.debut, ANNEE.fin) !== String(annee)) continue;
+    totaux[client(f)] = (totaux[client(f)] ?? 0) + totauxPiece(f).ht;
+  }
+  return totaux;
+}
+
+/**
+ * `computeTopClients` + `renderTopClientsHTML` (depuis 0f6f60d) : borné à
+ * l'EXERCICE — la reprise d'historique écrasait sinon l'activité courante —,
+ * avec le montant N-1 en regard ; un client à zéro ou en négatif (avoirs)
+ * sort du classement.
+ */
+export function topClients(factures: readonly FacturePilotage[], annee: number): LigneTopClient[] {
+  const courant = cumulParClient(factures, annee);
+  const precedent = cumulParClient(factures, annee - 1);
+  const top = Object.entries(courant)
+    .map(([nom, total]) => ({ client: nom, total, precedent: precedent[nom] || 0 }))
+    .filter((c) => c.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, TOP_CLIENTS);
   if (!top.length) return [];
   const max = Math.max(...top.map((t) => t.total));
-  return top.map((t) => ({ ...t, largeur: Math.round((t.total / max) * 100) }));
+  return top.map((t) => ({ ...t, largeur: Math.round((t.total / max) * POURCENT) }));
 }
 
 // ---------- Graphique du chiffre d'affaires ----------
@@ -312,9 +382,8 @@ export interface BarresMois {
 /**
  * Les barres de `renderYearlyComparisonSVG` : hauteur proportionnelle au plus
  * grand mois (au moins 1), 2 px au moins pour un montant positif, rien pour un
- * montant nul ou négatif. L'infobulle porte l'année de la DERNIÈRE barre pour
- * toutes (DEF-STA-15) : sur 12 mois, octobre de l'an dernier s'annonce
- * « octobre » de cette année.
+ * montant nul ou négatif. Chaque infobulle porte l'année de SON mois
+ * (66ea9e1, qui corrige en production DEF-STA-15).
  */
 export function barresGraphique(serie: RevenuPeriode, libellesLongs: readonly string[]): BarresMois[] {
   const max = Math.max(1, ...serie.data.map((d) => Math.max(d.current, d.previous)));
@@ -324,7 +393,20 @@ export function barresGraphique(serie: RevenuPeriode, libellesLongs: readonly st
     precedent: d.previous,
     hauteurCourant: hauteur(d.current),
     hauteurPrecedent: hauteur(d.previous),
-    infobulleCourant: `${libellesLongs[i] ?? ""} ${serie.currentYear}`,
-    infobullePrecedent: `${libellesLongs[i] ?? ""} ${serie.prevYear}`,
+    infobulleCourant: `${libellesLongs[i] ?? ""} ${d.annee}`,
+    infobullePrecedent: `${libellesLongs[i] ?? ""} ${d.annee - 1}`,
   }));
+}
+
+/**
+ * La légende de `renderYearlyComparisonSVG` : deux millésimes quand la
+ * fenêtre tient dans une seule année, sinon « Période » / « Un an plus tôt »
+ * — à cheval sur deux années, un millésime désignerait mal la moitié des barres.
+ */
+export function legendeGraphique(serie: RevenuPeriode): { courant: string; precedent: string; uneSeuleAnnee: boolean } {
+  const premiere = serie.data[0]?.annee;
+  const uneSeuleAnnee = serie.data.every((d) => d.annee === premiere);
+  return uneSeuleAnnee
+    ? { courant: String(serie.currentYear), precedent: String(serie.prevYear), uneSeuleAnnee }
+    : { courant: "Période", precedent: "Un an plus tôt", uneSeuleAnnee };
 }

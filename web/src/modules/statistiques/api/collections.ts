@@ -50,8 +50,8 @@ const schemaDevis = z.object({
   lignes: z.array(schemaLigne),
 }) satisfies z.ZodType<DevisPilotage>;
 
-const schemaReglement = z.object({ id: z.string(), facture_id: z.string(), montant: z.number(), cree_le: z.string().nullable() }) satisfies z.ZodType<ReglementPilotage>;
-const schemaRapport = z.object({ id: z.string(), numero: z.string().nullable(), client_nom: z.string().nullable(), cree_le: z.string().nullable() }) satisfies z.ZodType<RapportPilotage>;
+const schemaReglement = z.object({ id: z.string(), facture_id: z.string(), montant: z.number(), date: z.string().nullable(), cree_le: z.string().nullable() }) satisfies z.ZodType<ReglementPilotage>;
+const schemaRapport = z.object({ id: z.string(), numero: z.string().nullable(), client_nom: z.string().nullable(), date: z.string().nullable(), cree_le: z.string().nullable() }) satisfies z.ZodType<RapportPilotage>;
 const schemaBon = z.object({
   id: z.string(),
   cree_le: z.string().nullable(),

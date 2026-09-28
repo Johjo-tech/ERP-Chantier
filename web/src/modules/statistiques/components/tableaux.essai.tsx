@@ -33,6 +33,7 @@ vi.mock("@/modules/interventions/api/rapports", async (orig) => ({ ...(await ori
 vi.mock("@/modules/societes/api/reglages", async (orig) => ({ ...(await orig<object>()), chargerReglagesSociete: autres.chargerReglagesSociete }));
 
 const AUJ = todayISO();
+const ANNEE = Number(AUJ.slice(0, 4));
 const EURO = /€/;
 const ligne = (ht: number) => ({ type: "ligne", quantite: 1, prix_unitaire: ht, tva: 20 });
 const facture = (s: Partial<FacturePilotage>): FacturePilotage => ({
@@ -49,8 +50,8 @@ beforeEach(() => {
   ]);
   collections.lireDevis.mockResolvedValue([{ id: "d1", numero: "DEV-2026-000004", client_nom: "Régie Sud", date: AUJ, statut: "envoyé", remise_pourcentage: 0, conducteur: "Christophe Conducteur", cree_le: "2026-01-01T08:00:00Z", lignes: [ligne(253)] }]);
   collections.lireReglements.mockResolvedValue([
-    { id: "r0", facture_id: "f1", montant: 1200, cree_le: new Date().toISOString() },
-    { id: "r1", facture_id: "f3", montant: 40, cree_le: new Date().toISOString() },
+    { id: "r0", facture_id: "f1", montant: 1200, date: AUJ, cree_le: new Date().toISOString() },
+    { id: "r1", facture_id: "f3", montant: 40, date: AUJ, cree_le: new Date().toISOString() },
   ]);
   collections.lireRapports.mockResolvedValue([]);
   collections.lireBons.mockResolvedValue([{ id: "b1", cree_le: `${AUJ}T08:00:00Z`, conducteur: "Christophe Conducteur", technicien: null, bon_commande_parent_id: null, date_fin_travaux: "2000-01-01" }]);
@@ -87,7 +88,11 @@ describe("tableau de bord de pilotage (calculs de l'ancien)", () => {
     expect(screen.getByRole("meter", { name: "Taux de conversion devis" })).toHaveAttribute("aria-valuenow", "0");
     expect(screen.getByText("Chiffre d'affaires encaissé (HT)")).toBeInTheDocument();
     expect(screen.getAllByText("Paiement reçu")).toHaveLength(2);
-    expect(screen.getByText("Régie Sud · null")).toBeInTheDocument();
+    expect(screen.getByText("Régie Sud · brouillon")).toBeInTheDocument();
+    // 0f6f60d : la référence N-1 — rien l'an passé ici, donc rien à comparer.
+    expect(screen.getByText(`Top clients ${ANNEE} (HT)`)).toBeInTheDocument();
+    expect(screen.getByText(`Facturé ${ANNEE} (HT)`)).toBeInTheDocument();
+    expect(screen.getAllByText(`rien en ${ANNEE - 1}`).length).toBeGreaterThan(2);
     expect(screen.getByRole("link", { name: /Nouvelle facture/ })).toHaveAttribute("href", "/factures/nouvelle");
   });
 
@@ -113,6 +118,10 @@ describe("tableau de bord de pilotage (calculs de l'ancien)", () => {
     expect(screen.getByRole("table", { name: "Chiffre d'affaires HT par mois" })).toBeInTheDocument();
     // 1 000 + 660 (brouillon) + 200 : le total de la période (DEF-STA-01).
     expect(screen.getAllByText("1 860,00 €").length).toBeGreaterThan(0);
+    // 66ea9e1 : sur 12 mois (à cheval sur deux années, sauf en décembre), les séries se nomment, pas un millésime.
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Période" }), "12m");
+    const aCheval = AUJ.slice(5, 7) !== "12";
+    expect(screen.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Mois", aCheval ? "Période" : String(ANNEE), aCheval ? "Un an plus tôt" : String(ANNEE - 1)]);
   });
 });
 

@@ -5,7 +5,7 @@ import { moisGlissants, premierDuMois, refusPlage } from "./periodes";
 import { genreDuTableau, lienActivite } from "./pilotage";
 import { indexSuivant, resultatsRecherche } from "./recherche";
 import { statutReglementFacture, totauxPiece } from "./ancien/montants";
-import { activiteRecente, aTraiterPilotage, resumeDuMois, revenuPeriode, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage } from "./ancien/pilotage";
+import { activiteRecente, aTraiterPilotage, comparaisonN1, resumeDuMois, revenuPeriode, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage } from "./ancien/pilotage";
 import { equipesParMois, filtrerParPeriode, moisLabelCourt, periodeLabel, retardParConducteur, statsParConducteur, type BonStats } from "./ancien/statistiques";
 import { mesBonsTechnicien, tableauSousTraitant, tableauTechnicien } from "./ancien/terrain";
 
@@ -90,17 +90,36 @@ describe("pilotage (défauts de l'ancien conservés)", () => {
     expect(aTraiterPilotage([b], [facture({ bon_commande_id: "b1" })], JOUR).aFacturer).toBe(0);
   });
 
-  it("DEF-STA-06 : l'activité écrit « null » pour une facture sans numéro, et montre un lettrage comme un paiement", () => {
+  it("DEF-STA-06, repris par 0f6f60d : l'activité suit la DATE DES PIÈCES, nomme la pièce, et montre un lettrage comme un paiement", () => {
+    // Saisie aujourd'hui, datée de l'an passé : une pièce reprise ne passe plus pour l'activité du jour.
+    const reprise = facture({ id: "rep", numero: "FAC-2025-000001", date: "2025-01-10", cree_le: "2026-09-25T09:59:00Z" });
     const f = facture({ numero: null, cree_le: "2026-09-25T09:00:00Z" });
-    const a = activiteRecente([devis()], [f], [], [{ id: "r1", facture_id: "f1", montant: -30, cree_le: "2026-09-25T09:30:00Z" }]);
-    expect(a.map((x) => x.libelle)).toEqual(["Paiement reçu", "Facture créée", "Devis créé"]);
-    expect(a[1]?.sous).toBe("OPAC · null");
+    const avoir = facture({ id: "a1", numero: "AV-1", type_document: "avoir", date: "2026-09-26", cree_le: "2025-01-01T08:00:00Z" });
+    const a = activiteRecente([devis()], [reprise, f, avoir], [], [{ id: "r1", facture_id: "f1", montant: -30, date: "2026-09-27", cree_le: "2026-09-20T09:30:00Z" }]);
+    expect(a.map((x) => x.libelle)).toEqual(["Paiement reçu", "Avoir", "Devis", "Facture", "Facture"]);
+    expect(a.map((x) => x.id)).toEqual(["r1", "a1", "d1", "f1", "rep"]);
+    // Le numéro absent : « brouillon » pour la facture, toujours « null » pour le paiement qui la cite.
+    expect(a[0]?.sous).toBe("OPAC · null");
+    expect(a[3]?.sous).toBe("OPAC · brouillon");
+    expect(a[1]).toMatchObject({ avoir: true, montant: -100 });
     expect(lienActivite(a[0] ?? { nature: "reglement", id: "", factureId: null })).toBe("/factures/f1");
   });
 
-  it("DEF-STA-07 : le classement groupe par le NOM écrit sur la facture", () => {
-    const t = topClients([facture({ client_nom: "OPAC" }), facture({ id: "f2", client_nom: "O.P.A.C.", ht: 300 })]);
-    expect(t.map((c) => [c.client, c.total, c.largeur])).toEqual([["O.P.A.C.", 300, 100], ["OPAC", 100, 33]]);
+  it("DEF-STA-07 : le classement groupe par le NOM écrit sur la facture ; 0f6f60d le borne à l'exercice, avec N-1", () => {
+    const t = topClients([facture({ client_nom: "OPAC" }), facture({ id: "f2", client_nom: "O.P.A.C.", ht: 300 }), facture({ id: "f0", client_nom: "OPAC", date: "2025-03-01", ht: 50 })], 2026);
+    expect(t.map((c) => [c.client, c.total, c.precedent, c.largeur])).toEqual([["O.P.A.C.", 300, 0, 100], ["OPAC", 100, 50, 33]]);
+    expect(comparaisonN1(100, 50, 2025)).toEqual({ type: "ecart", anneePrecedente: 2025, precedent: 50, ecart: 100 });
+    expect(comparaisonN1(300, 0, 2025)).toEqual({ type: "rien", anneePrecedente: 2025 });
+    // Un client que les avoirs ramènent à zéro sort du classement.
+    expect(topClients([facture({ type_document: "avoir" }), facture({ id: "f2" })], 2026)).toEqual([]);
+  });
+
+  it("0f6f60d : le résumé porte le même mois N-1 (encaissé) et le facturé de l'exercice face au précédent", () => {
+    const r = resumeDuMois(
+      [facture({ statut: "payée" }), facture({ id: "n1", statut: "payée", date: "2025-09-03", ht: 40 }), facture({ id: "n1b", statut: "impayée", date: "2025-09-04", ht: 7 }), facture({ id: "vieux", date: "2024-09-04", ht: 9 })],
+      [], [], JOUR, sixMois
+    );
+    expect([r.annee, r.caMois, r.caMoisN1, r.cumulAnnee, r.cumulAnneeN1]).toEqual([2026, 100, 40, 100, 47]);
   });
 
   it("le tableau suit le rôle effectif ; le sous-traitant a le sien", () => {

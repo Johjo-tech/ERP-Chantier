@@ -6,10 +6,11 @@ import { useModeDiscret } from "@/lib/modeDiscret";
 import { activiteRecente, topClients, type FacturePilotage, type NatureActivite } from "../domain/ancien/pilotage";
 import { lienActivite, lienClient, tempsRelatif } from "../domain/pilotage";
 import type { DonneesPilotage } from "../hooks/useStatistiques";
+import { ComparaisonN1 } from "./ComparaisonN1";
 import { Section } from "./Tuile";
 import { formatEurosEcranAncien } from "./format";
 
-/** Le pictogramme et sa pastille par nature (`buildActivityFeed` : devis vert, facture bleue, rapport orangé, paiement vert). */
+/** Le pictogramme et sa pastille par nature (`buildActivityFeed` : devis vert, facture bleue — un avoir orangé —, rapport orangé, paiement vert). */
 const APPARENCE: Record<NatureActivite, { icone: NomIcone; couleur: "success" | "info" | "warn" }> = {
   devis: { icone: "devis", couleur: "success" },
   facture: { icone: "factures", couleur: "info" },
@@ -29,7 +30,7 @@ function LigneActivite({ vers, children }: { vers: string | null; children: Reac
   );
 }
 
-/** Les dernières pièces créées et les derniers paiements reçus (`buildActivityFeed`). */
+/** Les dernières pièces et les derniers paiements, par date de pièce (`buildActivityFeed`). */
 export function ActiviteRecente({ d }: { d: DonneesPilotage }) {
   useModeDiscret();
   const lignes = activiteRecente(d.devis, d.factures, d.rapports, d.reglements);
@@ -43,7 +44,7 @@ export function ActiviteRecente({ d }: { d: DonneesPilotage }) {
           ) : (
             lignes.map((a) => (
               <LigneActivite key={`${a.nature}-${a.id}`} vers={lienActivite(a)}>
-                <span className={`activity-icon ${APPARENCE[a.nature].couleur}`}>
+                <span className={`activity-icon ${a.avoir ? "warn" : APPARENCE[a.nature].couleur}`}>
                   <Icone nom={APPARENCE[a.nature].icone} />
                 </span>
                 <div className="activity-mid">
@@ -63,22 +64,28 @@ export function ActiviteRecente({ d }: { d: DonneesPilotage }) {
   );
 }
 
-/** Les cinq premiers clients par chiffre d'affaires HT, toutes factures, par le nom porté sur la pièce (`computeTopClients`). */
-export function TopClients({ factures }: { factures: readonly FacturePilotage[] }) {
+/**
+ * Les cinq premiers clients par chiffre d'affaires HT de l'exercice, par le
+ * nom porté sur la pièce, avec le rappel N-1 (`computeTopClients`, 0f6f60d).
+ */
+export function TopClients({ factures, annee }: { factures: readonly FacturePilotage[]; annee: number }) {
   useModeDiscret();
-  const lignes = topClients(factures);
+  const lignes = topClients(factures, annee);
   return (
     <div className="dash-col">
-      <Section titre="Top clients (HT)">
+      <Section titre={`Top clients ${annee} (HT)`}>
         <div className="card activity-card topclient-card">
           {!lignes.length ? (
-            <div className="empty">Pas encore de factures.</div>
+            <div className="empty">Aucune facture sur {annee}.</div>
           ) : (
             lignes.map((c, i) => (
               <Link key={`${i}-${c.client}`} to={lienClient(c.client)} title={`Ouvrir le dossier de règlements de ${c.client}`} className="topclient-row cliquable">
                 <span className="topclient-rank">{i + 1}</span>
                 <div className="topclient-mid">
                   <div className="topclient-name">{c.client}</div>
+                  <div className="card-sub" style={{ marginTop: "2px" }}>
+                    <ComparaisonN1 courant={c.total} precedent={c.precedent} anneePrecedente={annee - 1} />
+                  </div>
                   <div className="progress-bar" style={{ marginTop: "5px" }}>
                     <div className="progress-fill" style={{ width: `${c.largeur}%`, background: "var(--accent)" }} />
                   </div>

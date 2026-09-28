@@ -1,6 +1,6 @@
 import { useState, type FocusEvent, type MouseEvent } from "react";
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { barresGraphique, type RevenuPeriode } from "../domain/ancien/pilotage";
+import { barresGraphique, legendeGraphique, type RevenuPeriode } from "../domain/ancien/pilotage";
 import type { MoisCalendaire } from "../domain/periodes";
 import { formatEurosEcranAncien } from "./format";
 
@@ -27,8 +27,11 @@ const PART_BARRE = 0.32;
 const OPACITE_PRECEDENTE = 0.32;
 /** Sous l'axe : la ligne des mois. */
 const DECALAGE_MOIS = 22;
-/** La légende, calée à 230 px du bord droit et 10 px du haut. */
-const LEGENDE = { droite: 230, haut: 10, ecartSerie: 75 } as const;
+/**
+ * La légende, calée à 230 px du bord droit et 10 px du haut. La seconde série
+ * se décale de 20 px quand elle se nomme « Période » plutôt qu'une année.
+ */
+const LEGENDE = { droite: 230, haut: 10, ecartSerie: 75, texteSerie: 94, decalageNoms: 20 } as const;
 /** L'infobulle : 14 px à droite du pointeur, 44 au-dessus, et retournée à gauche près du bord (140 + 14). */
 const BULLE = { dx: 14, dy: 44, largeur: 140, retour: 154, dessous: 18 } as const;
 
@@ -50,6 +53,8 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
   const [survol, setSurvol] = useState<Survol | null>(null);
   const { currentYear: anneeCourante, prevYear: anneePrecedente } = serie;
   const barres = barresGraphique(serie, mois.map((m) => m.libelleLong));
+  const legende = legendeGraphique(serie);
+  const decalage = legende.uneSeuleAnnee ? 0 : LEGENDE.decalageNoms;
   const points = mois.map((m, i) => ({ ...m, ...(barres[i] ?? { courant: 0, precedent: 0, hauteurCourant: 0, hauteurPrecedent: 0, infobulleCourant: "", infobullePrecedent: "" }) }));
   const largeurGroupe = (L - 2 * COTE) / points.length;
   const barre = Math.min(LARGEUR_BARRE_MAX, largeurGroupe * PART_BARRE);
@@ -67,7 +72,7 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
 
   return (
     <>
-      <svg viewBox={`0 0 ${L} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label={`Chiffre d'affaires HT par mois, ${anneeCourante} comparé à ${anneePrecedente}. Le détail est dans le tableau qui suit.`}>
+      <svg viewBox={`0 0 ${L} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label={`Chiffre d'affaires HT par mois, ${legende.uneSeuleAnnee ? `${anneeCourante} comparé à ${anneePrecedente}` : "comparé au même mois un an plus tôt"}. Le détail est dans le tableau qui suit.`}>
         {points.map((p, i) => {
           const centre = COTE + i * largeurGroupe + largeurGroupe / 2;
           const barres = [
@@ -106,11 +111,11 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
         <g transform={`translate(${c(L - LEGENDE.droite)}, ${LEGENDE.haut})`} aria-hidden="true">
           <rect x="0" y="2" width="13" height="13" rx="3" fill="var(--accent)" />
           <text x="19" y="12.5" fontSize="13.5" fill="var(--text)">
-            {anneeCourante}
+            {legende.courant}
           </text>
-          <rect x={LEGENDE.ecartSerie} y="2" width="13" height="13" rx="3" fill="var(--text-dim)" opacity={OPACITE_PRECEDENTE} />
-          <text x="94" y="12.5" fontSize="13.5" fill="var(--text)">
-            {anneePrecedente}
+          <rect x={LEGENDE.ecartSerie + decalage} y="2" width="13" height="13" rx="3" fill="var(--text-dim)" opacity={OPACITE_PRECEDENTE} />
+          <text x={LEGENDE.texteSerie + decalage} y="12.5" fontSize="13.5" fill="var(--text)">
+            {legende.precedent}
           </text>
         </g>
       </svg>
@@ -126,14 +131,14 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
         <thead>
           <tr>
             <th scope="col">Mois</th>
-            <th scope="col">{anneeCourante}</th>
-            <th scope="col">{anneePrecedente}</th>
+            <th scope="col">{legende.courant}</th>
+            <th scope="col">{legende.precedent}</th>
           </tr>
         </thead>
         <tbody>
           {points.map((p) => (
             <tr key={p.cle}>
-              <td>{p.libelleLong}</td>
+              <td>{`${p.libelleLong} ${p.annee}`}</td>
               <td>{formatEurosEcranAncien(p.courant)}</td>
               <td>{formatEurosEcranAncien(p.precedent)}</td>
             </tr>

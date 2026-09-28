@@ -46,7 +46,7 @@ D-STA-A-01) ; les défauts ainsi gardés sont décrits dans
 - **Parité** : `tests/parite/statistiques.essai.ts` évalue la source de
   `app.js` (`renderDashboard`, `computeMonthSummary`, `computeDashTraiter`,
   `computeRevenuePeriod`, `computeCustomRevenue`, `buildActivityFeed`,
-  `renderTopClientsHTML`, `computeStatsParConducteur`,
+  `renderTopClientsHTML`, `comparaisonN1HTML` (référence N-1, D-MAIN-10), `computeStatsParConducteur`,
   `computeStatsBinomesParMois`, `renderStats*`, `renderYearlyComparisonSVG`,
   `renderDashboardTechnicien`, `renderDashboardSousTraitant`,
   `statsConducteur`, `relativeTime`) et compare au flottant près, à l'heure

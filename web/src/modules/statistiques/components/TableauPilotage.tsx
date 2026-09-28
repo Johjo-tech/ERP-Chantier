@@ -9,6 +9,7 @@ import { aTraiterPilotage, resumeDuMois, totalATraiterPilotage, tuilesPilotage, 
 import { moisGlissants, MOIS_RESUME } from "../domain/periodes";
 import { DESTINATIONS } from "../domain/pilotage";
 import { useDonneesPilotage, type DonneesPilotage } from "../hooks/useStatistiques";
+import { ComparaisonN1 } from "./ComparaisonN1";
 import { ActiviteRecente, TopClients } from "./ListesPilotage";
 import { BlocChiffreAffaires } from "./BlocChiffreAffaires";
 import { RechercheGlobale, ResultatsRecherche } from "./RechercheGlobale";
@@ -65,7 +66,7 @@ function Pilotage({ d, jour }: { d: DonneesPilotage; jour: string }) {
       <BlocChiffreAffaires factures={d.factures} jour={jour} />
       <div className="dash-columns3">
         <ActiviteRecente d={d} />
-        <TopClients factures={d.factures} />
+        <TopClients factures={d.factures} annee={resume.annee} />
         <ResumeDuMois r={resume} />
       </div>
     </>
@@ -112,7 +113,17 @@ function Tuiles({ t, r, a }: { t: TuilesPilotage; r: ResumeMois; a: ATraiterPilo
   useModeDiscret();
   return (
     <div className="grid-stats grid-stats-4">
-      <Tuile libelle="CA encaissé ce mois (HT)" valeur={formatEurosEcranAncien(r.caMois)} argent ton="succes" icone="factures" couleurIcone="success" vers={DESTINATIONS.caEncaisse} titre="Voir les factures réglées ce mois" />
+      <Tuile
+        libelle="CA encaissé ce mois (HT)"
+        valeur={formatEurosEcranAncien(r.caMois)}
+        sous={<ComparaisonN1 courant={r.caMois} precedent={r.caMoisN1} anneePrecedente={r.annee - 1} />}
+        argent
+        ton="succes"
+        icone="factures"
+        couleurIcone="success"
+        vers={DESTINATIONS.caEncaisse}
+        titre="Voir les factures réglées ce mois"
+      />
       <Tuile libelle="Devis en attente" valeur={t.devisEnAttente} sous={`${formatEurosEcranAncien(t.devisEnAttenteMontant)} HT`} icone="devis" couleurIcone="info" vers={DESTINATIONS.devisEnAttente} titre="Voir les devis en attente de réponse" />
       <Tuile libelle="Factures impayées" valeur={t.impayees} sous={`${formatEurosEcranAncien(r.impayeesMontant)} restant dû`} ton={t.impayees ? "danger" : "neutre"} icone="factures" couleurIcone="danger" vers={DESTINATIONS.impayees} titre="Voir les factures impayées" />
       <Tuile libelle="À facturer" valeur={a.aFacturer} sous={`${formatEurosEcranAncien(a.aFacturerMontant)} HT`} ton={a.aFacturer ? "alerte" : "neutre"} icone="bonsCommande" couleurIcone="accent" vers={DESTINATIONS.aFacturer} titre="Voir les bons de commande à facturer" />
@@ -142,7 +153,7 @@ function ATraiter({ t }: { t: ATraiterPilotage }) {
   );
 }
 
-/** Le résumé du mois (`computeMonthSummary`), dans la troisième colonne : ses trois lignes et leurs jauges. */
+/** Le résumé du mois (`computeMonthSummary`), dans la troisième colonne : ses trois jauges, puis le facturé de l'exercice face au précédent (0f6f60d). */
 function ResumeDuMois({ r }: { r: ResumeMois }) {
   useModeDiscret();
   return (
@@ -152,6 +163,13 @@ function ResumeDuMois({ r }: { r: ResumeMois }) {
           <Jauge libelle="Chiffre d'affaires encaissé (HT)" valeur={formatEurosEcranAncien(r.caMois)} largeur={r.caMoisPct} vers={DESTINATIONS.caEncaisse} titre="Voir les factures réglées ce mois" couleur="var(--success)" premiere />
           <Jauge libelle="Taux de conversion devis" valeur={`${r.tauxConversion}%`} largeur={r.tauxConversion} vers={DESTINATIONS.devisEnAttente} titre="Voir les devis" couleur="var(--info)" />
           <Jauge libelle="Taux d'encaissement" valeur={`${r.tauxEncaisse}%`} largeur={r.tauxEncaisse} vers={DESTINATIONS.reglements} titre="Voir les règlements" couleur="var(--accent)" />
+          <div className="summary-row" style={{ marginTop: "16px" }}>
+            <span>Facturé {r.annee} (HT)</span>
+            <b>{formatEurosEcranAncien(r.cumulAnnee)}</b>
+          </div>
+          <div className="card-sub">
+            <ComparaisonN1 courant={r.cumulAnnee} precedent={r.cumulAnneeN1} anneePrecedente={r.annee - 1} />
+          </div>
         </div>
       </Section>
     </div>

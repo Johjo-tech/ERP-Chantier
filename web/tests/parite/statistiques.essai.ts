@@ -26,7 +26,7 @@ import * as ancienTotaux from "../../../src/api/regles-totaux";
 import { dateISO, formatDateFr, todayISO } from "../../src/lib/dates";
 import { statsConducteur, type BonConducteur } from "../../src/modules/statistiques/domain/conducteur";
 import type { LigneChiffree } from "../../src/modules/statistiques/domain/ancien/montants";
-import { activiteRecente, aTraiterPilotage, barresGraphique, resumeDuMois, revenuPeriode, revenuPlage, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage, type RapportPilotage, type ReglementPilotage } from "../../src/modules/statistiques/domain/ancien/pilotage";
+import { activiteRecente, aTraiterPilotage, barresGraphique, comparaisonN1, legendeGraphique, resumeDuMois, revenuPeriode, revenuPlage, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage, type RapportPilotage, type ReglementPilotage } from "../../src/modules/statistiques/domain/ancien/pilotage";
 import { equipesParMois, periodeLabel, repartitionCA, retardParConducteur, statsParConducteur, totauxStats, type BonStats, type EquipeStats, type PeriodeStats } from "../../src/modules/statistiques/domain/ancien/statistiques";
 import { mesBonsTechnicien, tableauSousTraitant, tableauTechnicien, type BonTerrain, type TacheTerrain } from "../../src/modules/statistiques/domain/ancien/terrain";
 import { moisDepuisJanvier, moisGlissants } from "../../src/modules/statistiques/domain/periodes";
@@ -54,7 +54,7 @@ const aLInstant = (d: Date) => vi.setSystemTime(d);
 const FONCTIONS = [
   "dateLocaleISO", "todayISO", "computeTotalsAvecRemise", "estAvoirDoc", "computeDocTotals", "reglementsForFacture", "reglementStatutFacture",
   "buildMonthsBack", "buildYTDMonths", "monthsForPeriod", "computeRevenuePeriod", "computeMonthSummary", "circuitTermine", "computeDashTraiter",
-  "buildActivityFeed", "computeTopClients", "renderTopClientsHTML", "renderDashboard", "computeCustomRevenue",
+  "buildActivityFeed", "cumulParClient", "computeTopClients", "comparaisonN1HTML", "renderTopClientsHTML", "renderDashboard", "computeCustomRevenue",
   "filtrerParPeriode", "moisLabelCourt", "periodeLabel", "computeStatsParConducteur", "technicienLabel", "computeStatsBinomesParMois",
   "renderStatsCARepartitionHTML", "renderStatsRetardHTML", "renderYearlyComparisonSVG", "mesBonsTechnicien", "renderDashboardTechnicien",
   "sousTraitantActuel", "facturesDuSousTraitant", "bcFacturesKTA", "factureSTQuiCouvre", "renderDashboardSousTraitant",
@@ -63,13 +63,14 @@ const CONSTANTES = ["CIRCUIT_CLOS", "JOURNEE_VISIBLE", "STATS_PALETTE"] as const
 
 type Etat = Record<string, unknown>;
 interface Ancien {
-  computeMonthSummary: (soc: string) => { caMois: number; caMoisPct: number; tauxConversion: number; devisCount: number; tauxEncaisse: number; impayeesMontant: number };
+  computeMonthSummary: (soc: string) => { caMois: number; caMoisPct: number; tauxConversion: number; devisCount: number; tauxEncaisse: number; impayeesMontant: number; annee: number; caMoisN1: number; cumulAnnee: number; cumulAnneeN1: number };
   computeDashTraiter: (soc: string) => Record<string, number>;
-  computeRevenuePeriod: (f: unknown[], m: unknown[]) => { data: { current: number; previous: number }[]; total: number; currentYear: number; prevYear: number };
+  computeRevenuePeriod: (f: unknown[], m: unknown[]) => { data: { annee: number; current: number; previous: number }[]; total: number; currentYear: number; prevYear: number };
   buildMonthsBack: (n: number) => { year: number; month: number; label: string; fullLabel: string }[];
   buildYTDMonths: () => { year: number; month: number; label: string; fullLabel: string }[];
-  buildActivityFeed: (soc: string) => { label: string; sub: string; amount: number | null; id: string; date: string; goFn: string }[];
-  renderTopClientsHTML: (f: unknown[]) => string;
+  buildActivityFeed: (soc: string) => { icon: string; color: string; label: string; sub: string; amount: number | null; id: string; date: string; goFn: string }[];
+  renderTopClientsHTML: (f: unknown[], annee: number) => string;
+  comparaisonN1HTML: (courant: number, precedent: number, anneePrecedente: number) => string;
   renderDashboard: () => string;
   computeCustomRevenue: () => void;
   computeStatsParConducteur: () => Record<string, number | string>[];
@@ -212,10 +213,17 @@ function societe(maintenant: Date): Societe {
         // Un lettrage d'avoir s'écrit en négatif côté avoir ; un règlement partiel, une fraction.
         facture_id: g.reel() < 0.9 ? g.parmi(factures).id : "introuvable",
         montant: g.parmi([g.entier(1, 300_000) / 100, 120, -50, 0.01]),
+        date: peutEtre(0.97, () => uneDate(maintenant, 60)),
         cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
       }))
     : [];
-  const rapports: RapportPilotage[] = Array.from({ length: g.entier(0, 4) }, (_, i) => ({ id: `i${i}`, numero: peutEtre(0.7, () => `RAP-${i}`), client_nom: g.parmi(CLIENTS), cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)) }));
+  const rapports: RapportPilotage[] = Array.from({ length: g.entier(0, 4) }, (_, i) => ({
+    id: `i${i}`,
+    numero: peutEtre(0.7, () => `RAP-${i}`),
+    client_nom: g.parmi(CLIENTS),
+    date: peutEtre(0.97, () => uneDate(maintenant, 60)),
+    cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
+  }));
   const bonsPilotage: BonPilotage[] = idsBons.map((id) => {
     const statut = g.parmi([null, "en_cours", "pret_a_chiffrer", "chiffre", "facture", "cloture_gratuit"]);
     return {
@@ -253,8 +261,8 @@ function etatAncien(s: Societe, extra: Etat = {}): Etat {
       ...cree(f.cree_le), lignes: f.lignes.map(ligneAncienne),
     })),
     devis: s.devis.map((d) => ({ id: d.id, societeId: SOC, numero: d.numero, client: d.client_nom ?? "", date: d.date, statut: d.statut, conducteur: d.conducteur, remisePourcentage: d.remise_pourcentage, ...cree(d.cree_le), lignes: d.lignes.map(ligneAncienne) })),
-    reglements: s.reglements.map((r) => ({ id: r.id, societeId: SOC, factureId: r.facture_id, montant: r.montant, ...cree(r.cree_le) })),
-    interventions: s.rapports.map((i) => ({ id: i.id, societeId: SOC, numero: i.numero, client: i.client_nom ?? "", statut: "terminé", ...cree(i.cree_le) })),
+    reglements: s.reglements.map((r) => ({ id: r.id, societeId: SOC, factureId: r.facture_id, montant: r.montant, date: r.date, ...cree(r.cree_le) })),
+    interventions: s.rapports.map((i) => ({ id: i.id, societeId: SOC, numero: i.numero, client: i.client_nom ?? "", date: i.date, statut: "terminé", ...cree(i.cree_le) })),
     // Un même bon, vu par « À traiter » (pilotage) et par les statistiques : réunis par identifiant.
     bonsCommande: [...new Set([...s.bonsPilotage.map((b) => b.id), ...s.bonsStats.map((b) => b.id)])].map((id) => {
       const b = s.bonsPilotage.find((x) => x.id === id);
@@ -279,6 +287,22 @@ const extraire = (html: string, motif: RegExp) => {
   if (!m) throw new Error(`motif introuvable : ${motif}`);
   return m.slice(1);
 };
+/**
+ * Ce que dit `comparaisonN1HTML` (montants écrits «n» par le faux
+ * `moneyDisplay`) : « rien en 2025 », ou « 2025 : «n» · +12 % » et sa couleur.
+ */
+const lireN1 = (html: string) => {
+  const rien = /^<span style="color:var\(--text-dim\);">rien en (\d+)<\/span>$/.exec(html);
+  if (rien) return ["rien", rien[1]];
+  const m = /^(\d+) : «([^»]*)» · <b style="color:var\(--(success|danger|text-dim)\);">([+-]?\d+) %<\/b>$/.exec(html);
+  if (!m) throw new Error(`rappel N-1 illisible : ${html}`);
+  return m.slice(1);
+};
+const COULEUR_ECART = (e: number) => (e > 0 ? "success" : e < 0 ? "danger" : "text-dim");
+const n1Neuf = (courant: number, precedent: number, annee: number) => {
+  const c = comparaisonN1(courant, precedent, annee);
+  return c.type === "rien" ? ["rien", String(annee)] : [String(annee), String(c.precedent), COULEUR_ECART(c.ecart), `${c.ecart > 0 ? "+" : ""}${c.ecart}`];
+};
 
 const TIRAGES = 150;
 
@@ -299,6 +323,11 @@ describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
       const cas = JSON.stringify({ n, s });
 
       expect(extraire(html, /CA encaissé ce mois \(HT\)<\/div><div class="stat-num stat-num-money">«([^»]*)»/), cas).toEqual([String(r.caMois)]);
+      // 0f6f60d : le même mois un an plus tôt sous la tuile, le facturé de l'exercice face au précédent dans le résumé.
+      expect(lireN1(extraire(html, /stat-num-money">«[^»]*»<\/div><div class="stat-subamount">(.*?)<\/div><\/div>/)[0] ?? ""), cas).toEqual(n1Neuf(r.caMois, r.caMoisN1, r.annee - 1));
+      expect(extraire(html, /<span>Facturé (\d+) \(HT\)<\/span><b>«([^»]*)»<\/b>/), cas).toEqual([String(r.annee), String(r.cumulAnnee)]);
+      expect(lireN1(extraire(html, /Facturé \d+ \(HT\)<\/span><b>«[^»]*»<\/b><\/div>\s*<div class="card-sub">(.*?)<\/div>/)[0] ?? ""), cas).toEqual(n1Neuf(r.cumulAnnee, r.cumulAnneeN1, r.annee - 1));
+      expect(extraire(html, /Top clients (\d+) \(HT\)/), cas).toEqual([String(r.annee)]);
       expect(extraire(html, /Devis en attente<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» HT/), cas).toEqual([String(t.devisEnAttente), String(t.devisEnAttenteMontant)]);
       expect(extraire(html, /Factures impayées<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» restant dû/), cas).toEqual([String(t.impayees), String(r.impayeesMontant)]);
       expect(extraire(html, /À facturer<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» HT/), cas).toEqual([String(tr.aFacturer), String(tr.aFacturerMontant)]);
@@ -328,7 +357,8 @@ describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
       const mois = moisAnciens(12, jour);
       const legacy = vieux.computeRevenuePeriod(etatAncien(s).factures as unknown[], vieux.buildMonthsBack(12));
       const neuf = revenuPeriode(s.factures, mois, 2026);
-      expect(neuf.data).toEqual(legacy.data.map((p) => ({ current: p.current, previous: p.previous })));
+      // 66ea9e1 : chaque mois emporte son année.
+      expect(neuf.data).toEqual(legacy.data.map((p) => ({ annee: p.annee, current: p.current, previous: p.previous })));
       expect([neuf.total, neuf.currentYear, neuf.prevYear]).toEqual([legacy.total, legacy.currentYear, legacy.prevYear]);
     }
   });
@@ -357,17 +387,27 @@ describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
       const vieux = a.buildActivityFeed(SOC);
       const neuf = activiteRecente(s.devis, s.factures, s.rapports, s.reglements);
       expect(neuf.map((x) => [x.libelle, x.sous, x.montant, x.id, x.quand])).toEqual(vieux.map((x) => [x.label, x.sub, x.amount, x.id, x.date]));
+      // La pastille : un avoir orangé (« warn »), une facture bleue.
+      expect(neuf.filter((x) => x.nature === "facture").map((x) => (x.avoir ? "warn" : "info"))).toEqual(vieux.filter((x) => x.icon === "factures").map((x) => x.color));
       // Un paiement sans facture retrouvée ne s'ouvre pas, comme l'ancien (`goFn` vide).
       expect(neuf.map((x) => x.nature !== "reglement" || !!x.factureId)).toEqual(vieux.map((x) => !!x.goFn));
 
-      const html = a.renderTopClientsHTML(etatAncien(s).factures as unknown[]);
-      const top = topClients(s.factures);
-      if (!top.length) {
-        expect(html).toContain("Pas encore de factures.");
-        continue;
+      // 0f6f60d : borné à l'exercice, avec le rappel N-1 sous chaque nom ; l'année précédente sert aussi.
+      for (const annee of [2026, 2025]) {
+        const html = a.renderTopClientsHTML(etatAncien(s).factures as unknown[], annee);
+        const top = topClients(s.factures, annee);
+        if (!top.length) {
+          expect(html).toContain(`Aucune facture sur ${annee}.`);
+          continue;
+        }
+        const lignesAnciennes = [...html.matchAll(/topclient-name">([^<]*)<\/div>\s*<div class="card-sub" style="margin-top:2px;">(.*?)<\/div>[\s\S]*?width:([^%]*)%[\s\S]*?topclient-amount">«([^»]*)»/g)].map((m) => [
+          m[1],
+          lireN1(m[2] ?? ""),
+          m[3],
+          m[4],
+        ]);
+        expect(top.map((c) => [c.client, n1Neuf(c.total, c.precedent, annee - 1), String(c.largeur), String(c.total)])).toEqual(lignesAnciennes);
       }
-      const lignesAnciennes = [...html.matchAll(/topclient-name">([^<]*)<\/div>[\s\S]*?width:([^%]*)%[\s\S]*?topclient-amount">«([^»]*)»/g)].map((m) => [m[1], m[2], m[3]]);
-      expect(top.map((c) => [c.client, String(c.largeur), String(c.total)])).toEqual(lignesAnciennes);
     }
   });
 
@@ -389,8 +429,8 @@ describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
       ],
       devis: [],
       reglements: [
-        { id: "r1", facture_id: "partielle", montant: 60, cree_le: `${jour}T09:00:00Z` },
-        { id: "lettrage", facture_id: "avoir", montant: -20, cree_le: `${jour}T09:30:00Z` }, // DEF-06
+        { id: "r1", facture_id: "partielle", montant: 60, date: jour, cree_le: `${jour}T09:00:00Z` },
+        { id: "lettrage", facture_id: "avoir", montant: -20, date: jour, cree_le: `${jour}T09:30:00Z` }, // DEF-06
       ],
       rapports: [],
       bonsPilotage: [{ id: "clos", statut_workflow: "cloture_gratuit", bon_commande_parent_id: null, rappel_date: "2000-01-01", valideConducteur: false, valideDirecteur: false, lignes: [] }], // DEF-05
@@ -403,9 +443,16 @@ describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
     expect(r.caMois).toBe(100); // l'acompte « payée », pas la facture payée d'un autre mois
     expect(aTraiterPilotage(cas.bonsPilotage, cas.factures, jour)).toEqual(a.computeDashTraiter(SOC));
     expect(aTraiterPilotage(cas.bonsPilotage, cas.factures, jour)).toMatchObject({ rappelsAujourdhui: 1, facturesEchues: 1 });
-    expect(activiteRecente([], cas.factures, [], cas.reglements).map((x) => x.sous)).toContain("OPAC · null");
-    expect(activiteRecente([], cas.factures, [], cas.reglements)[0]).toMatchObject({ libelle: "Paiement reçu", montant: -20 });
-    expect(topClients(cas.factures).map((c) => c.client)).toEqual(["OPAC", "O.P.A.C."]);
+    // Depuis 0f6f60d, une facture sans numéro s'annonce « brouillon », un avoir « Avoir », au jour de la pièce.
+    const fil = activiteRecente([], cas.factures, [], cas.reglements);
+    expect(fil.map((x) => [x.libelle, x.sous])).toEqual(
+      a.buildActivityFeed(SOC).map((x) => [x.label, x.sub])
+    );
+    expect(fil.map((x) => x.sous)).toContain("OPAC · brouillon");
+    expect(fil.find((x) => x.id === "avoir")).toMatchObject({ libelle: "Avoir", montant: -100, avoir: true });
+    expect(fil.find((x) => x.id === "lettrage")).toMatchObject({ libelle: "Paiement reçu", montant: -20 });
+    expect(fil.map((x) => x.id)).not.toContain("payee-mois-precedent");
+    expect(topClients(cas.factures, 2026).map((c) => c.client)).toEqual(["OPAC", "O.P.A.C."]);
     expect(revenuPeriode(cas.factures, moisAnciens(6, jour), 2026).total).toBe(a.computeRevenuePeriod(etatAncien(cas).factures as unknown[], a.buildMonthsBack(6)).total);
   });
 });
@@ -567,7 +614,7 @@ describe("technicien et sous-traitant : renderDashboardTechnicien, renderDashboa
 
 // ---------------------------------------------------------------------------
 describe("DEF-STA-15 à 19 : ce que l'ancien dessine et écrit", () => {
-  it("DEF-STA-15 : mêmes hauteurs de barres, même infobulle (l'année de la dernière barre pour toutes)", () => {
+  it("DEF-STA-15, corrigé en production (66ea9e1) : mêmes hauteurs de barres, chaque infobulle à l'année de son mois, même légende", () => {
     aLInstant(INSTANTS[0]);
     const jour = todayISO();
     for (let n = 0; n < TIRAGES; n++) {
@@ -583,7 +630,23 @@ describe("DEF-STA-15 à 19 : ce que l'ancien dessine et écrit", () => {
       expect(barres.flatMap((b) => [b.infobullePrecedent, b.infobulleCourant])).toEqual(infobulles);
     }
     const octobre = barresGraphique(revenuPeriode([], moisAnciens(12, jour), 2026), moisGlissants(12, jour).map((m) => m.libelleLong))[0];
-    expect(octobre?.infobulleCourant).toBe("octobre 2026");
+    expect(octobre?.infobulleCourant).toBe("octobre 2025");
+    expect(octobre?.infobullePrecedent).toBe("octobre 2024");
+  });
+
+  it("66ea9e1 : la légende nomme deux millésimes sur une seule année, « Période » / « Un an plus tôt » à cheval sur deux", () => {
+    for (const [instant, n] of [[INSTANTS[0], 6], [INSTANTS[0], 12], [new Date("2026-01-15T10:00:00Z"), 6], [new Date("2026-12-15T10:00:00Z"), 12]] as const) {
+      aLInstant(instant);
+      const jour = todayISO();
+      const a = ancien(etatAncien(societe(instant)));
+      const svg = a.renderYearlyComparisonSVG(a.computeRevenuePeriod([], a.buildMonthsBack(n)));
+      const ancienne = [...svg.matchAll(/<rect x="(\d+)" y="2"[^>]*\/>\s*<text x="(\d+)" y="12.5" font-size="13.5" fill="var\(--text\)">([^<]*)<\/text>/g)].map((m) => [m[1], m[2], m[3]]);
+      const l = legendeGraphique(revenuPeriode([], moisAnciens(n, jour), instant.getFullYear()));
+      const decalage = l.uneSeuleAnnee ? 0 : 20;
+      expect([["0", "19", l.courant], [String(75 + decalage), String(94 + decalage), l.precedent]], `${jour} ${n}`).toEqual(ancienne);
+    }
+    aLInstant(INSTANTS[0]);
+    expect(legendeGraphique(revenuPeriode([], moisAnciens(12, todayISO()), 2026))).toEqual({ courant: "Période", precedent: "Un an plus tôt", uneSeuleAnnee: false });
   });
 
   it("DEF-STA-16 (non reproduit, à trancher) : l'infobulle de l'ancien écrit le montant sans le mode discret", () => {

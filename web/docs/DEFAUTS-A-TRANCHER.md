@@ -36,7 +36,7 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-STA-03 | Restant dû et taux d'encaissement : brouillons comptés | identique à l'ancienne | calcul |
 | DEF-STA-04 | Impayées / échues lues sur le statut stocké | identique à l'ancienne | calcul |
 | DEF-STA-05 | « Locataires à rappeler » : affaires closes | identique à l'ancienne | calcul |
-| DEF-STA-06 | Activité récente : « · null », lettrages en paiements | identique à l'ancienne | affichage |
+| DEF-STA-06 | Activité récente : « · null », lettrages en paiements | en partie corrigé en production (0f6f60d) ; le reste identique à l'ancienne | affichage |
 | DEF-STA-07 | Top clients par nom écrit | identique à l'ancienne | calcul |
 | DEF-STA-08 | Statistiques par étiquette du conducteur | identique à l'ancienne | calcul |
 | DEF-STA-09 | « En retard » : bons facturés, clos | identique à l'ancienne | calcul |
@@ -45,7 +45,7 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-STA-12 | Jamais « injoignable » | identique à l'ancienne | calcul |
 | DEF-STA-13 | Technicien : seul le jour du rendez-vous | identique à l'ancienne | calcul |
 | DEF-STA-14 | Sous-traitant : deux tuiles à zéro | identique à l'ancienne | calcul |
-| DEF-STA-15 | Infobulle 12 mois : année fausse | identique à l'ancienne | affichage |
+| DEF-STA-15 | Infobulle 12 mois : année fausse | corrigé en production (66ea9e1), repris dans web/ | affichage |
 | DEF-STA-16 | Infobulle : montant en mode discret | corrigé dans web/ | affichage |
 | DEF-STA-17 | Part du CA négative ou > 100 % | identique à l'ancienne | calcul |
 | DEF-STA-18 | Bons rangés par date de saisie | identique à l'ancienne | calcul |
@@ -53,7 +53,7 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-ECR-01 | Rapport sans statut : pastille vide | identique à l'ancienne | affichage |
 | DEF-ECR-02 | « 📦 Commandé » n'enregistre pas la date | corrigé dans web/ | données perdues |
 | DEF-ECR-03 | Brouillon compté dans le CA (= STA-01) | identique à l'ancienne | calcul |
-| DEF-ECR-04 | « Mme Durand · null » (= STA-06) | identique à l'ancienne | affichage |
+| DEF-ECR-04 | « Mme Durand · null » (= STA-06) | corrigé en production (0f6f60d) pour la facture, repris dans web/ | affichage |
 | DEF-BDD-01 | `prochain_numero` ouvert à une autre société | correction proposée en base | sécurité |
 | DEF-BDD-02 | Compte désactivé qui se réactive ; adresse d'un autre | correction proposée en base | sécurité |
 | DEF-BDD-03 | Suivi médical, notes et dossiers RH lisibles par tous | correction proposée en base | sécurité |
@@ -235,13 +235,20 @@ décrivent chaque correction.
 - **Ancienne** : le numéro absent est écrit « null » ; tout règlement, lettrage compris, est un paiement.
 - **Juste** : pas de « null » ; un lettrage d'avoir n'est pas un paiement reçu.
 - **Correction existante** : `stats_activite_recente` (commit `3f534d0`, D-STA-04).
+- **Corrigé en production, en partie (0f6f60d)** : le fil suit désormais la DATE des pièces (plus
+  `createdAt`), nomme la pièce (« Devis », « Facture », « Avoir », « Rapport d'intervention ») et
+  écrit « brouillon » pour une facture sans numéro. Restent « null » : un devis sans numéro et le
+  paiement qui cite une facture en brouillon ; et les lettrages restent des « Paiement reçu ».
+  Repris à l'identique dans `web/` (D-MAIN-10, `activiteRecente`).
 
 ### DEF-STA-07 — Top clients : par le nom écrit sur la facture
 - **Écran** : Accueil — « Top clients (HT) ».
 - **Reproduire** : `admin.alpha` → deux factures pour le même client dont le nom est écrit
   différemment sur la pièce (« OPAC du Rhône » / « OPAC du Rhone ») : deux lignes au classement. Une
   facture sans nom de client : une ligne sans nom.
-- **Ancienne** : groupé par `client_nom` de la pièce, toutes factures (DEF-STA-01).
+- **Ancienne** : groupé par `client_nom` de la pièce, toutes factures (DEF-STA-01). Depuis 0f6f60d,
+  le classement est borné à l'exercice (« Top clients 2026 (HT) ») avec le montant N-1 sous chaque
+  nom — le groupement par nom écrit, lui, demeure. Repris dans `web/` (D-MAIN-10).
 - **Juste** : groupé par la fiche client (`client_id`), le nom à défaut.
 - **Correction existante** : D-STA-05 (`stats_par_client`).
 
@@ -318,6 +325,9 @@ décrivent chaque correction.
 - **Ancienne** : l'année de la dernière barre est appliquée à toutes.
 - **Juste** : l'année de chaque mois.
 - **Correction existante** : `GraphiqueCA.tsx` du commit `3f534d0` (`p.annee`).
+- **Corrigé en production (66ea9e1)** : chaque barre porte l'année de son mois, et la légende dit
+  « Période » / « Un an plus tôt » quand la fenêtre est à cheval sur deux années. `web/` suit
+  (`barresGraphique`, `legendeGraphique`, D-MAIN-10) : plus rien à trancher.
 
 ### DEF-STA-16 — L'infobulle du graphique montre les montants en mode discret
 - **Écran** : Accueil — graphique, mode discret activé.
@@ -396,7 +406,9 @@ mois de Statistiques dans les deux applications.
 
 ### DEF-ECR-04 — Tableau de bord : la création d'un brouillon s'écrit « Mme Durand · null »
 Même défaut que **DEF-STA-06** (reproduction et correction y sont décrites). Depuis D-STA-A-01, la
-nouvelle écrit elle aussi « Mme Durand · null ».
+nouvelle écrivait elle aussi « Mme Durand · null ». **Corrigé en production (0f6f60d)** pour la
+facture — elle s'écrit « Mme Durand · brouillon » — et repris dans `web/` ; le paiement qui cite un
+brouillon garde « · null » dans les deux applications.
 
 ## Base de données et sécurité (production)
 
