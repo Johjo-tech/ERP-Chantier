@@ -53,7 +53,7 @@ export function useSupprimerClient() {
 }
 
 export function useUsagesClient(id: string) {
-  return useQuery({ queryKey: ["usages-client", id], queryFn: () => usagesDuClient(id) });
+  return useQuery({ queryKey: ["usages-client", id], queryFn: () => usagesDuClient(id), enabled: id !== "" });
 }
 
 /** Les usages lus au moment du clic : la liste n'a pas à compter les pièces de chaque client pour rien. */

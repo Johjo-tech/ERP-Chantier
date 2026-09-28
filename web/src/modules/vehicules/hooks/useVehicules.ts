@@ -35,9 +35,9 @@ export function useEcheancesDocuments() {
   return useQuery({ queryKey: clesVehicules.echeances(societe.id), queryFn: () => documentsAEcheance(societe.id) });
 }
 
-export const usePretsVehicule = (id: string) => useQuery({ queryKey: clesVehicules.prets(id), queryFn: () => listerPretsVehicule(id) });
-export const useEntretiens = (id: string) => useQuery({ queryKey: clesVehicules.entretiens(id), queryFn: () => listerEntretiens(id) });
-export const useDocumentsVehicule = (id: string) => useQuery({ queryKey: clesVehicules.documents(id), queryFn: () => listerDocuments(id) });
+export const usePretsVehicule = (id: string) => useQuery({ queryKey: clesVehicules.prets(id), queryFn: () => listerPretsVehicule(id), enabled: id !== "" });
+export const useEntretiens = (id: string) => useQuery({ queryKey: clesVehicules.entretiens(id), queryFn: () => listerEntretiens(id), enabled: id !== "" });
+export const useDocumentsVehicule = (id: string) => useQuery({ queryKey: clesVehicules.documents(id), queryFn: () => listerDocuments(id), enabled: id !== "" });
 
 /**
  * Toute écriture relit ce que la fiche du véhicule montre : la fiche elle-même

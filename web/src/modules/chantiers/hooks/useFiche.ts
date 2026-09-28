@@ -58,13 +58,13 @@ function useEcriture<V>(cle: QueryKey, ecrire: (v: V) => Promise<unknown>, autre
 
 // ── Documents ───────────────────────────────────────────────────────────────
 
-export const useDocuments = (id: string) => useQuery({ queryKey: clesFiche.documents(id), queryFn: () => listerDocuments(id) });
-export const useComptesRendus = (id: string) => useQuery({ queryKey: clesFiche.comptesRendus(id), queryFn: () => listerComptesRendus(id) });
-export const useInspections = (id: string) => useQuery({ queryKey: clesFiche.inspections(id), queryFn: () => listerInspections(id) });
+export const useDocuments = (id: string) => useQuery({ queryKey: clesFiche.documents(id), queryFn: () => listerDocuments(id), enabled: id !== "" });
+export const useComptesRendus = (id: string) => useQuery({ queryKey: clesFiche.comptesRendus(id), queryFn: () => listerComptesRendus(id), enabled: id !== "" });
+export const useInspections = (id: string) => useQuery({ queryKey: clesFiche.inspections(id), queryFn: () => listerInspections(id), enabled: id !== "" });
 
 export function useDevisComplementaires(id: string) {
   const autorise = usePeutVoirDpgf();
-  return useQuery({ queryKey: clesFiche.devisComplementaires(id), queryFn: () => listerDevisComplementaires(id), enabled: autorise });
+  return useQuery({ queryKey: clesFiche.devisComplementaires(id), queryFn: () => listerDevisComplementaires(id), enabled: autorise && id !== "" });
 }
 
 export function useDeposerDocument(chantierId: string) {
@@ -108,7 +108,7 @@ export function useRetirerFichier(chantierId: string, table: TableDatee) {
 
 export function useAchats(chantierId: string) {
   const autorise = usePeutVoirDpgf();
-  return useQuery({ queryKey: clesFiche.achats(chantierId), queryFn: () => listerAchats(chantierId), enabled: autorise });
+  return useQuery({ queryKey: clesFiche.achats(chantierId), queryFn: () => listerAchats(chantierId), enabled: autorise && chantierId !== "" });
 }
 
 export function useCategoriesAchat() {
@@ -127,7 +127,7 @@ export const useSupprimerAchat = (chantierId: string) => useEcriture(clesFiche.a
 
 // ── To-do ───────────────────────────────────────────────────────────────────
 
-export const useTodos = (chantierId: string) => useQuery({ queryKey: clesFiche.todos(chantierId), queryFn: () => listerTodos(chantierId) });
+export const useTodos = (chantierId: string) => useQuery({ queryKey: clesFiche.todos(chantierId), queryFn: () => listerTodos(chantierId), enabled: chantierId !== "" });
 export const useAjouterTodo = (chantierId: string) =>
   useEcriture(clesFiche.todos(chantierId), ({ texte, position }: { texte: string; position: number }) => ajouterTodo(chantierId, texte, position));
 export const useChangerStatutTodo = (chantierId: string) =>
@@ -138,7 +138,7 @@ export const useSupprimerTodo = (chantierId: string) => useEcriture(clesFiche.to
 
 // ── Intervenants ────────────────────────────────────────────────────────────
 
-export const useAffectations = (chantierId: string) => useQuery({ queryKey: clesFiche.affectations(chantierId), queryFn: () => listerAffectations(chantierId) });
+export const useAffectations = (chantierId: string) => useQuery({ queryKey: clesFiche.affectations(chantierId), queryFn: () => listerAffectations(chantierId), enabled: chantierId !== "" });
 
 export function useMembres() {
   const societe = useSocieteActive();
@@ -158,17 +158,17 @@ export const useRetirerAffectation = (chantierId: string) => useEcriture(clesFic
 
 export function useFacturesDuChantier(chantierId: string) {
   const autorise = usePermission("factures", "voir");
-  return useQuery({ queryKey: clesFiche.factures(chantierId), queryFn: () => listerFacturesDuChantier(chantierId), enabled: autorise });
+  return useQuery({ queryKey: clesFiche.factures(chantierId), queryFn: () => listerFacturesDuChantier(chantierId), enabled: autorise && chantierId !== "" });
 }
 
 export function useDevisAvecLignes(chantierId: string) {
   const autorise = usePermission("devis", "voir");
-  return useQuery({ queryKey: clesFiche.devis(chantierId), queryFn: () => listerDevisAvecLignes(chantierId), enabled: autorise });
+  return useQuery({ queryKey: clesFiche.devis(chantierId), queryFn: () => listerDevisAvecLignes(chantierId), enabled: autorise && chantierId !== "" });
 }
 
 export function useDevisDuChantier(chantierId: string) {
   const autorise = usePermission("devis", "voir");
-  return useQuery({ queryKey: [...clesFiche.devis(chantierId), "totaux"], queryFn: () => listerDevisDuChantier(chantierId), enabled: autorise });
+  return useQuery({ queryKey: [...clesFiche.devis(chantierId), "totaux"], queryFn: () => listerDevisDuChantier(chantierId), enabled: autorise && chantierId !== "" });
 }
 
 export function useMetiers() {
