@@ -121,6 +121,14 @@ export function invitationEnAttente(invitations: readonly Invitation[], salarieI
   return invitations.find((i) => i.salarie_id === salarieId && i.statut === "en_attente") ?? null;
 }
 
+/** L'invitation qui attend encore pour ce sous-traitant (DEF-REP-06). */
+export function invitationSousTraitantEnAttente(invitations: readonly Invitation[], sousTraitantId: string): Invitation | null {
+  return invitations.find((i) => i.sous_traitant_id === sousTraitantId && i.statut === "en_attente") ?? null;
+}
+
+/** L'adresse du compte d'un sous-traitant : son rôle est fixé, `sous_traitant`, seule l'adresse se saisit. */
+export const schemaAdresseInvitation = z.string().trim().pipe(z.email("Indiquez une adresse e-mail valide."));
+
 export const schemaSaisieInvitation = z.object({
   email: z.string().trim().pipe(z.email("Indiquez une adresse e-mail valide.")),
   role: z.enum(["technicien", "conducteur", "secretaire", "lecture", "admin"], { message: "Rôle impossible pour un salarié." }),

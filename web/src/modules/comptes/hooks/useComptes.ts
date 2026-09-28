@@ -6,6 +6,8 @@ import {
   definirAcces,
   definirRole,
   inviterSalarie,
+  inviterSousTraitant,
+  listerSousTraitants,
   listerConducteursSuivis,
   listerInvitations,
   listerMembres,
@@ -19,7 +21,13 @@ export const clesComptes = {
   invitations: (id: string) => ["invitations", id] as const,
   salaries: (id: string) => ["salaries-comptes", id] as const,
   suivis: (id: string) => ["conducteurs-suivis", id] as const,
+  sousTraitants: (id: string) => ["sous-traitants-comptes", id] as const,
 };
+
+export function useSousTraitantsComptes() {
+  const s = useSocieteActive();
+  return useQuery({ queryKey: clesComptes.sousTraitants(s.id), queryFn: () => listerSousTraitants(s.id) });
+}
 
 export function useMembres() {
   const s = useSocieteActive();
@@ -46,12 +54,13 @@ export function useGererComptes() {
   const s = useSocieteActive();
   const qc = useQueryClient();
   const relire = () => {
-    for (const cle of [clesComptes.membres(s.id), clesComptes.invitations(s.id), clesComptes.salaries(s.id)]) void qc.invalidateQueries({ queryKey: cle });
+    for (const cle of [clesComptes.membres(s.id), clesComptes.invitations(s.id), clesComptes.salaries(s.id), clesComptes.sousTraitants(s.id)]) void qc.invalidateQueries({ queryKey: cle });
   };
   return {
     role: useMutation({ mutationFn: (v: { membre: Membre; role: RoleMembre }) => definirRole(v.membre, v.role), onSettled: relire }),
     acces: useMutation({ mutationFn: (v: { id: string; actif: boolean }) => definirAcces(v.id, v.actif), onSettled: relire }),
     inviter: useMutation({ mutationFn: (v: { salarieId: string; saisie: SaisieInvitation }) => inviterSalarie(v.salarieId, v.saisie), onSettled: relire }),
+    inviterSousTraitant: useMutation({ mutationFn: (v: { sousTraitantId: string; email: string }) => inviterSousTraitant(v.sousTraitantId, v.email), onSettled: relire }),
     annuler: useMutation({ mutationFn: (id: string) => annulerInvitation(id), onSettled: relire }),
     supprimer: useMutation({ mutationFn: (id: string) => supprimerInvitation(id), onSettled: relire }),
   };

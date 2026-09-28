@@ -112,8 +112,23 @@ const DELAI_INVITATION_MS = 30_000;
  * repris tel quel : `functions.invoke` le cache derrière un message générique.
  */
 export async function inviterSalarie(salarieId: string, saisie: SaisieInvitation): Promise<{ etat: EtatInvitation; email: string }> {
+  return appelerInvitation({ salarie_id: salarieId, email: saisie.email, role: saisie.role });
+}
+
+/**
+ * Inviter le contact d'un SOUS-TRAITANT (DEF-REP-06) : même fonction de bord, qui pose
+ * `invitations.sous_traitant_id` ; `appliquer_invitations()` rattache ensuite
+ * `sous_traitants.contact_profile_id`. Suppose la fonction proposée déployée
+ * (supabase/propositions/fonctions/inviter-salarie) : l'actuelle répond « Salarié non
+ * désigné. », que l'écran affiche tel quel.
+ */
+export async function inviterSousTraitant(sousTraitantId: string, email: string): Promise<{ etat: EtatInvitation; email: string }> {
+  return appelerInvitation({ sous_traitant_id: sousTraitantId, email, role: "sous_traitant" });
+}
+
+async function appelerInvitation(body: Record<string, string>): Promise<{ etat: EtatInvitation; email: string }> {
   const { data, error } = await supabase().functions.invoke("inviter-salarie", {
-    body: { salarie_id: salarieId, email: saisie.email, role: saisie.role },
+    body,
     signal: AbortSignal.timeout(DELAI_INVITATION_MS),
   });
   if (error) {
@@ -160,6 +175,38 @@ export async function listerSalaries(societeId: string): Promise<SalarieCompte[]
       email: s.email ?? "",
       profileId: s.profile_id,
     }));
+}
+
+export interface SousTraitantCompte {
+  id: string;
+  nom: string;
+  email: string;
+  profileId: string | null;
+}
+
+const ligneSousTraitant = z.object({
+  id: z.string(),
+  nom: z.string().nullable(),
+  contact_nom: z.string().nullable(),
+  contact_email: z.string().nullable(),
+  email: z.string().nullable(),
+  contact_profile_id: z.string().nullable(),
+});
+
+/** Les sous-traitants de la société et le compte de leur contact, s'il en a un (DEF-REP-06). */
+export async function listerSousTraitants(societeId: string): Promise<SousTraitantCompte[]> {
+  const { data, error } = await supabase()
+    .from("sous_traitants")
+    .select("id, nom, contact_nom, contact_email, email, contact_profile_id")
+    .eq("societe_id", societeId)
+    .order("nom");
+  if (error) throw error;
+  return analyser(z.array(ligneSousTraitant), data, "sous-traitants").map((s) => ({
+    id: s.id,
+    nom: [s.nom, s.contact_nom].filter(Boolean).join(" — ") || "—",
+    email: s.contact_email ?? s.email ?? "",
+    profileId: s.contact_profile_id,
+  }));
 }
 
 /** Les fiches conducteur qui suivent un salarié : elles décident du rôle proposé. */
