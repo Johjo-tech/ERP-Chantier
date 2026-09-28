@@ -98,7 +98,9 @@ export function ecransFacturation(): Ecran[] {
     factures("factures-reglements-par-facture", "Factures › Règlements › Par facture", { facturesView: "reglements", reglementsVue: "factures", reglementsClient: null }, "/factures/reglements/par-facture", seuils({ pixels: 0.002, texte: 2 * ACOMPTES }, { pixels: 0.002, texte: 2 * ACOMPTES })),
     factures("factures-reglements-tous", "Factures › Règlements › Tous les règlements", { facturesView: "reglements", reglementsVue: "tous", reglementsClient: null }, "/factures/reglements/tous", seuils({ pixels: MEME_INSTANT, texte: 0 }, { pixels: 0.002, texte: 0 })),
     factures("factures-reglements-dossier", "Factures › Règlements › dossier d'un client", { facturesView: "reglements", reglementsClient: "OPAC du Rhône" }, "/factures/reglements/dossier?client=OPAC%20du%20Rh%C3%B4ne", seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 })),
-    factures("factures-impayees", "Factures › liste filtrée (🔴 Impayées)", { facturesView: "liste" }, "/factures", seuils({ pixels: 0.002, texte: EFFACER }, { pixels: 0.002, texte: EFFACER }), choisir("🔴 Impayées")),
+    // Le dossier qui porte le brouillon du jeu : titre « Brouillon — non émise » et ligne « Pas encore émise… » (97287c3).
+    factures("factures-reglements-dossier-brouillon", "Factures › Règlements › dossier d'un client (brouillon)", { facturesView: "reglements", reglementsClient: "Mme Durand" }, "/factures/reglements/dossier?client=Mme%20Durand", seuils({ pixels: 0.002, texte: 0 }, { pixels: 0.002, texte: 0 })),
+    factures("factures-impayees","Factures › liste filtrée (🔴 Impayées)", { facturesView: "liste" }, "/factures", seuils({ pixels: 0.002, texte: EFFACER }, { pixels: 0.002, texte: EFFACER }), choisir("🔴 Impayées")),
     {
       id: "devis",
       titre: "Devis",

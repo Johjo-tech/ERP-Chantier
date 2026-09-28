@@ -172,7 +172,9 @@ function CartePieceClient({ c, regs, coche, basculer, aujourdhui, regler, corrig
 }) {
   useModeDiscret();
   // « Payable » : on peut y poser un encaissement. Un avoir a un reste, mais c'est un crédit : il se coche pour être lettré, il ne s'encaisse pas.
-  const payable = c.etat.reste.gt(UN_CENTIME) && !c.etat.avoir;
+  // Et il faut un NUMÉRO (97287c3) : encaisser un brouillon le faisait numéroter par le déclencheur, hors de
+  // tout ordre chronologique (art. 242 nonies A, annexe II du CGI). L'émission se fait dans Factures.
+  const payable = c.etat.reste.gt(UN_CENTIME) && !c.etat.avoir && !!c.f.numero;
   const lettrable = c.etat.reste.gt(UN_CENTIME) && c.etat.avoir;
   const delai = c.etat.avoir ? null : delaiBadge(c.f, c.etat.reste, aujourdhui);
   const surCarte = (e: MouseEvent) => {
@@ -189,7 +191,7 @@ function CartePieceClient({ c, regs, coche, basculer, aujourdhui, regler, corrig
             <span style={{ width: "17px", flexShrink: 0 }} />
           )}
           <div>
-            <div className="card-title">{c.f.numero ?? ""}</div>
+            <div className="card-title">{c.f.numero ? c.f.numero : "Brouillon — non émise"}</div>
             <div className="card-sub">{formatDateFr(c.f.date)}{c.f.echeance ? ` · échéance ${formatDateFr(c.f.echeance)}` : ""}</div>
           </div>
         </div>
@@ -209,6 +211,10 @@ function CartePieceClient({ c, regs, coche, basculer, aujourdhui, regler, corrig
           <button type="button" className="btn small" style={payable ? undefined : { marginLeft: "auto" }} onClick={imputer} title="Solder tout ou partie de cette facture avec un avoir du même client">🧾 Régler par un avoir</button>
         )}
         {payable && <button type="button" className="btn small primary" style={{ marginLeft: "auto" }} onClick={regler}>+ Règlement</button>}
+        {/* Un brouillon perdrait sa case, son bouton et son clic sans un mot : on dit pourquoi, et où se fait le geste qui l'ouvrira. */}
+        {!c.f.numero && !c.etat.avoir && (
+          <span style={{ marginLeft: "auto" }}>Pas encore émise : elle ne s&apos;encaisse pas tant qu&apos;elle n&apos;a pas de numéro. L&apos;émission se fait dans <b>Factures</b>.</span>
+        )}
       </div>
       {regs.length > 0 && <div className="card-sub" style={{ marginTop: "10px", fontWeight: 600 }}>Historique des règlements</div>}
       {regs.map((r) => (

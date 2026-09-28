@@ -177,3 +177,28 @@ describe("vues des règlements (FAC-30 à FAC-32)", () => {
     expect(screen.getByText("🏗️ Les Tilleuls")).toBeInTheDocument();
   });
 });
+
+describe("un brouillon ne s'encaisse pas (97287c3)", () => {
+  const BROUILLON = solde({ facture_id: "b1", numero: null, date: "2026-09-05", ttc: 250, reste: 250, du: 250 });
+
+  beforeEach(() => {
+    api.soldes.soldesDesFactures.mockResolvedValue([...SOLDES, BROUILLON]);
+    api.ecran.listerFacturesEcran.mockResolvedValue([...SOLDES, BROUILLON].map((s) => ({ ...carte(s), statut: s.numero ? "impayée" : "brouillon" })));
+    api.ecran.totauxDesFactures.mockResolvedValue([...SOLDES, BROUILLON].map((s) => ({ facture_id: s.facture_id, ht: s.ttc, ttc: s.ttc })));
+  });
+
+  it("ni case, ni « + Règlement » ; un titre, et une ligne qui dit pourquoi et où l'émettre", async () => {
+    ouvrir("/factures/reglements/dossier?client=OPAC");
+    await screen.findByLabelText("Sélectionner FAC-2026-000001");
+    const brouillon = carteDe("Brouillon — non émise");
+    expect(within(brouillon).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(brouillon).queryByRole("button", { name: "+ Règlement" })).not.toBeInTheDocument();
+    expect(brouillon).toHaveTextContent("Pas encore émise : elle ne s'encaisse pas tant qu'elle n'a pas de numéro. L'émission se fait dans Factures.");
+    expect(within(brouillon).getByText("Factures").tagName).toBe("B");
+    // Une facture émise garde sa case et son bouton, sans la ligne du brouillon.
+    const emise = carteDe("FAC-2026-000001");
+    expect(within(emise).getByRole("checkbox")).toBeInTheDocument();
+    expect(within(emise).getByRole("button", { name: "+ Règlement" })).toBeInTheDocument();
+    expect(emise).not.toHaveTextContent("Pas encore émise");
+  });
+});
