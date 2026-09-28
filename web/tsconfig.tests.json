@@ -12,7 +12,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@supabase/supabase-js": ["./node_modules/@supabase/supabase-js"]
+    }
   },
   "include": ["tests"]
 }
