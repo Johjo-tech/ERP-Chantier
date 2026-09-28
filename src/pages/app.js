@@ -3138,6 +3138,38 @@ function resolveClientAdresse(nom){
   const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===nom);
   return c ? (c.adresse||'') : '';
 }
+/**
+ * L'adresse du client, ENTIÈRE, pour un document imprimé.
+ *
+ * `doc.adresse` ne porte que la rue : `resolveClientAdresse` ne remonte que
+ * celle-là au moment de l'enregistrement, et le code postal comme la ville
+ * restaient sur la fiche. Le bloc « Client » sortait donc sans eux — une
+ * adresse de facturation sans commune, sur une pièce qu'on envoie par la
+ * poste. Le bloc ÉMETTEUR, lui, imprime son adresse entière depuis qu'on l'a
+ * corrigé ; c'est le même défaut, de l'autre côté de la page.
+ *
+ * L'adresse de FACTURATION l'emporte quand elle est renseignée : c'est celle
+ * que le bon de commande porte jusqu'à la facture, et elle dit où la pièce
+ * doit être envoyée — ce qui n'est pas toujours le siège du client.
+ *
+ * Le code postal et la ville se lisent sur la FICHE, faute d'être figés sur le
+ * document : mieux vaut l'adresse d'aujourd'hui que pas d'adresse du tout. La
+ * rue, elle, reste celle qu'on a figée.
+ */
+function adresseClientDuDocument(doc){
+  const f = [doc.facturationAdresse, doc.facturationCodePostal, doc.facturationVille].filter(Boolean);
+  if(f.length){
+    return {
+      rue: doc.facturationAdresse || '',
+      cpVille: [doc.facturationCodePostal, doc.facturationVille].filter(Boolean).join(' '),
+    };
+  }
+  const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===doc.client) || {};
+  return {
+    rue: doc.adresse || c.adresse || '',
+    cpVille: [c.codePostal, c.ville].filter(Boolean).join(' '),
+  };
+}
 function logementLabel(statut){
   if(statut === 'occupé') return 'Logement occupé';
   if(statut === 'vacant') return 'Logement vacant';
@@ -4098,6 +4130,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     iban: doc.emetteurIban || s.iban,
   };
   const r = (s.reglages && s.reglages.documents) || {};
+  const adrClient = adresseClientDuDocument(doc);
   const fisc = [em.siret? `<b>Siret</b> ${esc(em.siret)}`:'', s.codeNaf? `<b>APE</b> ${esc(s.codeNaf)}`:''].filter(Boolean).join(' · ');
   const logo = logoHTML(s);
   return `
@@ -4116,7 +4149,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       ${carteChantierHTML(doc)}
       <div class="p-carte">
         <div class="p-carte-titre">Client</div>
-        <div class="p-line"><b>${esc(doc.client)}</b><br>${esc(doc.adresse)}${doc.clientSiret? '<br>SIRET '+esc(doc.clientSiret):''}${doc.clientTvaIntracom? '<br>TVA '+esc(doc.clientTvaIntracom):''}${doc.interlocuteur? "<br>À l'attention de "+esc(doc.interlocuteur):''}</div>
+        <div class="p-line"><b>${esc(doc.client)}</b>${[adrClient.rue, adrClient.cpVille].filter(Boolean).map(v=>'<br>'+esc(v)).join('')}${doc.clientSiret? '<br>SIRET '+esc(doc.clientSiret):''}${doc.clientTvaIntracom? '<br>TVA '+esc(doc.clientTvaIntracom):''}${doc.interlocuteur? "<br>À l'attention de "+esc(doc.interlocuteur):''}</div>
       </div>
     </div>
     <table class="p-lignes">
