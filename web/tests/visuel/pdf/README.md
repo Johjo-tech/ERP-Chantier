@@ -58,3 +58,21 @@ l'aperçu (`apercu-*.png`).
 les blocs de `src/pages/index.html` (numéros de ligne en tête du script) ; à
 relancer quand l'ancienne feuille change. `tests/parite/impression.essai.ts`
 échoue si la copie ne correspond plus.
+
+## Écarts voulus (DEF-REP-04, D-REP-04)
+
+Depuis la correction du 28/09, trois différences de rendu sont attendues — et
+elles seules ; `tests/parite/impression.essai.ts` les applique au HTML de
+l'ancien (`ecartVoulu`) et exige l'identité pour tout le reste :
+
+- colonnes **Qté** et **% TVA** de chaque ligne : « 2,5 » et « 10 % » (l'ancien
+  « 2.5 » et « 10% ») — toutes les pièces, dont FAC-2026-000001 (2,5 ml) ;
+- **avoir AV-2026-000001** : tous les montants en négatif (lignes, bases de TVA,
+  totaux, net), une déduction sans signe ;
+- un **SAV** s'intitule « SAV » (le jeu n'en imprime pas : BC-2026-900001 garde
+  « BON DE COMMANDE »).
+
+L'écart de pixels mesuré jusqu'ici sur les factures (mentions, D-CLI-12)
+s'augmente donc de ces cellules. À recomparer : devis DEV-2026-900001,
+FAC-2026-000001, FAC-2026-000002, AV-2026-000001, BC-2026-900001 (PDF et
+aperçu), plus la pré-facture d'un bon (fenêtre des Bons).

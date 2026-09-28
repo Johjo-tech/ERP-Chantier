@@ -13,6 +13,8 @@ export interface BonImprimable extends LieuDeBase {
   conducteur: string | null;
   metiers: unknown;
   metier: string | null;
+  /** Le bon d'origine d'un SAV : c'est lui qui fait d'un bon un SAV. */
+  bon_commande_parent_id: string | null;
   facturation_adresse: string | null;
   facturation_code_postal: string | null;
   facturation_ville: string | null;
@@ -26,11 +28,15 @@ export interface BonImprimable extends LieuDeBase {
  * référence que le client connaisse), le conducteur et les métiers.
  *
  * `masquerPrix` : la fiche interne vue sans les prix (`!ctx.avecPrix`).
+ *
+ * Un SAV s'intitule « SAV » : l'ancien l'imprimait « BON DE COMMANDE », et le
+ * client recevait pour une reprise sous garantie une pièce qui ressemblait à une
+ * nouvelle commande (DEF-REP-04, D-REP-04).
  */
 export function contexteBon(b: BonImprimable, lignes: readonly LigneDeBase[], e: EmetteurImprimable, masquerPrix = false, ficheClient: FicheClientImprimable | null = null): ContexteImpression {
   return {
     type: "bonCommande",
-    titre: "BON DE COMMANDE",
+    titre: b.bon_commande_parent_id ? "SAV" : "BON DE COMMANDE",
     s: e.s,
     nomSociete: e.nomSociete,
     masquerPrix,

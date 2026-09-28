@@ -13,12 +13,17 @@
  *    centimes pathologiques (tests/parite/impression.essai.ts) ;
  *  - les mentions légales arrivent déjà composées (règle corrigée gardée).
  *
+ * Et trois corrections voulues de RENDU (DEF-REP-04, D-REP-04) : la quantité et
+ * la TVA d'une ligne s'écrivent à la française (« 2,5 », « 5,5 % » — l'ancien
+ * imprimait « 2.5 » et « 5.5% ») ; un avoir s'imprime en négatif (`sens`) ; un
+ * SAV s'intitule « SAV » (`titre`, posé par le module des bons).
+ *
  * La parité est vérifiée en évaluant la source même de l'ancien sur les mêmes
  * données (tests/parite/impression.essai.ts) : une retouche de l'ancien gabarit
  * fait échouer le test au lieu de laisser diverger celui-ci.
  */
 import Big from "big.js";
-import { formatEuros, montant, type Montant } from "@/lib/money";
+import { arrondiCentimes, formatEuros, montant, type Montant } from "@/lib/money";
 import { identifiantsLegaux } from "../domain/identite";
 import { montantLigneHt, soldeAPayer, sousTotauxChapitres, totauxDocument } from "../domain/totaux";
 
@@ -128,6 +133,12 @@ export interface ContexteImpression {
   nomSociete: string;
   /** Mode discret / pré-facture sans prix : « ••• » à la place des montants. */
   masquerPrix?: boolean;
+  /**
+   * -1 pour un avoir : ses montants sont STOCKÉS positifs et l'ancien les imprimait
+   * tels quels sous le titre AVOIR — une pièce qui se lit comme une dette du client
+   * (DEF-REP-04). En négatif, comme à l'écran. Absent : 1.
+   */
+  sens?: 1 | -1;
   lignesRemplacees?: LigneImprimable[] | null;
   /** Devis : `validiteDevis(doc)` (date déjà calculée par `dateEcheance`). */
   validite?: { jours: number; date: string } | null;
@@ -165,6 +176,33 @@ function money(n: number | string | null | undefined): string {
 
 /** Un montant CALCULÉ, arrondi au bord (D-006). */
 const argent = (m: Montant) => formatEuros(m);
+
+type Sens = 1 | -1;
+
+/**
+ * Les montants d'une pièce, dans son sens. Un zéro ne prend jamais de signe :
+ * « -0,00 € » sur un avoir ne dirait rien de plus qu'un zéro.
+ */
+function formateur(hidePrices: boolean, sens: Sens): (m: Montant | number | string | null | undefined) => string {
+  if (hidePrices) return () => "•••";
+  return (m) => {
+    if (m instanceof Big) return argent(sens < 0 && !arrondiCentimes(m).eq(0) ? m.neg() : m);
+    const n = Number(m) || 0;
+    return money(sens < 0 && n !== 0 ? -n : n);
+  };
+}
+
+/** La quantité d'une ligne à la française : « 2,5 », pas « 2.5 » (DEF-REP-04). */
+export function quantiteImprimee(q: number | string | null | undefined): string {
+  const n = typeof q === "number" ? q : q === null || q === undefined || String(q).trim() === "" ? NaN : Number(String(q).replace(",", "."));
+  return Number.isFinite(n) ? String(n).replace(".", ",") : String(q);
+}
+
+/** La TVA d'une ligne comme celle des totaux : « 5,5 % », pas « 5.5% » (DEF-REP-04). */
+export function tvaImprimee(t: number | string | null | undefined): string {
+  const n = typeof t === "number" ? t : t === null || t === undefined || String(t).trim() === "" ? NaN : Number(String(t).replace(",", "."));
+  return Number.isFinite(n) ? formaterTaux(n) : "";
+}
 
 export function fmtDate(d: string | null | undefined): string {
   if (!d) return "—";
@@ -219,8 +257,8 @@ function sousTotalChapitreHTML(total: Montant, fmt: Formateur): string {
   return `<td class="st">Total HT</td><td class="stv">${fmt(total)}</td>`;
 }
 
-export function printableLignesRows(lignes: readonly LigneImprimable[] | null | undefined, hidePrices?: boolean): string {
-  const fmt: Formateur = hidePrices ? () => "•••" : (m) => (m instanceof Big ? argent(m) : money(m));
+export function printableLignesRows(lignes: readonly LigneImprimable[] | null | undefined, hidePrices?: boolean, sens: Sens = 1): string {
+  const fmt: Formateur = formateur(!!hidePrices, sens);
   const sousTotaux = sousTotauxChapitres((lignes ?? []).map(versMontant));
   let html = "";
   let chap = 0;
@@ -235,7 +273,7 @@ export function printableLignesRows(lignes: readonly LigneImprimable[] | null | 
       html += `<tr class="p-comment${cls}"><td colspan="6">${badge}${esc(l.designation)}</td></tr>`;
     } else {
       const sansPrix = !(parseFloat(String(l.prixUnitaire)) > 0) ? " p-sans-prix" : "";
-      html += `<tr class="${(cls + sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${String(l.qte)}</td><td class="unite">${esc(l.unite || "u")}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(montantLigneHt(versMontant(l)))}</td><td class="num">${String(l.tva)}%</td></tr>`;
+      html += `<tr class="${(cls + sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${esc(quantiteImprimee(l.qte))}</td><td class="unite">${esc(l.unite || "u")}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(montantLigneHt(versMontant(l)))}</td><td class="num">${tvaImprimee(l.tva)}</td></tr>`;
     }
   });
   return html;
@@ -324,22 +362,27 @@ export function libelleModePaiement(mode: string | null | undefined): string {
   return LIBELLES_MODE_PAIEMENT[mode ?? ""] ?? "virement";
 }
 
-function blocTotauxHTML(doc: DocImprimable, lignes: readonly LigneImprimable[], fmt: Formateur): string {
+function blocTotauxHTML(doc: DocImprimable, lignes: readonly LigneImprimable[], fmt: Formateur, sens: Sens): string {
   const t = totauxDocument(lignes.map(versMontant), doc.remisePourcentage ?? 0);
+  // Remise, acompte, retenue viennent EN DÉDUCTION : « -12,00 € » sur une facture ; sur un avoir,
+  // dont le total est négatif, la même déduction le ramène vers zéro et s'écrit sans signe.
+  const deduction = (m: Montant) => (sens < 0 ? fmt(m.neg()) : "-" + fmt(m));
+  // La base d'un taux s'affiche même sans les prix, comme dans l'ancien : seul son signe suit la pièce.
+  const baseTva = formateur(false, sens);
   const v = t.ventilation;
   const kv = (l: string, x: string, c?: string) => `<div class="p-kv${c || ""}"><span>${l}</span><em>${x}</em></div>`;
   const solde = soldeAPayer(t.ttc, doc.acomptesDeduits, doc.retenueGarantiePourcentage);
   const unique = v.length === 1 ? v[0] : undefined;
   return (
     (v.length > 1
-      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map((pa) => kv(`TVA ${formaterTaux(pa.taux)} sur ${argent(pa.base)}`, fmt(pa.montant))).join("")}${kv("Total TVA", fmt(t.tva), " somme")}</div>`
+      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map((pa) => kv(`TVA ${formaterTaux(pa.taux)} sur ${baseTva(pa.base)}`, fmt(pa.montant))).join("")}${kv("Total TVA", fmt(t.tva), " somme")}</div>`
       : "") +
     kv("Total HT", fmt(t.htAvant)) +
-    (t.remisePct.gt(0) ? kv(`Remise (${Number(t.remisePct.toString())} %)`, "-" + fmt(t.remiseMontantHT)) : "") +
+    (t.remisePct.gt(0) ? kv(`Remise (${Number(t.remisePct.toString())} %)`, deduction(t.remiseMontantHT)) : "") +
     kv(unique ? `Total TVA ${formaterTaux(unique.taux)}` : "Total TVA", fmt(t.tva)) +
     kv("Total TTC", fmt(t.ttc), " p-ttc") +
-    (solde.acomptes.gt(0) ? kv("Acompte déjà versé", "-" + fmt(solde.acomptes)) : "") +
-    (solde.retenueMontant.gt(0) ? kv(`Retenue de garantie (${formaterTaux(solde.retenuePourcentage)})`, "-" + fmt(solde.retenueMontant)) : "") +
+    (solde.acomptes.gt(0) ? kv("Acompte déjà versé", deduction(solde.acomptes)) : "") +
+    (solde.retenueMontant.gt(0) ? kv(`Retenue de garantie (${formaterTaux(solde.retenuePourcentage)})`, deduction(solde.retenueMontant)) : "") +
     kv("Net à payer", fmt(solde.netAPayer), " p-net")
   );
 }
@@ -417,7 +460,8 @@ export function renderPrintDoc(c: ContexteImpression): string {
   const { type, doc, s } = c;
   const hidePrices = !!c.masquerPrix;
   const lignes = c.lignesRemplacees || doc.lignes || [];
-  const fmt: Formateur = hidePrices ? () => "•••" : (m) => (m instanceof Big ? argent(m) : money(m));
+  const sens: Sens = c.sens ?? 1;
+  const fmt: Formateur = formateur(hidePrices, sens);
   const title = c.titre;
 
   const em: Emetteur = {
@@ -456,11 +500,11 @@ export function renderPrintDoc(c: ContexteImpression): string {
     </div>
     <table class="p-lignes">
       <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
-      ${printableLignesRows(lignes, hidePrices)}
+      ${printableLignesRows(lignes, hidePrices, sens)}
     </table>
     <div class="p-bloc-bas">
       ${blocReglementHTML(type, doc, s, em, hidePrices)}
-      <div class="p-totaux">${blocTotauxHTML(doc, lignes, fmt)}</div>
+      <div class="p-totaux">${blocTotauxHTML(doc, lignes, fmt, sens)}</div>
     </div>
     ${
       type === "facture"
