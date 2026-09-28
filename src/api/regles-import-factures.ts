@@ -59,6 +59,41 @@ const FRAGMENT_MIN = 4;
 /** Ce qui sépare deux mots dans un nom : ce qui peut ouvrir ou fermer un sigle. */
 const BORNE_MOT = /[\s(),.\-\/]/;
 
+/** Les caractères qu'une expression régulière lirait comme des instructions. */
+const A_ECHAPPER = /[.*+?^${}()|[\]\\]/g;
+
+/**
+ * Le motif qui retrouve un sigle quelle que soit son orthographe.
+ *
+ * « SEM4V » et « SEM 4V » sont le même sigle, et les deux s'écrivent : le
+ * logiciel comptable colle, le registre officiel sépare. La coupure se fait
+ * TOUJOURS au passage des lettres aux chiffres — on y tolère donc une espace,
+ * un point ou un tiret, et nulle part ailleurs. « SEMCODA » ne devient pas
+ * « SEM CODA » pour autant : il n'y a pas de transition à y couper.
+ */
+function motifSigle(fragment: string): RegExp {
+  let motif = "";
+  for (let i = 0; i < fragment.length; i++) {
+    const c = fragment[i];
+    if (/[\s.\-]/.test(c)) {
+      // Un séparateur écrit accepte d'être absent en face, ou multiple.
+      motif += "[\\s.\\-]*";
+      continue;
+    }
+    if (i > 0 && transition(fragment[i - 1], c) && !/[\s.\-]$/.test(fragment[i - 1])) {
+      motif += "[\\s.\\-]*";
+    }
+    motif += c.replace(A_ECHAPPER, "\\$&");
+  }
+  return new RegExp(motif, "g");
+}
+
+/** Passe-t-on d'une lettre à un chiffre, ou l'inverse ? */
+function transition(a: string, b: string): boolean {
+  const chiffre = (c: string) => c >= "0" && c <= "9";
+  return chiffre(a) !== chiffre(b);
+}
+
 /**
  * `fragment` apparaît-il dans `nom` en ouvrant ET en fermant un mot ?
  *
@@ -67,14 +102,43 @@ const BORNE_MOT = /[\s(),.\-\/]/;
  * retrouve pas « sem4value ».
  */
 function fragmentAncre(nom: string, fragment: string): boolean {
-  for (let i = nom.indexOf(fragment); i !== -1; i = nom.indexOf(fragment, i + 1)) {
-    const avant = i === 0 ? "" : nom.charAt(i - 1);
-    const apres = nom.charAt(i + fragment.length);
+  if (fragment.length < FRAGMENT_MIN) return false;
+  const motif = motifSigle(fragment);
+  for (let m = motif.exec(nom); m; m = motif.exec(nom)) {
+    const avant = m.index === 0 ? "" : nom.charAt(m.index - 1);
+    const apres = nom.charAt(m.index + m[0].length);
     if ((avant === "" || BORNE_MOT.test(avant)) && (apres === "" || BORNE_MOT.test(apres))) {
       return true;
     }
+    if (m[0].length === 0) motif.lastIndex++;
   }
   return false;
+}
+
+/**
+ * Le nom débarrassé de ses parenthèses.
+ *
+ * Les deux côtés en mettent, et pas les mêmes : le registre officiel répète le
+ * sigle — « … OFFICE PUBLIC DE L'HABITAT (ALPES ISERE HABITAT) » — et l'annuaire
+ * ajoute l'établissement — « ALPES ISERE HABITAT (Siège) ». Le même client
+ * n'avait alors aucun texte commun contigu. Comparés sur leur noyau, les deux
+ * se retrouvent.
+ */
+function noyau(nom: string): string {
+  return nom
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** `court` ouvre-t-il `long`, en s'arrêtant sur une frontière de mot ? */
+function prefixeAncre(long: string, court: string): boolean {
+  return (
+    court.length > 0 &&
+    long.length > court.length &&
+    long.startsWith(court) &&
+    BORNE_MOT.test(long.charAt(court.length))
+  );
 }
 
 /**
@@ -126,29 +190,45 @@ export function rapprocherClient(nom: string, existants: ClientConnu[]): Rapproc
   if (exacts.length === 1) return { type: "exact", client: exacts[0] };
   if (exacts.length > 1) return { type: "ambigu", candidats: exacts };
 
-  /* La frontière de mot évite que « SCI MILLY » n'attrape « SCI MILLYON » :
-     ce qui suit le préfixe doit ouvrir un mot, pas le prolonger. */
-  const prefixes = existants.filter((c) => {
-    const k = cleNom(c.nom);
-    return k.startsWith(cle) && /[\s(,-]/.test(k.charAt(cle.length));
-  });
-  /* Le sigle en fin de nom, ou au milieu. Ancré des deux côtés, et assez long
-     pour distinguer — les deux premières gardes détaillées plus haut. */
-  const fragments =
-    cle.length >= FRAGMENT_MIN
-      ? existants.filter((c) => fragmentAncre(cleNom(c.nom), cle))
-      : [];
+  /* Le préfixe et le sigle, DANS LES DEUX SENS — c'est ce qui manquait.
+     La fiche peut porter le nom long et le fichier le court (« ALPES ISERE
+     HABITAT » pour « ALPES ISERE HABITAT OFFICE PUBLIC… »), mais l'inverse
+     arrive tout autant : l'export comptable écrit la raison sociale ENTIÈRE,
+     suffixe compris — « … (ALPES ISERE HABITAT) (Siège) » — quand la fiche
+     s'arrête avant. Ne regarder que dans un sens déclarait alors « aucune
+     fiche » sur un client qui existait, et l'import en créait un doublon.
+     La frontière de mot évite dans les deux cas que « SCI MILLY » n'attrape
+     « SCI MILLYON » : ce qui suit doit ouvrir un mot, pas le prolonger. */
+  const noyauCle = noyau(cle);
+  const porte = (long: string, court: string) =>
+    prefixeAncre(long, court) || fragmentAncre(long, court);
 
-  /* La troisième garde, et elle compte les deux niveaux ENSEMBLE. Un préfixe
-     et un sigle qui désignent deux fiches différentes — « SEM4V ANNECY » et
-     « REGIE SEM4V » — ne se départagent pas : le préfixe l'emportait en
-     silence, alors que rien ne dit laquelle des deux a émis la pièce. Mieux
-     vaut une fiche créée en trop, visible dans l'aperçu, qu'une facture
-     indestructible attachée au mauvais client. */
-  const candidats = [...new Set([...prefixes, ...fragments])];
+  /* Les fiches qui portent TOUT le nom du fichier, et celles dont le nom n'en
+     est qu'un début. La distinction n'est pas cosmétique : « CDC HABITAT
+     SOCIAL » ouvre « CDC HABITAT SOCIAL SOCIETE ANONYME… » et est ouvert par
+     « CDC HABITAT ». Les deux sont des candidats, mais le premier garde tout ce
+     que le fichier disait quand le second en perd un mot. Une fiche qui retient
+     le nom entier l'emporte donc, et l'ambiguïté ne se pose qu'entre égaux. */
+  const portentTout = existants.filter((c) => {
+    const k = cleNom(c.nom);
+    return porte(k, cle) || porte(noyau(k), noyauCle);
+  });
+  const nEnPortentQueLeDebut = existants.filter((c) => {
+    const k = cleNom(c.nom);
+    return porte(cle, k) || porte(noyauCle, noyau(k));
+  });
+
+  const candidats = portentTout.length ? portentTout : nEnPortentQueLeDebut;
   if (candidats.length > 1) return { type: "ambigu", candidats };
   if (candidats.length === 1) {
-    return prefixes.length === 1
+    /* Une fiche qui ne porte qu'un DÉBUT du nom du fichier se rapproche en
+       perdant un mot : « CDC HABITAT SOCIAL » tomberait sur « CDC HABITAT »,
+       qui est une autre personne morale. On ne refuse pas — la fiche existe
+       peut-être bien — mais on ne l'affirme pas non plus : « probablement »,
+       et l'aperçu demande de vérifier. Seule une fiche qui retient le nom
+       ENTIER s'annonce comme un rapprochement sûr. */
+    if (!portentTout.length) return { type: "contenu", client: candidats[0] };
+    return prefixeAncre(cleNom(candidats[0].nom), cle)
       ? { type: "prefixe", client: candidats[0] }
       : { type: "contenu", client: candidats[0] };
   }
