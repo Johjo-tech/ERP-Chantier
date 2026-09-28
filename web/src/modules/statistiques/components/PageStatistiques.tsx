@@ -3,7 +3,7 @@ import { Chargement, Erreur } from "@/components/etats/Etats";
 import { Icone } from "@/components/ui/icones";
 import { todayISO } from "@/lib/dates";
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { equipesParMois, periodeLabel, PERIODES_STATS, statsParConducteur, totauxStats, type PeriodeStats } from "../domain/ancien/statistiques";
+import { equipesParMois, periodeLabel, PERIODES_STATS, statsParConducteur, totauxStats, type PeriodeStats } from "../domain/statistiques";
 import { useDonneesStatistiques, type DonneesStatistiques } from "../hooks/useStatistiques";
 import { GraphiquesConducteurs, TableauConducteurs } from "./Barres";
 import { StatsEquipes } from "./SectionsStatistiques";
@@ -11,8 +11,9 @@ import { StatsEquipes } from "./SectionsStatistiques";
 /**
  * Statistiques, au HTML et aux calculs de `renderStatistiques` (app.js
  * l. 12168) : en-tête et période, trois tuiles, les graphiques et le tableau
- * par conducteur, puis le chiffre d'affaires par équipe et par mois. Par
- * l'ÉTIQUETTE du conducteur portée par les pièces, comme l'ancien (D-STA-A-01).
+ * par conducteur, puis le chiffre d'affaires par équipe et par mois. Par la
+ * RÉFÉRENCE du conducteur, avec une ligne « Sans conducteur », et sans les
+ * défauts de calcul de l'ancien (D-STA-B-01, DEF-STA-08 à 11, 17, 18).
  */
 export function PageStatistiques() {
   useModeDiscret();

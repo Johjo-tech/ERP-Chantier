@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Modale } from "@/components/ui/modale";
 import { formatDateFr, partiesIso } from "@/lib/dates";
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { revenuPeriode, revenuPlage, type FacturePilotage } from "../domain/ancien/pilotage";
+import type { FactureStats } from "../domain/pieces";
+import { revenuPeriode, revenuPlage } from "../domain/tableau";
 import { moisGlissants, MOIS_GRAPHIQUE, premierDuMois, refusPlage, type PeriodeGraphique } from "../domain/periodes";
 import { GraphiqueCA } from "./GraphiqueCA";
 import { Section } from "./Tuile";
-import { formatEurosEcranAncien } from "./format";
+import { formatMontant } from "./format";
 
 /** Les choix de l'ancien sélecteur, dans son ordre (`.dash-period-select`) : « Depuis janvier » n'y figurait pas. */
 const OPTIONS: readonly [PeriodeGraphique | "custom", string][] = [
@@ -19,11 +20,11 @@ const OPTIONS: readonly [PeriodeGraphique | "custom", string][] = [
 /**
  * « Chiffre d'affaires (HT) » (`.dash-revenue-full`) : 6 ou 12 mois face à
  * N-1, et « Sélectionner les dates » qui ouvre la fenêtre du total sur une
- * plage libre (`revenueCustomModal`). Le chiffre est celui de l'ancien :
- * toutes les factures datées, brouillons et acomptes compris, avoirs en
- * négatif (D-STA-A-01).
+ * plage libre (`revenueCustomModal`). Seules les pièces émises comptent,
+ * hors facture d'acompte, les avoirs en négatif (DEF-STA-01, D-STA-B-01) :
+ * un brouillon ne gonfle plus le total.
  */
-export function BlocChiffreAffaires({ factures, jour }: { factures: readonly FacturePilotage[]; jour: string }) {
+export function BlocChiffreAffaires({ factures, jour }: { factures: readonly FactureStats[]; jour: string }) {
   useModeDiscret();
   const [periode, setPeriode] = useState<PeriodeGraphique>("6m");
   const [plage, setPlage] = useState(false);
@@ -41,7 +42,7 @@ export function BlocChiffreAffaires({ factures, jour }: { factures: readonly Fac
         aDroite={
           <div className="dash-revenue-controls">
             <span className="dash-revenue-total">
-              Total période : <b>{formatEurosEcranAncien(serie.total)}</b>
+              Total période : <b>{formatMontant(serie.total)}</b>
             </span>
             <select
               className="dash-period-select"
@@ -71,7 +72,7 @@ export function BlocChiffreAffaires({ factures, jour }: { factures: readonly Fac
 }
 
 /** `revenueCustomModal` / `computeCustomRevenue` : le total HT entre deux dates, et le nombre de pièces. */
-function PlageLibre({ factures, jour, onFermer }: { factures: readonly FacturePilotage[]; jour: string; onFermer: () => void }) {
+function PlageLibre({ factures, jour, onFermer }: { factures: readonly FactureStats[]; jour: string; onFermer: () => void }) {
   useModeDiscret();
   const [saisie, setSaisie] = useState({ du: premierDuMois(jour), au: jour });
   const [retenue, setRetenue] = useState<{ du: string; au: string } | null>(null);
@@ -108,7 +109,7 @@ function PlageLibre({ factures, jour, onFermer }: { factures: readonly FacturePi
                 Du {formatDateFr(retenue.du)} au {formatDateFr(retenue.au)}
               </span>
             </div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "var(--text)", fontFamily: "'JetBrains Mono',monospace", marginTop: "6px" }}>{formatEurosEcranAncien(total.total)}</div>
+            <div style={{ fontSize: "28px", fontWeight: 800, color: "var(--text)", fontFamily: "'JetBrains Mono',monospace", marginTop: "6px" }}>{formatMontant(total.total)}</div>
             <div className="card-sub" style={{ marginTop: "4px" }}>
               {total.nombre} facture{total.nombre > 1 ? "s" : ""}
             </div>

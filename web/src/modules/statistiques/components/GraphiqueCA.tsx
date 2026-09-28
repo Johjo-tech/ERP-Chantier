@@ -1,8 +1,9 @@
 import { useState, type FocusEvent, type MouseEvent } from "react";
+import { ZERO, type Montant } from "@/lib/money";
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { barresGraphique, legendeGraphique, type RevenuPeriode } from "../domain/ancien/pilotage";
+import { barresGraphique, legendeGraphique, type RevenuPeriode } from "../domain/tableau";
 import type { MoisCalendaire } from "../domain/periodes";
-import { formatEurosEcranAncien } from "./format";
+import { formatMontant } from "./format";
 
 /**
  * Le chiffre d'affaires HT mois par mois, face à l'année précédente — le
@@ -45,7 +46,7 @@ interface Survol {
   left: number;
   top: number;
   libelle: string;
-  montant: number;
+  montant: Montant;
 }
 
 export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: readonly MoisCalendaire[] }) {
@@ -55,7 +56,7 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
   const barres = barresGraphique(serie, mois.map((m) => m.libelleLong));
   const legende = legendeGraphique(serie);
   const decalage = legende.uneSeuleAnnee ? 0 : LEGENDE.decalageNoms;
-  const points = mois.map((m, i) => ({ ...m, ...(barres[i] ?? { courant: 0, precedent: 0, hauteurCourant: 0, hauteurPrecedent: 0, infobulleCourant: "", infobullePrecedent: "" }) }));
+  const points = mois.map((m, i) => ({ ...m, ...(barres[i] ?? { courant: ZERO, precedent: ZERO, hauteurCourant: 0, hauteurPrecedent: 0, infobulleCourant: "", infobullePrecedent: "" }) }));
   const largeurGroupe = (L - 2 * COTE) / points.length;
   const barre = Math.min(LARGEUR_BARRE_MAX, largeurGroupe * PART_BARRE);
   const utile = H - HAUT - BAS;
@@ -89,7 +90,7 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
                     key={b.cle}
                     tabIndex={0}
                     role="button"
-                    aria-label={`${b.libelle} : ${formatEurosEcranAncien(b.m)}`}
+                    aria-label={`${b.libelle} : ${formatMontant(b.m)}`}
                     onFocus={(e) => {
                       const r = e.currentTarget.getBoundingClientRect();
                       montrer(r.left + r.width / 2, r.top, carteDe(e));
@@ -123,7 +124,7 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
         <div id="revenueTooltip" role="status" style={{ display: "block", left: `${survol.left}px`, top: `${survol.top}px` }}>
           <b>{survol.libelle}</b>
           <br />
-          {formatEurosEcranAncien(survol.montant)}
+          {formatMontant(survol.montant)}
         </div>
       )}
       <table className="sr-only">
@@ -139,8 +140,8 @@ export function GraphiqueCA({ serie, mois }: { serie: RevenuPeriode; mois: reado
           {points.map((p) => (
             <tr key={p.cle}>
               <td>{`${p.libelleLong} ${p.annee}`}</td>
-              <td>{formatEurosEcranAncien(p.courant)}</td>
-              <td>{formatEurosEcranAncien(p.precedent)}</td>
+              <td>{formatMontant(p.courant)}</td>
+              <td>{formatMontant(p.precedent)}</td>
             </tr>
           ))}
         </tbody>

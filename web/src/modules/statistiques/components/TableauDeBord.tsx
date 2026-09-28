@@ -9,7 +9,7 @@ export function TableauDeBord() {
   const { etat, roleEffectif } = useSession();
   const nom = etat.statut === "connecte" ? etat.session.utilisateur.nom : "";
   const genre = genreDuTableau(roleEffectif);
-  if (genre === "sous_traitant") return <TableauSousTraitant />;
+  if (genre === "sous_traitant") return <TableauSousTraitant nom={nom} />;
   if (genre === "technicien") return <TableauTerrain nom={nom} />;
   if (genre === "conducteur") return <TableauConducteur nom={nom} />;
   return <TableauPilotage nom={nom} />;

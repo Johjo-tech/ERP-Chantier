@@ -1,14 +1,14 @@
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { repartitionCA, retardParConducteur, type StatConducteurAncien } from "../domain/ancien/statistiques";
-import { formatEurosEcranAncien } from "./format";
+import { repartitionCA, retardParConducteur, type StatConducteur } from "../domain/statistiques";
+import { formatMontant } from "./format";
 
 /** `STATS_PALETTE` de l'ancien écran : une couleur par conducteur, dans l'ordre du chiffre d'affaires. */
 const PALETTE = ["#FF6A1A", "#2E9BF0", "#5BC97A", "#F0A82E", "#9B6EF0", "#EF5A6F", "#2EC4C4", "#8C8C8C"] as const;
 const VERT = "#5BC97A";
 const ROUGE = "#EF5A6F";
 
-/** `renderStatsCARepartitionHTML` (app.js l. 12241) : sans chiffre d'affaires au total, le message vide. */
-function BarresRepartition({ stats }: { stats: readonly StatConducteurAncien[] }) {
+/** `renderStatsCARepartitionHTML` (app.js l. 12241) : les seuls chiffres d'affaires positifs se répartissent (DEF-STA-17) ; aucun, le message vide. */
+function BarresRepartition({ stats }: { stats: readonly StatConducteur[] }) {
   useModeDiscret();
   const lignes = repartitionCA(stats);
   if (!lignes) return <div className="empty">Aucun chiffre d&apos;affaires facturé pour l&apos;instant.</div>;
@@ -17,7 +17,7 @@ function BarresRepartition({ stats }: { stats: readonly StatConducteurAncien[] }
       {lignes.map(({ stat, part }, i) => {
         const couleur = PALETTE[i % PALETTE.length];
         return (
-          <div key={stat.nom} className="stats-bar-row">
+          <div key={stat.cle} className="stats-bar-row">
             <div className="stats-bar-label">
               <span className="stats-bar-dot" style={{ background: couleur }} />
               {stat.nom}
@@ -26,7 +26,7 @@ function BarresRepartition({ stats }: { stats: readonly StatConducteurAncien[] }
               <div className="stats-bar-fill" style={{ width: `${part}%`, background: couleur }} />
             </div>
             <div className="stats-bar-value">
-              {formatEurosEcranAncien(stat.ca)} <span className="card-sub">({part}%)</span>
+              {formatMontant(stat.ca)} <span className="card-sub">({part}%)</span>
             </div>
           </div>
         );
@@ -35,15 +35,15 @@ function BarresRepartition({ stats }: { stats: readonly StatConducteurAncien[] }
   );
 }
 
-/** `renderStatsRetardHTML` (app.js l. 12255). */
-function BarresRetard({ stats }: { stats: readonly StatConducteurAncien[] }) {
+/** `renderStatsRetardHTML` (app.js l. 12255) : un conducteur sans bon a une barre vide, plus une barre rouge pleine (DEF-STA-10). */
+function BarresRetard({ stats }: { stats: readonly StatConducteur[] }) {
   useModeDiscret();
   const lignes = retardParConducteur(stats);
   if (!lignes) return <div className="empty">Aucun bon de commande pour l&apos;instant.</div>;
   return (
     <>
       {lignes.map(({ stat, pctOk, pctRetard }) => (
-        <div key={stat.nom} className="stats-bar-row">
+        <div key={stat.cle} className="stats-bar-row">
           <div className="stats-bar-label">{stat.nom}</div>
           <div className="stats-bar-track stats-bar-track-split">
             {pctOk > 0 && <div className="stats-bar-seg" style={{ width: `${pctOk}%`, background: VERT }} title={`${stat.bcDansLesTemps} dans les temps`} />}
@@ -80,7 +80,7 @@ function MiniBarre({ libelle, taux, couleur }: { libelle: string; taux: number; 
 }
 
 /** Les trois cartes de `.stats-charts-grid` (app.js l. 12205). */
-export function GraphiquesConducteurs({ stats }: { stats: readonly StatConducteurAncien[] }) {
+export function GraphiquesConducteurs({ stats }: { stats: readonly StatConducteur[] }) {
   useModeDiscret();
   return (
     <div className="stats-charts-grid">
@@ -103,7 +103,7 @@ export function GraphiquesConducteurs({ stats }: { stats: readonly StatConducteu
             <div className="empty">Aucune donnée pour l&apos;instant.</div>
           ) : (
             stats.map((s) => (
-              <div key={s.nom} className="stats-taux-bloc">
+              <div key={s.cle} className="stats-taux-bloc">
                 <div className="stats-bar-label" style={{ marginBottom: "8px" }}>
                   {s.nom}
                 </div>
@@ -120,7 +120,7 @@ export function GraphiquesConducteurs({ stats }: { stats: readonly StatConducteu
 }
 
 /** Le tableau par conducteur (app.js l. 12219), mêmes neuf colonnes. */
-export function TableauConducteurs({ stats }: { stats: readonly StatConducteurAncien[] }) {
+export function TableauConducteurs({ stats }: { stats: readonly StatConducteur[] }) {
   useModeDiscret();
   return (
     <div className="stats-table-wrap">
@@ -140,11 +140,11 @@ export function TableauConducteurs({ stats }: { stats: readonly StatConducteurAn
         </thead>
         <tbody>
           {stats.map((s) => (
-            <tr key={s.nom}>
+            <tr key={s.cle}>
               <td>
                 <strong>{s.nom}</strong>
               </td>
-              <td className="stats-num">{formatEurosEcranAncien(s.ca)}</td>
+              <td className="stats-num">{formatMontant(s.ca)}</td>
               <td className="stats-num">{s.bcTotal}</td>
               <td className="stats-num">
                 <span className="badge success">{s.tauxDansLesTemps}%</span> <span className="card-sub">({s.bcDansLesTemps})</span>
@@ -162,7 +162,7 @@ export function TableauConducteurs({ stats }: { stats: readonly StatConducteurAn
               <td className="stats-num">
                 {s.tauxTravSup}% <span className="card-sub">({s.nbTravSup})</span>
                 <br />
-                <span className="card-sub">{formatEurosEcranAncien(s.montantTravSup)}</span>
+                <span className="card-sub">{formatMontant(s.montantTravSup)}</span>
               </td>
             </tr>
           ))}

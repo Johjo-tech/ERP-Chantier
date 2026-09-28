@@ -1,20 +1,20 @@
 import { jourIso } from "@/lib/dates";
 import type { RoleMembre } from "@/modules/auth-roles/domain/permissions";
-import type { Activite } from "./ancien/pilotage";
+import type { Activite } from "./tableau";
 
 /**
  * Ce qui entoure les chiffres des tableaux de bord : quel tableau pour quel
  * rôle, où mène chaque tuile, le temps relatif. Les chiffres eux-mêmes sont
- * calculés dans `ancien/`, comme l'ancien écran (D-STA-A-01).
+ * calculés dans `tableau.ts` et `statistiques.ts` (D-STA-B-01).
  */
 
 export type GenreTableau = "technicien" | "sous_traitant" | "conducteur" | "pilotage";
 
 /**
- * Un tableau de bord par métier (`renderDashboard`) : le sous-traitant a le
- * sien (factures prêtes, devis, impayés), le technicien sa journée, le
- * conducteur ses affaires ; le pilotage reste celui de l'administrateur, de
- * la secrétaire et de la lecture seule.
+ * Un tableau de bord par métier (`renderDashboard`) : le technicien et le
+ * sous-traitant leur journée — chacun salué et reconnu par son compte
+ * (DEF-STA-14, DEF-STA-19) —, le conducteur ses affaires ; le pilotage reste
+ * celui de l'administrateur, de la secrétaire et de la lecture seule.
  */
 export function genreDuTableau(role: RoleMembre | null): GenreTableau {
   if (role === "sous_traitant") return "sous_traitant";

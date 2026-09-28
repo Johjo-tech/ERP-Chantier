@@ -5,7 +5,7 @@ import { Icone } from "@/components/ui/icones";
 import { todayISO } from "@/lib/dates";
 import { useModeDiscret } from "@/lib/modeDiscret";
 import { Can } from "@/modules/auth-roles/components/Can";
-import { aTraiterPilotage, resumeDuMois, totalATraiterPilotage, tuilesPilotage, type ATraiterPilotage, type ResumeMois, type TuilesPilotage } from "../domain/ancien/pilotage";
+import { aTraiterPilotage, resumeDuMois, totalATraiterPilotage, tuilesPilotage, type ATraiterPilotage, type ResumeMois, type TuilesPilotage } from "../domain/tableau";
 import { moisGlissants, MOIS_RESUME } from "../domain/periodes";
 import { DESTINATIONS } from "../domain/pilotage";
 import { useDonneesPilotage, type DonneesPilotage } from "../hooks/useStatistiques";
@@ -14,14 +14,15 @@ import { ActiviteRecente, TopClients } from "./ListesPilotage";
 import { BlocChiffreAffaires } from "./BlocChiffreAffaires";
 import { RechercheGlobale, ResultatsRecherche } from "./RechercheGlobale";
 import { EnTeteTableau, LigneATraiter, Section, Tuile } from "./Tuile";
-import { dateDuJourEnLettres, formatEurosEcranAncien, salutation } from "./format";
+import { dateDuJourEnLettres, formatMontant, salutation } from "./format";
 
 /**
  * Le pilotage — administrateur, secrétaire, lecture (`renderDashboard`, app.js
  * l. 2051), au HTML près le sien : la recherche, la salutation, les actions
  * rapides (téléphone seulement), les quatre tuiles, « À traiter », le chiffre
  * d'affaires, puis l'activité, le classement et le résumé du mois. Chaque
- * chiffre est calculé comme l'ancien, défauts compris (D-STA-A-01).
+ * chiffre suit la forme de l'ancien, sans ses défauts (D-STA-B-01) : encaissé
+ * = règlements du mois, restant dû et retards sur le solde de la base.
  */
 export function TableauPilotage({ nom }: { nom: string }) {
   useModeDiscret();
@@ -52,12 +53,12 @@ function Contenu() {
 
 function Pilotage({ d, jour }: { d: DonneesPilotage; jour: string }) {
   useModeDiscret();
-  const resume = resumeDuMois(d.factures, d.devis, d.reglements, jour, moisSurSixMois(jour));
-  const traiter = aTraiterPilotage(d.bons, d.factures, jour);
+  const resume = resumeDuMois(d.factures, d.devis, d.reglements, d.soldes, jour, moisSurSixMois(jour));
+  const traiter = aTraiterPilotage(d.bons, d.factures, d.soldes, jour);
   return (
     <>
       <ActionsRapides />
-      <Tuiles t={tuilesPilotage(d.factures, d.devis)} r={resume} a={traiter} />
+      <Tuiles t={tuilesPilotage(d.devis, d.soldes)} r={resume} a={traiter} />
       <div className="dash-workrow">
         <div className="dash-workcol-main">
           <ATraiter t={traiter} />
@@ -108,25 +109,29 @@ function ActionsRapides() {
   );
 }
 
-/** Les quatre tuiles de l'ancien, libellés compris (« CA encaissé ce mois (HT) »). */
+/**
+ * Les quatre tuiles de l'ancien. La première dit désormais ce qui est ENTRÉ
+ * en caisse — les règlements datés du mois, en TTC — et non plus le HT des
+ * factures au statut « payée » datées du mois (DEF-STA-02) : son libellé le dit.
+ */
 function Tuiles({ t, r, a }: { t: TuilesPilotage; r: ResumeMois; a: ATraiterPilotage }) {
   useModeDiscret();
   return (
     <div className="grid-stats grid-stats-4">
       <Tuile
-        libelle="CA encaissé ce mois (HT)"
-        valeur={formatEurosEcranAncien(r.caMois)}
-        sous={<ComparaisonN1 courant={r.caMois} precedent={r.caMoisN1} anneePrecedente={r.annee - 1} />}
+        libelle="Encaissé ce mois (TTC)"
+        valeur={formatMontant(r.encaisseMois)}
+        sous={<ComparaisonN1 courant={r.encaisseMois} precedent={r.encaisseMoisN1} anneePrecedente={r.annee - 1} />}
         argent
         ton="succes"
         icone="factures"
         couleurIcone="success"
         vers={DESTINATIONS.caEncaisse}
-        titre="Voir les factures réglées ce mois"
+        titre="Voir les règlements"
       />
-      <Tuile libelle="Devis en attente" valeur={t.devisEnAttente} sous={`${formatEurosEcranAncien(t.devisEnAttenteMontant)} HT`} icone="devis" couleurIcone="info" vers={DESTINATIONS.devisEnAttente} titre="Voir les devis en attente de réponse" />
-      <Tuile libelle="Factures impayées" valeur={t.impayees} sous={`${formatEurosEcranAncien(r.impayeesMontant)} restant dû`} ton={t.impayees ? "danger" : "neutre"} icone="factures" couleurIcone="danger" vers={DESTINATIONS.impayees} titre="Voir les factures impayées" />
-      <Tuile libelle="À facturer" valeur={a.aFacturer} sous={`${formatEurosEcranAncien(a.aFacturerMontant)} HT`} ton={a.aFacturer ? "alerte" : "neutre"} icone="bonsCommande" couleurIcone="accent" vers={DESTINATIONS.aFacturer} titre="Voir les bons de commande à facturer" />
+      <Tuile libelle="Devis en attente" valeur={t.devisEnAttente} sous={`${formatMontant(t.devisEnAttenteMontant)} HT`} icone="devis" couleurIcone="info" vers={DESTINATIONS.devisEnAttente} titre="Voir les devis en attente de réponse" />
+      <Tuile libelle="Factures impayées" valeur={t.impayees} sous={`${formatMontant(r.impayeesMontant)} restant dû`} ton={t.impayees ? "danger" : "neutre"} icone="factures" couleurIcone="danger" vers={DESTINATIONS.impayees} titre="Voir les factures impayées" />
+      <Tuile libelle="À facturer" valeur={a.aFacturer} sous={`${formatMontant(a.aFacturerMontant)} HT`} ton={a.aFacturer ? "alerte" : "neutre"} icone="bonsCommande" couleurIcone="accent" vers={DESTINATIONS.aFacturer} titre="Voir les bons de commande à facturer" />
     </div>
   );
 }
@@ -160,12 +165,12 @@ function ResumeDuMois({ r }: { r: ResumeMois }) {
     <div className="dash-col">
       <Section titre="Résumé du mois">
         <div className="card">
-          <Jauge libelle="Chiffre d'affaires encaissé (HT)" valeur={formatEurosEcranAncien(r.caMois)} largeur={r.caMoisPct} vers={DESTINATIONS.caEncaisse} titre="Voir les factures réglées ce mois" couleur="var(--success)" premiere />
+          <Jauge libelle="Encaissé ce mois (TTC)" valeur={formatMontant(r.encaisseMois)} largeur={r.encaisseMoisPct} vers={DESTINATIONS.caEncaisse} titre="Voir les règlements" couleur="var(--success)" premiere />
           <Jauge libelle="Taux de conversion devis" valeur={`${r.tauxConversion}%`} largeur={r.tauxConversion} vers={DESTINATIONS.devisEnAttente} titre="Voir les devis" couleur="var(--info)" />
           <Jauge libelle="Taux d'encaissement" valeur={`${r.tauxEncaisse}%`} largeur={r.tauxEncaisse} vers={DESTINATIONS.reglements} titre="Voir les règlements" couleur="var(--accent)" />
           <div className="summary-row" style={{ marginTop: "16px" }}>
             <span>Facturé {r.annee} (HT)</span>
-            <b>{formatEurosEcranAncien(r.cumulAnnee)}</b>
+            <b>{formatMontant(r.cumulAnnee)}</b>
           </div>
           <div className="card-sub">
             <ComparaisonN1 courant={r.cumulAnnee} precedent={r.cumulAnneeN1} anneePrecedente={r.annee - 1} />

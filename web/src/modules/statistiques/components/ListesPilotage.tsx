@@ -3,12 +3,13 @@ import { Link } from "react-router";
 import { Icone, type NomIcone } from "@/components/ui/icones";
 import { formatDateFr } from "@/lib/dates";
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { activiteRecente, topClients, type FacturePilotage, type NatureActivite } from "../domain/ancien/pilotage";
+import type { FactureStats } from "../domain/pieces";
+import { activiteRecente, topClients, type NatureActivite } from "../domain/tableau";
 import { lienActivite, lienClient, tempsRelatif } from "../domain/pilotage";
 import type { DonneesPilotage } from "../hooks/useStatistiques";
 import { ComparaisonN1 } from "./ComparaisonN1";
 import { Section } from "./Tuile";
-import { formatEurosEcranAncien } from "./format";
+import { formatMontant } from "./format";
 
 /** Le pictogramme et sa pastille par nature (`buildActivityFeed` : devis vert, facture bleue — un avoir orangé —, rapport orangé, paiement vert). */
 const APPARENCE: Record<NatureActivite, { icone: NomIcone; couleur: "success" | "info" | "warn" }> = {
@@ -52,7 +53,7 @@ export function ActiviteRecente({ d }: { d: DonneesPilotage }) {
                   <div className="activity-sub">{a.sous}</div>
                 </div>
                 <div className="activity-right">
-                  {a.montant !== null && <div className="activity-amount">{formatEurosEcranAncien(a.montant)}</div>}
+                  {a.montant !== null && <div className="activity-amount">{formatMontant(a.montant)}</div>}
                   <div className="activity-time">{tempsRelatif(a.quand, maintenant, formatDateFr)}</div>
                 </div>
               </LigneActivite>
@@ -66,9 +67,10 @@ export function ActiviteRecente({ d }: { d: DonneesPilotage }) {
 
 /**
  * Les cinq premiers clients par chiffre d'affaires HT de l'exercice, par le
- * nom porté sur la pièce, avec le rappel N-1 (`computeTopClients`, 0f6f60d).
+ * la fiche client (le nom écrit sur la pièce à défaut, DEF-STA-07), avec le
+ * rappel N-1 (`computeTopClients`, 0f6f60d).
  */
-export function TopClients({ factures, annee }: { factures: readonly FacturePilotage[]; annee: number }) {
+export function TopClients({ factures, annee }: { factures: readonly FactureStats[]; annee: number }) {
   useModeDiscret();
   const lignes = topClients(factures, annee);
   return (
@@ -79,7 +81,7 @@ export function TopClients({ factures, annee }: { factures: readonly FacturePilo
             <div className="empty">Aucune facture sur {annee}.</div>
           ) : (
             lignes.map((c, i) => (
-              <Link key={`${i}-${c.client}`} to={lienClient(c.client)} title={`Ouvrir le dossier de règlements de ${c.client}`} className="topclient-row cliquable">
+              <Link key={`${i}-${c.client}`} to={lienClient(c.nomSurLesPieces)} title={`Ouvrir le dossier de règlements de ${c.client}`} className="topclient-row cliquable">
                 <span className="topclient-rank">{i + 1}</span>
                 <div className="topclient-mid">
                   <div className="topclient-name">{c.client}</div>
@@ -90,7 +92,7 @@ export function TopClients({ factures, annee }: { factures: readonly FacturePilo
                     <div className="progress-fill" style={{ width: `${c.largeur}%`, background: "var(--accent)" }} />
                   </div>
                 </div>
-                <div className="topclient-amount">{formatEurosEcranAncien(c.total)}</div>
+                <div className="topclient-amount">{formatMontant(c.total)}</div>
               </Link>
             ))
           )}

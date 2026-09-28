@@ -118,8 +118,13 @@ const SEUILS_MODULES: Record<string, Partial<Record<Taille, Seuils>>> = {
   // Repris : le groupe « Accès » du rail (D-ECR-PAR-08) et la carte des jours fériés (D-ECR-PAR-10).
   reglages: { bureau: { pixels: 0.001, texte: 10 } },
   rh: { bureau: { pixels: 0.001, texte: 0 } },
-  // Repris (D-ECR-PAR-13), calculs de l'ancien défauts compris (D-STA-A-01) : plus d'écart décidé.
-  statistiques: { bureau: { pixels: 0.001, texte: 0 } },
+  // Repris (D-ECR-PAR-13). Écart ATTENDU depuis D-STA-B-01 (défauts corrigés) : une ligne par
+  // référence de conducteur, « Sans conducteur » en plus, les graphies d'une même fiche réunies
+  // (DEF-STA-08) ; chiffre d'affaires sans brouillon ni acompte (DEF-STA-01) ; retard sur les seuls
+  // bons ouverts (DEF-STA-09), barre vide sans bon (DEF-STA-10), travaux supplémentaires réels
+  // (DEF-STA-11), parts sans négatif (DEF-STA-17), bons par date de commande (DEF-STA-18). Chaque
+  // ligne du tableau (9 cellules) et des trois graphiques peut changer : plafond, pas cible.
+  statistiques: { bureau: { pixels: 0.03, texte: 60 } },
   vehicules: { bureau: { pixels: 0.001, texte: 0 } },
 };
 
@@ -127,13 +132,22 @@ const TEMPS_RELATIF = [".activity-time"] as const;
 
 /**
  * Le tableau de bord de pilotage : seul ce qui change d'une seconde à l'autre
- * est masqué ; tuiles, classement et résumé se calculent comme l'ancien
- * (D-STA-A-01) et se comparent.
+ * est masqué ; le reste se compare.
  */
 const PILOTAGE = [...TEMPS_RELATIF] as const;
 
-/** Plus d'écart décidé sur le pilotage : les chiffres sont ceux de l'ancien (D-STA-A-01). */
-const ECART_DECIDE_PILOTAGE = 0;
+/**
+ * Écart ATTENDU sur le pilotage depuis D-STA-B-01 (défauts corrigés), en lignes de texte (manquantes +
+ * ajoutées) : la tuile « Encaissé ce mois (TTC) » remplace « CA encaissé ce mois (HT) », avec sa valeur
+ * et son rappel N-1, et la ligne du résumé (DEF-STA-02, ~8) ; restant dû, nombre d'impayées, taux
+ * d'encaissement sur le solde de la base (DEF-STA-03, 04, ~6) ; rappels et échues de « À traiter »
+ * (DEF-STA-04, 05, ~4) ; « Total période » et « Facturé AAAA » sans brouillon ni acompte (DEF-STA-01,
+ * ~6) ; les cinq lignes du classement par fiche client (DEF-STA-07, nom, rappel N-1, montant : ~30) ;
+ * les six lignes du fil sans « · null » ni lettrage (DEF-STA-06, libellé, sous-titre, montant : ~36).
+ * Un plafond qui couvre le jeu d'essai, pas une cible ; les pixels suivent (largeur des montants).
+ */
+const ECART_DECIDE_PILOTAGE = 90;
+const PIXELS_DECIDES_PILOTAGE = 0.03;
 
 export const ECRANS: readonly Ecran[] = [
   // ── Le cadre ─────────────────────────────────────────────────────────────
@@ -159,7 +173,7 @@ export const ECRANS: readonly Ecran[] = [
     compte: "admin",
     ancien: { chemin: "/", gestes: ouvrirMenu },
     nouveau: { chemin: "/", gestes: ouvrirMenu },
-    seuils: { bureau: { pixels: 0.002, texte: ECART_DECIDE_PILOTAGE } },
+    seuils: { bureau: { pixels: PIXELS_DECIDES_PILOTAGE, texte: ECART_DECIDE_PILOTAGE } },
     masques: PILOTAGE,
   },
   {
@@ -175,7 +189,7 @@ export const ECRANS: readonly Ecran[] = [
       gestes: cliquer(".planning-menu-toggle", "#sidebar .user-menu-btn"),
     },
     // « Mon compte » : ouvert à tous les rôles depuis ce menu (AUTH-17, D-SOC-06), 1 ligne de plus.
-    seuils: { bureau: { pixels: 0.008, texte: ECART_DECIDE_PILOTAGE + 2 } },
+    seuils: { bureau: { pixels: PIXELS_DECIDES_PILOTAGE + 0.006, texte: ECART_DECIDE_PILOTAGE + 2 } },
     // La version construite diffère forcément : deux constructions, deux commits.
     masques: [...PILOTAGE, ".user-menu-version"],
   },
@@ -185,7 +199,7 @@ export const ECRANS: readonly Ecran[] = [
     compte: "admin",
     ancien: { chemin: "/", gestes: cliquer("#deskTopStrip .societe-btn") },
     nouveau: { chemin: "/", gestes: cliquer("#deskTopStrip .societe-btn") },
-    seuils: { bureau: { pixels: 0.002, texte: ECART_DECIDE_PILOTAGE } },
+    seuils: { bureau: { pixels: PIXELS_DECIDES_PILOTAGE, texte: ECART_DECIDE_PILOTAGE } },
     masques: PILOTAGE,
   },
   {
@@ -194,7 +208,7 @@ export const ECRANS: readonly Ecran[] = [
     compte: "admin",
     ancien: { chemin: "/", gestes: cliquer("#deskTopStrip .notif-bell-btn") },
     nouveau: { chemin: "/", gestes: cliquer("#deskTopStrip .notif-bell-btn") },
-    seuils: { bureau: { pixels: 0.002, texte: ECART_DECIDE_PILOTAGE } },
+    seuils: { bureau: { pixels: PIXELS_DECIDES_PILOTAGE, texte: ECART_DECIDE_PILOTAGE } },
     masques: PILOTAGE,
   },
   {
@@ -213,8 +227,8 @@ export const ECRANS: readonly Ecran[] = [
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
     seuils: {
-      bureau: { pixels: 0.002, texte: ECART_DECIDE_PILOTAGE },
-      mobile: { pixels: 0.004, texte: ECART_DECIDE_PILOTAGE },
+      bureau: { pixels: PIXELS_DECIDES_PILOTAGE, texte: ECART_DECIDE_PILOTAGE },
+      mobile: { pixels: PIXELS_DECIDES_PILOTAGE + 0.002, texte: ECART_DECIDE_PILOTAGE },
     },
     masques: PILOTAGE,
   },
@@ -224,7 +238,9 @@ export const ECRANS: readonly Ecran[] = [
     compte: "conducteur",
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
-    seuils: partout(0.001, 0),
+    // Écart ATTENDU (D-STA-B-01, DEF-STA-12) : un bon à trois tentatives sans rendez-vous s'annonce
+    // « injoignable » — tuile « À traiter » et sa ligne, au plus quelques lignes.
+    seuils: partout(0.01, 6),
   },
   {
     id: "tableau-de-bord-terrain",
@@ -232,8 +248,10 @@ export const ECRANS: readonly Ecran[] = [
     compte: "technicien",
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
-    // Le compte d'essai n'a pas d'équipe : les deux montrent alors tout (D-VIS-09).
-    seuils: partout(0.001, 0),
+    // Le compte d'essai n'a pas d'équipe : les deux montrent alors tout (D-VIS-09). Écart ATTENDU
+    // (D-STA-B-01, DEF-STA-13) : les interventions se comptent en cartes du planning, journées
+    // supplémentaires comprises — les quatre tuiles et la liste du jour peuvent changer.
+    seuils: partout(0.02, 12),
   },
   {
     id: "tableau-de-bord-sous-traitant",
@@ -241,8 +259,10 @@ export const ECRANS: readonly Ecran[] = [
     compte: "soustraitant",
     ancien: { chemin: "/" },
     nouveau: { chemin: "/" },
-    // Son tableau à trois tuiles, bandeau compris (D-STA-A-01, DEF-STA-14, DEF-STA-19).
-    seuils: partout(0.001, 0),
+    // Écart ATTENDU (D-STA-B-01) : reconnu par son compte, salué au nom de son entreprise, sans le
+    // bandeau « Réglages » (DEF-STA-19) ; sa journée — quatre tuiles et « Aujourd'hui » — remplace
+    // les trois tuiles de factures et de devis de sous-traitant (DEF-STA-14). Écran refait.
+    seuils: partout(0.2, 20),
   },
   // ── Bons de commande et pièces (vague « écrans identiques », D-ECR-BC) ──
   ...ecransCommandes(),

@@ -2,9 +2,11 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useSession, useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import type { BonDeLaListe } from "@/modules/commandes/api/bons";
 import { useBons } from "@/modules/commandes/hooks/useBons";
-import type { BonPilotage, DevisPilotage, FacturePilotage, RapportPilotage, ReglementPilotage } from "../domain/ancien/pilotage";
-import type { BonStats, EquipeStats } from "../domain/ancien/statistiques";
-import { lireBons, lireConducteurs, lireDevis, lireEquipes, lireFactures, lireRapports, lireReglements } from "../api/collections";
+import { useSoldes } from "@/modules/facturation/hooks/useFactures";
+import type { DevisStats, FactureStats, RapportStats, ReglementStats, SoldeStats } from "../domain/pieces";
+import type { BonStats, EquipeStats, FicheConducteur, TacheStats, TravailStats } from "../domain/statistiques";
+import type { BonPilotage } from "../domain/tableau";
+import { lireBons, lireConducteurs, lireDevis, lireEquipes, lireFactures, lireRapports, lireReglements, lireTaches, lireTravaux } from "../api/collections";
 import { bonsDuConducteur, maFicheConducteur } from "../api/conducteur";
 
 /**
@@ -22,6 +24,8 @@ export const clesStatistiques = {
   bons: (s: string) => ["statistiques", s, "bons"] as const,
   conducteurs: (s: string) => ["statistiques", s, "conducteurs"] as const,
   equipes: (s: string) => ["statistiques", s, "equipes"] as const,
+  taches: (s: string) => ["statistiques", s, "taches"] as const,
+  travaux: (s: string) => ["statistiques", s, "travaux"] as const,
   maFiche: (s: string, u: string) => ["statistiques", s, "ma-fiche", u] as const,
   bonsConducteur: (s: string, c: string | null) => ["statistiques", s, "bons-conducteur", c] as const,
 };
@@ -59,6 +63,16 @@ export function useConducteursStats() {
 export function useEquipesStats() {
   const s = useSocieteActive();
   return useQuery({ queryKey: clesStatistiques.equipes(s.id), queryFn: () => lireEquipes(s.id), staleTime: FRAICHEUR_MS });
+}
+
+export function useTachesStats() {
+  const s = useSocieteActive();
+  return useQuery({ queryKey: clesStatistiques.taches(s.id), queryFn: () => lireTaches(s.id), staleTime: FRAICHEUR_MS });
+}
+
+export function useTravauxStats() {
+  const s = useSocieteActive();
+  return useQuery({ queryKey: clesStatistiques.travaux(s.id), queryFn: () => lireTravaux(s.id), staleTime: FRAICHEUR_MS });
 }
 
 /** La fiche conducteur du compte connecté, puis ses affaires (toutes celles de la société sans fiche). */
@@ -100,49 +114,59 @@ function bonPilotage(b: BonDeLaListe): BonPilotage {
 }
 
 export interface DonneesPilotage {
-  factures: FacturePilotage[];
-  devis: DevisPilotage[];
-  reglements: ReglementPilotage[];
-  rapports: RapportPilotage[];
+  factures: FactureStats[];
+  devis: DevisStats[];
+  reglements: ReglementStats[];
+  rapports: RapportStats[];
   bons: BonPilotage[];
+  /** Le solde de chaque pièce, calculé par la base : le même cache que l'écran des factures. */
+  soldes: SoldeStats[];
 }
 
-/** Tout ce que lisait `renderDashboard` : factures, devis, règlements, rapports et bons de la société. */
+/** Ce que lit le pilotage : pièces, règlements, rapports, bons, et le solde de la base. */
 export function useDonneesPilotage() {
   const factures = useFacturesStats();
   const devis = useDevisStats();
   const reglements = useReglementsStats();
   const rapports = useRapportsStats();
   const bons = useBons();
-  return ensemble<DonneesPilotage>([factures, devis, reglements, rapports, bons], () => ({
+  const soldes = useSoldes();
+  return ensemble<DonneesPilotage>([factures, devis, reglements, rapports, bons, soldes], () => ({
     factures: factures.data ?? [],
     devis: devis.data ?? [],
     reglements: reglements.data ?? [],
     rapports: rapports.data ?? [],
     bons: (bons.data ?? []).map(bonPilotage),
+    soldes: soldes.data ?? [],
   }));
 }
 
 export interface DonneesStatistiques {
-  factures: FacturePilotage[];
-  devis: DevisPilotage[];
+  factures: FactureStats[];
+  devis: DevisStats[];
   bons: BonStats[];
-  conducteurs: string[];
+  conducteurs: FicheConducteur[];
   equipes: EquipeStats[];
+  taches: TacheStats[];
+  travaux: TravailStats[];
 }
 
-/** Tout ce que lisait `renderStatistiques`. */
+/** Ce que lit l'écran Statistiques. */
 export function useDonneesStatistiques() {
   const factures = useFacturesStats();
   const devis = useDevisStats();
   const bons = useBonsStats();
   const conducteurs = useConducteursStats();
   const equipes = useEquipesStats();
-  return ensemble<DonneesStatistiques>([factures, devis, bons, conducteurs, equipes], () => ({
+  const taches = useTachesStats();
+  const travaux = useTravauxStats();
+  return ensemble<DonneesStatistiques>([factures, devis, bons, conducteurs, equipes, taches, travaux], () => ({
     factures: factures.data ?? [],
     devis: devis.data ?? [],
     bons: bons.data ?? [],
     conducteurs: conducteurs.data ?? [],
     equipes: equipes.data ?? [],
+    taches: taches.data ?? [],
+    travaux: travaux.data ?? [],
   }));
 }

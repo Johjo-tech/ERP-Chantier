@@ -1,16 +1,22 @@
 /**
- * Parité des tableaux de bord et des statistiques, contre la SOURCE de
- * `app.js` évaluée telle quelle (D-045), avec les modules de règles
- * historiques (`regles-totaux`, `regles-avoir`, `regles-reglements`,
- * `regles-import-factures`) posés sur `window` comme le fait le pont.
+ * Tableaux de bord et statistiques contre la SOURCE de `app.js` évaluée
+ * telle quelle (D-045), avec les modules de règles historiques posés sur
+ * `window` comme le fait le pont.
  *
- * Décision du client (D-STA-A-01) : les chiffres doivent être IDENTIQUES à
- * l'ancien, défauts compris. Les montants sont donc comparés au flottant près
- * (`toBe`, pas `toBeCloseTo`) et les tirages visent exprès les cas où l'ancien
- * « se trompe » : brouillons, acomptes, avoirs, factures partiellement
- * réglées, pièces reprises, bons facturés en retard, étiquettes de conducteur
- * différentes, lettrages d'avoir, prix à trois décimales. Chaque défaut de
- * docs/DEFAUTS-A-TRANCHER.md (DEF-STA-xx) a son cas nommé.
+ * Décision du client du 28/09 (D-STA-B-01, qui remplace D-STA-A-01) : les
+ * défauts de l'ancien calcul sont CORRIGÉS. Cette parité prouve donc deux
+ * choses :
+ *   1. l'ÉCART VOULU — pour chaque défaut de docs/DEFAUTS-A-TRANCHER.md
+ *      (DEF-STA-xx, DEF-ECR-03, 04), sur un même cas, l'ancien évalué donne la
+ *      valeur fausse et le nouveau la juste ;
+ *   2. RIEN D'AUTRE ne change — sur des sociétés tirées au hasard où aucun
+ *      défaut ne joue (pièces émises, conducteur tenu par sa fiche, bons
+ *      ouverts…), le nouveau rend les mêmes chiffres que l'ancien, au
+ *      flottant près (le nouveau calcule en décimal exact).
+ *
+ * Les montants du nouveau sont ceux de la BASE (`v_facture_totaux`,
+ * `v_devis_totaux`, `v_facture_solde`) : le test les calcule depuis les
+ * mêmes lignes, comme ces vues (`htVue`, `soldeVue`).
  *
  * Le fuseau est celui de Paris : l'ancien lisait l'heure du poste, et les
  * utilisateurs sont à Paris ; le nouveau lit Paris quel que soit le poste.
@@ -24,13 +30,30 @@ import * as ancienImport from "../../../src/api/regles-import-factures";
 import * as ancienReg from "../../../src/api/regles-reglements";
 import * as ancienTotaux from "../../../src/api/regles-totaux";
 import { dateISO, formatDateFr, todayISO } from "../../src/lib/dates";
-import { statsConducteur, type BonConducteur } from "../../src/modules/statistiques/domain/conducteur";
-import type { LigneChiffree } from "../../src/modules/statistiques/domain/ancien/montants";
-import { activiteRecente, aTraiterPilotage, barresGraphique, comparaisonN1, legendeGraphique, resumeDuMois, revenuPeriode, revenuPlage, topClients, tuilesPilotage, type BonPilotage, type DevisPilotage, type FacturePilotage, type RapportPilotage, type ReglementPilotage } from "../../src/modules/statistiques/domain/ancien/pilotage";
-import { equipesParMois, periodeLabel, repartitionCA, retardParConducteur, statsParConducteur, totauxStats, type BonStats, type EquipeStats, type PeriodeStats } from "../../src/modules/statistiques/domain/ancien/statistiques";
-import { mesBonsTechnicien, tableauSousTraitant, tableauTechnicien, type BonTerrain, type TacheTerrain } from "../../src/modules/statistiques/domain/ancien/terrain";
+import { montant, somme, ZERO, type Montant } from "../../src/lib/money";
+import { construireCartes, type BonPlanning, type TachePlanning } from "../../src/modules/planning/domain/cartes";
+import { ANNUAIRES, bonEssai, EQUIPE_A, EQUIPE_B, ST_A, tacheEssai } from "../../src/modules/planning/domain/fabrique.essai-aide";
+import { avancementDuBon, statsConducteur, type BonLu } from "../../src/modules/statistiques/domain/conducteur";
+import type { LigneChiffree } from "../../src/modules/statistiques/domain/lignes";
 import { moisDepuisJanvier, moisGlissants } from "../../src/modules/statistiques/domain/periodes";
+import { enNombre, type DevisStats, type FactureStats, type RapportStats, type ReglementStats, type SoldeStats } from "../../src/modules/statistiques/domain/pieces";
 import { tempsRelatif } from "../../src/modules/statistiques/domain/pilotage";
+import {
+  equipesParMois,
+  periodeLabel,
+  repartitionCA,
+  retardParConducteur,
+  SANS_CONDUCTEUR,
+  statsParConducteur,
+  totauxStats,
+  type BonStats,
+  type DonneesStats,
+  type EquipeStats,
+  type FicheConducteur,
+  type PeriodeStats,
+} from "../../src/modules/statistiques/domain/statistiques";
+import { activiteRecente, aTraiterPilotage, barresGraphique, comparaisonN1, legendeGraphique, resumeDuMois, revenuPeriode, revenuPlage, topClients, tuilesPilotage, type BonPilotage } from "../../src/modules/statistiques/domain/tableau";
+import { tableauTerrain } from "../../src/modules/statistiques/domain/terrain";
 import { generateur } from "./aleatoire";
 import { constanteDe, sourceDe } from "./source-app";
 
@@ -48,6 +71,9 @@ afterAll(() => {
 });
 const aLInstant = (d: Date) => vi.setSystemTime(d);
 
+/** Un montant du nouveau (décimal) face à un flottant de l'ancien : égaux à 10⁻⁶ près. */
+const proche = (neuf: Montant | null | undefined, vieux: number, cas = "") => expect(enNombre(neuf ?? ZERO), cas).toBeCloseTo(vieux, 6);
+
 // ---------------------------------------------------------------------------
 // L'ancien écran, évalué
 
@@ -62,18 +88,47 @@ const FONCTIONS = [
 const CONSTANTES = ["CIRCUIT_CLOS", "JOURNEE_VISIBLE", "STATS_PALETTE"] as const;
 
 type Etat = Record<string, unknown>;
+interface ResumeAncien {
+  caMois: number;
+  caMoisPct: number;
+  tauxConversion: number;
+  devisCount: number;
+  tauxEncaisse: number;
+  impayeesMontant: number;
+  annee: number;
+  caMoisN1: number;
+  cumulAnnee: number;
+  cumulAnneeN1: number;
+}
+interface LigneStatAncienne {
+  nom: string;
+  bcTotal: number;
+  bcSAV: number;
+  tauxSAV: number;
+  bcEnRetard: number;
+  bcDansLesTemps: number;
+  tauxDansLesTemps: number;
+  nbTravSup: number;
+  montantTravSup: number;
+  tauxTravSup: number;
+  ca: number;
+  devisTotal: number;
+  devisAcceptes: number;
+  tauxDevisAccepte: number;
+  devisTransformes: number;
+  tauxDevisTransforme: number;
+}
 interface Ancien {
-  computeMonthSummary: (soc: string) => { caMois: number; caMoisPct: number; tauxConversion: number; devisCount: number; tauxEncaisse: number; impayeesMontant: number; annee: number; caMoisN1: number; cumulAnnee: number; cumulAnneeN1: number };
-  computeDashTraiter: (soc: string) => Record<string, number>;
+  computeMonthSummary: (soc: string) => ResumeAncien;
+  computeDashTraiter: (soc: string) => { enAttenteConducteur: number; aValiderDirecteur: number; aFacturer: number; aFacturerMontant: number; rappelsAujourdhui: number; facturesEchues: number };
   computeRevenuePeriod: (f: unknown[], m: unknown[]) => { data: { annee: number; current: number; previous: number }[]; total: number; currentYear: number; prevYear: number };
   buildMonthsBack: (n: number) => { year: number; month: number; label: string; fullLabel: string }[];
   buildYTDMonths: () => { year: number; month: number; label: string; fullLabel: string }[];
   buildActivityFeed: (soc: string) => { icon: string; color: string; label: string; sub: string; amount: number | null; id: string; date: string; goFn: string }[];
-  renderTopClientsHTML: (f: unknown[], annee: number) => string;
-  comparaisonN1HTML: (courant: number, precedent: number, anneePrecedente: number) => string;
+  computeTopClients: (f: unknown[], annee: number) => { client: string; total: number; precedent: number }[];
   renderDashboard: () => string;
   computeCustomRevenue: () => void;
-  computeStatsParConducteur: () => Record<string, number | string>[];
+  computeStatsParConducteur: () => LigneStatAncienne[];
   computeStatsBinomesParMois: () => { mois: string[]; binomes: string[]; parBinome: Record<string, Record<string, number>> };
   periodeLabel: (p: string) => string;
   filtrerParPeriode: (items: unknown[], champ: string, p: string) => unknown[];
@@ -135,13 +190,68 @@ function ancien(state: Etat, stubs: { monEquipeId?: string | null } = {}): Ancie
 }
 
 // ---------------------------------------------------------------------------
-// Les tirages : une société, dans la forme de la base (nouveau) et dans celle du pont (ancien)
+// Les vues de la base, refaites ici depuis les mêmes lignes
+
+const CENT = 100;
+const round2 = (m: Montant) => m.round(2, 1);
+const estLigneVue = (l: LigneChiffree) => l.type === "ligne";
+
+/** `v_facture_totaux` / `v_devis_totaux` : Σ quantité × prix des lignes « ligne », remise appliquée, sans signe. */
+function totauxVue(lignes: readonly LigneChiffree[], remise: number): { ht: Montant; ttc: Montant } {
+  const lg = lignes.filter(estLigneVue);
+  const ht = somme(lg.map((l) => montant(l.quantite).times(montant(l.prix_unitaire))));
+  const tva = somme(lg.map((l) => montant(l.quantite).times(montant(l.prix_unitaire)).times(montant(l.tva)).div(CENT)));
+  const facteur = montant(1).minus(montant(remise).div(CENT));
+  return { ht: ht.times(facteur), ttc: ht.plus(tva).times(facteur) };
+}
+
+/** Une facture tirée : ce que lit le nouveau (`FactureStats`), et de quoi la chiffrer pour l'ancien et pour la vue. */
+interface FactureTiree extends FactureStats {
+  lignes: LigneChiffree[];
+  remise_pourcentage: number;
+  legacy_id: string | null;
+}
+interface DevisTire extends DevisStats {
+  lignes: LigneChiffree[];
+  remise_pourcentage: number;
+}
+
+/** `v_facture_solde` (proposition 20260926040000), sans acompte déduit ni retenue : ce que les tirages n'emploient pas. */
+function soldeVue(f: FactureTiree, reglements: readonly ReglementStats[], jour: string): SoldeStats {
+  const { ttc } = totauxVue(f.lignes, f.remise_pourcentage);
+  const avoir = f.type_document === "avoir";
+  const base = avoir ? ttc.abs() : ttc;
+  const brut = somme(reglements.filter((r) => r.facture_id === f.id).map((r) => montant(r.montant)));
+  const paye = round2(brut);
+  const reprise = String(f.legacy_id ?? "").startsWith("compta:") && f.statut === "payée" && brut.eq(ZERO);
+  const brouillon = !f.numero && f.statut === "brouillon";
+  const ecart = round2(base).minus(paye);
+  const reste = reprise || ecart.lt("0.005") ? ZERO : ecart;
+  const exigible = reprise || avoir ? ZERO : reste;
+  const cle = brouillon
+    ? "brouillon"
+    : reprise
+      ? "reprise"
+      : avoir
+        ? reste.lt("0.005") ? "impute" : paye.lt("0.005") ? "disponible" : "partiellement_impute"
+        : reste.lt("0.005") ? "reglee" : paye.lt("0.005") ? "non_reglee" : "partiellement_reglee";
+  const doit = cle === "non_reglee" || cle === "partiellement_reglee";
+  const reference = f.echeance || f.date || "";
+  return { facture_id: f.id, cle, sens: avoir ? -1 : 1, ttc: enNombre(ttc), du: doit ? enNombre(reste) : 0, en_retard: doit && exigible.gt("0.01") && !!reference && reference < jour };
+}
+
+// ---------------------------------------------------------------------------
+// Les tirages
 
 const SOC = "s";
 const CLIENTS = ["OPAC du Rhône", "Régie Sud", "", "2024", null] as const;
-const ETIQUETTES = ["Christophe Conducteur", "christophe conducteur", "Karim", "", null] as const;
+const FICHES: FicheConducteur[] = [
+  { id: "k1", nom: "Christophe Conducteur" },
+  { id: "k2", nom: "Karim" },
+  { id: "k3", nom: "Sans bon" },
+];
 const STATUTS_FACTURE = ["brouillon", "impayée", "impayée", "payée", "envoyée"] as const;
-const TYPES = ["facture", "facture", "avoir", "acompte", "situation", null] as const;
+const TYPES = ["facture", "facture", "avoir", "acompte"] as const;
 const EQUIPES: EquipeStats[] = [
   { id: "eqA", nom: "Équipe Thomas", metier: null, metiers: ["Plomberie"] },
   { id: "eqB", nom: "", metier: "Peinture", metiers: [] },
@@ -156,96 +266,83 @@ function unInstant(centre: Date, ecartJours: number): string {
 }
 const peutEtre = <T>(p: number, v: () => T): T | null => (g.reel() < p ? v() : null);
 
-function lignes() {
+/** Des lignes comme la base les garde (type toujours renseigné), prix à trois décimales compris. */
+function lignes(): LigneChiffree[] {
   return Array.from({ length: g.entier(0, 4) }, () => ({
-    type: g.parmi(["ligne", "ligne", "ligne", "chapitre", "commentaire", null]),
-    quantite: g.parmi([1, 2, 3, 0.5, 7, "2.5", null]) as number | string | null,
-    // Trois décimales : des demi-centimes que le flottant n'arrondit pas comme le décimal.
-    prix_unitaire: g.parmi([g.entier(0, 200_000) / 100, 3.335, 0.005, g.entier(-5000, 0) / 100, null]) as number | null,
-    tva: g.parmi([20, 10, 5.5, 0, null]) as number | null,
+    type: g.parmi(["ligne", "ligne", "ligne", "chapitre", "commentaire"]),
+    quantite: g.parmi([1, 2, 3, 0.5, 7, "2.5"]) as number | string,
+    prix_unitaire: g.parmi([g.entier(0, 200_000) / 100, 3.335, 0.005, g.entier(-5000, 0) / 100]),
+    tva: g.parmi([20, 10, 5.5, 0]),
   }));
 }
 const ligneAncienne = (l: LigneChiffree) => ({ type: l.type, qte: l.quantite, prixUnitaire: l.prix_unitaire, tva: l.tva });
 
 interface Societe {
-  factures: FacturePilotage[];
-  devis: DevisPilotage[];
-  reglements: ReglementPilotage[];
-  rapports: RapportPilotage[];
+  factures: FactureTiree[];
+  devis: DevisTire[];
+  reglements: ReglementStats[];
+  rapports: RapportStats[];
   bonsPilotage: BonPilotage[];
   bonsStats: BonStats[];
-  conducteurs: string[];
+  conducteurs: FicheConducteur[];
 }
 
 function societe(maintenant: Date): Societe {
   const nbBons = g.entier(0, 12);
   const idsBons = Array.from({ length: nbBons }, (_, i) => `b${i}`);
-  const devis: DevisPilotage[] = Array.from({ length: g.entier(0, 8) }, (_, i) => ({
-    id: `d${i}`,
-    numero: peutEtre(0.9, () => `DEV-${i}`),
-    client_nom: g.parmi(CLIENTS),
-    date: peutEtre(0.95, () => uneDate(maintenant, 400)),
-    statut: g.parmi(["brouillon", "envoyé", "envoyé", "accepté", "refusé"]),
-    conducteur: g.parmi(ETIQUETTES),
-    cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
-    remise_pourcentage: g.parmi([0, 10, "5", null, 150]),
-    lignes: lignes(),
-  }));
-  const factures: FacturePilotage[] = Array.from({ length: g.entier(0, 14) }, (_, i) => ({
-    id: `f${i}`,
-    numero: peutEtre(0.8, () => `FAC-${i}`),
-    client_nom: g.parmi(CLIENTS),
-    date: peutEtre(0.95, () => uneDate(maintenant, 400)),
-    echeance: peutEtre(0.8, () => uneDate(maintenant, 60)),
-    statut: g.parmi(STATUTS_FACTURE),
-    type_document: g.parmi(TYPES),
-    legacy_id: peutEtre(0.1, () => `compta:FAC${i}`),
-    bon_commande_id: nbBons && g.reel() < 0.4 ? g.parmi(idsBons) : null,
-    devis_id: devis.length && g.reel() < 0.4 ? g.parmi(devis).id : null,
-    conducteur: g.parmi(ETIQUETTES),
-    cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
-    remise_pourcentage: g.parmi([0, 0, 10, "5", null]),
-    lignes: lignes(),
-  }));
-  const reglements: ReglementPilotage[] = factures.length
+  const conducteur = () => g.parmi([...FICHES.map((f) => f.id), null]);
+  const nomDe = (id: string | null) => FICHES.find((f) => f.id === id)?.nom ?? null;
+  const devis: DevisTire[] = Array.from({ length: g.entier(0, 8) }, (_, i) => {
+    const l = lignes();
+    const remise = g.parmi([0, 10, 5]);
+    const k = conducteur();
+    return {
+      id: `d${i}`, numero: peutEtre(0.9, () => `DEV-${i}`), client_nom: g.parmi(CLIENTS), date: peutEtre(0.95, () => uneDate(maintenant, 400)),
+      statut: g.parmi(["brouillon", "envoyé", "envoyé", "accepté", "refusé"]), conducteur_id: k, conducteur: nomDe(k), cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
+      lignes: l, remise_pourcentage: remise, ht: totauxVue(l, remise).ht,
+    };
+  });
+  const factures: FactureTiree[] = Array.from({ length: g.entier(0, 14) }, (_, i) => {
+    const l = lignes();
+    const remise = g.parmi([0, 0, 10, 5]);
+    const k = conducteur();
+    return {
+      id: `f${i}`, numero: peutEtre(0.8, () => `FAC-${i}`), client_id: null, client_fiche: null, client_nom: g.parmi(CLIENTS), date: peutEtre(0.95, () => uneDate(maintenant, 400)),
+      echeance: peutEtre(0.8, () => uneDate(maintenant, 60)), statut: g.parmi(STATUTS_FACTURE), type_document: g.parmi(TYPES), legacy_id: peutEtre(0.1, () => `compta:FAC${i}`),
+      bon_commande_id: nbBons && g.reel() < 0.4 ? g.parmi(idsBons) : null, devis_id: devis.length && g.reel() < 0.4 ? g.parmi(devis).id : null,
+      conducteur_id: k, conducteur: nomDe(k), cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)), lignes: l, remise_pourcentage: remise, ht: totauxVue(l, remise).ht,
+    };
+  });
+  const reglements: ReglementStats[] = factures.length
     ? Array.from({ length: g.entier(0, 10) }, (_, i) => ({
         id: `r${i}`,
-        // Un lettrage d'avoir s'écrit en négatif côté avoir ; un règlement partiel, une fraction.
         facture_id: g.reel() < 0.9 ? g.parmi(factures).id : "introuvable",
-        montant: g.parmi([g.entier(1, 300_000) / 100, 120, -50, 0.01]),
+        montant: g.parmi([g.entier(1, 300_000) / 100, 120, 0.5]),
+        mode: g.parmi(["virement", "cheque", "virement", "imputation", "avoir"]),
         date: peutEtre(0.97, () => uneDate(maintenant, 60)),
         cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
       }))
     : [];
-  const rapports: RapportPilotage[] = Array.from({ length: g.entier(0, 4) }, (_, i) => ({
-    id: `i${i}`,
-    numero: peutEtre(0.7, () => `RAP-${i}`),
-    client_nom: g.parmi(CLIENTS),
-    date: peutEtre(0.97, () => uneDate(maintenant, 60)),
-    cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
+  const rapports: RapportStats[] = Array.from({ length: g.entier(0, 4) }, (_, i) => ({
+    id: `i${i}`, numero: peutEtre(0.7, () => `RAP-${i}`), client_nom: g.parmi(CLIENTS), date: peutEtre(0.97, () => uneDate(maintenant, 60)), cree_le: peutEtre(0.97, () => unInstant(maintenant, 60)),
   }));
   const bonsPilotage: BonPilotage[] = idsBons.map((id) => {
     const statut = g.parmi([null, "en_cours", "pret_a_chiffrer", "chiffre", "facture", "cloture_gratuit"]);
     return {
-      id,
-      statut_workflow: statut,
-      bon_commande_parent_id: peutEtre(0.25, () => "p"),
-      rappel_date: peutEtre(0.3, () => uneDate(maintenant, 10)),
-      valideConducteur: g.reel() < 0.4,
-      valideDirecteur: statut === "chiffre" || statut === "facture",
-      lignes: lignes(),
+      id, statut_workflow: statut, bon_commande_parent_id: peutEtre(0.25, () => "p"), rappel_date: peutEtre(0.3, () => uneDate(maintenant, 10)),
+      valideConducteur: g.reel() < 0.4, valideDirecteur: statut === "chiffre" || statut === "facture", lignes: lignes(),
     };
   });
-  const bonsStats: BonStats[] = idsBons.map((id, k) => ({
-    id,
-    cree_le: peutEtre(0.97, () => unInstant(maintenant, 400)),
-    conducteur: g.parmi(ETIQUETTES),
-    technicien: g.parmi(["eqA", "Équipe Thomas", "Peinture", "eqC", "Inconnue", null]),
-    bon_commande_parent_id: bonsPilotage[k]?.bon_commande_parent_id ?? null,
-    date_fin_travaux: peutEtre(0.7, () => uneDate(maintenant, 60)),
-  }));
-  const conducteurs = g.parmi([[], ["Christophe Conducteur"], ["Christophe Conducteur", "Karim", "Sans bon"]]);
-  return { factures, devis, reglements, rapports, bonsPilotage, bonsStats, conducteurs };
+  const bonsStats: BonStats[] = idsBons.map((id, k) => {
+    const cond = conducteur();
+    const date = uneDate(maintenant, 400);
+    return {
+      id, cree_le: `${date}T10:00:00Z`, date, date_reception: null, conducteur_id: cond, conducteur: nomDe(cond),
+      technicien: g.parmi(["eqA", "Équipe Thomas", "Peinture", "eqC", "Inconnue", null]), bon_commande_parent_id: bonsPilotage[k]?.bon_commande_parent_id ?? null,
+      date_fin_travaux: peutEtre(0.7, () => uneDate(maintenant, 60)), statut_workflow: bonsPilotage[k]?.statut_workflow ?? null,
+    };
+  });
+  return { factures, devis, reglements, rapports, bonsPilotage, bonsStats, conducteurs: FICHES };
 }
 
 /** La société telle que le pont la chargeait (`versLegacy`, `ligneVersLegacy`, `reconstituerWorkflow`). */
@@ -261,88 +358,149 @@ function etatAncien(s: Societe, extra: Etat = {}): Etat {
       ...cree(f.cree_le), lignes: f.lignes.map(ligneAncienne),
     })),
     devis: s.devis.map((d) => ({ id: d.id, societeId: SOC, numero: d.numero, client: d.client_nom ?? "", date: d.date, statut: d.statut, conducteur: d.conducteur, remisePourcentage: d.remise_pourcentage, ...cree(d.cree_le), lignes: d.lignes.map(ligneAncienne) })),
-    reglements: s.reglements.map((r) => ({ id: r.id, societeId: SOC, factureId: r.facture_id, montant: r.montant, date: r.date, ...cree(r.cree_le) })),
+    reglements: s.reglements.map((r) => ({ id: r.id, societeId: SOC, factureId: r.facture_id, montant: r.montant, date: r.date, mode: r.mode, ...cree(r.cree_le) })),
     interventions: s.rapports.map((i) => ({ id: i.id, societeId: SOC, numero: i.numero, client: i.client_nom ?? "", date: i.date, statut: "terminé", ...cree(i.cree_le) })),
-    // Un même bon, vu par « À traiter » (pilotage) et par les statistiques : réunis par identifiant.
     bonsCommande: [...new Set([...s.bonsPilotage.map((b) => b.id), ...s.bonsStats.map((b) => b.id)])].map((id) => {
       const b = s.bonsPilotage.find((x) => x.id === id);
       const st = s.bonsStats.find((x) => x.id === id);
       return {
-        id, societeId: SOC, statutWorkflow: b?.statut_workflow ?? null, bonCommandeId: b?.bon_commande_parent_id ?? st?.bon_commande_parent_id ?? null, rappelDate: b?.rappel_date ?? null,
+        id, societeId: SOC, statutWorkflow: b?.statut_workflow ?? st?.statut_workflow ?? null, bonCommandeId: b?.bon_commande_parent_id ?? st?.bon_commande_parent_id ?? null, rappelDate: b?.rappel_date ?? null,
         valideConducteur: b?.valideConducteur ?? false, valideDirecteur: b?.valideDirecteur ?? false, lignes: (b?.lignes ?? []).map(ligneAncienne), montant: 999,
         conducteur: st?.conducteur ?? null, technicien: st?.technicien ?? null, dateFinTravaux: st?.date_fin_travaux ?? null, ...cree(st?.cree_le ?? null),
       };
     }),
-    conducteurs: s.conducteurs.map((nom, k) => ({ id: `c${k}`, societeId: SOC, nom })),
+    conducteurs: s.conducteurs.map((c) => ({ id: c.id, societeId: SOC, nom: c.nom })),
     techniciens: EQUIPES.map((e) => ({ id: e.id, societeId: SOC, nom1: e.nom, metier: e.metier, metiers: e.metiers })),
     ...extra,
   };
 }
 
-/** Les mêmes bons, vus par les statistiques du nouveau (mêmes identifiants, mêmes étiquettes). */
-const pourStats = (s: Societe) => ({ bons: s.bonsStats, devis: s.devis, factures: s.factures, conducteurs: s.conducteurs });
+const soldesDe = (s: Societe, jour: string) => s.factures.map((f) => soldeVue(f, s.reglements, jour));
+const donneesStats = (s: Societe, suite: Partial<DonneesStats> = {}): DonneesStats => ({ bons: s.bonsStats, devis: s.devis, factures: s.factures, conducteurs: s.conducteurs, taches: [], travaux: [], ...suite });
 const moisAnciens = (n: number, jour: string) => moisGlissants(n, jour).map((m) => ({ year: m.annee, month: m.mois - 1 }));
-const extraire = (html: string, motif: RegExp) => {
-  const m = motif.exec(html);
-  if (!m) throw new Error(`motif introuvable : ${motif}`);
-  return m.slice(1);
-};
+
 /**
- * Ce que dit `comparaisonN1HTML` (montants écrits «n» par le faux
- * `moneyDisplay`) : « rien en 2025 », ou « 2025 : «n» · +12 % » et sa couleur.
+ * La société SANS aucun des cas que les défauts touchent : chaque facture est
+ * émise, facture ou avoir, son statut stocké dit ce que dit son solde, avec
+ * une échéance ; aucun lettrage ; chaque devis a son numéro ; un rappel ne
+ * reste que sur un bon ouvert ; chaque pièce a un conducteur, nommé comme sa
+ * fiche ; un bon désigné par une facture n'a pas de fin de travaux ; les bons
+ * sont ouverts. Là, l'ancien et le nouveau doivent dire la même chose.
  */
-const lireN1 = (html: string) => {
-  const rien = /^<span style="color:var\(--text-dim\);">rien en (\d+)<\/span>$/.exec(html);
-  if (rien) return ["rien", rien[1]];
-  const m = /^(\d+) : «([^»]*)» · <b style="color:var\(--(success|danger|text-dim)\);">([+-]?\d+) %<\/b>$/.exec(html);
-  if (!m) throw new Error(`rappel N-1 illisible : ${html}`);
-  return m.slice(1);
-};
-const COULEUR_ECART = (e: number) => (e > 0 ? "success" : e < 0 ? "danger" : "text-dim");
-const n1Neuf = (courant: number, precedent: number, annee: number) => {
-  const c = comparaisonN1(courant, precedent, annee);
-  return c.type === "rien" ? ["rien", String(annee)] : [String(annee), String(c.precedent), COULEUR_ECART(c.ecart), `${c.ecart > 0 ? "+" : ""}${c.ecart}`];
-};
+function sansDefaut(s: Societe, jour: string, maintenant: Date): Societe {
+  const reglements = s.reglements.filter((r) => r.mode !== "imputation" && r.mode !== "avoir");
+  const nommer = <T extends { conducteur_id: string | null; conducteur: string | null }>(x: T): T => {
+    const k = x.conducteur_id ?? "k1";
+    return { ...x, conducteur_id: k, conducteur: FICHES.find((f) => f.id === k)?.nom ?? null };
+  };
+  // Un avoir porte des lignes POSITIVES (c'est son type qui le signe) : celui dont les lignes sont négatives, l'ancien le
+  // comptait en positif, la base en négatif (D-STA-02, DEF-STA-01) — hors sujet ici, il redevient une facture.
+  const emises = s.factures.map((f, i) =>
+    nommer({ ...f, numero: f.numero ?? `FAC-X${i}`, type_document: f.type_document === "avoir" && f.ht.gte(0) ? "avoir" : "facture", legacy_id: null, statut: "impayée", echeance: f.echeance ?? uneDate(maintenant, 60) })
+  );
+  const factures = emises
+    .map((f) => {
+      const du = soldeVue(f, reglements, jour).du;
+      return { f, du };
+    })
+    // Un reste d'un centime : « impayée » pour le statut, pas encore exigible pour la base — un cas limite hors sujet.
+    .filter(({ du }) => !(du > 0 && du <= 0.01))
+    .map(({ f, du }) => ({ ...f, statut: du > 0 ? "impayée" : "payée" }));
+  const avoirs = new Set(factures.filter((f) => f.type_document === "avoir").map((f) => f.id));
+  const facturesDesBons = new Set(factures.map((f) => f.bon_commande_id).filter((id): id is string => !!id));
+  const clos = ["chiffre", "facture", "cloture_gratuit"];
+  return {
+    ...s,
+    factures,
+    reglements: reglements.filter((r) => !avoirs.has(r.facture_id)),
+    devis: s.devis.map((d, i) => nommer({ ...d, numero: d.numero ?? `DEV-X${i}` })),
+    bonsPilotage: s.bonsPilotage.map((b) => (clos.includes(b.statut_workflow ?? "") || facturesDesBons.has(b.id) ? { ...b, rappel_date: null } : b)),
+    bonsStats: s.bonsStats.map((b) => nommer({ ...b, statut_workflow: "en_cours", date_fin_travaux: facturesDesBons.has(b.id) ? null : b.date_fin_travaux })),
+  };
+}
 
 const TIRAGES = 150;
 
 // ---------------------------------------------------------------------------
-describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
-  it.each(INSTANTS.map((d) => [d.toISOString(), d] as const))("%s — tuiles, « À traiter », résumé du mois, chiffre d'affaires", (_, instant) => {
+describe("pilotage : sans défaut en jeu, les mêmes chiffres que l'ancien", () => {
+  it.each(INSTANTS.map((d) => [d.toISOString(), d] as const))("%s — tuiles, « À traiter », résumé du mois, chiffre d'affaires, fil, classement", (_, instant) => {
     aLInstant(instant);
     const jour = todayISO();
     for (let n = 0; n < TIRAGES; n++) {
-      const s = societe(instant);
-      const periode = g.parmi(["6m", "12m"] as const);
-      const a = ancien(etatAncien(s, { dashRevenuePeriod: periode }));
+      const s = sansDefaut(societe(instant), jour, instant);
+      const soldes = soldesDe(s, jour);
+      const a = ancien(etatAncien(s));
+      const cas = JSON.stringify({ n });
+      const vieux = a.computeMonthSummary(SOC);
+      const r = resumeDuMois(s.factures, s.devis, s.reglements, soldes, jour, moisAnciens(6, jour));
+      expect([r.tauxConversion, r.devisCount, r.annee], cas).toEqual([vieux.tauxConversion, vieux.devisCount, vieux.annee]);
+      // Au centime près par pièce : l'ancien arrondit au centime un TTC FLOTTANT (10,004999… → 10,00), la base un décimal (10,01).
+      expect(Math.abs(enNombre(r.impayeesMontant) - vieux.impayeesMontant), cas).toBeLessThanOrEqual(0.01 * s.factures.length + 1e-9);
+      expect(r.tauxEncaisse, cas).toBe(vieux.tauxEncaisse);
+      proche(r.cumulAnnee, vieux.cumulAnnee, cas);
+      proche(r.cumulAnneeN1, vieux.cumulAnneeN1, cas);
+
+      const t = tuilesPilotage(s.devis, soldes);
       const html = a.renderDashboard();
-      const r = resumeDuMois(s.factures, s.devis, s.reglements, jour, moisAnciens(6, jour));
-      const t = tuilesPilotage(s.factures, s.devis);
-      const tr = aTraiterPilotage(s.bonsPilotage, s.factures, jour);
-      const ca = revenuPeriode(s.factures, moisAnciens(periode === "12m" ? 12 : 6, jour), instant.getFullYear());
-      const cas = JSON.stringify({ n, s });
+      const [nbDevis = "", htDevis = ""] = /Devis en attente<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» HT/.exec(html)?.slice(1) ?? [];
+      expect(t.devisEnAttente, cas).toBe(Number(nbDevis));
+      proche(t.devisEnAttenteMontant, Number(htDevis), cas);
+      expect(t.impayees, cas).toBe(Number(/Factures impayées<\/div><div class="stat-num">(\d+)</.exec(html)?.[1]));
 
-      expect(extraire(html, /CA encaissé ce mois \(HT\)<\/div><div class="stat-num stat-num-money">«([^»]*)»/), cas).toEqual([String(r.caMois)]);
-      // 0f6f60d : le même mois un an plus tôt sous la tuile, le facturé de l'exercice face au précédent dans le résumé.
-      expect(lireN1(extraire(html, /stat-num-money">«[^»]*»<\/div><div class="stat-subamount">(.*?)<\/div><\/div>/)[0] ?? ""), cas).toEqual(n1Neuf(r.caMois, r.caMoisN1, r.annee - 1));
-      expect(extraire(html, /<span>Facturé (\d+) \(HT\)<\/span><b>«([^»]*)»<\/b>/), cas).toEqual([String(r.annee), String(r.cumulAnnee)]);
-      expect(lireN1(extraire(html, /Facturé \d+ \(HT\)<\/span><b>«[^»]*»<\/b><\/div>\s*<div class="card-sub">(.*?)<\/div>/)[0] ?? ""), cas).toEqual(n1Neuf(r.cumulAnnee, r.cumulAnneeN1, r.annee - 1));
-      expect(extraire(html, /Top clients (\d+) \(HT\)/), cas).toEqual([String(r.annee)]);
-      expect(extraire(html, /Devis en attente<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» HT/), cas).toEqual([String(t.devisEnAttente), String(t.devisEnAttenteMontant)]);
-      expect(extraire(html, /Factures impayées<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» restant dû/), cas).toEqual([String(t.impayees), String(r.impayeesMontant)]);
-      expect(extraire(html, /À facturer<\/div><div class="stat-num">(\d+)<\/div><div class="stat-subamount">«([^»]*)» HT/), cas).toEqual([String(tr.aFacturer), String(tr.aFacturerMontant)]);
-      expect(extraire(html, /Total période : <b>«([^»]*)»<\/b>/), cas).toEqual([String(ca.total)]);
-      expect(extraire(html, /Taux de conversion devis<\/span><b>(-?\d+)%/), cas).toEqual([String(r.tauxConversion)]);
-      expect(extraire(html, /Taux d'encaissement<\/span><b>(-?\d+)%/), cas).toEqual([String(r.tauxEncaisse)]);
-      expect(extraire(html, /Chiffre d'affaires encaissé \(HT\)<\/span><b>«[^»]*»<\/b><\/div>\s*<div class="progress-bar"><div class="progress-fill" style="width:(-?\w+)%/), cas).toEqual([String(r.caMoisPct)]);
+      const tr = aTraiterPilotage(s.bonsPilotage, s.factures, soldes, jour);
+      const vtr = a.computeDashTraiter(SOC);
+      expect({ ...tr, aFacturerMontant: 0 }, cas).toEqual({ ...vtr, aFacturerMontant: 0 });
+      proche(tr.aFacturerMontant, vtr.aFacturerMontant, cas);
 
-      const traiter = a.computeDashTraiter(SOC);
-      expect(tr, cas).toEqual(traiter);
-      expect(r, cas).toEqual(a.computeMonthSummary(SOC));
+      for (const nbMois of [6, 12]) {
+        const neuf = revenuPeriode(s.factures, moisAnciens(nbMois, jour), instant.getFullYear());
+        const legacy = a.computeRevenuePeriod(etatAncien(s).factures as unknown[], a.buildMonthsBack(nbMois));
+        expect(neuf.data.map((p) => p.annee)).toEqual(legacy.data.map((p) => p.annee));
+        neuf.data.forEach((p, i) => {
+          proche(p.current, legacy.data[i]?.current ?? NaN, cas);
+          proche(p.previous, legacy.data[i]?.previous ?? NaN, cas);
+        });
+        proche(neuf.total, legacy.total, cas);
+        expect([neuf.currentYear, neuf.prevYear]).toEqual([legacy.currentYear, legacy.prevYear]);
+      }
+
+      const fil = activiteRecente(s.devis, s.factures, s.rapports, s.reglements);
+      const vfil = a.buildActivityFeed(SOC);
+      expect(fil.map((x) => [x.libelle, x.sous, x.id, x.quand]), cas).toEqual(vfil.map((x) => [x.label, x.sub, x.id, x.date]));
+      fil.forEach((x, i) => (x.montant === null ? expect(vfil[i]?.amount).toBeNull() : proche(x.montant, vfil[i]?.amount ?? NaN, cas)));
+      expect(fil.filter((x) => x.nature === "facture").map((x) => (x.avoir ? "warn" : "info"))).toEqual(vfil.filter((x) => x.icon === "factures").map((x) => x.color));
+      expect(fil.map((x) => x.nature !== "reglement" || !!x.factureId)).toEqual(vfil.map((x) => !!x.goFn));
+
+      for (const annee of [instant.getFullYear(), instant.getFullYear() - 1]) {
+        const top = topClients(s.factures, annee);
+        const vtop = a.computeTopClients(etatAncien(s).factures as unknown[], annee);
+        expect(top.map((c) => c.client), cas).toEqual(vtop.map((c) => c.client));
+        top.forEach((c, i) => {
+          proche(c.total, vtop[i]?.total ?? NaN, cas);
+          proche(c.precedent, vtop[i]?.precedent ?? NaN, cas);
+        });
+      }
     }
   });
 
-  it("chiffre d'affaires par mois face à N-1 (computeRevenuePeriod), 6, 12 mois et depuis janvier", () => {
+  it("plage libre (computeCustomRevenue) : même total, même nombre de factures", () => {
+    aLInstant(INSTANTS[0]);
+    const jour = todayISO();
+    for (let n = 0; n < TIRAGES; n++) {
+      const s = sansDefaut(societe(INSTANTS[0]), jour, INSTANTS[0]);
+      const a = ancien(etatAncien(s));
+      const du = uneDate(INSTANTS[0], 200);
+      const au = uneDate(INSTANTS[0], 200);
+      if (du > au) continue;
+      a.bac.saisies = { revenue_date_from: du, revenue_date_to: au };
+      a.computeCustomRevenue();
+      const neuf = revenuPlage(s.factures, du, au);
+      proche(neuf.total, Number(/«([^»]*)»/.exec(a.bac.resultat.innerHTML)?.[1]));
+      expect(neuf.nombre).toBe(Number(/(\d+) facture/.exec(a.bac.resultat.innerHTML)?.[1]));
+    }
+  });
+
+  it("mois du graphique (buildMonthsBack, buildYTDMonths) et rappel N-1 (comparaisonN1HTML) inchangés", () => {
     aLInstant(INSTANTS[0]);
     const jour = todayISO();
     const a = ancien(etatAncien(societe(INSTANTS[0])));
@@ -351,129 +509,129 @@ describe("pilotage : renderDashboard et ses calculs, au flottant près", () => {
     memesMois(a.buildMonthsBack(6), moisGlissants(6, jour));
     memesMois(a.buildMonthsBack(12), moisGlissants(12, jour));
     memesMois(a.buildYTDMonths(), moisDepuisJanvier(jour));
-    for (let n = 0; n < TIRAGES; n++) {
-      const s = societe(INSTANTS[0]);
-      const vieux = ancien(etatAncien(s));
-      const mois = moisAnciens(12, jour);
-      const legacy = vieux.computeRevenuePeriod(etatAncien(s).factures as unknown[], vieux.buildMonthsBack(12));
-      const neuf = revenuPeriode(s.factures, mois, 2026);
-      // 66ea9e1 : chaque mois emporte son année.
-      expect(neuf.data).toEqual(legacy.data.map((p) => ({ annee: p.annee, current: p.current, previous: p.previous })));
-      expect([neuf.total, neuf.currentYear, neuf.prevYear]).toEqual([legacy.total, legacy.currentYear, legacy.prevYear]);
+    const html = (c: number, p: number) => new Function("moneyDisplay", `${sourceDe("comparaisonN1HTML")}\nreturn comparaisonN1HTML;`)((x: number) => `«${x}»`)(c, p, 2025) as string;
+    for (const [c, p] of [[100, 50], [50, 100], [100, 0], [0, 0], [100, 100], [-40, 80], [125, 100], [87.5, 100]] as const) {
+      const neuf = comparaisonN1(montant(c), montant(p), 2025);
+      if (neuf.type === "rien") expect(html(c, p)).toContain("rien en 2025");
+      else expect(html(c, p)).toContain(`${neuf.ecart > 0 ? "+" : ""}${neuf.ecart} %`);
     }
-  });
-
-  it("plage libre (computeCustomRevenue) : même total, même nombre de factures", () => {
-    aLInstant(INSTANTS[0]);
-    for (let n = 0; n < TIRAGES; n++) {
-      const s = societe(INSTANTS[0]);
-      const a = ancien(etatAncien(s));
-      const du = uneDate(INSTANTS[0], 200);
-      const au = uneDate(INSTANTS[0], 200);
-      if (du > au) continue;
-      a.bac.saisies = { revenue_date_from: du, revenue_date_to: au };
-      a.computeCustomRevenue();
-      const neuf = revenuPlage(s.factures, du, au);
-      expect(extraire(a.bac.resultat.innerHTML, /«([^»]*)»/)).toEqual([String(neuf.total)]);
-      expect(extraire(a.bac.resultat.innerHTML, /(\d+) facture/)).toEqual([String(neuf.nombre)]);
-    }
-  });
-
-  it("activité récente (buildActivityFeed) et classement des clients (renderTopClientsHTML)", () => {
-    aLInstant(INSTANTS[0]);
-    for (let n = 0; n < TIRAGES; n++) {
-      const s = societe(INSTANTS[0]);
-      const a = ancien(etatAncien(s));
-      const vieux = a.buildActivityFeed(SOC);
-      const neuf = activiteRecente(s.devis, s.factures, s.rapports, s.reglements);
-      expect(neuf.map((x) => [x.libelle, x.sous, x.montant, x.id, x.quand])).toEqual(vieux.map((x) => [x.label, x.sub, x.amount, x.id, x.date]));
-      // La pastille : un avoir orangé (« warn »), une facture bleue.
-      expect(neuf.filter((x) => x.nature === "facture").map((x) => (x.avoir ? "warn" : "info"))).toEqual(vieux.filter((x) => x.icon === "factures").map((x) => x.color));
-      // Un paiement sans facture retrouvée ne s'ouvre pas, comme l'ancien (`goFn` vide).
-      expect(neuf.map((x) => x.nature !== "reglement" || !!x.factureId)).toEqual(vieux.map((x) => !!x.goFn));
-
-      // 0f6f60d : borné à l'exercice, avec le rappel N-1 sous chaque nom ; l'année précédente sert aussi.
-      for (const annee of [2026, 2025]) {
-        const html = a.renderTopClientsHTML(etatAncien(s).factures as unknown[], annee);
-        const top = topClients(s.factures, annee);
-        if (!top.length) {
-          expect(html).toContain(`Aucune facture sur ${annee}.`);
-          continue;
-        }
-        const lignesAnciennes = [...html.matchAll(/topclient-name">([^<]*)<\/div>\s*<div class="card-sub" style="margin-top:2px;">(.*?)<\/div>[\s\S]*?width:([^%]*)%[\s\S]*?topclient-amount">«([^»]*)»/g)].map((m) => [
-          m[1],
-          lireN1(m[2] ?? ""),
-          m[3],
-          m[4],
-        ]);
-        expect(top.map((c) => [c.client, n1Neuf(c.total, c.precedent, annee - 1), String(c.largeur), String(c.total)])).toEqual(lignesAnciennes);
-      }
-    }
-  });
-
-  it("DEF-STA-01 à 07 : chaque défaut, sur un cas qui le montre", () => {
-    aLInstant(INSTANTS[0]);
-    const jour = todayISO();
-    const ligne = (ht: number) => ({ type: "ligne", quantite: 1, prix_unitaire: ht, tva: 20 });
-    const f = (o: Partial<FacturePilotage>): FacturePilotage => ({
-      id: "f1", numero: "FAC-1", client_nom: "OPAC", date: jour, echeance: null, statut: "impayée", type_document: "facture", legacy_id: null, bon_commande_id: null, devis_id: null,
-      conducteur: null, cree_le: `${jour}T08:00:00Z`, remise_pourcentage: 0, lignes: [ligne(100)], ...o,
-    });
-    const cas: Societe = {
-      factures: [
-        f({ id: "brouillon", numero: null, statut: "brouillon" }), // DEF-01, DEF-03, DEF-06 (« · null »)
-        f({ id: "acompte", type_document: "acompte", statut: "payée" }), // DEF-01, DEF-02
-        f({ id: "partielle", echeance: "2000-01-01", client_nom: "O.P.A.C." }), // DEF-04, DEF-07
-        f({ id: "avoir", type_document: "avoir", statut: "impayée" }),
-        f({ id: "payee-mois-precedent", statut: "payée", date: "2000-01-15" }), // DEF-02
-      ],
-      devis: [],
-      reglements: [
-        { id: "r1", facture_id: "partielle", montant: 60, date: jour, cree_le: `${jour}T09:00:00Z` },
-        { id: "lettrage", facture_id: "avoir", montant: -20, date: jour, cree_le: `${jour}T09:30:00Z` }, // DEF-06
-      ],
-      rapports: [],
-      bonsPilotage: [{ id: "clos", statut_workflow: "cloture_gratuit", bon_commande_parent_id: null, rappel_date: "2000-01-01", valideConducteur: false, valideDirecteur: false, lignes: [] }], // DEF-05
-      bonsStats: [],
-      conducteurs: [],
-    };
-    const a = ancien(etatAncien(cas));
-    const r = resumeDuMois(cas.factures, [], cas.reglements, jour, moisAnciens(6, jour));
-    expect(r).toEqual(a.computeMonthSummary(SOC));
-    expect(r.caMois).toBe(100); // l'acompte « payée », pas la facture payée d'un autre mois
-    expect(aTraiterPilotage(cas.bonsPilotage, cas.factures, jour)).toEqual(a.computeDashTraiter(SOC));
-    expect(aTraiterPilotage(cas.bonsPilotage, cas.factures, jour)).toMatchObject({ rappelsAujourdhui: 1, facturesEchues: 1 });
-    // Depuis 0f6f60d, une facture sans numéro s'annonce « brouillon », un avoir « Avoir », au jour de la pièce.
-    const fil = activiteRecente([], cas.factures, [], cas.reglements);
-    expect(fil.map((x) => [x.libelle, x.sous])).toEqual(
-      a.buildActivityFeed(SOC).map((x) => [x.label, x.sub])
-    );
-    expect(fil.map((x) => x.sous)).toContain("OPAC · brouillon");
-    expect(fil.find((x) => x.id === "avoir")).toMatchObject({ libelle: "Avoir", montant: -100, avoir: true });
-    expect(fil.find((x) => x.id === "lettrage")).toMatchObject({ libelle: "Paiement reçu", montant: -20 });
-    expect(fil.map((x) => x.id)).not.toContain("payee-mois-precedent");
-    expect(topClients(cas.factures, 2026).map((c) => c.client)).toEqual(["OPAC", "O.P.A.C."]);
-    expect(revenuPeriode(cas.factures, moisAnciens(6, jour), 2026).total).toBe(a.computeRevenuePeriod(etatAncien(cas).factures as unknown[], a.buildMonthsBack(6)).total);
   });
 });
 
 // ---------------------------------------------------------------------------
-describe("statistiques : computeStatsParConducteur, computeStatsBinomesParMois et leurs graphiques", () => {
+describe("pilotage : chaque défaut, l'ancien faux et le nouveau juste sur le même cas", () => {
+  const JOUR = "2026-09-25";
+  const f = (o: Partial<Omit<FactureTiree, "ht">> & { htLigne?: number }): FactureTiree => {
+    const { htLigne = 100, ...reste } = o;
+    const l: LigneChiffree[] = [{ type: "ligne", quantite: 1, prix_unitaire: htLigne, tva: 20 }];
+    return {
+      id: "f1", numero: "FAC-1", client_id: null, client_fiche: null, client_nom: "OPAC", date: JOUR, echeance: null, statut: "impayée", type_document: "facture", legacy_id: null,
+      bon_commande_id: null, devis_id: null, conducteur_id: "k1", conducteur: "Christophe Conducteur", cree_le: `${JOUR}T08:00:00Z`, remise_pourcentage: 0, lignes: l, ht: totauxVue(l, 0).ht, ...reste,
+    };
+  };
+  const vide = (s: Partial<Societe>): Societe => ({ factures: [], devis: [], reglements: [], rapports: [], bonsPilotage: [], bonsStats: [], conducteurs: FICHES, ...s });
+  const avant = () => aLInstant(INSTANTS[0]);
+
+  it("DEF-STA-01 / DEF-ECR-03 : brouillon et acompte dans le chiffre d'affaires — l'ancien 2 300, le nouveau 1 000", () => {
+    avant();
+    const s = vide({ factures: [f({ id: "brouillon", numero: null, statut: "brouillon", htLigne: 1000 }), f({ id: "acompte", type_document: "acompte", htLigne: 300 }), f({ id: "solde", htLigne: 1000 })] });
+    const a = ancien(etatAncien(s));
+    expect(a.computeRevenuePeriod(etatAncien(s).factures as unknown[], a.buildMonthsBack(6)).total).toBe(2300);
+    expect(revenuPeriode(s.factures, moisAnciens(6, JOUR), 2026).total.toString()).toBe("1000");
+    expect(a.computeMonthSummary(SOC).cumulAnnee).toBe(2300);
+    expect(resumeDuMois(s.factures, [], [], [], JOUR, moisAnciens(6, JOUR)).cumulAnnee.toString()).toBe("1000");
+  });
+
+  it("DEF-STA-02 : « CA encaissé » — l'ancien 100 (HT d'un acompte « payée » du mois), le nouveau 180 (règlements datés du mois, TTC, hors lettrage)", () => {
+    avant();
+    const s = vide({
+      factures: [f({ id: "acompte", type_document: "acompte", statut: "payée" }), f({ id: "ancienne", statut: "payée", date: "2026-08-15" }), f({ id: "partielle" })],
+      reglements: [
+        { id: "r1", facture_id: "ancienne", montant: 120, mode: "virement", date: JOUR, cree_le: null },
+        { id: "r2", facture_id: "partielle", montant: 60, mode: "cheque", date: JOUR, cree_le: null },
+        { id: "r3", facture_id: "partielle", montant: 20, mode: "imputation", date: JOUR, cree_le: null },
+      ],
+    });
+    const a = ancien(etatAncien(s));
+    expect(a.computeMonthSummary(SOC).caMois).toBe(100);
+    expect(a.renderDashboard()).toContain("CA encaissé ce mois (HT)");
+    expect(resumeDuMois(s.factures, [], s.reglements, soldesDe(s, JOUR), JOUR, moisAnciens(6, JOUR)).encaisseMois.toString()).toBe("180");
+  });
+
+  it("DEF-STA-03 : restant dû — l'ancien compte le brouillon (720), le nouveau non (120) ; taux d'encaissement 40 % → 80 %", () => {
+    avant();
+    const s = vide({ factures: [f({ id: "due" }), f({ id: "brouillon", numero: null, statut: "brouillon", htLigne: 500 }), f({ id: "payee", statut: "payée", htLigne: 400 })], reglements: [{ id: "r", facture_id: "payee", montant: 480, mode: "virement", date: JOUR, cree_le: null }] });
+    const a = ancien(etatAncien(s));
+    const vieux = a.computeMonthSummary(SOC);
+    const neuf = resumeDuMois(s.factures, [], s.reglements, soldesDe(s, JOUR), JOUR, moisAnciens(6, JOUR));
+    expect(vieux.impayeesMontant).toBe(720);
+    expect(neuf.impayeesMontant.toString()).toBe("120");
+    // 1 − 720 / 1 200 (brouillon compris) → 40 % pour l'ancien ; 1 − 120 / 600 → 80 % pour le nouveau.
+    expect([vieux.tauxEncaisse, neuf.tauxEncaisse]).toEqual([40, 80]);
+  });
+
+  it("DEF-STA-04 : impayées et échues — le statut stocké « envoyée » d'une pièce qui doit encore : l'ancien 0 et 0, le nouveau 1 et 1", () => {
+    avant();
+    const s = vide({ factures: [f({ id: "envoyee", statut: "envoyée", echeance: "2026-09-01" })] });
+    const a = ancien(etatAncien(s));
+    expect(Number(/Factures impayées<\/div><div class="stat-num">(\d+)</.exec(a.renderDashboard())?.[1])).toBe(0);
+    expect(a.computeDashTraiter(SOC).facturesEchues).toBe(0);
+    expect(tuilesPilotage([], soldesDe(s, JOUR)).impayees).toBe(1);
+    expect(aTraiterPilotage([], s.factures, soldesDe(s, JOUR), JOUR).facturesEchues).toBe(1);
+  });
+
+  it("DEF-STA-05 : « Locataires à rappeler » — le bon clos : l'ancien 1, le nouveau 0", () => {
+    avant();
+    const s = vide({ bonsPilotage: [{ id: "clos", statut_workflow: "cloture_gratuit", bon_commande_parent_id: null, rappel_date: "2026-09-01", valideConducteur: false, valideDirecteur: false, lignes: [] }] });
+    expect(ancien(etatAncien(s)).computeDashTraiter(SOC).rappelsAujourdhui).toBe(1);
+    expect(aTraiterPilotage(s.bonsPilotage, [], [], JOUR).rappelsAujourdhui).toBe(0);
+  });
+
+  it("DEF-STA-06 / DEF-ECR-04 : « · null » et lettrages — l'ancien les écrit, le nouveau non", () => {
+    avant();
+    const s = vide({
+      devis: [{ id: "d", numero: null, client_nom: "Mme Durand", date: JOUR, statut: "brouillon", conducteur_id: null, conducteur: null, cree_le: null, lignes: [], remise_pourcentage: 0, ht: ZERO }],
+      factures: [f({ id: "brouillon", numero: null, statut: "brouillon", client_nom: "Mme Durand" }), f({ id: "avoir", numero: "AV-1", type_document: "avoir" })],
+      reglements: [
+        { id: "acompte-verse", facture_id: "brouillon", montant: 50, mode: "virement", date: JOUR, cree_le: null },
+        { id: "lettrage", facture_id: "avoir", montant: 20, mode: "avoir", date: JOUR, cree_le: null },
+      ],
+    });
+    const vieux = ancien(etatAncien(s)).buildActivityFeed(SOC);
+    expect(vieux.map((x) => x.sub)).toContain("Mme Durand · null");
+    expect(vieux.filter((x) => x.label === "Paiement reçu").map((x) => x.id)).toEqual(["acompte-verse", "lettrage"]);
+    const neuf = activiteRecente(s.devis, s.factures, [], s.reglements);
+    expect(neuf.some((x) => x.sous.includes("null"))).toBe(false);
+    expect(neuf.filter((x) => x.libelle === "Paiement reçu").map((x) => [x.id, x.sous])).toEqual([["acompte-verse", "Mme Durand · brouillon"]]);
+    expect(neuf.find((x) => x.nature === "devis")?.sous).toBe("Mme Durand · brouillon");
+  });
+
+  it("DEF-STA-07 : top clients — deux graphies d'une même fiche : l'ancien 2 lignes, le nouveau 1", () => {
+    avant();
+    const s = vide({ factures: [f({ id: "a", client_id: "c1", client_fiche: "OPAC du Rhône", client_nom: "OPAC du Rhône" }), f({ id: "b", client_id: "c1", client_fiche: "OPAC du Rhône", client_nom: "OPAC du Rhone", htLigne: 50 })] });
+    expect(ancien(etatAncien(s)).computeTopClients(etatAncien(s).factures as unknown[], 2026).map((c) => c.client)).toEqual(["OPAC du Rhône", "OPAC du Rhone"]);
+    expect(topClients(s.factures, 2026).map((c) => [c.client, c.total.toString()])).toEqual([["OPAC du Rhône", "150"]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("statistiques : sans défaut en jeu, les mêmes chiffres que l'ancien", () => {
   const PERIODES: PeriodeStats[] = ["tout", "annee", "mois"];
 
   it.each(INSTANTS.map((d) => [d.toISOString(), d] as const))("%s — mêmes lignes, mêmes taux, même ordre, sur trois périodes", (_, instant) => {
     aLInstant(instant);
     const jour = todayISO();
     for (let n = 0; n < TIRAGES; n++) {
-      const s = societe(instant);
+      const s = sansDefaut(societe(instant), jour, instant);
       const periode = g.parmi(PERIODES);
       const a = ancien(etatAncien(s, { statsPeriode: periode }));
       const cas = JSON.stringify({ n, periode });
-      const neuf = statsParConducteur(pourStats(s), periode, jour, instant);
+      const neuf = statsParConducteur(donneesStats(s), periode, jour, instant);
       const vieux = a.computeStatsParConducteur();
-      expect(neuf, cas).toEqual(vieux);
+      expect(neuf.map(({ ca, montantTravSup, cle, ...reste }) => ({ ...reste, ca: 0, montantTravSup: 0, cle: cle.length > 0 })), cas).toEqual(vieux.map((v) => ({ ...v, ca: 0, montantTravSup: 0, cle: true })));
+      neuf.forEach((x, i) => proche(x.ca, vieux[i]?.ca ?? NaN, cas));
 
-      const t = totauxStats(pourStats(s), periode, instant);
+      const t = totauxStats(donneesStats(s), periode, instant);
       expect([t.devis, t.factures, t.bons], cas).toEqual([
         a.filtrerParPeriode(etatAncien(s).devis as unknown[], "date", periode).length,
         a.filtrerParPeriode(etatAncien(s).factures as unknown[], "date", periode).length,
@@ -482,13 +640,18 @@ describe("statistiques : computeStatsParConducteur, computeStatsBinomesParMois e
       expect(periodeLabel(periode, jour, instant)).toBe(a.periodeLabel(periode));
 
       const eq = equipesParMois(s.factures, s.bonsStats, EQUIPES, periode, instant);
-      expect(eq, cas).toEqual(a.computeStatsBinomesParMois());
+      const veq = a.computeStatsBinomesParMois();
+      expect([eq.mois, eq.binomes], cas).toEqual([veq.mois, veq.binomes]);
+      for (const b of eq.binomes) for (const m of eq.mois) proche(eq.parBinome[b]?.[m], veq.parBinome[b]?.[m] ?? 0, cas);
 
-      const ca = a.renderStatsCARepartitionHTML(vieux);
-      const rep = repartitionCA(neuf);
-      if (!rep) expect(ca).toContain("Aucun chiffre d'affaires facturé");
-      else expect(rep.map((l) => `${l.stat.nom}:${l.part}`)).toEqual([...ca.matchAll(/stats-bar-dot"[^>]*><\/span>([^<]*)<\/div>[\s\S]*?card-sub">\(([^)]*)%\)/g)].map((m) => `${m[1]}:${m[2]}`));
-
+      // Répartition : identique tant qu'aucun chiffre d'affaires n'est négatif (sinon DEF-STA-17).
+      if (neuf.every((x) => x.ca.gte(0))) {
+        const ca = a.renderStatsCARepartitionHTML(vieux);
+        const rep = repartitionCA(neuf);
+        if (!rep) expect(ca).toContain("Aucun chiffre d'affaires facturé");
+        else expect(rep.map((l) => `${l.stat.nom}:${l.part}`)).toEqual([...ca.matchAll(/stats-bar-dot"[^>]*><\/span>([^<]*)<\/div>[\s\S]*?card-sub">\(([^)]*)%\)/g)].map((m) => `${m[1]}:${m[2]}`));
+      }
+      // Retard : identique pour qui a des bons (sans bon : DEF-STA-10).
       const ret = a.renderStatsRetardHTML(vieux);
       const r = retardParConducteur(neuf);
       if (!r) expect(ret).toContain("Aucun bon de commande");
@@ -498,140 +661,176 @@ describe("statistiques : computeStatsParConducteur, computeStatsBinomesParMois e
           const ko = /width:(\d+)%; background:#EF5A6F/.exec(m[1] ?? "");
           return [ok ? Number(ok[1]) : 0, ko ? Number(ko[1]) : 0];
         });
-        expect(r.map((l) => [l.pctOk > 0 ? l.pctOk : 0, l.pctRetard > 0 ? l.pctRetard : 0])).toEqual(vieuxPct);
+        r.forEach((l, i) => l.stat.bcTotal > 0 && expect([l.pctOk, l.pctRetard]).toEqual(vieuxPct[i]));
       }
     }
-  });
-
-  it("DEF-STA-08 à 11 : étiquettes, retard d'un bon facturé, barre rouge sans bon, travaux supplémentaires", () => {
-    const instant = INSTANTS[0];
-    aLInstant(instant);
-    const jour = todayISO();
-    const cas: Societe = {
-      factures: [{ id: "f", numero: "F", client_nom: "C", date: jour, echeance: null, statut: "impayée", type_document: "facture", legacy_id: null, bon_commande_id: "b1", devis_id: null, conducteur: "Christophe Conducteur", cree_le: null, remise_pourcentage: 0, lignes: [{ type: "ligne", quantite: 1, prix_unitaire: 100, tva: 20 }] }],
-      devis: [],
-      reglements: [],
-      rapports: [],
-      bonsPilotage: [],
-      bonsStats: [
-        { id: "b1", cree_le: `${jour}T08:00:00Z`, conducteur: "Christophe Conducteur", technicien: null, bon_commande_parent_id: null, date_fin_travaux: "2000-01-01" },
-        { id: "b2", cree_le: `${jour}T08:00:00Z`, conducteur: "christophe conducteur", technicien: null, bon_commande_parent_id: null, date_fin_travaux: null },
-        { id: "b3", cree_le: `${jour}T08:00:00Z`, conducteur: null, technicien: null, bon_commande_parent_id: null, date_fin_travaux: null },
-      ],
-      conducteurs: ["Karim"],
-    };
-    const a = ancien(etatAncien(cas, { statsPeriode: "tout" }));
-    const neuf = statsParConducteur(pourStats(cas), "tout", jour, instant);
-    expect(neuf).toEqual(a.computeStatsParConducteur());
-    expect(neuf.map((s) => s.nom)).toEqual(["Christophe Conducteur", "Karim", "christophe conducteur"]);
-    expect(neuf[0]).toMatchObject({ bcEnRetard: 1, tauxDansLesTemps: 0, nbTravSup: 0, montantTravSup: 0, tauxTravSup: 0 });
-    expect(retardParConducteur(neuf)?.find((l) => l.stat.nom === "Karim")).toMatchObject({ pctOk: 0, pctRetard: 100 });
   });
 });
 
 // ---------------------------------------------------------------------------
-describe("technicien et sous-traitant : renderDashboardTechnicien, renderDashboardSousTraitant", () => {
+describe("statistiques : chaque défaut, l'ancien faux et le nouveau juste sur le même cas", () => {
+  const instant = INSTANTS[0];
+  const JOUR = "2026-09-25";
+  const bon = (o: Partial<BonStats>): BonStats => ({ id: "b", cree_le: `${JOUR}T08:00:00Z`, date: JOUR, date_reception: null, conducteur_id: "k1", conducteur: "Christophe Conducteur", technicien: null, bon_commande_parent_id: null, date_fin_travaux: null, statut_workflow: "en_cours", ...o });
+  const facture = (o: Partial<Omit<FactureTiree, "ht">> & { htLigne?: number }): FactureTiree => {
+    const { htLigne = 100, ...reste } = o;
+    const l: LigneChiffree[] = [{ type: "ligne", quantite: 1, prix_unitaire: htLigne, tva: 20 }];
+    return {
+      id: "f", numero: "F", client_id: null, client_fiche: null, client_nom: "C", date: JOUR, echeance: null, statut: "impayée", type_document: "facture", legacy_id: null, bon_commande_id: null, devis_id: null,
+      conducteur_id: "k1", conducteur: "Christophe Conducteur", cree_le: null, remise_pourcentage: 0, lignes: l, ht: totauxVue(l, 0).ht, ...reste,
+    };
+  };
+  const vide = (s: Partial<Societe>): Societe => ({ factures: [], devis: [], reglements: [], rapports: [], bonsPilotage: [], bonsStats: [], conducteurs: FICHES.slice(0, 2), ...s });
+
+  it("DEF-STA-08 : par étiquette, l'ancien fait deux lignes d'une graphie et oublie le bon sans conducteur ; le nouveau groupe par la référence, avec « Sans conducteur »", () => {
+    aLInstant(instant);
+    const s = vide({ bonsStats: [bon({ id: "b1" }), bon({ id: "b2", conducteur: "christophe conducteur" }), bon({ id: "b3", conducteur_id: null, conducteur: null })] });
+    const vieux = ancien(etatAncien(s, { statsPeriode: "tout" })).computeStatsParConducteur();
+    expect(vieux.map((x) => [x.nom, x.bcTotal])).toEqual([["Christophe Conducteur", 1], ["Karim", 0], ["christophe conducteur", 1]]);
+    expect(statsParConducteur(donneesStats(s), "tout", JOUR, instant).map((x) => [x.nom, x.bcTotal])).toEqual([["Christophe Conducteur", 2], ["Karim", 0], [SANS_CONDUCTEUR, 1]]);
+  });
+
+  it("DEF-STA-09 : un bon facturé dont la fin de travaux est passée — l'ancien « en retard », le nouveau non", () => {
+    aLInstant(instant);
+    const s = vide({ bonsStats: [bon({ id: "b1", date_fin_travaux: "2000-01-01", statut_workflow: "facture" })], factures: [facture({ bon_commande_id: "b1" })] });
+    expect(ancien(etatAncien(s, { statsPeriode: "tout" })).computeStatsParConducteur()[0]).toMatchObject({ bcEnRetard: 1 });
+    expect(statsParConducteur(donneesStats(s), "tout", JOUR, instant)[0]).toMatchObject({ bcEnRetard: 0, tauxDansLesTemps: 100 });
+  });
+
+  it("DEF-STA-10 : un conducteur sans bon — l'ancien une barre rouge pleine, le nouveau aucune barre", () => {
+    aLInstant(instant);
+    const s = vide({ bonsStats: [bon({})] });
+    const a = ancien(etatAncien(s, { statsPeriode: "tout" }));
+    const ret = a.renderStatsRetardHTML(a.computeStatsParConducteur());
+    expect(ret).toMatch(/Karim<\/div>\s*<div class="stats-bar-track stats-bar-track-split">[^]*?width:100%; background:#EF5A6F/);
+    expect(retardParConducteur(statsParConducteur(donneesStats(s), "tout", JOUR, instant))?.find((l) => l.stat.nom === "Karim")).toMatchObject({ pctOk: 0, pctRetard: 0 });
+  });
+
+  it("DEF-STA-11 : un travail supplémentaire chiffré — l'ancien 0 (champ sans colonne), le nouveau 1 et son montant", () => {
+    aLInstant(instant);
+    const s = vide({ bonsStats: [bon({})] });
+    expect(ancien(etatAncien(s, { statsPeriode: "tout" })).computeStatsParConducteur()[0]).toMatchObject({ nbTravSup: 0, montantTravSup: 0, tauxTravSup: 0 });
+    const neuf = statsParConducteur(donneesStats(s, { travaux: [{ bon_commande_id: "b", statut: "chiffre", quantite: 2, prix_vente_ht: 45 }] }), "tout", JOUR, instant)[0];
+    expect(neuf).toMatchObject({ nbTravSup: 1, tauxTravSup: 100 });
+    expect(neuf?.montantTravSup.toString()).toBe("90");
+  });
+
+  it("DEF-STA-17 : les avoirs l'emportent — l'ancien des parts de 250 % et −150 %, le nouveau 100 % au seul positif", () => {
+    aLInstant(instant);
+    const s = vide({ factures: [facture({ id: "f1", conducteur_id: "k2", conducteur: "Karim" }), facture({ id: "a1", type_document: "avoir", htLigne: 60 })] });
+    const a = ancien(etatAncien(s, { statsPeriode: "tout" }));
+    const parts = [...a.renderStatsCARepartitionHTML(a.computeStatsParConducteur()).matchAll(/card-sub">\(([^)]*)%\)/g)].map((m) => Number(m[1]));
+    expect(parts).toEqual([250, -150]);
+    expect(repartitionCA(statsParConducteur(donneesStats(s), "tout", JOUR, instant))?.map((l) => [l.stat.nom, l.part])).toEqual([["Karim", 100]]);
+  });
+
+  it("DEF-STA-18 : un bon du mois dernier saisi aujourd'hui — l'ancien le compte « ce mois-ci », le nouveau non", () => {
+    aLInstant(instant);
+    const s = vide({ bonsStats: [bon({ date: "2026-08-20", cree_le: `${JOUR}T08:00:00Z` })] });
+    expect(ancien(etatAncien(s)).filtrerParPeriode(etatAncien(s).bonsCommande as unknown[], "createdAt", "mois")).toHaveLength(1);
+    expect(totauxStats(donneesStats(s), "mois", instant).bons).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("terrain : technicien et sous-traitant", () => {
   const METIERS = ["Plomberie", "Peinture", "Sol"] as const;
 
+  /** Le bon tel que `reconstituerWorkflow` le complétait à partir de ses tâches. */
+  function bonAncien(b: BonPlanning, taches: readonly TachePlanning[]) {
+    const ts = taches.filter((t) => t.bon_commande_id === b.id);
+    const faite = (t: TachePlanning) => t.statut === "realisee" || t.statut === "validee";
+    const metiersFait: Record<string, boolean> = {};
+    for (const t of ts) if (t.metier) metiersFait[t.metier] = faite(t);
+    const enAttente = ts.find((t) => t.piece_a_commander);
+    return {
+      id: b.id, societeId: SOC, client: b.client_nom ?? "", adresse: b.adresse, datePlanifiee: b.date_planifiee, heurePlanifiee: b.heure_planifiee, metier: b.metier, metiers: b.metiers,
+      technicien: b.technicien, metiersFait, pieceACommander: !!enAttente, pieceACommanderDateCommande: enAttente?.piece_date_commande ?? "",
+      valideConducteur: ts.length > 0 && ts.every((t) => t.statut === "validee"), sousTraitant: "", montantSousTraitant: null,
+    };
+  }
+
+  /**
+   * Des bons mono-métier, une journée chacun, leurs tâches posées le jour du
+   * rendez-vous et confiées à l'équipe du bon : là où la journée
+   * supplémentaire et la tâche confiée ailleurs (DEF-STA-13) ne jouent pas.
+   */
   function terrain(instant: Date) {
-    const bons: BonTerrain[] = Array.from({ length: g.entier(0, 14) }, (_, i) => ({
-      id: `b${i}`,
-      client_nom: `Client ${i}`,
-      adresse: peutEtre(0.5, () => `${i} rue Neuve`),
-      date_planifiee: peutEtre(0.8, () => uneDate(instant, 9)),
-      heure_planifiee: peutEtre(0.6, () => g.parmi(["08:00", "10:30", "14:00", "07:15"])),
-      metier: peutEtre(0.7, () => g.parmi(METIERS)),
-      metiers: g.parmi([null, [], ["Plomberie"], ["Peinture", "Sol"]]),
-      technicien: g.parmi(["eqA", "Équipe Thomas", "Peinture", "eqB", null]),
-      montant_sous_traitant: g.parmi([null, 250, "80.5"]),
-    }));
-    const taches: TacheTerrain[] = bons.flatMap((b) =>
-      Array.from({ length: g.entier(0, 3) }, () => ({
-        bon_commande_id: b.id,
-        metier: peutEtre(0.8, () => g.parmi(METIERS)),
-        statut: g.parmi(["planifiee", "realisee", "validee", "validee"]),
-        sous_traitant_id: peutEtre(0.4, () => g.parmi(["stA", "stB"])),
-        piece_a_commander: g.reel() < 0.25,
-        piece_date_commande: peutEtre(0.4, () => uneDate(instant, 5)),
-      }))
+    const bons: BonPlanning[] = Array.from({ length: g.entier(0, 14) }, (_, i) => {
+      const date = peutEtre(0.8, () => uneDate(instant, 9));
+      const metier = peutEtre(0.8, () => g.parmi(METIERS));
+      return bonEssai({
+        id: `b${i}`, client_nom: `Client ${i}`, adresse: peutEtre(0.5, () => `${i} rue Neuve`), date_planifiee: date, date_planifiee_fin: date,
+        heure_planifiee: peutEtre(0.6, () => g.parmi(["08:00", "10:30", "14:00", "07:15"])), metier, metiers: metier && g.reel() < 0.5 ? [metier] : null,
+        technicien: g.parmi([EQUIPE_A.id, EQUIPE_A.nom, EQUIPE_B.nom, EQUIPE_B.id, null]),
+      });
+    });
+    const taches: TachePlanning[] = bons.flatMap((b) =>
+      Array.from({ length: g.entier(0, 3) }, () =>
+        tacheEssai({
+          bon_commande_id: b.id, metier: peutEtre(0.8, () => g.parmi(METIERS)), date_tache: b.date_planifiee, technicien_id: null, sous_traitant_id: null,
+          statut: g.parmi(["planifiee", "realisee", "validee", "validee"]), piece_a_commander: g.reel() < 0.25, piece_date_commande: peutEtre(0.4, () => uneDate(instant, 5)),
+        })
+      )
     );
     return { bons, taches };
   }
 
-  /** Le bon tel que `reconstituerWorkflow` le complétait à partir de ses tâches. */
-  function bonAncien(b: BonTerrain, taches: readonly TacheTerrain[], noms: ReadonlyMap<string, string>) {
-    const ts = taches.filter((t) => t.bon_commande_id === b.id);
-    const faite = (t: TacheTerrain) => t.statut === "realisee" || t.statut === "validee";
-    const metiersFait: Record<string, boolean> = {};
-    for (const t of ts) if (t.metier) metiersFait[t.metier] = faite(t);
-    const enAttente = ts.find((t) => t.piece_a_commander);
-    const avecSt = ts.find((t) => t.sous_traitant_id);
-    return {
-      id: b.id, societeId: SOC, client: b.client_nom ?? "", adresse: b.adresse, datePlanifiee: b.date_planifiee, heurePlanifiee: b.heure_planifiee, metier: b.metier, metiers: b.metiers,
-      technicien: b.technicien, metiersFait, pieceACommander: !!enAttente, pieceACommanderDateCommande: enAttente?.piece_date_commande ?? "",
-      valideConducteur: ts.length > 0 && ts.every((t) => t.statut === "validee"), sousTraitant: avecSt?.sous_traitant_id ? (noms.get(avecSt.sous_traitant_id) ?? "") : "",
-      montantSousTraitant: b.montant_sous_traitant,
-    };
-  }
-
-  it.each(INSTANTS.map((d) => [d.toISOString(), d] as const))("%s — mêmes tuiles, même journée, même ordre", (_, instant) => {
+  it.each(INSTANTS.map((d) => [d.toISOString(), d] as const))("%s — sans journée supplémentaire ni tâche confiée ailleurs : mêmes tuiles, même journée, même ordre", (_, instant) => {
     aLInstant(instant);
     const jour = todayISO();
-    const finSemaine = dateISO(new Date(Date.now() + 6 * JOUR_MS));
-    const noms = new Map([["stA", "Serge SARL"], ["stB", "Bâti Plus"]]);
     for (let n = 0; n < TIRAGES; n++) {
       const { bons, taches } = terrain(instant);
-      const equipe = g.parmi(["eqA", "eqB", null]);
-      const legacy = bons.map((b) => bonAncien(b, taches, noms));
-      const a = ancien({ societeId: SOC, currentRole: "technicien", bonsCommande: legacy, techniciens: EQUIPES.map((e) => ({ id: e.id, societeId: SOC, nom1: e.nom, metier: e.metier, metiers: e.metiers })) }, { monEquipeId: equipe });
+      const equipe = g.parmi([EQUIPE_A.id, EQUIPE_B.id, null]);
+      const a = ancien({ societeId: SOC, currentRole: "technicien", bonsCommande: bons.map((b) => bonAncien(b, taches)), techniciens: [EQUIPE_A, EQUIPE_B].map((e) => ({ id: e.id, societeId: SOC, nom1: e.nom, metiers: e.metiers })) }, { monEquipeId: equipe });
       const html = a.renderDashboardTechnicien();
-      const t = tableauTechnicien(mesBonsTechnicien(bons, EQUIPES, equipe), taches, jour, finSemaine);
-      expect(a.bac.tuiles.map((x) => x.valeur)).toEqual([t.duJour.length, t.laSemaine.length, t.aPointer.length, t.pieces.length]);
-      const ordre = [...html.matchAll(/traiter-label">(Client \d+)/g)].map((m) => m[1]);
-      expect(t.duJour.slice(0, 8).map((b) => b.client_nom)).toEqual(ordre);
-
-      const actuel = g.parmi(["", "Serge SARL", "Bâti Plus"]);
-      const st = ancien({ societeId: SOC, currentRole: "sous_traitant", currentSousTraitant: actuel, bonsCommande: legacy, factures: [], devis: [] });
-      const nombres = [...st.renderDashboardSousTraitant().matchAll(/class="stat-num">(\d+)</g)].map((m) => Number(m[1]));
-      const neuf = tableauSousTraitant(bons, taches, noms, actuel);
-      expect([neuf.facturesPretes, neuf.devis, neuf.impayees]).toEqual(nombres);
+      const t = tableauTerrain(construireCartes(bons, taches, ANNUAIRES), { monEquipeId: equipe, monSousTraitantId: null }, jour);
+      const cas = JSON.stringify({ n, equipe });
+      expect(a.bac.tuiles.map((x) => x.valeur), cas).toEqual([t.duJour.length, t.aVenir.length, t.aPointer.length, t.pieces.length]);
+      expect(t.duJour.slice(0, 8).map((c) => c.bon.client_nom), cas).toEqual([...html.matchAll(/traiter-label">(Client \d+)/g)].map((m) => m[1]));
     }
   });
 
-  it("DEF-STA-13 : une journée supplémentaire aujourd'hui ne compte pas ; DEF-STA-14 : devis et impayés du sous-traitant à 0", () => {
+  it("DEF-STA-13 : une journée supplémentaire aujourd'hui, confiée à mon équipe sur le bon d'une autre — l'ancien 0, le nouveau 1", () => {
     aLInstant(INSTANTS[0]);
     const jour = todayISO();
-    const b: BonTerrain = { id: "b", client_nom: "Client 1", adresse: null, date_planifiee: "2000-01-01", heure_planifiee: null, metier: "Sol", metiers: null, technicien: null, montant_sous_traitant: 10 };
-    const taches: TacheTerrain[] = [{ bon_commande_id: "b", metier: "Sol", statut: "validee", sous_traitant_id: "stA", piece_a_commander: false, piece_date_commande: null }];
-    const noms = new Map([["stA", "Serge SARL"]]);
-    const a = ancien({ societeId: SOC, currentRole: "technicien", bonsCommande: [bonAncien(b, taches, noms)], techniciens: [] });
+    const b = bonEssai({ id: "b", client_nom: "Client 1", date_planifiee: "2026-09-24", date_planifiee_fin: "2026-09-24", technicien: EQUIPE_B.nom });
+    const taches = [tacheEssai({ id: "t1", bon_commande_id: "b", date_tache: "2026-09-24", technicien_id: EQUIPE_B.id, statut: "realisee" }), tacheEssai({ id: "t2", bon_commande_id: "b", date_tache: jour, technicien_id: EQUIPE_A.id })];
+    const a = ancien({ societeId: SOC, currentRole: "technicien", bonsCommande: [bonAncien(b, taches)], techniciens: [EQUIPE_A, EQUIPE_B].map((e) => ({ id: e.id, societeId: SOC, nom1: e.nom })) }, { monEquipeId: EQUIPE_A.id });
     a.renderDashboardTechnicien();
-    expect(tableauTechnicien([b], taches, jour, jour).duJour).toHaveLength(0);
     expect(a.bac.tuiles[0]?.valeur).toBe(0);
-    expect(tableauSousTraitant([b], taches, noms, "Serge SARL")).toEqual({ facturesPretes: 1, devis: 0, impayees: 0 });
+    expect(tableauTerrain(construireCartes([b], taches, ANNUAIRES), { monEquipeId: EQUIPE_A.id, monSousTraitantId: null }, jour).duJour).toHaveLength(1);
+  });
+
+  it("DEF-STA-14 et 19 : le sous-traitant — l'ancien : bandeau « Réglages », « Mes devis » et « Mes factures impayées » à 0 ; le nouveau : sa journée, par son entreprise", () => {
+    aLInstant(INSTANTS[0]);
+    const jour = todayISO();
+    const html = ancien({ societeId: SOC, currentRole: "sous_traitant", currentSousTraitant: "", bonsCommande: [], factures: [], devis: [] }).renderDashboardSousTraitant();
+    expect(html).toContain("Sélectionnez votre nom dans <b>Réglages</b> pour ne voir que vos documents.");
+    expect(html).toMatch(/Mes devis<\/div><div class="stat-num">0</);
+    expect(html).toMatch(/Mes factures impayées<\/div><div class="stat-num">0</);
+    const b = bonEssai({ id: "b", date_planifiee: jour, date_planifiee_fin: jour });
+    const cartes = construireCartes([b, bonEssai({ id: "autre", date_planifiee: jour, date_planifiee_fin: jour })], [tacheEssai({ bon_commande_id: "b", date_tache: jour, sous_traitant_id: ST_A.id })], ANNUAIRES);
+    expect(tableauTerrain(cartes, { monEquipeId: null, monSousTraitantId: ST_A.id }, jour).duJour.map((c) => c.bcId)).toEqual(["b"]);
   });
 });
 
 // ---------------------------------------------------------------------------
-describe("DEF-STA-15 à 19 : ce que l'ancien dessine et écrit", () => {
-  it("DEF-STA-15, corrigé en production (66ea9e1) : mêmes hauteurs de barres, chaque infobulle à l'année de son mois, même légende", () => {
+describe("DEF-STA-15 et 16 : ce que l'ancien dessine", () => {
+  it("DEF-STA-15, corrigé en production (66ea9e1) : mêmes hauteurs de barres (pièces émises), chaque infobulle à l'année de son mois", () => {
     aLInstant(INSTANTS[0]);
     const jour = todayISO();
     for (let n = 0; n < TIRAGES; n++) {
-      const s = societe(INSTANTS[0]);
+      const s = sansDefaut(societe(INSTANTS[0]), jour, INSTANTS[0]);
       const a = ancien(etatAncien(s));
-      const vieux = a.computeRevenuePeriod(etatAncien(s).factures as unknown[], a.buildMonthsBack(12));
-      const svg = a.renderYearlyComparisonSVG(vieux);
-      const mois = moisGlissants(12, jour);
-      const barres = barresGraphique(revenuPeriode(s.factures, moisAnciens(12, jour), 2026), mois.map((m) => m.libelleLong));
-      const hauteurs = [...svg.matchAll(/height="([^"]*)" rx="3" fill="var\(--(?:text-dim|accent)\)"(?: opacity="0.32")? pointer-events/g)].map((m) => m[1]);
-      expect(barres.flatMap((b) => [b.hauteurPrecedent.toFixed(1), b.hauteurCourant.toFixed(1)])).toEqual(hauteurs);
-      const infobulles = [...svg.matchAll(/showRevenueTooltip\(event,'([^']*)'/g)].map((m) => m[1]);
-      expect(barres.flatMap((b) => [b.infobullePrecedent, b.infobulleCourant])).toEqual(infobulles);
+      const svg = a.renderYearlyComparisonSVG(a.computeRevenuePeriod(etatAncien(s).factures as unknown[], a.buildMonthsBack(12)));
+      const barres = barresGraphique(revenuPeriode(s.factures, moisAnciens(12, jour), 2026), moisGlissants(12, jour).map((m) => m.libelleLong));
+      const hauteurs = [...svg.matchAll(/height="([^"]*)" rx="3" fill="var\(--(?:text-dim|accent)\)"(?: opacity="0.32")? pointer-events/g)].map((m) => Number(m[1]));
+      barres.flatMap((b) => [b.hauteurPrecedent, b.hauteurCourant]).forEach((h, i) => expect(h).toBeCloseTo(hauteurs[i] ?? NaN, 1));
+      expect(barres.flatMap((b) => [b.infobullePrecedent, b.infobulleCourant])).toEqual([...svg.matchAll(/showRevenueTooltip\(event,'([^']*)'/g)].map((m) => m[1]));
     }
     const octobre = barresGraphique(revenuPeriode([], moisAnciens(12, jour), 2026), moisGlissants(12, jour).map((m) => m.libelleLong))[0];
-    expect(octobre?.infobulleCourant).toBe("octobre 2025");
-    expect(octobre?.infobullePrecedent).toBe("octobre 2024");
+    expect([octobre?.infobulleCourant, octobre?.infobullePrecedent]).toEqual(["octobre 2025", "octobre 2024"]);
   });
 
   it("66ea9e1 : la légende nomme deux millésimes sur une seule année, « Période » / « Un an plus tôt » à cheval sur deux", () => {
@@ -645,47 +844,11 @@ describe("DEF-STA-15 à 19 : ce que l'ancien dessine et écrit", () => {
       const decalage = l.uneSeuleAnnee ? 0 : 20;
       expect([["0", "19", l.courant], [String(75 + decalage), String(94 + decalage), l.precedent]], `${jour} ${n}`).toEqual(ancienne);
     }
-    aLInstant(INSTANTS[0]);
-    expect(legendeGraphique(revenuPeriode([], moisAnciens(12, todayISO()), 2026))).toEqual({ courant: "Période", precedent: "Un an plus tôt", uneSeuleAnnee: false });
   });
 
-  it("DEF-STA-16 (non reproduit, à trancher) : l'infobulle de l'ancien écrit le montant sans le mode discret", () => {
+  it("DEF-STA-16 (déjà masqué dans web/) : l'infobulle de l'ancien écrit le montant sans le mode discret", () => {
     expect(sourceDe("renderYearlyComparisonSVG")).toContain("money(d.current)");
     expect(sourceDe("renderYearlyComparisonSVG")).not.toContain("moneyDisplay");
-  });
-
-  it("DEF-STA-17 : une part négative quand les avoirs l'emportent, comme l'ancien", () => {
-    aLInstant(INSTANTS[0]);
-    const jour = todayISO();
-    const piece = (id: string, type: string, conducteur: string, ht: number): FacturePilotage => ({
-      id, numero: id, client_nom: "C", date: jour, echeance: null, statut: "impayée", type_document: type, legacy_id: null, bon_commande_id: null, devis_id: null, conducteur, cree_le: null, remise_pourcentage: 0,
-      lignes: [{ type: "ligne", quantite: 1, prix_unitaire: ht, tva: 20 }],
-    });
-    const cas: Societe = { factures: [piece("f1", "facture", "Karim", 100), piece("a1", "avoir", "Christophe Conducteur", 60)], devis: [], reglements: [], rapports: [], bonsPilotage: [], bonsStats: [], conducteurs: [] };
-    const a = ancien(etatAncien(cas, { statsPeriode: "tout" }));
-    const neuf = statsParConducteur(pourStats(cas), "tout", jour, INSTANTS[0]);
-    const html = a.renderStatsCARepartitionHTML(a.computeStatsParConducteur());
-    const parts = [...html.matchAll(/card-sub">\(([^)]*)%\)/g)].map((m) => Number(m[1]));
-    expect(repartitionCA(neuf)?.map((l) => l.part)).toEqual(parts);
-    expect(parts).toEqual([250, -150]);
-  });
-
-  it("DEF-STA-18 : un bon se range dans la période par sa date de saisie", () => {
-    const instant = INSTANTS[0];
-    aLInstant(instant);
-    const jour = todayISO();
-    const cas: Societe = {
-      factures: [], devis: [], reglements: [], rapports: [], bonsPilotage: [], conducteurs: [],
-      bonsStats: [{ id: "b", cree_le: `${jour}T08:00:00Z`, conducteur: "Karim", technicien: null, bon_commande_parent_id: null, date_fin_travaux: null }],
-    };
-    const a = ancien(etatAncien(cas));
-    expect(totauxStats(pourStats(cas), "mois", instant).bons).toBe(a.filtrerParPeriode(etatAncien(cas).bonsCommande as unknown[], "createdAt", "mois").length);
-    expect(totauxStats(pourStats(cas), "mois", instant).bons).toBe(1);
-  });
-
-  it("DEF-STA-19 : le bandeau du sous-traitant sans nom renvoie aux Réglages", () => {
-    const a = ancien({ societeId: SOC, currentRole: "sous_traitant", currentSousTraitant: "", bonsCommande: [], factures: [], devis: [] });
-    expect(a.renderDashboardSousTraitant()).toContain("Sélectionnez votre nom dans <b>Réglages</b> pour ne voir que vos documents.");
   });
 });
 
@@ -714,48 +877,37 @@ describe("indicateurs du conducteur (statsConducteur)", () => {
       { factures }
     )(bons) as AncienConducteur;
 
-  function tirage(i: number, instant: Date): { ancien: BonAncien; nouveau: BonConducteur; factureLiee: boolean } {
+  function tirage(i: number, instant: Date) {
     const statut = g.parmi([null, "en_cours", "pret_a_chiffrer", "chiffre", "facture", "cloture_gratuit"]);
     const datePlanifiee = g.reel() < 0.6 ? uneDate(instant, 150) : null;
     const suppl = datePlanifiee && g.reel() < 0.4 ? [uneDate(instant, 150)] : [];
     const dates = datePlanifiee ? [datePlanifiee, ...suppl].map((d) => ({ dayIso: d, fait: g.reel() < 0.6 })) : [];
     const faite = g.reel() < 0.5;
-    const tentatives = Array.from({ length: g.entier(0, 5) }, (_, k) => ({ id: k, type: "appel", date: "2026-09-25", heure: "09:00" }));
+    // Moins de trois tentatives : là où l'ancien et le nouveau s'accordent (au-delà, DEF-STA-12).
+    const tentatives = Array.from({ length: g.entier(0, 2) }, (_, k) => ({ id: k, type: "appel", date: "2026-09-25", heure: "09:00" }));
     const b = {
-      id: `b${i}`,
-      parent: g.reel() < 0.25 ? "p" : null,
-      valideConducteur: g.reel() < 0.4,
-      dateReception: g.reel() < 0.8 ? uneDate(instant, 150) : null,
-      date: uneDate(instant, 150),
-      dateFinTravaux: g.reel() < 0.7 ? uneDate(instant, 120) : null,
-      dateTerminee: g.reel() < 0.3 ? uneDate(instant, 100) : null,
-      rappel: g.reel() < 0.3 ? uneDate(instant, 10) : null,
-      piece: g.reel() < 0.3,
-      pieceCommandee: g.reel() < 0.5 ? uneDate(instant, 10) : "",
+      id: `b${i}`, parent: g.reel() < 0.25 ? "p" : null, valideConducteur: g.reel() < 0.4, dateReception: g.reel() < 0.8 ? uneDate(instant, 150) : null, date: uneDate(instant, 150),
+      dateFinTravaux: g.reel() < 0.7 ? uneDate(instant, 120) : null, dateTerminee: g.reel() < 0.3 ? uneDate(instant, 100) : null, rappel: g.reel() < 0.3 ? uneDate(instant, 10) : null,
+      piece: g.reel() < 0.3, pieceCommandee: g.reel() < 0.5 ? uneDate(instant, 10) : "",
     };
     const factureLiee = g.reel() < 0.15;
     const valideDirecteur = statut === "chiffre" || statut === "facture";
-    return {
-      factureLiee,
-      ancien: {
-        id: b.id, statutWorkflow: statut, bonCommandeId: b.parent, valideConducteur: b.valideConducteur, valideDirecteur,
-        datePlanifiee, dateReception: b.dateReception, date: b.date, dateFinTravaux: b.dateFinTravaux, dateInterventionTerminee: b.dateTerminee,
-        rappelDate: b.rappel, tentativesContact: tentatives, pieceACommander: b.piece, pieceACommanderDateCommande: b.pieceCommandee, problemeDescription: "",
-        __faite: faite, __dates: dates,
-      },
-      nouveau: {
-        id: b.id, conducteur_id: null, bon_commande_parent_id: b.parent, statut_workflow: statut, client_nom: "Client", date: b.date,
-        date_reception: b.dateReception, date_planifiee: datePlanifiee, date_fin_travaux: b.dateFinTravaux, date_intervention_terminee: b.dateTerminee,
-        rappel_date: b.rappel, tentatives_contact: tentatives, probleme_description: null, metier: null, metiers: [],
-        factureLiee, valideConducteur: b.valideConducteur, valideDirecteur, pieceEnAttente: b.piece && !b.pieceCommandee,
-        interventionFaite: faite, journeesFaites: dates.filter((d) => d.fait).map((d) => d.dayIso), nbTentatives: parseInt(String(tentatives), 10) || 0,
-      },
+    const ancienBon: BonAncien = {
+      id: b.id, statutWorkflow: statut, bonCommandeId: b.parent, valideConducteur: b.valideConducteur, valideDirecteur,
+      datePlanifiee, dateReception: b.dateReception, date: b.date, dateFinTravaux: b.dateFinTravaux, dateInterventionTerminee: b.dateTerminee,
+      rappelDate: b.rappel, tentativesContact: tentatives, pieceACommander: b.piece, pieceACommanderDateCommande: b.pieceCommandee, problemeDescription: "", __faite: faite, __dates: dates,
     };
+    const lu: BonLu = {
+      id: b.id, conducteur_id: null, bon_commande_parent_id: b.parent, statut_workflow: statut, client_nom: "Client", date: b.date, date_reception: b.dateReception, date_planifiee: datePlanifiee,
+      date_fin_travaux: b.dateFinTravaux, date_intervention_terminee: b.dateTerminee, rappel_date: b.rappel, tentatives_contact: tentatives, probleme_description: null, metier: null, metiers: [],
+    };
+    const nouveau = { ...avancementDuBon(lu, [], factureLiee), valideConducteur: b.valideConducteur, valideDirecteur, pieceEnAttente: b.piece && !b.pieceCommandee, interventionFaite: faite, journeesFaites: dates.filter((d) => d.fait).map((d) => d.dayIso) };
+    return { factureLiee, ancien: ancienBon, nouveau };
   }
 
   const ids = (l: { id: string }[]) => l.map((b) => b.id);
 
-  it("toutes les listes — injoignables compris — et les quatre mesures, sur 200 portefeuilles", () => {
+  it("toutes les listes et les quatre mesures, sur 200 portefeuilles", () => {
     const instant = INSTANTS[0];
     aLInstant(instant);
     const jour = todayISO();
@@ -773,20 +925,15 @@ describe("indicateurs du conducteur (statsConducteur)", () => {
     }
   });
 
-  it("DEF-STA-12 : trois tentatives ne font pas un injoignable, ni dans l'ancien ni dans le nouveau", () => {
+  it("DEF-STA-12 : trois tentatives sans rendez-vous — l'ancien aucun injoignable, le nouveau un", () => {
     aLInstant(INSTANTS[0]);
     const jour = todayISO();
     const t = tirage(0, INSTANTS[0]);
-    t.ancien.statutWorkflow = t.nouveau.statut_workflow = "en_cours";
-    t.nouveau.factureLiee = false;
-    t.ancien.datePlanifiee = t.nouveau.date_planifiee = null;
-    t.ancien.rappelDate = t.nouveau.rappel_date = null;
     const trois = [{ id: 1 }, { id: 2 }, { id: 3 }];
-    t.ancien.tentativesContact = trois;
-    t.nouveau.tentatives_contact = trois;
-    t.nouveau.nbTentatives = parseInt(String(trois), 10) || 0;
-    expect(statsAnciennes([t.ancien], [], 7, jour).injoignables).toHaveLength(0);
-    expect(statsConducteur([t.nouveau], jour, 7).injoignables).toHaveLength(0);
+    const vieux: BonAncien = { ...t.ancien, statutWorkflow: "en_cours", datePlanifiee: null, rappelDate: null, tentativesContact: trois };
+    expect(statsAnciennes([vieux], [], 7, jour).injoignables).toHaveLength(0);
+    const lu: BonLu = { id: "b0", conducteur_id: null, bon_commande_parent_id: null, statut_workflow: "en_cours", client_nom: "Client", date: jour, date_reception: null, date_planifiee: null, date_fin_travaux: null, date_intervention_terminee: null, rappel_date: null, tentatives_contact: trois, probleme_description: null, metier: null, metiers: [] };
+    expect(ids(statsConducteur([avancementDuBon(lu, [], false)], jour, 7).injoignables)).toEqual(["b0"]);
   });
 });
 

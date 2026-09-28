@@ -1,13 +1,13 @@
 import { useModeDiscret } from "@/lib/modeDiscret";
-import { moisLabelCourt, totalEquipe, type TableauEquipesAncien } from "../domain/ancien/statistiques";
-import { formatEurosEcranAncien } from "./format";
+import { moisLabelCourt, totalEquipe, type TableauEquipes } from "../domain/statistiques";
+import { formatMontant } from "./format";
 
 /**
  * Chiffre d'affaires par équipe et par mois (`renderStatsBinomesHTML`,
  * app.js l. 12146) : rien d'affiché sans facture ; une case à zéro (un avoir
  * qui annule une facture du même mois) s'écrit « — », comme l'ancien.
  */
-export function StatsEquipes({ t }: { t: TableauEquipesAncien }) {
+export function StatsEquipes({ t }: { t: TableauEquipes }) {
   useModeDiscret();
   if (!t.binomes.length) return null;
   return (
@@ -41,12 +41,12 @@ export function StatsEquipes({ t }: { t: TableauEquipesAncien }) {
                   const v = t.parBinome[b]?.[m];
                   return (
                     <td key={m} className="stats-num">
-                      {v ? formatEurosEcranAncien(v) : <span className="card-sub">—</span>}
+                      {v && !v.eq(0) ? formatMontant(v) : <span className="card-sub">—</span>}
                     </td>
                   );
                 })}
                 <td className="stats-num">
-                  <strong>{formatEurosEcranAncien(totalEquipe(t, b))}</strong>
+                  <strong>{formatMontant(totalEquipe(t, b))}</strong>
                 </td>
               </tr>
             ))}
