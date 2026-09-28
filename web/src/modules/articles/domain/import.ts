@@ -160,13 +160,22 @@ export function decouperLigne(ligne: string): string[] {
   return ligne.split(";");
 }
 
-/** Lecture volontairement identique à l'ancienne (`Number`, première virgule seulement) : la parité l'exige. */
-function nombre(brut: string): number | null {
-  const texte = brut.trim().replace(",", ".");
-  if (!texte) return null;
-  const valeur = Number(texte);
-  return Number.isFinite(valeur) ? valeur : null;
+/**
+ * Un prix tel qu'un logiciel de gestion l'exporte : chiffres, une virgule ou un
+ * point décimal, des espaces de milliers. L'ancien passait par `Number`, qui lit
+ * `1e3` comme 1 000 et `0x10` comme 16, et refuse « 1 200,00 » (DEF-REP-01) :
+ * un prix mal lu entrait au catalogue sans un mot. Tout le reste est illisible —
+ * prix à 0 et signalement, comme l'ancien le faisait déjà pour « abc ».
+ */
+const PRIX_LISIBLE = /^[+-]?((\d{1,3}([   ]\d{3})+|\d+)([.,]\d*)?|[.,]\d+)$/;
+const ESPACES_DE_MILLIERS = /[   ]/g;
+
+export function lirePrix(brut: string): number | null {
+  const texte = brut.trim();
+  if (!texte || !PRIX_LISIBLE.test(texte)) return null;
+  return Number(texte.replace(ESPACES_DE_MILLIERS, "").replace(",", "."));
 }
+const nombre = lirePrix;
 
 export interface EnteteArticles {
   /** Le nombre de champs que chaque ligne devra porter. */
