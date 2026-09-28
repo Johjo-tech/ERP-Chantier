@@ -69,6 +69,7 @@ devis, factures et bons. Migration **proposée, non appliquée** en production
 (`docs/migrations-proposees.md`), appliquée seulement en local pour tester.
 
 ## D-009 — Niveaux d'abonnement : tout ouvert par défaut
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-20.
 Aucune colonne ne porte le niveau d'abonnement. **Décision** : 5 niveaux
 définis côté front (`societes/domain/abonnement.ts`) ; une société sans niveau
 connu a le niveau 5 (tout). Lu par `select *` : la colonne proposée
@@ -144,6 +145,7 @@ refusé (défaut DEV-51). `web/` propose le statut dans l'en-tête, sous le droi
 `devis / modifier`.
 
 ## D-022 — Import d'articles : parité stricte, bizarreries comprises
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-01.
 Le port (`articles/domain/import.ts`) rend exactement ce que rend
 `regles-import-articles.ts` (600 fichiers tirés, `tests/parite/import-articles.essai.ts`).
 Cela inclut une lecture des prix par `Number` : `1e3` vaut 1000, `0x10` vaut 16,
@@ -168,6 +170,7 @@ dernière page au lieu d'une erreur 416 ; une liste « Retirés » vide dit « A
 article ne correspond » et non « Le catalogue est vide ».
 
 ## D-025 — `articles.metier` ni saisi ni recopié (ART-50)
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-03.
 Comme l'ancien écran. L'import (`upsert`) n'envoie pas la colonne : une valeur
 posée ailleurs n'est donc pas effacée par un nouvel import. Toutes les colonnes
 NOT NULL (`prix_unitaire`, `tva`, `type_article`, `actif`, `gere_en_stock`) sont
@@ -353,6 +356,7 @@ le rôle administrateur se confirme, à l'invitation comme au changement de rôl
 Le bloc de la fiche RH pourra réutiliser `comptes/api` et `BlocInvitations`.
 
 ## D-SOC-08 — Sous-traitant : pas d'invitation (reproduit)
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-06.
 AUTH-79 : la fonction de bord refuse `sous_traitant` et exige un salarié. On
 reproduit (rôle absent des rôles invitables) ; ouvrir un compte à un sous-traitant
 demande une décision produit et une évolution de la fonction de bord
@@ -385,6 +389,7 @@ des sociétés de production (SOC-31 : une donnée, aucune liste en dur dans `we
 base locale partagée (il n'agit que si `membres_societe` est vide).
 
 ## D-SOC-13 — Fonction de bord `inviter-salarie` inchangée
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-13.
 Elle vit hors de `web/` (lecture seule). Son défaut AUTH-77 (`listUsers()` sur une
 seule page de 50 comptes) est à corriger côté fonction (pagination ou recherche par
 adresse) ; `web/` l'appelle telle quelle, valide sa réponse (Zod) et relaie ses
@@ -574,17 +579,20 @@ par champ : un champ hors contrat vaut « non lu », une ligne illisible est
 refusée.
 
 ## D-BC-13 — `statut` libre : posé, jamais réécrit ni affiché
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-10.
 Deux statuts pour un bon (BC-99) : `web/` écrit « en attente » à la création
 (comme l'ancien), ne le réécrit jamais et ne l'affiche pas. Seul
 `statut_workflow`, tenu par les RPC, dit où en est le bon.
 
 ## D-BC-14 — `bc_generer_facture` : correction à écrire avec la facturation
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-14.
 Mode de paiement forcé à « virement », `conducteur_id` non recopié, TVA 10 du
 forfait (BC-95) : la fonction vient d'être reprise par la chaîne de facturation
 (émetteur figé). Sa correction est listée dans `migrations-proposees.md`
 (« à écrire ») pour ne pas croiser deux réécritures de la même fonction.
 
 ## D-BC-15 — `extraire-bc` hors de `web/`
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-11.
 L'Edge Function ne vérifie ni l'utilisateur ni la société (OCR-40). Elle vit
 dans `supabase/functions/`, hors du périmètre modifiable : le contrôle est un
 prérequis de mise en service (listé dans `migrations-proposees.md`). Côté
@@ -688,6 +696,7 @@ retenue pour lui : `creerFacture` (brouillon) puis `emettreFacture` (numéro par
 la base), fiche client obligatoire, taux de la liste des réglages.
 
 ## D-FAC-12 — Historique comptable : hors code
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-19.
 FAC-99 (7 factures d'ALPES ISERE HABITAT restées dans `kv_store`) se répare
 par une reprise en production, par un humain, avec le préfixe `compta:` de
 `legacy_id` que la base accepte (proposition `20260925040000`). `web/`
@@ -1098,6 +1107,7 @@ webhook) n'avaient aucun écran dans l'ancienne app : pas d'écran non plus ici
 (EFA-06). Les tables PDP existent déjà en production (EFA-07) : rien à proposer.
 
 ## D-EFA-05 — Rôle vérifié à l'écran seulement ; défauts des fonctions PDP signalés
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-12.
 `pdp-emit-invoice` ne vérifie que l'appartenance (EFA-20) et `pdp-webhook`
 compare son secret avec `!==` sans `verify_jwt=false` déclaré (EFA-21). Les
 corriger impose de modifier des fonctions hors de web/, interdit ici. web/ masque
@@ -1366,6 +1376,7 @@ seau `terrain` générique (D-BC-06) ; les chemins du seau propres à un module
 (salariés, véhicules) ont leurs politiques.
 
 ## D-AUTH-06 — Suppression = « module / supprimer » (AUTH-71)
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-17.
 Relevé automatisé (`tests/rls/auth-roles.essai.ts`, lecture de `pg_policy`) :
 plus AUCUNE politique DELETE sous `est_membre()`. Celles qui restaient trop
 larges sous `peut_ecrire()` (un technicien effaçait une fiche conducteur, un
@@ -1764,6 +1775,7 @@ variables de l'ancienne feuille. La palette de société pose aussi `--accent`, 
 Google Fonts, même titre d'onglet (« Terrain — Gestion chantier »).
 
 ## D-VIS-03 — Connexion et nouveau mot de passe : les pages autonomes de l'ancien, au HTML près
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-09.
 Feuille de plan, façade qui se trace, cartouche daté (« 25.09.26 »), libellés « Identifiant »,
 « Entrer », « Connexion en cours... », « Saisissez votre email, puis cliquez à nouveau. ». La
 feuille de la page est posée au montage et retirée au démontage (elle vise `body`, `label`,
@@ -1775,6 +1787,7 @@ le message anglais de Supabase), le motif d'une session expirée, la validation 
 de base.
 
 ## D-VIS-04 — Le cadre : le HTML d'index.html, piloté par les classes de <body>
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-09.
 `#app`, `.planning-menu-toggle` (☰), `#sidebar` (menu du nom, `#navDesktop`, « Garder le menu
 ouvert », pied), `#deskTopStrip` (cloche, interrupteur du mode discret, société), `#topbar`,
 `#content.content-wide`, `#bottomnav` : mêmes identifiants (l'ancienne feuille en vise plusieurs),
@@ -1881,6 +1894,7 @@ par `revert`). Les polices de l'ancien squelette (Google Fonts, Inter / Manrope
 capture (5 s au plus, puis repli comme l'ancien hors ligne).
 
 ## D-PDF-03 — Rendu de l'ancien gardé là où une correction l'avait changé
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-04.
 Là où web/ avait « corrigé » le rendu, c'est l'ancien qui fait foi : un avoir
 s'imprime avec ses montants POSITIFS sous le titre AVOIR (écart de D-FAC-03
 abandonné) ; la colonne TVA s'écrit « 5.5% » et la quantité « 2.5 » tels que
@@ -1949,6 +1963,7 @@ comme l'ancien l'imprimait à la saisie : c'est le seul écart mesuré sur le
 rapport (1 % des pixels, la section en plus) — `tests/visuel/pdf/`.
 
 ## D-ECR-BC-01 — Bons de commande : les cartes de l'ancien (remplace D-BC-01)
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-10.
 L'exigence « identique à l'ancienne » l'emporte sur le tableau : la liste reprend
 `bonCommandeCardHTML` (`CarteBon`) — carte repliée (client, n° du client, conducteur,
 adresse), contacts à droite, montant et pastilles (logement, étape, `statut`), zone
@@ -2032,6 +2047,7 @@ qu'une redirection vers ce formulaire. Écarts : le message d'échec est en fran
 relancée depuis un formulaire déjà saisi repart du prérempli, sans fusion avec la saisie.
 
 ## D-ECR-BC-11 — La pré-facture est une fenêtre (`openValidationDirecteurModal`)
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-08.
 La pré-facture s'ouvre par-dessus la liste (ou la fiche), au format de l'ancien : colonne des
 prix (`pf-table` : métier des chapitres, code, désignation, qté/unité, PU HT, travaux placés
 dans leur chapitre puis « Travaux supplémentaires constatés sur le chantier », sous-totaux par
@@ -2091,6 +2107,7 @@ Clients en lecture seule : l'ancien montrait « + Nouveau client », « Modifier
 que la RLS refuse. Masqués (règle du projet : l'écran masque ce qui serait refusé). 10 lignes d'écart mesurées.
 
 ## D-ECR-CHA-07 — Le nom du client des chantiers n'est pas affiché, comme l'ancien (révisée)
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-05.
 L'ancien lit un champ texte `client` que la base ne remplit pas : la carte et le bandeau du chantier le
 laissent vide. Un premier passage l'affichait (`client_nom`) ; c'était une correction non décidée, qui
 faisait passer une ligne de plus sur téléphone (10 à 15 % d'écart sur la liste et la fiche). Retirée :
@@ -2270,6 +2287,7 @@ contrôles que l'ancien écran n'a pas : il passe en `.sr-only` (joignable au cl
 seul « Effacer les marques » reste à l'écran, comme avant.
 
 ## D-ECR-PAR-04 — `BarreRecherche`, composant partagé
+> Révisée le 28/09 (« corrige tout ») : voir D-REP-07.
 `barreRecherche()` de l'ancien (`.barre-recherche`, compteur « n sur m ») sert à une dizaine de
 listes : il devient `components/ui/barre-recherche.tsx`, libellé caché en plus. La liste du matériel
 garde son champ nu (`renderMateriel` n'utilisait pas la barre commune), et son message vide
@@ -2511,3 +2529,141 @@ importés tels quels (`tests/parite/import-factures.essai.ts`, `tests/parite/rep
 `scripts/vider-documents-production.sql` est un script d'exploitation de la base de production, hors
 application. `web/` n'a pas à le reprendre (règle : rien hors de `web/`, aucune connexion à la
 production) ; la base locale se reconstruit par `scripts/preparer-base-locale.sh`.
+
+## D-REP-01 — Import d'articles : les prix se lisent à la française, sans exposant ni hexadécimal (DEF-REP-01)
+Décision du client (28/09, « corrige tout ») : remplace D-022 pour la lecture des prix. `lirePrix`
+(`articles/domain/import.ts`) n'accepte que chiffres, une virgule ou un point décimal, des espaces de
+milliers (espace, U+00A0, U+202F) : « 1 200,00 » vaut 1 200 ; `1e3`, `0x10`, `Infinity`, `12abc`,
+« 1,2,3 » sont illisibles — prix à 0 et le signalement « Prix de vente absent » que l'ancien donnait déjà
+pour « abc ». Le reste de l'import garde la parité stricte (600 fichiers tirés) ; les prix de l'écart
+ont leur essai, qui montre le défaut de l'ancien et le juste du nouveau.
+
+## D-REP-02 — Import de DPGF : « 1.234 » vaut 1 234 ; le séparateur se lit sur dix lignes (DEF-REP-02)
+Remplace IMP-31 / D-EFA-09 pour ces deux points. `lireMontantCellule` : des groupes de trois chiffres
+séparés par des points, sans zéro de tête (« 1.234 », « 12.345.678 ») sont des milliers ; « 0.125 »,
+« 1.23 », « 1.2345 » restent décimaux. `devinerSeparateur` : `;` dès que la moitié des dix premières
+lignes en porte un hors guillemets (à égalité, le point-virgule l'emporte : la virgule est décimale en
+France) ; une virgule dans un titre ne fait plus découper un fichier `;` sur ses virgules décimales.
+Prudence : un fichier réellement « à l'anglaise » (1.234 = un virgule deux cent trente-quatre) est
+désormais lu mille fois plus grand — l'aperçu de l'import, obligatoire avant d'écrire, le montre.
+
+## D-REP-03 — Le métier d'un article se saisit et se recopie (DEF-REP-03)
+Remplace D-025 (ART-50). Fiche article : un sélecteur « Métier » (métiers de la société, un métier retiré
+reste proposé sur la fiche qui le porte, « — » = aucun, écrit NULL). Choisir l'article sur une ligne
+recopie son métier ; un article sans métier ne retire pas celui de la ligne. L'import n'envoie toujours
+pas la colonne (un import n'efface pas un métier posé à la main).
+
+## D-REP-04 — Pièces imprimées : « 2,5 », « 5,5 % », avoir en négatif, SAV intitulé « SAV » (DEF-REP-04)
+Remplace D-PDF-03 pour ces quatre points (DEV-52 et l'écart de D-FAC-03 repris). Le gabarit
+(`documents/impression/gabarit.ts`) reçoit `sens` (-1 pour un avoir, posé par `contexteFacture`) :
+lignes, bases de TVA, totaux et net en négatif ; une déduction (remise, acompte, retenue) s'écrit alors
+sans signe ; un zéro n'en prend jamais. `contexteBon` intitule « SAV » un bon qui a un bon d'origine.
+La parité (`tests/parite/impression.essai.ts`) applique ces seules corrections au HTML de l'ancien
+(`ecartVoulu`) et exige l'identité pour tout le reste. Écrans et PDF à recomparer :
+`tests/visuel/pdf/README.md`.
+
+## D-REP-05 — Le nom du client sur la carte et le bandeau du chantier (DEF-REP-05)
+Remplace D-ECR-CHA-07 (révisée) : `client_nom`, que la base tient, s'affiche dans `.chantier-a4-client`
+et après le type dans le bandeau de la fiche. Écart visuel attendu consigné dans
+`tests/visuel/ecrans-chantiers.ts` (`avecNomDuClient`, marge provisoire).
+
+## D-REP-06 — Un sous-traitant reçoit un compte par invitation (DEF-REP-06)
+Remplace D-SOC-08. Réglages › Comptes : « Sous-traitants sans compte » (fiches sans
+`contact_profile_id`), rôle fixé `sous_traitant`, adresse du contact préremplie. La fonction de bord
+`inviter-salarie` proposée (`supabase/propositions/fonctions/inviter-salarie`) accepte
+`sous_traitant_id` et pose `invitations.sous_traitant_id` ; `appliquer_invitations()` rattachait déjà
+`sous_traitants.contact_profile_id`. **Prérequis** : la fonction proposée déployée — l'actuelle répond
+« Salarié non désigné. », que l'écran affiche tel quel.
+
+## D-REP-07 — Matériel : « Aucun matériel ne correspond. » quand la recherche écarte tout (DEF-REP-07)
+Révise D-ECR-PAR-04 : « Aucun matériel pour l'instant. » reste pour un inventaire vide.
+
+## D-REP-08 — La pré-facture masque ses montants en mode discret (DEF-REP-08)
+Révise D-ECR-BC-11 : la boîte des totaux (`BoiteTotaux masquable`) et les sous-totaux par métier
+passent par `formatEurosEcran`. La fiche interne à droite (la pièce imprimée) et la boîte de dialogue du
+hors-circuit gardent leurs montants (D-CLI-04 : un document porte ses montants). Le chiffrage d'un bon
+(`ChiffrageBon`) n'est pas visé par l'entrée et reste comme l'ancien.
+
+## D-REP-09 — Pied du menu à jour, carte « nouveau mot de passe » mise en forme (DEF-REP-09)
+Révise D-VIS-03 / D-VIS-04. Pied du menu : « Données réservées aux comptes de votre société. » (la
+phrase de l'ancien datait du `kv_store` ouvert par lien). La carte porte `login-container login-card` :
+sa feuille, copiée telle quelle, la met enfin en forme. Le pied est masqué des deux côtés dans la
+comparaison visuelle (`MASQUES_COMMUNS`, `tests/visuel/comparer.visuel.ts`).
+
+## D-REP-10 — Un seul statut affiché pour un bon : l'étape du circuit (DEF-REP-10)
+Révise D-BC-13 / D-ECR-BC-01 : la pastille grise `statut` (« en attente », jamais réécrite) disparaît des
+cartes (liste des bons, files de Facturation, espace client). **Retirer la colonne du schéma** : reporté —
+l'application historique, en production, écrit encore « en attente » à chaque création ; la supprimer
+casserait ses insertions. À faire quand elle sera retirée. web/ continue d'écrire « en attente ».
+
+## D-REP-11 — `extraire-bc` exige un utilisateur qui peut créer un bon (DEF-REP-11)
+Remplace D-BC-15 (côté fonction). Copie corrigée proposée : `supabase/propositions/fonctions/extraire-bc`
+(le dossier `supabase/functions` de web/ n'existant pas, la mission voulait une proposition documentée ;
+une copie complète, testable par `tests/rls/bord/charger.ts`, a été préférée à un texte). Contrôle AVANT
+la clé Mistral : `auth.getUser()` (la clé anon, qui passe `verify_jwt`, n'a pas d'utilisateur → 401),
+puis, dans une au moins de ses sociétés, `a_permission(…, 'bons_commande', 'creer')` et, si la
+proposition du niveau est appliquée, `niveau_suffisant(…, 'ocr')` (→ 403). Le corps ne désigne pas de
+société : l'écran historique n'en envoie pas et doit continuer de fonctionner au déploiement — choix
+prudent ; un compte de plusieurs sociétés qui a le droit dans l'une peut lire.
+
+## D-REP-12 — Fonctions PDP : la matrice décide ; secret du webhook à temps constant (DEF-REP-12)
+Remplace D-EFA-05 (côté fonction). `droitRefuse` (`_shared/supabase.ts` proposé) lit `a_permission` avec
+le jeton de l'appelant : dépôt et cycle de vie « factures / modifier » ; synchronisation et fichier
+« factures / voir » (facture fournisseur : « controle_fournisseurs / voir ») ; réception
+« controle_fournisseurs / créer » ; éligibilité d'un client « clients / modifier » ; e-reporting,
+connexion et déconnexion « facturation_electronique / modifier ». `pdp-webhook` compare son secret par
+`egauxATempsConstant`. `verify_jwt = false` de `pdp-webhook` est à DÉCLARER dans `supabase/config.toml`
+racine (`[functions.pdp-webhook]`) — hors de web/, au déploiement. Le second dépôt après expiration
+(D-R4-11, M7) reste gardé par `pdp_identifiant` (409), inchangé. Seul « Transmettre » est appelé par
+web/, déjà masqué sans « factures / modifier » : aucun écran de web/ ne perd un accès.
+
+## D-REP-13 — `inviter-salarie` retrouve un compte au-delà de 50 (DEF-REP-13)
+Remplace D-SOC-13 (côté fonction). `compteParAdresse` : le profil (créé par déclencheur pour chaque
+compte) donne l'identifiant, `getUserById` l'état de confirmation ; faute de profil, toutes les pages
+d'Auth (1 000 par page, 50 pages au plus).
+
+## D-REP-14 — La facture née du bon reprend le client, le conducteur, la TVA de la société (DEF-REP-14)
+Remplace D-BC-14. Proposition `20260928200001` : `clients.mode_paiement` (« virement » à défaut),
+`conducteur_id` du bon, TVA par défaut des Réglages (10 si illisible) pour la ligne forfait et les
+travaux sans taux. Refait la fonction du n° 35 et s'arrête si la fonction en place n'est pas la sienne.
+
+## D-REP-15 — Un devis, un bon : l'index unique suffit, pas de RPC (DEF-REP-15)
+Proposition `20260928200002` : index unique partiel `bons_commande(devis_id)` (hors SAV), précédé d'une
+garde qui nomme les doublons existants et s'arrête — un humain choisit lequel garder. Pas de RPC
+`bon_depuis_devis` : l'index règle la course, et l'échec des lignes est déjà rattrapé (D-R4-07). web/
+traduit le refus de l'index (23505) en « déjà lié au bon … » (`devis/api/operations.ts`).
+
+## D-REP-16 — Un bon ou un devis reste dans sa société (DEF-REP-16)
+Proposition `20260928200003` : déclencheur SECURITY DEFINER (EXECUTE retiré à tous) qui refuse (23514) un
+client ou un conducteur d'une autre société. Bons et devis seulement (les deux cités par l'entrée) ; à
+étendre aux factures et aux chantiers si le métier le veut. Lignes existantes non touchées : comptées par
+l'essai à blanc.
+
+## D-REP-17 — L'écriture des fiches conducteur et des fournisseurs suit la matrice seule (DEF-REP-17)
+Proposition `20260928200004`, après la vérification que demandait D-AUTH-06 : aucun geste de l'une ou
+l'autre application ne crée une fiche conducteur ou un fournisseur hors de RH et des Réglages (le
+déclencheur de l'étiquette `conducteur` n'insère rien). Insert et update : `rh` ou `reglages` (créer /
+modifier) pour les conducteurs, `reglages` pour les fournisseurs. La garde s'arrête si une autre
+politique permissive d'écriture existe en production.
+
+## D-REP-18 — Le sous-traitant ne lit plus la gestion que ses écrans n'ouvrent pas (DEF-REP-18)
+Le métier n'ayant pas tranché table par table, choix prudent : politique RESTRICTIVE (proposition
+`20260928200005`) sur `fournisseurs`, `factures_entrantes`, `vehicules`, `workflow_journal` — aucun
+écran du sous-traitant ne les lit. Restent lisibles parce que ses écrans les lisent : `clients` (nouveau
+rapport), `conducteurs`, `techniciens`, `materiels`, `referentiels`, `societe_settings`,
+`v_salaries_annuaire` (déjà masquée). Les fermer demanderait d'adapter ces écrans : à re-trancher.
+
+## D-REP-19 — Les sept factures du `kv_store` : procédure de reprise, pas de migration (DEF-REP-19)
+Impossible d'ici sans décision risquée : les données vivent en production (aucune connexion permise) et
+leur forme exacte n'est pas connue. Correction PROPOSÉE (`docs/migrations-proposees.md`, « Reprise des
+sept factures du kv_store ») : un humain relève les sept valeurs (requête en lecture seule fournie), les
+passe par l'import d'historique comptable de web/ (administrateur, marqueur `compta:`, proposition
+`20260925040000`), puis vérifie la série. Aucun fichier SQL : écrire la reprise à l'aveugle risquerait
+des pièces légales fausses, pire que le trou.
+
+## D-REP-20 — Le niveau d'abonnement est opposable en base (DEF-REP-20)
+Proposition `20260928200007` : `societes.niveau_abonnement` (NULL = 5, rien ne change au déploiement),
+posé par le service seulement (déclencheur : un compte connecté ne le pose ni ne le change),
+`niveau_suffisant()` (même table que `societes/domain/abonnement.ts`), politiques RESTRICTIVES sur
+articles (2), factures et lignes (2), bons et lignes (3) ; « ocr » (4) vérifié par `extraire-bc` proposée.
+Hors de portée, dit dans le fichier : les vues du terrain et les fonctions SECURITY DEFINER.

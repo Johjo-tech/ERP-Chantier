@@ -140,26 +140,26 @@ diffère de l'ancienne), « correction proposée en base » (migration de `supab
 | DEF-COR-54 | Réf. de bon client figée vide sans avertissement | corrigé dans web/ | affichage |
 | DEF-COR-55 | « Mon nom » inaccessible au terrain | corrigé dans web/ | affichage |
 | DEF-COR-56 | Ordre des listes au gré de la base | corrigé dans web/ | affichage |
-| DEF-REP-01 | Import d'articles : `1e3`, `0x10`, « 1 200,00 » | identique à l'ancienne | calcul |
-| DEF-REP-02 | Import de DPGF : « 1.234 » lu 1,234 | identique à l'ancienne | calcul |
-| DEF-REP-03 | `articles.metier` ni saisi ni recopié | identique à l'ancienne | affichage |
-| DEF-REP-04 | Pièces imprimées : « 5.5% », avoir positif, SAV « BON DE COMMANDE » | identique à l'ancienne | affichage |
-| DEF-REP-05 | Nom du client absent des cartes de chantier | identique à l'ancienne | affichage |
-| DEF-REP-06 | Sous-traitant non invitable | identique à l'ancienne | affichage |
-| DEF-REP-07 | Matériel : message « vide » même sur recherche | identique à l'ancienne | affichage |
-| DEF-REP-08 | Pré-facture : montants hors mode discret | identique à l'ancienne | affichage |
-| DEF-REP-09 | Textes périmés du cadre et de « nouveau mot de passe » | identique à l'ancienne | affichage |
-| DEF-REP-10 | Deux statuts pour un bon | identique à l'ancienne | affichage |
-| DEF-REP-11 | `extraire-bc` sans authentification | identique à l'ancienne | sécurité |
-| DEF-REP-12 | Fonctions PDP : rôle non vérifié, secret comparé par `!==` | identique à l'ancienne | sécurité |
-| DEF-REP-13 | `inviter-salarie` : une seule page de 50 comptes | identique à l'ancienne | affichage |
-| DEF-REP-14 | `bc_generer_facture` : virement forcé, TVA 10, sans conducteur | identique à l'ancienne | calcul |
-| DEF-REP-15 | Deux onglets, deux bons depuis le même devis | identique à l'ancienne | données perdues |
-| DEF-REP-16 | Client ou conducteur d'une autre société sur un bon | identique à l'ancienne | sécurité |
-| DEF-REP-17 | Le terrain crée une fiche conducteur ou fournisseur | identique à l'ancienne | sécurité |
-| DEF-REP-18 | Clients, véhicules, annuaire lisibles par le sous-traitant | identique à l'ancienne | sécurité |
-| DEF-REP-19 | Sept factures restées dans `kv_store` | identique à l'ancienne | données perdues |
-| DEF-REP-20 | Niveau d'abonnement non opposable | identique à l'ancienne | sécurité |
+| DEF-REP-01 | Import d'articles : `1e3`, `0x10`, « 1 200,00 » | corrigé dans web/ (ad1087b) | calcul |
+| DEF-REP-02 | Import de DPGF : « 1.234 » lu 1,234 | corrigé dans web/ (1376a23) | calcul |
+| DEF-REP-03 | `articles.metier` ni saisi ni recopié | corrigé dans web/ (e37c56a) | affichage |
+| DEF-REP-04 | Pièces imprimées : « 5.5% », avoir positif, SAV « BON DE COMMANDE » | corrigé dans web/ (95cfb34) | affichage |
+| DEF-REP-05 | Nom du client absent des cartes de chantier | corrigé dans web/ (f38c3d4) | affichage |
+| DEF-REP-06 | Sous-traitant non invitable | corrigé dans web/ (68a4961) ; fonction de bord proposée | affichage |
+| DEF-REP-07 | Matériel : message « vide » même sur recherche | corrigé dans web/ (a406884) | affichage |
+| DEF-REP-08 | Pré-facture : montants hors mode discret | corrigé dans web/ (89c7caf) | affichage |
+| DEF-REP-09 | Textes périmés du cadre et de « nouveau mot de passe » | corrigé dans web/ (b57f363) | affichage |
+| DEF-REP-10 | Deux statuts pour un bon | corrigé dans web/ (9b23235) ; colonne gardée (D-REP-10) | affichage |
+| DEF-REP-11 | `extraire-bc` sans authentification | correction proposée (fonction de bord, 5cd0b69) | sécurité |
+| DEF-REP-12 | Fonctions PDP : rôle non vérifié, secret comparé par `!==` | correction proposée (fonctions de bord, 5cd0b69) | sécurité |
+| DEF-REP-13 | `inviter-salarie` : une seule page de 50 comptes | correction proposée (fonction de bord, 68a4961) | affichage |
+| DEF-REP-14 | `bc_generer_facture` : virement forcé, TVA 10, sans conducteur | correction proposée en base (20260928200001) | calcul |
+| DEF-REP-15 | Deux onglets, deux bons depuis le même devis | correction proposée en base (20260928200002) ; écran adapté (90bff00) | données perdues |
+| DEF-REP-16 | Client ou conducteur d'une autre société sur un bon | correction proposée en base (20260928200003) | sécurité |
+| DEF-REP-17 | Le terrain crée une fiche conducteur ou fournisseur | correction proposée en base (20260928200004) | sécurité |
+| DEF-REP-18 | Clients, véhicules, annuaire lisibles par le sous-traitant | correction proposée en base (20260928200005), en partie (D-REP-18) | sécurité |
+| DEF-REP-19 | Sept factures restées dans `kv_store` | correction proposée (procédure humaine, D-REP-19) | données perdues |
+| DEF-REP-20 | Niveau d'abonnement non opposable | correction proposée en base (20260928200007) | sécurité |
 
 ## Statistiques et tableaux de bord
 
@@ -1383,6 +1383,7 @@ faire si le client répond « on corrige ».
 - **Pourquoi gardé** : même fichier, même résultat (`tests/parite/import-articles.essai.ts`, 600
   fichiers tirés).
 - **Corriger** : refuser exposant et hexadécimal des deux côtés, ou consigner l'écart (D-022).
+- **État (28/09)** : corrigé dans web/ — commit ad1087b ; `lirePrix` (`articles/domain/import.ts`) lit « 1 200,00 », refuse `1e3` et `0x10` ; test `tests/parite/import-articles.essai.ts` (« prix lus de travers par l'ancien » : l'ancien, évalué tel quel, rend le défaut, le nouveau le juste). D-REP-01.
 
 ### DEF-REP-02 — Import de DPGF : « 1.234 » lu 1,234, séparateur deviné sur la 1re ligne
 - **Écran** : Chantiers › DPGF › import.
@@ -1391,6 +1392,7 @@ faire si le client répond « on corrige ».
 - **Pourquoi gardé** : des fichiers préparés pour l'ancien liraient autrement (IMP-31, D-EFA-09) ;
   seul le remplacement sans annonce est tempéré (DEF-COR-06).
 - **Corriger** : `chantiers/domain/import-dpgf.ts`, avec un écart consigné.
+- **État (28/09)** : corrigé dans web/ — commit 1376a23 ; « 1.234 » vaut 1 234, séparateur deviné sur dix lignes (`devinerSeparateur`) ; test `tests/parite/chantiers.essai.ts` (« écart voulu »). D-REP-02.
 
 ### DEF-REP-03 — `articles.metier` ni saisi ni recopié sur la ligne
 - **Écran** : Catalogue, lignes de devis / factures / bons.
@@ -1398,6 +1400,7 @@ faire si le client répond « on corrige ».
   n'est pas repris.
 - **Décision** : D-025 (INVENTAIRE ART-50). **Corriger** : saisir le métier sur la fiche article et le
   recopier sur la ligne.
+- **État (28/09)** : corrigé dans web/ — commit e37c56a ; champ « Métier » sur la fiche article, recopié par `appliquerArticle` ; tests `articles/domain/article.essai.ts`, `articles/components/articles.essai.tsx`. Écart visuel : `tests/visuel/ecrans-chantiers.ts` (fiche article). D-REP-03.
 
 ### DEF-REP-04 — Pièces imprimées : « 5.5% », « 2.5 », avoir en positif, SAV intitulé « BON DE COMMANDE »
 - **Écran** : aperçus et PDF des devis, factures, bons.
@@ -1406,6 +1409,7 @@ faire si le client répond « on corrige ».
 - **Décision** : D-PDF-03 (DEV-52 écarté) — le client a exigé la pièce de l'ancien à l'identique.
   **Corriger** : la correction abandonnée est décrite en D-FAC-03 (avoir en négatif) et DEV-52
   (« 5,5 % »).
+- **État (28/09)** : corrigé dans web/ — commit 95cfb34 ; « 2,5 », « 5,5 % », avoir en négatif (`sens`), SAV intitulé « SAV » ; tests `tests/parite/impression.essai.ts` (« écarts voulus » + `ecartVoulu` sur 4 000 tirages), `commandes/domain/impression.essai.ts`, `facturation/domain/duplication.essai.ts`. **À recomparer** (PDF et aperçus) : `tests/visuel/pdf/README.md`. D-REP-04.
 
 ### DEF-REP-05 — Le nom du client n'apparaît pas sur les chantiers
 - **Écran** : Chantiers › liste (cartes) et bandeau de la fiche.
@@ -1413,6 +1417,7 @@ faire si le client répond « on corrige ».
 - **Ancienne** : lit un champ texte `client` que la base ne remplit pas.
 - **Décision** : D-ECR-CHA-07 (révisée : l'affichage de `client_nom` a été retiré). **Corriger** :
   afficher `client_nom`.
+- **État (28/09)** : corrigé dans web/ — commit f38c3d4 ; `client_nom` sur la carte et dans le bandeau ; test `chantiers/components/fiche.essai.tsx`. Écart visuel : `tests/visuel/ecrans-chantiers.ts` (`avecNomDuClient`). D-REP-05.
 
 ### DEF-REP-06 — Un sous-traitant ne peut pas recevoir de compte par invitation
 - **Écran** : Réglages › Comptes (et fiche RH).
@@ -1420,11 +1425,13 @@ faire si le client répond « on corrige ».
   refuse `sous_traitant` et exige un salarié (AUTH-79).
 - **Décision** : D-SOC-08. **Corriger** : décision produit et évolution de la fonction de bord (hors
   `web/`), `invitations.sous_traitant_id` existe déjà.
+- **État (28/09)** : corrigé dans web/ — commit 68a4961 ; Réglages › Comptes : « Sous-traitants sans compte », rôle fixé ; test `comptes/components/comptes.essai.tsx`. Fonction de bord proposée : `supabase/propositions/fonctions/inviter-salarie` (prérequis au déploiement) ; test RLS `tests/rls/fonctions-proposees.essai.ts` (écrit, non lancé). D-REP-06.
 
 ### DEF-REP-07 — Matériel : « Aucun matériel pour l'instant. » même quand la recherche écarte tout
 - **Écran** : Matériel › liste.
 - **Reproduire** : chercher un mot absent : le message dit qu'il n'y a aucun matériel.
 - **Décision** : D-ECR-PAR-04. **Corriger** : « Aucun matériel ne correspond. » quand la recherche filtre.
+- **État (28/09)** : corrigé dans web/ — commit a406884 ; test `materiel/components/materiel.essai.tsx`. D-REP-07.
 
 ### DEF-REP-08 — Pré-facture : les montants restent en clair en mode discret
 - **Écran** : Bons › pré-facture (fenêtre).
@@ -1432,6 +1439,7 @@ faire si le client répond « on corrige ».
 - **Décision** : D-ECR-BC-11 (« comme l'ancien »). **Corriger** : `formatEurosEcran` dans la fenêtre
   (le document imprimé garderait ses montants, D-CLI-04). À rapprocher de DEF-STA-16, où `web/` a fait
   le choix inverse.
+- **État (28/09)** : corrigé dans web/ — commit 89c7caf ; totaux et sous-totaux de la fenêtre par `formatEurosEcran` ; test `commandes/components/circuit.essai.tsx` (« en mode discret »). D-REP-08.
 
 ### DEF-REP-09 — Textes périmés du cadre et de « nouveau mot de passe »
 - **Écrans** : pied du menu ; page « nouveau mot de passe ».
@@ -1439,6 +1447,7 @@ faire si le client répond « on corrige ».
   page « nouveau mot de passe » garde un `login-card` que sa feuille ne style pas.
 - **Décision** : D-VIS-04, D-VIS-03 (« identique d'abord »). **Corriger** : retirer ou réécrire la
   phrase ; styler la carte.
+- **État (28/09)** : corrigé dans web/ — commit b57f363 ; pied « Données réservées aux comptes de votre société. », carte `login-container` ; tests `app/Layout.essai.tsx`, `auth-roles/components/compte.essai.tsx`. Pied masqué des deux côtés dans la comparaison visuelle. D-REP-09.
 
 ### DEF-REP-10 — Deux statuts pour un bon
 - **Écran** : Bons de commande (pastille grise « en attente » sur la carte).
@@ -1446,6 +1455,7 @@ faire si le client répond « on corrige ».
   `statut_workflow` dit où il en est.
 - **Décision** : D-BC-13, D-ECR-BC-01 (INVENTAIRE BC-99). **Corriger** : ne plus afficher `statut`, puis
   le retirer du schéma.
+- **État (28/09)** : corrigé dans web/ — commit 9b23235 ; pastille `statut` retirée des cartes ; tests `commandes/components/commandes.essai.tsx`, `circuit.essai.tsx` (« cartes des files »). Écart visuel : `tests/visuel/ecrans.ts` (`sansPastilleStatut`). Colonne gardée tant que l'application historique l'écrit (D-REP-10).
 
 ### DEF-REP-11 — `extraire-bc` ne vérifie ni l'utilisateur ni la société
 - **Gravité** : sécurité — un JWT `anon` suffit à consommer le quota Mistral (OCR-40).
@@ -1453,6 +1463,7 @@ faire si le client répond « on corrige ».
 - **Décision** : D-BC-15. Côté `web/`, l'écran exige `bons_commande / creer` ET la fonctionnalité
   `ocr` — masquage seulement. **Corriger** : vérifier le JWT et l'appartenance dans la fonction
   (prérequis de mise en service, `migrations-proposees.md`).
+- **État (28/09)** : correction proposée — copie corrigée `supabase/propositions/fonctions/extraire-bc` (commit 5cd0b69), jamais déployée ; test RLS `tests/rls/fonctions-proposees.essai.ts` (« extraire-bc », écrit, non lancé). D-REP-11.
 
 ### DEF-REP-12 — Fonctions PDP : rôle non vérifié ; secret du webhook comparé par `!==`
 - **Gravité** : sécurité — un compte `lecture` peut déposer une facture, un technicien connecter ou
@@ -1462,11 +1473,13 @@ faire si le client répond « on corrige ».
   `web/`) : `a_permission('factures','modifier')` dans la fonction, comparaison à temps constant,
   `verify_jwt` déclaré. Aussi : un second dépôt après expiration du délai n'est gardé que par la
   fonction (D-R4-11, M7) — comportement de l'ancien **à vérifier**.
+- **État (28/09)** : correction proposée — copies corrigées des fonctions PDP (`supabase/propositions/fonctions/pdp-*`, commit 5cd0b69) : `a_permission` par fonction, webhook à temps constant, `verify_jwt = false` à déclarer à la racine ; test RLS `tests/rls/fonctions-proposees.essai.ts` (« fonctions PDP », écrit, non lancé). Second dépôt après expiration : inchangé (409 sur `pdp_identifiant`). D-REP-12.
 
 ### DEF-REP-13 — `inviter-salarie` ne cherche que dans une page de 50 comptes
 - **Constater** : `listUsers()` sur une seule page (AUTH-77) : au-delà de 50 comptes, un compte
   existant peut ne pas être trouvé.
 - **Décision** : D-SOC-13. **Corriger** (hors `web/`) : pagination ou recherche par adresse.
+- **État (28/09)** : correction proposée — `compteParAdresse` dans la copie corrigée d'`inviter-salarie` (commit 68a4961) ; test RLS `tests/rls/fonctions-proposees.essai.ts` (« au-delà de la 1re page », écrit, non lancé). D-REP-13.
 
 ### DEF-REP-14 — Facture née du bon : virement forcé, TVA 10 en dur, conducteur non recopié
 - **Écran** : Bons › « 🧾 Créer la facture » (les deux applications appellent `bc_generer_facture`).
@@ -1474,23 +1487,27 @@ faire si le client répond « on corrige ».
   10 %, sans conducteur.
 - **Décision** : D-BC-14, D-ECR-BC-07 (INVENTAIRE BC-95). **Corriger** : migration « à écrire »
   (`migrations-proposees.md`), à combiner avec le n° 35 qui refait la même fonction.
+- **État (28/09)** : correction proposée en base — `supabase/propositions/20260928200001_la_facture_du_bon_reprend_le_client.sql` (commit 700de3e, après le n° 35) ; test RLS `tests/rls/corrections-reproduites.essai.ts` (écrit, non lancé). D-REP-14.
 
 ### DEF-REP-15 — Deux onglets créent deux bons depuis le même devis
 - **Écran** : Devis › « Créer un bon de commande ».
 - **Constater** : aucun index unique sur `bons_commande(devis_id)`. `web/` rattrape l'échec des lignes
   (le bon créé s'ouvre, D-R4-07) mais la course reste (D-R4-11).
 - **Corriger** : RPC `bon_depuis_devis` et index unique partiel, après examen des doublons (« à écrire »).
+- **État (28/09)** : correction proposée en base — `20260928200002_un_devis_un_bon.sql` (index unique partiel, garde des doublons) ; écran adapté (commit 90bff00 : le 23505 devient « déjà lié au bon … », test `devis/api/bon-depuis-devis-course.essai.ts`) ; test RLS `tests/rls/corrections-reproduites.essai.ts` (écrit, non lancé). D-REP-15.
 
 ### DEF-REP-16 — Un bon accepte un client ou un conducteur d'une autre société
 - **Gravité** : sécurité (cohérence entre sociétés). L'écran ne les propose pas ; la base ne le refuse
   pas (relecture 3, M1).
 - **Corriger** : contrainte ou déclencheur « à écrire » (`migrations-proposees.md`).
+- **État (28/09)** : correction proposée en base — `20260928200003_un_document_reste_dans_sa_societe.sql` (commit 700de3e ; bons et devis) ; test RLS `tests/rls/corrections-reproduites.essai.ts` (écrit, non lancé). D-REP-16.
 
 ### DEF-REP-17 — Le terrain peut encore CRÉER une fiche conducteur ou un fournisseur
 - **Gravité** : sécurité — l'insertion reste ouverte à `peut_ecrire()` (technicien compris), par l'API ;
   la proposition n° 30 n'a retiré que la suppression.
 - **Décision** : D-AUTH-06 (à fermer après vérification qu'aucun geste de l'écran historique n'en
   dépend). **Corriger** : migration « à écrire ».
+- **État (28/09)** : correction proposée en base — `20260928200004_le_terrain_ne_cree_ni_conducteur_ni_fournisseur.sql` (commit 700de3e ; vérifié qu'aucun geste de l'écran n'en dépend) ; test RLS `tests/rls/corrections-reproduites.essai.ts` (écrit, non lancé). D-REP-17.
 
 ### DEF-REP-18 — Clients, véhicules, annuaire… lisibles par tout membre, sous-traitant compris
 - **Gravité** : sécurité — sous `est_membre(societe_id)` : `clients`, `conducteurs`, `techniciens`,
@@ -1499,12 +1516,16 @@ faire si le client répond « on corrige ».
 - **Constater** : `select tablename from pg_policies where cmd = 'SELECT' and qual ~
   '^est_membre\(societe_id\)$';` (`migrations-proposees.md`, n° 25, « Reste ouvert »).
 - **Corriger** : à trancher par le métier (RAPPORT-MATIN, « Décisions à valider »).
+- **État (28/09)** : correction proposée en base, **en partie** — `20260928200005_le_sous_traitant_ne_lit_pas_la_gestion.sql` (commit 700de3e) ferme `fournisseurs`, `factures_entrantes`, `vehicules`, `workflow_journal` au sous-traitant ; `clients`, `conducteurs`, `techniciens`, `materiels`, `referentiels`, `societe_settings`, `v_salaries_annuaire` restent lus parce que ses écrans les lisent (décision prudente D-REP-18, à re-trancher par le métier). Test RLS `tests/rls/corrections-reproduites.essai.ts` (écrit, non lancé).
 
 ### DEF-REP-19 — Sept factures réelles restées dans `kv_store`
 - **Gravité** : données — FAC-2026-0007 à 0013 (ALPES ISERE HABITAT) : trou dans la série légale
   (FAC-99).
 - **Décision** : D-FAC-12. **Corriger** : reprise en production par un humain, `legacy_id` « compta: ».
+- **État (28/09)** : correction proposée — procédure humaine documentée (`docs/migrations-proposees.md`, « Reprise des sept factures du kv_store ») ; aucune migration : les données ne sont lisibles qu'en production (D-REP-19). **Non corrigé d'ici.**
 
 ### DEF-REP-20 — Le niveau d'abonnement n'est pas opposable
 - **Constater** : aucune colonne ne le porte ; les deux écrans ne font que masquer (D-009, D-R4-09).
 - **Corriger** : `societes.niveau_abonnement` puis une vérification en base (« à écrire »).
+- **État (28/09)** : correction proposée en base — `20260928200007_le_niveau_d_abonnement_est_opposable.sql` (commit 700de3e ; NULL = tout ouvert, posé par le service) ; test RLS `tests/rls/corrections-reproduites.essai.ts` (écrit, non lancé). D-REP-20.
+
