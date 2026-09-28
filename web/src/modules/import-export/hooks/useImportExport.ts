@@ -1,6 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSocieteActive } from "@/modules/auth-roles/hooks/useSession";
 import { clesClients } from "@/modules/clients/hooks/useClients";
+import { clesFactures } from "@/modules/facturation/hooks/useFactures";
+import { clesStatistiques } from "@/modules/statistiques/hooks/useStatistiques";
 import { todayISO } from "@/lib/dates";
 import { clientsRapprochables, importerClients } from "../api/clients";
 import { clientsConnus, creerClientMinimal, importerFactures, numerosDejaPris, supprimerBrouillonsImport, type ResultatImportFactures } from "../api/factures";
@@ -57,10 +59,28 @@ export function useApercuFactures() {
 }
 
 /**
- * Les fiches manquantes D'ABORD : l'en-tête d'une facture porte `client_id`,
- * et il est gelé dès que le numéro est posé.
+ * Ce que la reprise vient d'écrire, relu (production f957231) : les pièces, les
+ * fiches créées au passage et les imputations qui consomment les avoirs —
+ * factures (règlements et soldes compris, sous la même racine), clients, et les
+ * collections du tableau de bord. Sans quoi un avoir déjà imputé en base
+ * s'afficherait « À imputer ». Ces trois-là seulement : tout relire ne servirait
+ * à rien. Un rechargement raté ne lève pas : chaque écran dit le sien.
  */
-export function useEcrireFactures(onProgress: (faites: number, total: number) => void) {
+export function rechargerApresReprise(qc: QueryClient, societeId: string): Promise<unknown> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: clesFactures.racine(societeId) }),
+    qc.invalidateQueries({ queryKey: clesClients.liste(societeId) }),
+    qc.invalidateQueries({ queryKey: clesStatistiques.racine(societeId) }),
+  ]);
+}
+
+/**
+ * Les fiches manquantes D'ABORD : l'en-tête d'une facture porte `client_id`,
+ * et il est gelé dès que le numéro est posé. Réussie ou non, l'écriture est
+ * suivie d'une relecture, qu'on ATTEND (« Rechargement… ») : rendre la main
+ * avant montrerait encore l'état d'avant.
+ */
+export function useEcrireFactures(onProgress: (faites: number, total: number) => void, onRechargement?: () => void) {
   const societe = useSocieteActive();
   const qc = useQueryClient();
   return useMutation({
@@ -76,8 +96,8 @@ export function useEcrireFactures(onProgress: (faites: number, total: number) =>
       return { ...(await importerFactures(societe.id, pieces, onProgress)), clientsCrees: parCle.size };
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ["factures", societe.id] });
-      void qc.invalidateQueries({ queryKey: clesClients.liste(societe.id) });
+      onRechargement?.();
+      return rechargerApresReprise(qc, societe.id);
     },
   });
 }

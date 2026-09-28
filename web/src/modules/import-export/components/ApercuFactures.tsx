@@ -20,7 +20,15 @@ interface Props {
 }
 
 function libelleClient(c: ApercuImportFactures["clients"][number]): string {
-  const sort = c.rapprochement === "exact" ? "fiche existante" : c.rapprochement === "prefixe" ? `rapproché de « ${c.versNom} »` : "aucune fiche — elle sera créée";
+  const sort =
+    c.rapprochement === "exact"
+      ? "fiche existante"
+      : c.rapprochement === "prefixe"
+        ? `rapproché de « ${c.versNom} »`
+        : // « probablement », pas « rapproché » : sur des pièces indestructibles, la nuance se lit avant d'écrire.
+          c.rapprochement === "contenu"
+          ? `probablement ${c.versNom} — « ${c.nom} » retrouvé dans la raison sociale, à vérifier`
+          : "aucune fiche — elle sera créée";
   return `${c.nom} — ${c.pieces} pièce(s), ${euros(c.ht)} : ${sort}`;
 }
 

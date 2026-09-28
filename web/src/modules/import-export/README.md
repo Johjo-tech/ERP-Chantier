@@ -29,15 +29,18 @@ DPGF dans `chantiers` (IMP-30) : ce module les signale depuis `/import-export`.
     (D-EFA-06) ;
   - `factures.ts` — alias de colonnes, séparateur constaté, dates ISO seules,
     contrôles à 0,011 (signe, TVA, TTC, somme des lignes), un rejet bloque
-    TOUT, 0 % sans catégorie mis de côté ; `apercu-factures.ts` — rapprochement
-    exact puis préfixe, collisions de numéros, statut « payée », montants en
-    valeur absolue, legacy « compta: » ;
+    TOUT, 0 % sans catégorie mis de côté, taux moyen repris et signalé ;
+    rapprochement exact, puis préfixe ou sigle ancré dans les deux sens et sur
+    le noyau sans parenthèses (« probablement » quand la fiche est plus courte,
+    D-MAIN-11) ; `apercu-factures.ts` — collisions de numéros, statut « payée »,
+    montants en valeur absolue, legacy « compta: », avoirs annoncés déjà imputés ;
   - `sauvegarde.ts` — le fichier `terrain-sauvegarde-AAAA-MM-JJ.json`,
     `version: 2`.
 - **Écriture** (`api/`) : clients par lots de 200 à clés uniformisées, mises à
   jour une par une ; factures pièce par pièce, brouillon → lignes → numéro +
-  statut en un ordre ; brouillons orphelins supprimables tant qu'ils n'ont pas
-  de numéro.
+  statut en un ordre, puis l'imputation qui consomme un avoir repris ;
+  brouillons orphelins supprimables tant qu'ils n'ont pas de numéro. Après
+  l'écriture, factures, règlements, clients et tableau de bord sont relus.
 - **Non repris** : la restauration d'une sauvegarde (D-EFA-08), l'annuaire des
   entreprises à l'import (D-EFA-06). L'ancien n'avait aucun export CSV/Excel
   des listes ni d'export comptable : rien à reprendre.

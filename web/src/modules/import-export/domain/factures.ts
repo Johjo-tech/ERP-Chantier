@@ -30,13 +30,85 @@ export interface ClientConnu {
   cadre: string | null;
 }
 
-export type RapprochementClient = { type: "exact" | "prefixe"; client: ClientConnu } | { type: "ambigu"; candidats: ClientConnu[] } | { type: "aucun" };
+export type RapprochementClient = { type: "exact" | "prefixe" | "contenu"; client: ClientConnu } | { type: "ambigu"; candidats: ClientConnu[] } | { type: "aucun" };
+
+/** En deçà, un fragment ne distingue plus rien : « sci » est dans tout. */
+const FRAGMENT_MIN = 4;
+/** Ce qui sépare deux mots dans un nom : ce qui peut ouvrir ou fermer un sigle. */
+const BORNE_MOT = /[\s(),.\-/]/;
+/** Les caractères qu'une expression régulière lirait comme des instructions. */
+const A_ECHAPPER = /[.*+?^${}()|[\]\\]/g;
+
+/** Passe-t-on d'une lettre à un chiffre, ou l'inverse ? */
+function transition(a: string, c: string): boolean {
+  const chiffre = (x: string) => x >= "0" && x <= "9";
+  return chiffre(a) !== chiffre(c);
+}
 
 /**
- * Le nom seul en décide (`clients` n'a pas de code externe). L'exact d'abord,
- * puis le PRÉFIXE ancré à une frontière de mot : l'annuaire nomme « ALPES
- * ISERE HABITAT OFFICE PUBLIC… » ce que le logiciel comptable appelle « ALPES
- * ISERE HABITAT ». Deux candidats ne se départagent pas.
+ * Le motif qui retrouve un sigle quelle que soit son orthographe : « SEM4V »
+ * et « SEM 4V » sont le même sigle (le comptable colle, le registre sépare).
+ * La coupure se fait au passage des lettres aux chiffres — une espace, un
+ * point ou un tiret y sont tolérés, et nulle part ailleurs : « SEMCODA » ne
+ * devient pas « SEM CODA ».
+ */
+function motifSigle(fragment: string): RegExp {
+  let motif = "";
+  for (let i = 0; i < fragment.length; i++) {
+    const c = fragment.charAt(i);
+    if (/[\s.-]/.test(c)) {
+      // Un séparateur écrit accepte d'être absent en face, ou multiple.
+      motif += "[\\s.\\-]*";
+      continue;
+    }
+    const avant = fragment.charAt(i - 1);
+    if (i > 0 && transition(avant, c) && !/[\s.-]$/.test(avant)) motif += "[\\s.\\-]*";
+    motif += c.replace(A_ECHAPPER, "\\$&");
+  }
+  return new RegExp(motif, "g");
+}
+
+/**
+ * `fragment` apparaît-il dans `nom` en ouvrant ET en fermant un mot ? Sans
+ * quoi « SCI MILLY » attraperait « SCI MILLYON », « SEM4V » « SEM4VALLEES ».
+ */
+function fragmentAncre(nom: string, fragment: string): boolean {
+  if (fragment.length < FRAGMENT_MIN) return false;
+  const motif = motifSigle(fragment);
+  for (let m = motif.exec(nom); m; m = motif.exec(nom)) {
+    const avant = m.index === 0 ? "" : nom.charAt(m.index - 1);
+    const apres = nom.charAt(m.index + m[0].length);
+    if ((avant === "" || BORNE_MOT.test(avant)) && (apres === "" || BORNE_MOT.test(apres))) return true;
+    if (m[0].length === 0) motif.lastIndex++;
+  }
+  return false;
+}
+
+/**
+ * Le nom sans ses parenthèses : le registre répète le sigle, l'annuaire ajoute
+ * « (Siège) », et le même client n'avait plus aucun texte commun contigu.
+ */
+function noyau(nom: string): string {
+  return nom
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** `court` ouvre-t-il `long`, en s'arrêtant sur une frontière de mot ? */
+function prefixeAncre(long: string, court: string): boolean {
+  return court.length > 0 && long.length > court.length && long.startsWith(court) && BORNE_MOT.test(long.charAt(court.length));
+}
+
+/**
+ * Le nom seul en décide (`clients` n'a pas de code externe) — port de
+ * `rapprocherClient` (src/api/regles-import-factures.ts, production bb3cf60 et
+ * bf69f37). L'exact d'abord ; puis le préfixe ou le sigle ancré, DANS LES DEUX
+ * SENS et aussi sur le noyau sans parenthèses. Une fiche qui porte TOUT le nom
+ * du fichier l'emporte sur celle qui n'en porte que le début ; entre égaux,
+ * deux candidats ne se départagent pas. Une fiche qui ne retient qu'un début
+ * du nom (« CDC HABITAT » pour « CDC HABITAT SOCIAL ») ou un sigle s'annonce
+ * « contenu » — « probablement », à vérifier dans l'aperçu.
  */
 export function rapprocherClient(nom: string, existants: readonly ClientConnu[]): RapprochementClient {
   const cle = cleNom(nom);
@@ -44,14 +116,23 @@ export function rapprocherClient(nom: string, existants: readonly ClientConnu[])
   const exacts = existants.filter((c) => cleNom(c.nom) === cle);
   if (exacts.length === 1 && exacts[0]) return { type: "exact", client: exacts[0] };
   if (exacts.length > 1) return { type: "ambigu", candidats: exacts };
-  // La frontière de mot évite que « SCI MILLY » n'attrape « SCI MILLYON ».
-  const prefixes = existants.filter((c) => {
+
+  const noyauCle = noyau(cle);
+  const porte = (long: string, court: string) => prefixeAncre(long, court) || fragmentAncre(long, court);
+  const portentTout = existants.filter((c) => {
     const k = cleNom(c.nom);
-    return k.startsWith(cle) && /[\s(,-]/.test(k.charAt(cle.length));
+    return porte(k, cle) || porte(noyau(k), noyauCle);
   });
-  if (prefixes.length === 1 && prefixes[0]) return { type: "prefixe", client: prefixes[0] };
-  if (prefixes.length > 1) return { type: "ambigu", candidats: prefixes };
-  return { type: "aucun" };
+  const nEnPortentQueLeDebut = existants.filter((c) => {
+    const k = cleNom(c.nom);
+    return porte(cle, k) || porte(noyauCle, noyau(k));
+  });
+  const candidats = portentTout.length ? portentTout : nEnPortentQueLeDebut;
+  if (candidats.length > 1) return { type: "ambigu", candidats };
+  const seul = candidats[0];
+  if (!seul) return { type: "aucun" };
+  if (!portentTout.length) return { type: "contenu", client: seul };
+  return prefixeAncre(cleNom(seul.nom), cle) ? { type: "prefixe", client: seul } : { type: "contenu", client: seul };
 }
 
 export type CategorieTva = "S" | "Z" | "E" | "AE" | "K" | "G" | "O";
@@ -356,15 +437,37 @@ function typeDe(ctx: Contexte, numero: string, ht: number): "facture" | "avoir" 
   return null;
 }
 
+/**
+ * Les taux de TVA qui existent en France : tout le reste est la MOYENNE
+ * pondérée, arrondie, d'une pièce à plusieurs taux (7,93 %, 8,80 %…), dont
+ * aucun recalcul ne peut retomber juste.
+ */
+const TAUX_LEGAUX = [20, 10, 5.5, 2.1, 0];
+/** L'écart en deçà duquel deux taux lus sont le même. */
+const EPSILON_TAUX = 0.001;
+const tauxLegal = (taux: number) => TAUX_LEGAUX.some((t) => Math.abs(t - taux) < EPSILON_TAUX);
+
 /** Signe, TVA, TTC : un écart refuse le FICHIER (IMP-21). Rend la TVA et le TTC retenus. */
-function controlerMontants(ctx: Contexte, typeDocument: "facture" | "avoir", ht: number, taux: number): { tva: Montant; ttc: Montant } | null {
+function controlerMontants(ctx: Contexte, numero: string, typeDocument: "facture" | "avoir", ht: number, taux: number): { tva: Montant; ttc: Montant } | null {
   if (ht !== 0 && ht < 0 !== (typeDocument === "avoir")) {
     ctx.refuser(`Le signe du montant (${ht}) contredit le type « ${typeDocument} » : le fichier se dément lui-même.`);
     return null;
   }
   const tvaCalculee = b(ht).times(taux).div(100);
   const tva = nombre(ctx.champ(ENTETE_TVA));
-  if (tva !== null && ecartDepasse(tvaCalculee, b(tva))) {
+  /* Recalculer la TVA n'a de sens que depuis un VRAI taux (production 8e170ff) :
+     sur une pièce à plusieurs taux, la colonne porte leur moyenne arrondie, et
+     le contrôle refusait des pièces justes — et avec elles le fichier entier.
+     `TTC = HT + TVA`, la seule identité qui engage, reste contrôlée plus bas. */
+  if (tva !== null && !tauxLegal(taux)) {
+    ctx.signaler(
+      numero,
+      `Taux ${taux} % : ce n'est pas un taux de TVA, mais la moyenne d'une pièce ` +
+        `à plusieurs taux. Les montants sont repris tels quels et le TTC est vérifié ; ` +
+        `la ventilation par taux, elle, est perdue — la pièce ne pourra pas être ` +
+        `transmise en facture électronique.`
+    );
+  } else if (tva !== null && ecartDepasse(tvaCalculee, b(tva))) {
     ctx.refuser(`TVA incohérente : ${tva} annoncé, ${enDecimal2(tvaCalculee)} attendu (${ht} × ${taux} %).`);
     return null;
   }
@@ -419,7 +522,7 @@ function lirePiece(ctx: Contexte, vues: Map<string, number>, utilises: Set<strin
 
   const typeDocument = typeDe(ctx, numero, ht);
   if (!typeDocument) return { ecartee: true };
-  const montants = controlerMontants(ctx, typeDocument, ht, taux);
+  const montants = controlerMontants(ctx, numero, typeDocument, ht, taux);
   if (!montants) return { incoherent: true };
 
   const sesLignes = lignesDe(ctx, numero, ht, taux);

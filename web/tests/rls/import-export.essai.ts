@@ -93,6 +93,22 @@ describe("reprise d'historique (IMP-20 à IMP-22)", () => {
     expect(totaux.data).toEqual({ ht: 1000, tva: 200, ttc: 1200 });
   });
 
+  it("un avoir repris arrive DÉJÀ IMPUTÉ : son imputation est écrite, il ne reste rien à imputer (production 3c6bc02)", async () => {
+    courant.client = admin;
+    const avoir = `HISTAV-${suffixe}`;
+    const csvAvoir = `numero_facture;type;date_facture;client;montant_ht;taux_tva;montant_tva;montant_ttc\n${avoir};avoir;2025-07-15;${PREFIXE}-reprise;-50,00;20;-10,00;-60,00\n`;
+    const apercu = construireApercuFactures(analyserExportFactures(new TextEncoder().encode(csvAvoir), null), await facturesApi.clientsConnus(ALPHA), new Set());
+    expect(apercu.signalements.map((s) => s.motif)).toContain("1 avoir sera marqué DÉJÀ IMPUTÉ : leur crédit a été consommé avant la reprise, et ils ne pourront pas solder une facture d'aujourd'hui.");
+    const r = await facturesApi.importerFactures(ALPHA, apercu.pieces);
+    expect(r).toEqual({ ecrites: 1, lignes: 1, echecs: [], brouillonsOrphelins: [] });
+
+    const { data } = await secretaire.from("factures").select("id, type_document, reglements(date, montant, mode, reference)").eq("societe_id", ALPHA).eq("numero", avoir).single();
+    expect(data?.type_document).toBe("avoir");
+    expect(data?.reglements).toEqual([{ date: "2025-07-15", montant: 60, mode: "imputation", reference: "Reprise d'historique — avoir déjà utilisé avant la reprise" }]);
+    const { statutImputation } = await import("../../src/modules/facturation/domain/avoir");
+    expect(statutImputation(-60, data?.reglements ?? []).cle).toBe("impute");
+  });
+
   it("une pièce reprise ne se supprime plus, et son numéro ne se reprend pas", async () => {
     courant.client = secretaire;
     expect(await facturesApi.supprimerBrouillonsImport([factureId])).toBe(0);

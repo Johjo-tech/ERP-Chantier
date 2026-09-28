@@ -152,6 +152,84 @@ describe("parité de la reprise d'historique", () => {
     expect(nouveau.DESIGNATION_SANS_LIGNES).toBe(ancien.DESIGNATION_SANS_LIGNES);
   });
 
+  it("rapprochement des clients (bb3cf60, bf69f37) : les deux sens, le sigle qui change d'orthographe, le noyau sans parenthèses, la plus spécifique", () => {
+    const fiches = [
+      "ALPES ISERE HABITAT OFFICE PUBLIC DE L'HABITAT (ALPES ISERE HABITAT)",
+      "SEM4V",
+      "SEM 4V ANNECY",
+      "REGIE SEM4V",
+      "SEMCODA",
+      "CDC HABITAT",
+      "CDC HABITAT SOCIAL SA HLM",
+      "FLIMMO1",
+      "SCI MILLYON",
+      "OPAC 38",
+      "Mme Durand",
+      "HABITAT DAUPHINOIS",
+      "PLURALIS",
+      "SDH (Siège)",
+      "(parenthèse seule)",
+    ].map((nom, i) => ({ id: String(i), nom, cadre: null }));
+    const noms = [
+      "ALPES ISERE HABITAT OFFICE PUBLIC DE L'HABITAT (ALPES ISERE HABITAT) (Siège)",
+      "ALPES ISERE HABITAT",
+      "SOCIETE D'ECONOMIE MIXTE EN ABREGE SEM 4V (SEM 4V)",
+      "SEM 4V",
+      "sem.4v",
+      "SEM-4V",
+      "SEM CODA",
+      "SEMCODA",
+      "CDC HABITAT SOCIAL",
+      "CDC HABITAT",
+      "FLIMMO 1",
+      "FLIMMO 12",
+      "SCI MILLY",
+      "HABITAT",
+      "OPAC",
+      "OPAC 38 (Grenoble)",
+      "SDH",
+      "Mme Durand (locataire)",
+      "PLURALIS SA",
+      "()",
+      "",
+    ];
+    for (const n of noms) expect(nouveau.rapprocherClient(n, fiches), n).toEqual(ancien.rapprocherClient(n, fiches));
+    // Les dires du commit : KTA retrouve ses clients, « probablement » quand la fiche est plus courte.
+    expect(nouveau.rapprocherClient("CDC HABITAT SOCIAL", fiches)).toMatchObject({ type: "prefixe", client: { nom: "CDC HABITAT SOCIAL SA HLM" } });
+    expect(nouveau.rapprocherClient("FLIMMO 1", fiches)).toMatchObject({ type: "contenu", client: { nom: "FLIMMO1" } });
+
+    // Et au hasard : des noms faits de sigles, chiffres, parenthèses et séparateurs.
+    const MOTS = ["SEM", "4V", "SEM4V", "CDC", "HABITAT", "SOCIAL", "OPAC", "38", "(Siège)", "(SEM 4V)", "SA", "HLM", "FLIMMO", "1", "FLIMMO1", "-", ".", "D'ALPES"];
+    const nom = () => Array.from({ length: g.entier(1, 5) }, () => g.parmi(MOTS)).join(g.parmi([" ", " ", "", "-"]));
+    for (let i = 0; i < TIRAGES; i++) {
+      const existants = Array.from({ length: g.entier(0, 6) }, (_, k) => ({ id: String(k), nom: nom(), cadre: null }));
+      const n = nom();
+      expect(nouveau.rapprocherClient(n, existants), `${n} ⟷ ${existants.map((e) => e.nom).join(" | ")}`).toEqual(ancien.rapprocherClient(n, existants));
+    }
+  });
+
+  it("taux moyen (8e170ff) : la pièce à plusieurs taux est reprise et nommée, un taux légal reste contrôlé", () => {
+    const csv = [
+      "numero_facture;type;date_facture;client;montant_ht;taux_tva;montant_tva;montant_ttc",
+      "FAC000258;facture;2025-03-01;SEM4V;675,00;7,93;53,55;728,55",
+      "FAC000259;facture;2025-03-02;SEM4V;1160,00;8,80;102,05;1262,05",
+      "FAC000260;facture;2025-03-03;SEM4V;100,00;5,5;5,50;105,50",
+      "FAC000261;facture;2025-03-04;SEM4V;100,00;2,1;2,10;102,10",
+    ].join("\n");
+    const o = new TextEncoder().encode(csv);
+    const a = ancien.analyserExportFactures(o, null, {});
+    expect(arrondi(nouveau.analyserExportFactures(o, null, {}))).toEqual(arrondi(a));
+    expect(a.incoherent).toBe(false);
+    expect(a.factures).toHaveLength(4);
+    expect(a.signalements.filter((x) => /moyenne d'une pièce/.test(x.motif)).map((x) => x.code)).toEqual(["FAC000258", "FAC000259"]);
+    // Le TTC, lui, reste contrôlé pour la pièce à taux moyen ; un taux légal faux refuse toujours.
+    for (const faux of [csv.replace("728,55", "729,55"), csv.replace("105,50", "106,50").replace(";5,50;", ";6,50;")]) {
+      const f = new TextEncoder().encode(faux);
+      expect(arrondi(nouveau.analyserExportFactures(f, null, {}))).toEqual(arrondi(ancien.analyserExportFactures(f, null, {})));
+      expect(nouveau.analyserExportFactures(f, null, {}).incoherent).toBe(true);
+    }
+  });
+
   it("la pièce écrite est celle de l'ancien (brouillon → lignes → numéro, legacy « compta: », valeurs absolues)", () => {
     const d = DIALECTES[1] as Dialecte;
     const rapport = nouveau.analyserExportFactures(new TextEncoder().encode(entetes(d, pieces())), null, { categorieTauxZero: "E" });

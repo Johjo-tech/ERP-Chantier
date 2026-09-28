@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,10 +74,37 @@ describe("reprise d'historique", () => {
     await screen.findByText(/Totaux reconstitués/);
     expect(screen.getByText(/50,00 €/, { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/SCI Nouvelle — 1 pièce\(s\), -50,00 € : aucune fiche — elle sera créée/)).toBeInTheDocument();
+    // 3c6bc02 : annoncé AVANT d'écrire, l'avoir repris arrive déjà imputé.
+    expect(screen.getByText(/1 avoir sera marqué DÉJÀ IMPUTÉ : leur crédit a été consommé avant la reprise/)).toBeInTheDocument();
+    const relues = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     await userEvent.click(screen.getByRole("button", { name: "Écrire 2 pièces — définitif" }));
     await waitFor(() => expect(screen.getByText(/Reprise terminée — 2 pièce\(s\) et 2 ligne\(s\) écrites, 1 fiche\(s\) client créée\(s\)/)).toBeInTheDocument());
     const [, pieces] = api.factures.importerFactures.mock.calls[0] as [string, { numero: string; entete: { client_id: string | null; legacy_id: string } }[]];
     expect(pieces.map((p) => [p.numero, p.entete.client_id, p.entete.legacy_id])).toEqual([["F1", "c1", "compta:F1"], ["A1", "nouveau", "compta:A1"]]);
+    // f957231 : l'écran relit ce que l'import vient d'écrire — factures (règlements compris), clients, tableau de bord.
+    expect(relues.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey)).toEqual(expect.arrayContaining([["factures", "alpha"], ["clients", "alpha"], ["statistiques", "alpha"]]));
+    relues.mockRestore();
+  });
+
+  it("une écriture refusée relit quand même : ce qui a pu être écrit doit se voir", async () => {
+    api.factures.importerFactures.mockRejectedValue(new Error("réseau coupé"));
+    api.factures.creerClientMinimal.mockResolvedValue("nouveau");
+    rendreAvecSession(<PageImportFactures />, { role: "admin" });
+    await userEvent.upload(screen.getByLabelText("Fichier(s) à reprendre"), fichier("factures.csv", ENTETES));
+    await screen.findByText(/Totaux reconstitués/);
+    const relues = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    await userEvent.click(screen.getByRole("button", { name: "Écrire 2 pièces — définitif" }));
+    await waitFor(() => expect(api.factures.importerFactures).toHaveBeenCalled());
+    await waitFor(() => expect(relues.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey)).toEqual(expect.arrayContaining([["factures", "alpha"], ["clients", "alpha"]])));
+    relues.mockRestore();
+  });
+
+  it("bf69f37 : la fiche qui porte le nom court se retrouve, mais « probablement »", async () => {
+    api.factures.clientsConnus.mockResolvedValue([{ id: "c2", nom: "SEM4V", cadre: "B2G" }]);
+    rendreAvecSession(<PageImportFactures />, { role: "admin" });
+    const long = "numero_facture;type;date_facture;client;montant_ht;taux_tva;montant_tva;montant_ttc\nF9;facture;2025-01-10;SOCIETE D'ECONOMIE MIXTE EN ABREGE SEM 4V (SEM 4V);100,00;20;20,00;120,00\n";
+    await userEvent.upload(screen.getByLabelText("Fichier(s) à reprendre"), fichier("factures.csv", long));
+    expect(await screen.findByText(/probablement SEM4V — « SOCIETE D'ECONOMIE MIXTE EN ABREGE SEM 4V \(SEM 4V\) » retrouvé dans la raison sociale, à vérifier/)).toBeInTheDocument();
   });
 
   it("un fichier qui se contredit bloque TOUTE écriture ; un 0 % demande sa catégorie", async () => {

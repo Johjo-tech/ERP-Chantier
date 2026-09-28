@@ -37,7 +37,10 @@ export function PageImportFactures() {
   const [categorie, setCategorie] = useState<CategorieTva | undefined>(undefined);
   const [progres, setProgres] = useState("");
   const apercu = useApercuFactures();
-  const ecrire = useEcrireFactures((fait, total) => setProgres(`Écriture : ${fait} / ${total} pièces`));
+  const ecrire = useEcrireFactures(
+    (fait, total) => setProgres(`Écriture : ${fait} / ${total} pièces`),
+    () => setProgres("Rechargement…")
+  );
 
   const titre = <EnTetePage titre="Reprendre un historique de facturation" actions={<Button variant="ghost" asChild><Link to="/factures">Retour aux factures</Link></Button>} />;
   if (!autorise) return <>{titre}<Alert variant="erreur">La reprise crée des factures définitives, hors de la numérotation de la société : elle est réservée à l'administrateur.</Alert></>;

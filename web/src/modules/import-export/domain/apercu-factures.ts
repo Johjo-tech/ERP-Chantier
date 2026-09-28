@@ -8,6 +8,7 @@
  * supprime plus : l'aperçu est la seule occasion de voir.
  */
 import type { CadreFacturation } from "@/modules/clients/domain/client";
+import { estAvoir, MODE_REGLEMENT_IMPUTATION } from "@/modules/facturation/domain/avoir";
 import { cleNom } from "./clients";
 import { legacyDuNumero } from "./historique";
 import { rapprocherClient, totauxDe, type CategorieTva, type ClientConnu, type FactureImportee, type RapportImportFactures, type TotauxFichier } from "./factures";
@@ -105,7 +106,8 @@ export interface ClientDuFichier {
   pieces: number;
   /** Net et signé : le poids de ce client dans ce qui s'importe. */
   ht: number;
-  rapprochement: "exact" | "prefixe" | "ambigu" | "aucun";
+  /** `aucun` et `ambigu` appellent une fiche neuve ; `contenu` se rattache, mais « probablement ». */
+  rapprochement: "exact" | "prefixe" | "contenu" | "ambigu" | "aucun";
   /** Le nom de la fiche retenue, quand il diffère de celui du fichier. */
   versNom: string | null;
 }
@@ -126,6 +128,46 @@ export interface ApercuImportFactures {
   pieces: PieceAEcrire[];
   /** Parallèle à `pieces` : la clé du client à créer, ou `null` si sa fiche existe. */
   clientACreerParPiece: (string | null)[];
+}
+
+/**
+ * Dit AVANT d'écrire qu'un avoir repris arrive déjà imputé (production
+ * 3c6bc02) : son crédit a été consommé dans l'ancien logiciel, il ne soldera
+ * pas une facture d'aujourd'hui. Libellé recopié de l'ancien.
+ */
+export function motifAvoirsImputes(n: number): string {
+  return (
+    `${n} avoir${n > 1 ? "s" : ""} ${n > 1 ? "seront marqués" : "sera marqué"} ` +
+    `DÉJÀ IMPUTÉ${n > 1 ? "S" : ""} : leur crédit a été consommé avant la reprise, ` +
+    `et ils ne pourront pas solder une facture d'aujourd'hui.`
+  );
+}
+
+/**
+ * Ce qu'on lit dans le livre des règlements en face d'un avoir repris — en
+ * clair : quelqu'un relira cette ligne dans six mois (recopié de l'ancien).
+ */
+export const REFERENCE_AVOIR_REPRIS = "Reprise d'historique — avoir déjà utilisé avant la reprise";
+
+/**
+ * L'imputation qui consomme un avoir repris (production 3c6bc02) : son TTC,
+ * au jour de la pièce, mode « imputation » — ce que compte `resteAImputer`,
+ * l'écran n'a donc aucune règle de plus à connaître. Rien pour une facture,
+ * ni pour un avoir à zéro.
+ */
+export function imputationDeReprise(piece: PieceAEcrire): { date: string; montant: number; mode: typeof MODE_REGLEMENT_IMPUTATION; reference: string } | null {
+  if (!estAvoir(piece.entete.type_document)) return null;
+  const credit = Math.abs(Number(piece.entete.total_ttc ?? 0));
+  if (!(credit > 0)) return null;
+  return { date: piece.entete.date, montant: credit, mode: MODE_REGLEMENT_IMPUTATION, reference: REFERENCE_AVOIR_REPRIS };
+}
+
+/** Ce que l'aperçu et le rapport disent d'un client (`telechargerRapportFactures`). */
+export function issueDuClient(c: Pick<ClientDuFichier, "rapprochement" | "versNom">): string {
+  if (c.rapprochement === "exact") return "fiche trouvée";
+  if (c.rapprochement === "prefixe") return `rapproché de « ${c.versNom} »`;
+  if (c.rapprochement === "contenu") return `probablement « ${c.versNom} » (nom retrouvé dans la raison sociale)`;
+  return "aucune fiche : elle sera créée";
 }
 
 export function construireApercuFactures(
@@ -156,7 +198,8 @@ export function construireApercuFactures(
       continue;
     }
     const r = resoudre(f.nomClient);
-    const trouve = r.type === "exact" || r.type === "prefixe" ? r.client : null;
+    // Le sigle ou le début de nom retrouvé compte comme une fiche trouvée : l'aperçu le dit « probablement ».
+    const trouve = r.type === "exact" || r.type === "prefixe" || r.type === "contenu" ? r.client : null;
     const cle = cleNom(f.nomClient);
     const vu = clients.get(cle) ?? { code: f.codeClient, nom: f.nomClient, pieces: 0, ht: 0, rapprochement: r.type, versNom: trouve && cleNom(trouve.nom) !== cle ? trouve.nom : null };
     vu.pieces++;
@@ -168,8 +211,10 @@ export function construireApercuFactures(
   }
 
   const tous = [...clients.values()].sort((a, c) => Math.abs(c.ht) - Math.abs(a.ht));
+  const avoirs = retenues.filter((f) => f.typeDocument === "avoir").length;
   return {
     ...commun,
+    signalements: avoirs > 0 ? [...rapport.signalements, { ligne: 0, motif: motifAvoirsImputes(avoirs) }] : rapport.signalements,
     aEcrire: pieces.length,
     totauxAEcrire: totauxDe(retenues),
     collisions,
@@ -189,7 +234,7 @@ export function lignesRapportFactures(a: ApercuImportFactures): { ligne: number;
     ...a.collisions.map((n) => ({ ligne: 0, motif: "Numéro déjà présent en base : la pièce n'est pas réécrite.", contenu: `pièce ${n}` })),
     ...a.clients.map((c) => ({
       ligne: 0,
-      motif: `Client « ${c.nom} » — ${c.rapprochement === "exact" ? "fiche trouvée" : c.rapprochement === "prefixe" ? `rapproché de « ${c.versNom} »` : "aucune fiche : elle sera créée"} (${c.pieces} pièces)`,
+      motif: `Client « ${c.nom} » — ${issueDuClient(c)} (${c.pieces} pièces)`,
       contenu: c.code ?? "",
     })),
   ];

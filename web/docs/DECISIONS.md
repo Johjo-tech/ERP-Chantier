@@ -978,8 +978,10 @@ source de `app.js` et compare au flottant près, à l'heure de Paris.
 4. « Factures impayées » (nombre) et « Factures échues » lues sur le statut stocké — DEF-STA-04.
 5. « Locataires à rappeler » compte les bons clos, chiffrés, facturés — DEF-STA-05.
 6. Activité récente : « Client · null » pour une facture sans numéro ; lettrages d'avoir montrés
-   comme « Paiement reçu » — DEF-STA-06.
-7. Top clients par le nom écrit sur la facture — DEF-STA-07.
+   comme « Paiement reçu » — DEF-STA-06. (Depuis 0f6f60d, la facture sans numéro s'écrit
+   « brouillon » et le fil suit la date des pièces : repris, D-MAIN-10.)
+7. Top clients par le nom écrit sur la facture — DEF-STA-07. (Depuis 0f6f60d, borné à l'exercice,
+   avec le rappel N-1 : repris, D-MAIN-10.)
 8. Statistiques par l'étiquette `conducteur` (graphies distinctes = lignes distinctes, aucune ligne
    « Sans conducteur », fiches sans pièce à zéro) — DEF-STA-08.
 9. « En retard » = fin de travaux dépassée, même sur un bon facturé ou clos — DEF-STA-09.
@@ -992,7 +994,8 @@ source de `app.js` et compare au flottant près, à l'heure de Paris.
     sous-traitant n'existent pas (D-FAC-09, D-FAC-14). Comme à chaque ouverture de l'ancien, aucun
     sous-traitant « actuel » : « Bonjour 👋 Sous-traitant » et le bandeau « Sélectionnez votre nom
     dans Réglages » — DEF-STA-19.
-15. Infobulle du graphique sur 12 mois : l'année de la dernière barre pour toutes — DEF-STA-15.
+15. ~~Infobulle du graphique sur 12 mois : l'année de la dernière barre pour toutes — DEF-STA-15.~~
+    Corrigé en production (66ea9e1) et repris : chaque barre porte l'année de son mois (D-MAIN-10).
 16. Part du chiffre d'affaires négative ou au-delà de 100 % avec des avoirs — DEF-STA-17.
 17. Bons rangés dans la période par leur date de saisie — DEF-STA-18.
 
@@ -2461,3 +2464,50 @@ bloque pas l'impression : la rue seule, comme l'ancien quand `state.clients` ne 
 facture lit désormais `facturation_adresse`, `facturation_code_postal`, `facturation_ville`. L'espace
 client (absent de l'ancien) ne lit pas les fiches (D-FAC-10) : ses pièces sortent avec la rue et, pour
 une facture, son adresse de facturation.
+
+## D-MAIN-10 — Tableau de bord : l'historique repris devient la référence N-1 (production 0f6f60d, 66ea9e1)
+La production date désormais le tableau de bord sur la PIÈCE, plus sur sa saisie, et fait de
+l'exercice précédent (l'historique repris) la référence. **Décision** : port littéral dans
+`statistiques/domain/ancien/pilotage.ts` (D-STA-A-01 : identique, flottant compris), parité évaluée sur
+la source de `app.js` (`buildActivityFeed`, `cumulParClient`, `computeTopClients`,
+`comparaisonN1HTML`, `computeMonthSummary`, `computeRevenuePeriod`, `renderYearlyComparisonSVG`) :
+- fil d'activité rangé sur `date` (devis, factures, rapports, règlements — les collections lisent
+  maintenant `reglements.date` et `interventions.date`), tri texte `localeCompare`, libellés
+  « Devis », « Facture », « Avoir » (pastille orangée), « Rapport d'intervention », « brouillon » pour
+  une facture sans numéro ;
+- « Top clients AAAA (HT) » borné à l'exercice (client à zéro ou négatif exclu), « Aucune facture sur
+  AAAA. », montant N-1 et écart sous chaque nom ;
+- tuile « CA encaissé ce mois » : le même mois un an plus tôt (même filtre « payée ») ; résumé :
+  « Facturé AAAA (HT) » face au précédent. « rien en AAAA » quand N-1 est nul, jamais « +100 % » ;
+- graphique : chaque barre porte SON année (`PointRevenu.annee`) ; légende « Période » / « Un an plus
+  tôt » quand la fenêtre est à cheval sur deux années (texte décalé de 20 px, comme l'ancien). Le
+  tableau pour lecteurs d'écran suit (mois + année, séries nommées). DEF-STA-15 n'est plus à trancher.
+
+L'historique repris n'a besoin d'aucune lecture particulière : l'ancien le lit dans `state.factures`
+par `date`, `web/` dans `lireFactures` (toutes les factures de la société) par `date` — même source.
+
+## D-MAIN-11 — Reprise d'historique : rapprochement dans les deux sens, taux moyen, avoir déjà imputé, relecture
+Cinq changements de production portés dans `import-export`, parité sur les modules historiques
+importés tels quels (`tests/parite/import-factures.essai.ts`, `tests/parite/reprise-avoirs.essai.ts`) :
+- **bb3cf60 + bf69f37** (rapprochement) : `rapprocherClient` était resté à « exact puis préfixe ». Port
+  littéral du sigle ancré (≥ 4 caractères, tolérance espace/point/tiret à la transition lettres↔chiffres),
+  des deux sens, du noyau sans parenthèses, de la priorité à la fiche qui porte tout le nom ; nouveau
+  type `contenu`, compté comme fiche trouvée et annoncé « probablement … à vérifier » (aperçu et
+  rapport CSV au libellé de l'ancien). bb3cf60 n'était pas dans la liste des commits à reprendre mais
+  bf69f37 le suppose : porté pour que la parité tienne.
+- **8e170ff** (taux moyen, non listé non plus, révélé par la parité) : un taux hors 20 / 10 / 5,5 / 2,1 / 0
+  n'est plus recalculé ; la pièce est reprise et signalée, le TTC reste contrôlé.
+- **3c6bc02** (avoir repris) : étape 4 de l'écriture — un règlement « imputation » du TTC, au jour de la
+  pièce, référence « Reprise d'historique — avoir déjà utilisé avant la reprise »
+  (`imputationDeReprise`) ; un refus est nommé à l'étape « imputation », la pièce reste écrite (ni
+  orpheline, ni supprimable). L'aperçu l'annonce : « N avoir(s) sera/seront marqué(s) DÉJÀ IMPUTÉ(S) ».
+  Aucune migration : l'administrateur écrit déjà les règlements (`tests/rls/import-export.essai.ts`).
+- **f957231** (relecture) : réussie ou non, l'écriture est suivie d'une relecture ATTENDUE
+  (« Rechargement… ») des factures (règlements et soldes compris), des clients et des collections du
+  tableau de bord (`rechargerApresReprise`) — ces trois familles seulement, comme `recharger('facture',
+  'reglement', 'client')`. Un rechargement raté ne lève pas : chaque écran affiche le sien.
+
+## D-MAIN-12 — Script de remise à zéro des documents (production b0ed7e0) : rien à porter
+`scripts/vider-documents-production.sql` est un script d'exploitation de la base de production, hors
+application. `web/` n'a pas à le reprendre (règle : rien hors de `web/`, aucune connexion à la
+production) ; la base locale se reconstruit par `scripts/preparer-base-locale.sh`.

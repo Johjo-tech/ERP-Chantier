@@ -12,15 +12,18 @@
  * Après le 3, la pièce est close : ni modification, ni suppression. D'où une
  * écriture PIÈCE PAR PIÈCE, jamais par lot : un échec se nomme avec son étape,
  * et un brouillon sans numéro reste supprimable.
+ *   4. Un AVOIR repris reçoit l'imputation qui le consomme (production
+ *      3c6bc02) : son crédit a été utilisé dans l'ancien logiciel.
  */
 import { listerClientsRapprochables } from "@/modules/clients/api/clients";
 import type { Database } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
-import type { PieceAEcrire } from "../domain/apercu-factures";
+import { imputationDeReprise, type PieceAEcrire } from "../domain/apercu-factures";
 import type { ClientConnu } from "../domain/factures";
 
 type FactureInsert = Database["public"]["Tables"]["factures"]["Insert"];
 type LigneInsert = Database["public"]["Tables"]["facture_lignes"]["Insert"];
+type ReglementInsert = Database["public"]["Tables"]["reglements"]["Insert"];
 
 /** Assez grand pour que 768 pièces tiennent en quatre lectures. */
 const LOT_LECTURE = 200;
@@ -46,7 +49,8 @@ export async function numerosDejaPris(societeId: string, numeros: readonly strin
 
 export interface EchecPiece {
   numero: string;
-  etape: "entete" | "lignes" | "numero";
+  /** À quelle étape, pour savoir ce qui reste en base. */
+  etape: "entete" | "lignes" | "numero" | "imputation";
   motif: string;
 }
 
@@ -90,6 +94,16 @@ async function ecrirePiece(societeId: string, piece: PieceAEcrire): Promise<{ id
   if (numero.error || !numero.data.length) {
     return { id, lignes: lignes.data.length, echec: { numero: piece.numero, etape: "numero", motif: numero.error ? motifRefusFacture(numero.error) : motifRefusFacture({ code: "42501" }) } };
   }
+  /* Sans cette imputation, la reprise ferait réapparaître l'avoir comme
+     DISPONIBLE, et « Régler par un avoir » solderait une facture d'aujourd'hui
+     avec un crédit de 2025 déjà utilisé. Son échec ne défait rien — la pièce est
+     numérotée, donc indestructible — mais il est NOMMÉ : un avoir resté
+     disponible se rattrape à la main, à condition de savoir lequel. */
+  const imputation = imputationDeReprise(piece);
+  if (imputation) {
+    const ecrite = await db.from("reglements").insert({ ...imputation, societe_id: societeId, facture_id: id } satisfies ReglementInsert).select("id");
+    if (ecrite.error) return { id, lignes: lignes.data.length, echec: { numero: piece.numero, etape: "imputation", motif: motifRefusFacture(ecrite.error) } };
+  }
   return { id, lignes: lignes.data.length };
 }
 
@@ -104,7 +118,9 @@ export async function importerFactures(societeId: string, pieces: readonly Piece
     if (r.echec) {
       console.error("Reprise d'historique : pièce refusée", r.echec);
       echecs.push(r.echec);
-      if (r.id) brouillonsOrphelins.push({ numero: piece.numero, id: r.id });
+      // Une imputation refusée laisse une pièce ÉCRITE et numérotée : ni orpheline, ni supprimable.
+      if (r.echec.etape === "imputation") ecrites++;
+      else if (r.id) brouillonsOrphelins.push({ numero: piece.numero, id: r.id });
     } else ecrites++;
     onProgress?.(i + 1, pieces.length);
   }
