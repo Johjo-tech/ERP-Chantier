@@ -191,10 +191,14 @@ describe("[proposition] le sous-traitant ne lit pas la gestion (DEF-REP-18, 2026
   });
 
   it("ce que ses écrans lisent reste lisible : clients (rapports), conducteurs, matériel, réglages", async () => {
+    // Comparé à ce que lit l'administrateur, pas à « au moins une ligne » : la ligne de réglages
+    // d'ALPHA n'existe qu'une fois qu'un autre fichier l'a écrite, et l'ordre des fichiers varie.
     for (const table of ["clients", "conducteurs", "materiels", "societe_settings"] as const) {
-      const { data, error } = await sousTraitant.from(table).select("societe_id").eq("societe_id", ALPHA).limit(1);
-      expect(error, table).toBeNull();
-      expect(data?.length, table).toBeGreaterThan(0);
+      const vu = await sousTraitant.from(table).select("societe_id").eq("societe_id", ALPHA);
+      const reference = await admin.from(table).select("societe_id").eq("societe_id", ALPHA);
+      expect(vu.error, table).toBeNull();
+      expect(reference.error, table).toBeNull();
+      expect(vu.data?.length, table).toBe(reference.data?.length);
     }
   });
 
