@@ -1438,7 +1438,12 @@ function computeRevenuePeriod(factures, monthsList){
       if(y===mo.year-1 && m===mo.month) previous[idx] += t;
     });
   });
-  const data = monthsList.map((mo,i)=>({label:mo.label, fullLabel:mo.fullLabel, current:current[i], previous:previous[i]}));
+  /* Chaque mois emporte SON année. La fenêtre est GLISSANTE : sur douze mois
+     arrêtés en septembre 2026, octobre à décembre appartiennent à 2025. Un
+     millésime unique pour tout le graphique étiquetait donc « décembre 2026 »
+     une barre qui portait décembre 2025 — un mois qui n'a pas encore eu lieu,
+     avec un montant bien réel dedans. */
+  const data = monthsList.map((mo,i)=>({label:mo.label, fullLabel:mo.fullLabel, annee:mo.year, current:current[i], previous:previous[i]}));
   const total = current.reduce((a,b)=>a+b,0);
   const lastYear = monthsList.length? monthsList[monthsList.length-1].year : new Date().getFullYear();
   return { data, total, currentYear:lastYear, prevYear:lastYear-1 };
@@ -1521,8 +1526,8 @@ function renderYearlyComparisonSVG(yearly){
     const xCurr = groupCenter + gapBars/2;
     const yPrev = h-padB-hPrev;
     const yCurr = h-padB-hCurr;
-    const prevLabel = `${d.fullLabel} ${prevYear}`.replace(/'/g,"\\'");
-    const currLabel = `${d.fullLabel} ${currentYear}`.replace(/'/g,"\\'");
+    const prevLabel = `${d.fullLabel} ${d.annee - 1}`.replace(/'/g,"\\'");
+    const currLabel = `${d.fullLabel} ${d.annee}`.replace(/'/g,"\\'");
     const prevAmount = money(d.previous).replace(/'/g,"\\'");
     const currAmount = money(d.current).replace(/'/g,"\\'");
     bars += `<rect x="${xPrev.toFixed(1)}" y="${padT}" width="${barW.toFixed(1)}" height="${(h-padT-padB).toFixed(1)}" fill="transparent" style="cursor:pointer;" onmousemove="showRevenueTooltip(event,'${jsAttr(prevLabel)}','${jsAttr(prevAmount)}')" onmouseleave="hideRevenueTooltip()"/>
@@ -1531,12 +1536,18 @@ function renderYearlyComparisonSVG(yearly){
     <rect x="${xCurr.toFixed(1)}" y="${yCurr.toFixed(1)}" width="${barW.toFixed(1)}" height="${hCurr.toFixed(1)}" rx="3" fill="var(--accent)" pointer-events="none"/>`;
     bars += `<text x="${groupCenter.toFixed(1)}" y="${h-padB+22}" text-anchor="middle" font-size="12.5" fill="var(--text-dim)">${d.label}</text>`;
   });
+  /* Deux millésimes ne se lisent que si la fenêtre tient dans UNE année. À
+     cheval sur deux, « 2026 / 2025 » désignerait mal la moitié des barres :
+     on nomme alors ce que les deux séries sont vraiment. */
+  const uneSeuleAnnee = data.every(d=>d.annee === data[0].annee);
+  const nomCourant = uneSeuleAnnee ? String(currentYear) : 'Période';
+  const nomPrecedent = uneSeuleAnnee ? String(prevYear) : 'Un an plus tôt';
   const legend = `
     <g transform="translate(${(w-230).toFixed(1)}, 10)">
       <rect x="0" y="2" width="13" height="13" rx="3" fill="var(--accent)"/>
-      <text x="19" y="12.5" font-size="13.5" fill="var(--text)">${currentYear}</text>
-      <rect x="75" y="2" width="13" height="13" rx="3" fill="var(--text-dim)" opacity="0.32"/>
-      <text x="94" y="12.5" font-size="13.5" fill="var(--text)">${prevYear}</text>
+      <text x="19" y="12.5" font-size="13.5" fill="var(--text)">${esc(nomCourant)}</text>
+      <rect x="${uneSeuleAnnee ? 75 : 95}" y="2" width="13" height="13" rx="3" fill="var(--text-dim)" opacity="0.32"/>
+      <text x="${uneSeuleAnnee ? 94 : 114}" y="12.5" font-size="13.5" fill="var(--text)">${esc(nomPrecedent)}</text>
     </g>`;
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:auto; display:block;">${bars}${legend}</svg>`;
 }
