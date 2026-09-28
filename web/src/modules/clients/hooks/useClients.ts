@@ -63,7 +63,14 @@ export function useLireUsagesClient() {
 }
 
 export function useInterlocuteurs(clientId: string) {
-  return useQuery({ queryKey: clesClients.interlocuteurs(clientId), queryFn: () => listerInterlocuteurs(clientId) });
+  // Tant qu'aucun client n'est choisi (nouveau devis, facture, bon), il n'y a rien à lire :
+  // demander les interlocuteurs de `""` fait refuser la requête (uuid invalide) et
+  // allume le bandeau « Certaines données n'ont pas pu être chargées ».
+  return useQuery({
+    queryKey: clesClients.interlocuteurs(clientId),
+    queryFn: () => listerInterlocuteurs(clientId),
+    enabled: clientId !== "",
+  });
 }
 
 /** La liste des clients porte leurs interlocuteurs : toute écriture la relit aussi. */
