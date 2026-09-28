@@ -59,6 +59,15 @@ export const CONTROLES_PAR_METIER: Record<MetierRapport, readonly PointDeControl
 /** Trois photos au plus par rapport, comme l'ancien écran. */
 export const PHOTOS_MAX = 3;
 export const STATUT_DEFAUT = "en cours";
+
+/**
+ * Statut à afficher : un rapport repris ou écrit hors de l'écran peut n'en avoir aucun (la colonne n'a pas
+ * de défaut en production). L'ancien écrivait une pastille vide ; on montre le statut qu'un rapport reçoit
+ * à sa naissance, le seul qu'il puisse avoir tant que personne ne l'a changé (DEF-ECR-01).
+ */
+export function statutDuRapport(statut: string | null | undefined): string {
+  return statut?.trim() ? statut : STATUT_DEFAUT;
+}
 export const ETAPES = ["Infos", "Contrôles", "Photos", "Rapport"] as const;
 
 export type LogementStatut = "occupé" | "vacant" | "commune";
