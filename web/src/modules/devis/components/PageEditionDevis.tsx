@@ -8,6 +8,7 @@ import { useFormulaire } from "@/lib/useFormulaire";
 import { useMessageNavigation } from "@/lib/useMessageNavigation";
 import { usePermission } from "@/modules/auth-roles/hooks/useSession";
 import { useClients, useInterlocuteurs } from "@/modules/clients/hooks/useClients";
+import { ChampMetierAncien } from "@/modules/commandes/components/MetierChapitreAncien";
 import { LignesAncien } from "@/modules/documents/components/LignesAncien";
 import { SectionLieuAncien } from "@/modules/documents/components/SectionLieuAncien";
 import { TotauxAncien } from "@/modules/documents/components/TotauxAncien";
@@ -167,7 +168,7 @@ function FormulaireDevis({ devis, reglages, ChampReference }: { devis: Devis | n
         <SectionLieuAncien valeurs={valeurs} changer={changer} suffixe="Devis" avecTelephone />
         <div className="form-section">
           <div className="form-section-head">Lignes</div>
-          <LignesAncien lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} ChampReference={ChampReference} />
+          <LignesAncien lignes={lignes} onChange={setLignes} tvaDefaut={reglages.tvaDefaut} taux={reglages.tauxTva} erreurs={erreursLignes} ChampReference={ChampReference} ChampMetier={ChampMetierAncien} />
         </div>
         <div className="form-section">
           <div className="form-section-head">Remise &amp; totaux</div>

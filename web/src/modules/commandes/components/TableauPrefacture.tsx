@@ -1,8 +1,9 @@
 import { Fragment, useContext } from "react";
 import { formatEuros, somme } from "@/lib/money";
 import { ligneVide, type LigneEdition } from "@/modules/documents/domain/lignes";
-import { memeMetier, METIER_AUCUN, metierAffiche, metierChoisi, montantsParMetier } from "../domain/metiers";
+import { metierAffiche, montantsParMetier } from "../domain/metiers";
 import { badgeOrigine, metierDuTravail, placerTravaux, UNITE_DEFAUT, type LigneDocument, type SaisieTravail, type TacheDuTravail, type Travail } from "../domain/prefacture";
+import { SelectMetierChapitre } from "./MetierChapitreAncien";
 import { MetiersConnus } from "./metiersConnus";
 
 interface Props {
@@ -23,17 +24,7 @@ interface Props {
 /** Le métier d'un chapitre (`metierPrefactureHTML`) : le métier lu sur le titre est présélectionné, en retrait. */
 function MetierDuChapitre({ ligne, onChange, desactive }: { ligne: LigneEdition; onChange: (m: string | null) => void; desactive: boolean }) {
   const connus = useContext(MetiersConnus);
-  const vu = metierAffiche(ligne, connus);
-  const noms = vu.valeur && !memeMetier(vu.valeur, METIER_AUCUN) && !connus.some((n) => memeMetier(n, vu.valeur)) ? [vu.valeur, ...connus] : connus;
-  const classes = ["chapitre-metier", vu.devine ? "est-deduit" : "", vu.certitude === "approchant" ? "est-approchant" : ""].filter(Boolean).join(" ");
-  const titre = vu.devine ? (vu.valeur ? "Lu sur le titre du chapitre — choisissez pour le figer" : "Aucun métier reconnu dans ce titre") : "Métier choisi pour ce chapitre";
-  return (
-    <select className={classes} title={titre} aria-label="Métier du chapitre" value={vu.valeur} disabled={desactive} onChange={(e) => onChange(metierChoisi(e.target.value))}>
-      <option value="">— Déduit du titre —</option>
-      <option value={METIER_AUCUN}>— Aucun métier —</option>
-      {noms.map((n) => <option key={n} value={n}>{n}</option>)}
-    </select>
-  );
+  return <SelectMetierChapitre ligne={ligne} connus={connus} onChange={onChange} desactive={desactive} />;
 }
 
 /** Une ligne de travail supplémentaire (`ligneTravailDirecteurHTML`) : liseré ambre, étiquette d'origine, quantité, unité, prix. */
