@@ -32,3 +32,5 @@
   `app/Layout.essai.tsx` (menu par rôle), `tests/matrice-miroir.essai.ts` (la matrice
   n'a qu'un texte), `tests/rls/isolement.essai.ts` et `tests/rls/auth-roles.essai.ts`
   (la vraie barrière).
+
+**Inactivité et jeton (D-AUTH-SEC-01)** : déconnexion après une heure sans geste, heure partagée entre onglets (`domain/inactivite.ts`, `hooks/useDeconnexionInactivite.ts`) ; jeton d’accès de 15 min (`supabase/config.toml`, à reporter en production dans le tableau de bord Supabase).

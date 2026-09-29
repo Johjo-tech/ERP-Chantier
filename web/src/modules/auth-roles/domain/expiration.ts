@@ -26,8 +26,9 @@ export function estSessionExpiree(e: unknown): boolean {
 }
 
 /** Pourquoi la session a été fermée sans que l'utilisateur l'ait demandé. */
-export type MotifDeconnexion = "session_expiree";
+export type MotifDeconnexion = "session_expiree" | "inactivite";
 
 export const MESSAGES_DECONNEXION: Record<MotifDeconnexion, string> = {
   session_expiree: "Votre session a expiré. Reconnectez-vous pour reprendre là où vous en étiez.",
+  inactivite: "Vous avez été déconnecté après une heure d'inactivité. Reconnectez-vous pour continuer.",
 };

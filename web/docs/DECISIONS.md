@@ -2906,3 +2906,22 @@ et échoue au-delà, texte et nombre de pages devant rester identiques.
   50 ms après l'ouverture ; le clic d'étape l'interrompait à mi-course, la page s'arrêtait 27 px plus bas
   une passe sur deux (0 ligne de texte d'écart, 24 à 28 % de pixels). Le geste attend la fin du défilement
   (800 ms) avant de cliquer l'étape.
+
+## D-AUTH-SEC-01 — JWT de 15 minutes et déconnexion après une heure d'inactivité (demande du client, 29/09)
+- **Jeton d'accès** : 15 min au lieu d'1 h (`supabase/config.toml`, `jwt_expiry = 900`). Le
+  rafraîchissement automatique (`autoRefreshToken`) renouvelle le jeton sans rien demander : aucun
+  utilisateur actif n'est déconnecté. Ce qui change : un jeton volé, ou celui d'un compte désactivé,
+  cesse de valoir au plus 15 min après. **En production**, ce réglage se pose dans le tableau de bord
+  Supabase (Authentication › Sessions / JWT expiry) : rien dans le dépôt ne l'applique. Il vaut aussi
+  pour l'ancienne application, qui partage la même base et le même service d'authentification.
+- **Inactivité** : une heure sans aucun geste (clic, touche, molette, toucher, défilement) déconnecte
+  (`domain/inactivite.ts`, `hooks/useDeconnexionInactivite.ts`). L'heure du dernier geste est
+  partagée entre les onglets (stockage du navigateur) : travailler dans un onglet garde les autres
+  ouverts. Vérifiée chaque minute et au retour de l'onglet au premier plan (la veille suspend les
+  minuteries) ; à l'ouverture, une heure dépassée déconnecte aussitôt. La déconnexion révoque la
+  session côté serveur (`signOut`), localement à défaut, vide le cache et la simulation, et la page
+  de connexion dit « Vous avez été déconnecté après une heure d'inactivité ».
+- **Limite** : c'est un geste de l'écran de `web/`. L'ancienne application n'a pas cette
+  déconnexion ; la seule barrière commune aux deux est la durée du jeton et du jeton de
+  rafraîchissement, réglée côté Supabase (on peut aussi y fixer une durée maximale de session et un
+  délai d'inactivité, « Time-box user sessions » / « Inactivity timeout », selon l'offre).

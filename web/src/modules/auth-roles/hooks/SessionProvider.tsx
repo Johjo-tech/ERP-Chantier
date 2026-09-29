@@ -7,6 +7,7 @@ import { estSessionExpiree, type MotifDeconnexion } from "../domain/expiration";
 import type { RoleMembre } from "../domain/permissions";
 import { rolesDeLaSession, simulationRetenue, societeRetenue } from "../domain/selection";
 import { SessionContexte, type EtatSession, type ValeurSession } from "./SessionContexte";
+import { CLE_DERNIER_GESTE, useDeconnexionInactivite } from "./useDeconnexionInactivite";
 
 const CLE_SOCIETE = "erp.web.societe";
 const CLE_SIMULATION = "erp.web.simulation";
@@ -142,9 +143,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [uid]
   );
 
+  // Une heure sans geste : la session est fermée côté serveur (le jeton de
+  // rafraîchissement est révoqué), localement à défaut, et la page de connexion dit pourquoi.
+  const deconnecterPourInactivite = useCallback(() => {
+    surExpiration("inactivite");
+    seDeconnecter()
+      .catch((e: unknown) => {
+        console.error("Déconnexion pour inactivité refusée par le serveur : fermeture locale", e);
+        return fermerSessionLocale();
+      })
+      .catch((e: unknown) => console.error("Fermeture locale après inactivité impossible", e))
+      .finally(() => {
+        oublierLeMetier(qc);
+        qc.setQueryData(CLE_COMPTE, null);
+      });
+  }, [qc, surExpiration]);
+  useDeconnexionInactivite(uid !== null, deconnecterPourInactivite);
+
   const deconnecter = useCallback(async () => {
     await seDeconnecter();
     oublierSimulation();
+    ecrirePreference(CLE_DERNIER_GESTE, null);
     // Déconnexion voulue : aucun motif à afficher sur la page de connexion.
     setMotif(undefined);
     qc.clear();
