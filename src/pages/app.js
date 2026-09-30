@@ -19657,10 +19657,11 @@ async function saveDocument(){
     ]);
     if(Array.isArray(societes) && societes.length){
       SOCIETES = societes.map(s => ({ id: s.id, nom: s.nom }));
-      if(!societes.some(s => s.id === state.societeId)){
-        state.societeId = societes[0].id;
-      }
-      window.choisirSociete(state.societeId);
+      /* La session a déjà retrouvé la société de cet onglet : la reprendre.
+         Rappeler `choisirSociete(state.societeId)` ici, c'était imposer le
+         « kta » écrit en dur dans l'état initial à chaque rechargement. */
+      const active = window.societeActive();
+      state.societeId = active ? active.id : societes[0].id;
     }
     state.currentRole = window.roleEffectif();
     document.body.classList.toggle('role-technicien', state.currentRole==='technicien');

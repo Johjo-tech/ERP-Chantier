@@ -260,6 +260,7 @@ import {
 } from "./permissions";
 import type { Action, ModuleId } from "./permissions";
 import { peut } from "./permissions";
+import { memoiresNavigateur, memoriserSociete, societeARestaurer } from "./societe-memorisee";
 
 export interface SocieteAccessible {
   /** Code court attendu par l'app (« kta »). */
@@ -294,7 +295,11 @@ export async function chargerSession(): Promise<SocieteAccessible[]> {
     }))
   );
 
-  societeCourante = societes[0] ?? null;
+  /* Pas la première de la liste : c'était elle que chaque rechargement
+     imposait, et un onglet ouvert sur CHM revenait sur KTA. */
+  const { onglet, navigateur } = memoiresNavigateur();
+  const code = societeARestaurer(societes.map((s) => s.id), onglet, navigateur);
+  societeCourante = societes.find((s) => s.id === code) ?? null;
   restaurerSimulation();
   return societes;
 }
@@ -312,6 +317,8 @@ export function choisirSociete(code: string): boolean {
   const trouvee = societes.find((s) => s.id === code);
   if (!trouvee) return false;
   societeCourante = trouvee;
+  const { onglet, navigateur } = memoiresNavigateur();
+  memoriserSociete(code, onglet, navigateur);
   restaurerSimulation();
   return true;
 }
