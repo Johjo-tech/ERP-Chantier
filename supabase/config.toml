@@ -455,3 +455,11 @@ enabled = true
 # déploiement.
 [functions.extraire-bc]
 verify_jwt = true
+
+# `extraire-devis` relit un devis de l'ancien logiciel depuis son PDF. Même
+# exigence, et pour la même raison : sans cette déclaration la fonction se
+# déploie OUVERTE — c'est exactement ce qui était arrivé à `extraire-bc`, dont
+# l'en-tête affirmait pourtant le contraire. Le contrôle se fait après
+# déploiement : un POST sans jeton doit rendre 401.
+[functions.extraire-devis]
+verify_jwt = true
