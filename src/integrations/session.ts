@@ -123,7 +123,16 @@ import {
   surplusImputation,
   refusImputation,
 } from "@/api/regles-reglements";
-import { extraireBonCommande, preparer, rapprocherClient, versSaisieBonCommande } from "./ocr";
+import { devisParNumero } from "@/api/queries/devis";
+import { ecartDeTotal } from "@/api/regles-devis";
+import {
+  extraireBonCommande,
+  extraireDevis,
+  preparer,
+  rapprocherClient,
+  versSaisieBonCommande,
+  versSaisieDevis,
+} from "./ocr";
 import { urlPieceJointe, urlTelechargementPieceJointe } from "./pieces-jointes";
 import {
   ajouterDocumentRh,
@@ -956,6 +965,12 @@ export function injecterSession() {
   w.attenteAnnoncee = attenteAnnoncee;
   w.versSaisieBonCommande = versSaisieBonCommande;
   w.rapprocherClient = rapprocherClient;
+  /* La lecture d'un DEVIS. Même mécanique que celle du bon, autre contrat : un
+     devis est émis par nous et adressé au client, l'inverse d'un bon. */
+  w.extraireDevis = extraireDevis;
+  w.versSaisieDevis = versSaisieDevis;
+  w.devisParNumero = devisParNumero;
+  w.ecartDeTotal = ecartDeTotal;
 
   /* Le bon tel que le client l'a envoyé : ce qu'on accepte, et comment on le
      rouvre depuis un bucket privé. */

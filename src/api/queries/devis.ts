@@ -126,3 +126,31 @@ export async function replaceDevisLignes(devisId: Uuid, lignes: LigneDevisInput[
 export function deleteDevis(id: Uuid) {
   return remove("devis", id);
 }
+
+/**
+ * Le devis qui porte déjà ce numéro dans cette société, s'il y en a un.
+ *
+ * On demande AVANT d'écrire plutôt que d'attendre le 23505 de
+ * `devis_societe_id_numero_key` : le message de Postgres nomme la contrainte,
+ * pas la pièce, et l'utilisateur n'a alors aucun moyen de savoir laquelle le
+ * bloque. C'est le cas d'un devis RELU, qui garde le numéro de l'ancien
+ * logiciel : relire deux fois le même PDF ne doit pas créer deux devis.
+ *
+ * `numerosDejaPris` (`queries/factures-import.ts`) répond à l'autre question —
+ * « lesquels de ces 768 numéros sont pris » — et rend un ensemble : elle ne
+ * sait pas dire LEQUEL.
+ */
+export async function devisParNumero(
+  societeId: Uuid,
+  numero: string
+): Promise<{ id: string; numero: string; client_nom: string | null; date: string } | null> {
+  const { data, error } = await supabase
+    .from("devis")
+    .select("id, numero, client_nom, date")
+    .eq("societe_id", societeId)
+    .eq("numero", numero)
+    .maybeSingle();
+
+  if (error) throw new SupabaseError("Recherche de numéro de devis impossible", error.code, error);
+  return data;
+}

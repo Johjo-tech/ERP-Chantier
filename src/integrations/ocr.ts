@@ -11,6 +11,7 @@
 
 import { supabase, todayISO } from "@/api/client";
 import { essentielsDeLecture } from "@/api/regles-bc";
+import { essentielsDeLectureDevis, remiseNormalisee } from "@/api/regles-devis";
 import {
   DELAI_BASCULE_ANALYSE_MS,
   DELAI_LECTURE_MS,
@@ -197,6 +198,53 @@ function erreurNommee(nom: string, message: string): Error {
   return e;
 }
 
+/**
+ * Ce qu'une lecture de DEVIS rend.
+ *
+ * Recopié à la main depuis `supabase/functions/_shared/contrat-devis.ts`, comme
+ * `ExtractionBC` l'est de `contrat-bc.ts` : une fonction edge est une unité de
+ * déploiement séparée, qui ne peut rien importer de `src/`. Les deux fichiers
+ * doivent donc être modifiés ensemble — rien ne détecte leur divergence.
+ */
+export interface LigneDevisExtraite {
+  type: "ligne" | "chapitre" | "commentaire";
+  designation: string;
+  qte?: number | null;
+  unite?: string | null;
+  prixUnitaire?: number | null;
+  tva?: number | null;
+  optionnelle?: boolean | null;
+  tranche?: "ferme" | "conditionnelle" | null;
+}
+
+export interface ExtractionDevis {
+  numeroDevis: string | null;
+  dateDevis: string | null;
+  client: string | null;
+  interlocuteur: string | null;
+  adresseChantier: string | null;
+  codePostal: string | null;
+  ville: string | null;
+  logementStatut: "occupé" | "vacant" | "commune" | null;
+  occupant: string | null;
+  ancienLocataire: string | null;
+  precisionCommune: string | null;
+  etage: string | null;
+  numeroLogement: string | null;
+  telephoneLocataire: string | null;
+  dureeValidite: string | null;
+  delaiExecution: string | null;
+  conditionsPaiement: string | null;
+  acompte: string | null;
+  remisePourcentage: number | null;
+  remiseMontantHT: number | null;
+  totalHT: number | null;
+  totalTVA: number | null;
+  totalTTC: number | null;
+  lignes: LigneDevisExtraite[];
+  avertissements: string[];
+}
+
 export interface OptionsLecture {
   /** Permet à l'utilisateur d'abandonner une lecture qui s'éternise. */
   signal?: AbortSignal;
@@ -214,10 +262,21 @@ export interface OptionsLecture {
   surFichierPret?: (fichier: File) => void;
 }
 
-export async function extraireBonCommande(
+/**
+ * Le trajet d'un document déposé jusqu'à son extraction, quel qu'il soit.
+ *
+ * Préparation, encodage, appel, étapes annoncées, et les trois causes d'échec
+ * que `functions.invoke` confond toutes dans un même « Failed to send a
+ * request ». Rien là-dedans ne sait ce qu'est un bon ou un devis : seuls le nom
+ * de la fonction edge et le type de sortie changent.
+ */
+async function lireDocument<T>(
+  fonction: "extraire-bc" | "extraire-devis",
+  /** « du bon », « du devis » — pour le message d'échec, en français. */
+  quoi: string,
   brut: File,
-  options: OptionsLecture = {}
-): Promise<ExtractionBC> {
+  options: OptionsLecture
+): Promise<T> {
   const dire = options.surEtape ?? (() => {});
 
   dire("preparation");
@@ -239,8 +298,8 @@ export async function extraireBonCommande(
   const bascule = setTimeout(() => dire("analyse"), DELAI_BASCULE_ANALYSE_MS);
 
   try {
-    const { data, error } = await supabase.functions.invoke<{ extraction: ExtractionBC }>(
-      "extraire-bc",
+    const { data, error } = await supabase.functions.invoke<{ extraction: T }>(
+      fonction,
       {
         body: { fichierBase64, mimeType: fichier.type },
         signal: options.signal,
@@ -265,31 +324,143 @@ export async function extraireBonCommande(
         );
       }
       const motif = await motifDuServeur(error);
-      throw new Error(motif ?? `Lecture du bon impossible : ${error.message}`);
+      throw new Error(motif ?? `Lecture ${quoi} impossible : ${error.message}`);
     }
-    if (!data?.extraction) throw new Error("Lecture du bon impossible : réponse vide.");
-
-    const lignes = data.extraction.lignes ?? [];
-
-    /* Le modèle remplit `avertissements` à sa discrétion, et il se tait
-       justement quand il n'a rien vu : une lecture qui rentre sans numéro, sans
-       adresse de chantier ni ligne de travaux se présentait comme une réussite.
-       On complète donc son compte rendu par ce qu'on sait manquer. */
-    return {
-      ...data.extraction,
-      lignes,
-      avertissements: [
-        ...(data.extraction.avertissements ?? []),
-        ...essentielsDeLecture({
-          numeroBC: data.extraction.numeroBC,
-          adresse: data.extraction.adresse,
-          lignes,
-        }).map((m) => m.libelle),
-      ],
-    };
+    if (!data?.extraction) throw new Error(`Lecture ${quoi} impossible : réponse vide.`);
+    return data.extraction;
   } finally {
     clearTimeout(bascule);
   }
+}
+
+export async function extraireBonCommande(
+  brut: File,
+  options: OptionsLecture = {}
+): Promise<ExtractionBC> {
+  const extraction = await lireDocument<ExtractionBC>("extraire-bc", "du bon", brut, options);
+  const lignes = extraction.lignes ?? [];
+
+  /* Le modèle remplit `avertissements` à sa discrétion, et il se tait
+     justement quand il n'a rien vu : une lecture qui rentre sans numéro, sans
+     adresse de chantier ni ligne de travaux se présentait comme une réussite.
+     On complète donc son compte rendu par ce qu'on sait manquer. */
+  return {
+    ...extraction,
+    lignes,
+    avertissements: [
+      ...(extraction.avertissements ?? []),
+      ...essentielsDeLecture({
+        numeroBC: extraction.numeroBC,
+        adresse: extraction.adresse,
+        lignes,
+      }).map((m) => m.libelle),
+    ],
+  };
+}
+
+export async function extraireDevis(
+  brut: File,
+  options: OptionsLecture = {}
+): Promise<ExtractionDevis> {
+  const extraction = await lireDocument<ExtractionDevis>("extraire-devis", "du devis", brut, options);
+  const lignes = extraction.lignes ?? [];
+  return {
+    ...extraction,
+    lignes,
+    avertissements: [
+      ...(extraction.avertissements ?? []),
+      ...essentielsDeLectureDevis({
+        numeroDevis: extraction.numeroDevis,
+        client: extraction.client,
+        lignes,
+        totalHT: extraction.totalHT,
+      }).map((m) => m.libelle),
+    ],
+  };
+}
+
+export interface ContexteSaisieDevis {
+  /** Le taux de la société (`reglages.documents.tvaDefaut`), injecté par
+   *  l'écran : `ocr.ts` ne lit pas les réglages, et une fonction qui reçoit
+   *  tout ce dont elle a besoin s'éprouve sans monter d'application. */
+  tvaDefaut: number;
+}
+
+/**
+ * Convertit l'extraction en brouillon pour le formulaire de devis.
+ *
+ * Trois décisions qui ne sont pas de la recopie :
+ *
+ *  - LA TVA ABSENTE PREND LE TAUX DE LA SOCIÉTÉ, jamais 0. Dans cette base, 0
+ *    veut dire exonéré ou autoliquidé ; un devis rechargé à 0 % passerait sans
+ *    erreur et fausserait tout l'aval.
+ *
+ *  - UNE OPTION DEVIENT UN COMMENTAIRE. Une ligne en option, en variante ou en
+ *    tranche conditionnelle n'entre pas dans le total du devis d'origine. La
+ *    rendre en ligne chiffrée gonflerait le total ; la jeter perdrait
+ *    l'information. Un commentaire porte son libellé et son chiffrage en
+ *    toutes lettres, et `estLigne` comme `v_devis_totaux` l'ignorent : le total
+ *    recalculé égale celui du devis d'origine.
+ *
+ *  - L'ADRESSE DU CHANTIER VA DANS `adresseLocataire`, jamais dans `adresse` :
+ *    `saveDevis` écrase cette dernière par celle de la fiche client.
+ */
+export function versSaisieDevis(
+  e: ExtractionDevis,
+  contexte: ContexteSaisieDevis
+): Record<string, unknown> {
+  const statutsValides = ["occupé", "vacant", "commune"];
+  const logementStatut = statutsValides.includes(e.logementStatut ?? "")
+    ? e.logementStatut
+    : undefined;
+
+  const horsTotal = (l: LigneDevisExtraite) =>
+    l.optionnelle === true || l.tranche === "conditionnelle";
+
+  const lignes = (e.lignes ?? []).map((l, i) => {
+    const ecarte = horsTotal(l);
+    const prefixe = l.optionnelle
+      ? "OPTION — "
+      : l.tranche === "conditionnelle"
+        ? "TRANCHE CONDITIONNELLE — "
+        : "";
+    const chiffrage =
+      ecarte && l.prixUnitaire != null
+        ? ` (${l.qte ?? 1} ${l.unite ?? ""} × ${l.prixUnitaire} € HT)`.replace("  ", " ")
+        : "";
+    return {
+      id: `ocr-${Date.now()}-${i}`,
+      type: ecarte ? "commentaire" : l.type,
+      designation: prefixe + (l.designation ?? "") + chiffrage,
+      qte: ecarte ? undefined : (l.qte ?? undefined),
+      unite: ecarte ? undefined : (l.unite ?? undefined),
+      prixUnitaire: ecarte ? undefined : (l.prixUnitaire ?? undefined),
+      tva: ecarte ? undefined : (l.tva ?? contexte.tvaDefaut),
+    };
+  });
+
+  const totalAvantRemise = (e.lignes ?? [])
+    .filter((l) => !horsTotal(l) && l.type === "ligne")
+    .reduce((s, l) => s + (Number(l.qte) || 0) * (Number(l.prixUnitaire) || 0), 0);
+
+  return {
+    numero: e.numeroDevis ?? undefined,
+    date: e.dateDevis ?? undefined,
+    client: e.client ?? undefined,
+    interlocuteur: e.interlocuteur ?? undefined,
+    adresseLocataire: e.adresseChantier ?? undefined,
+    codePostal: e.codePostal ?? undefined,
+    ville: e.ville ?? undefined,
+    logementStatut,
+    occupant: e.occupant ?? undefined,
+    ancienLocataire: e.ancienLocataire ?? undefined,
+    precisionCommune: e.precisionCommune ?? undefined,
+    etage: e.etage ?? undefined,
+    numeroLogement: e.numeroLogement ?? undefined,
+    telephoneLocataire: e.telephoneLocataire ?? undefined,
+    remisePourcentage: remiseNormalisee(e.remisePourcentage, e.remiseMontantHT, totalAvantRemise),
+    lignes,
+  };
 }
 
 /** Convertit l'extraction en brouillon pour le formulaire de bon de commande. */

@@ -97,8 +97,10 @@ declare global {
     depasseLePlafondLegal: any;
     dernierRefus: any;
     derniereVisite: any;
+    devisParNumero: any;
     docx: any;
     dossierSalarie: any;
+    ecartDeTotal: any;
     echecsDeLecture: any;
     ecrireImportClients: any;
     ecrireImportFactures: any;
@@ -120,6 +122,7 @@ declare global {
     etatVisite: any;
     exportAllData: any;
     extraireBonCommande: any;
+    extraireDevis: any;
     facturesDuBon: any;
     famillesCatalogue: any;
     filtrerDocuments: any;
@@ -279,6 +282,7 @@ declare global {
     verrouBonCommande: any;
     verrouFacture: any;
     versSaisieBonCommande: any;
+    versSaisieDevis: any;
   }
 }
 
