@@ -228,7 +228,24 @@ Deno.serve(async (req) => {
     JSON.stringify({
       model: MODELE_OCR,
       document,
-      table_format: "html",
+      /* PAS de `table_format`, et c'est ce qui fait la différence sur un bon
+         dont les prestations sont dans un tableau. Avec « html » comme avec
+         « markdown », Mistral EXTERNALISE les tableaux : le Markdown rendu ne
+         porte qu'une référence, `[tbl-0.html](tbl-0.html)`, vers un fichier
+         qu'on ne reçoit jamais. Les lignes, les quantités, les prix et les taux
+         partent avec, et le modèle — qui ne voit que la référence — conclut
+         honnêtement que le bon n'est pas chiffré.
+
+         Mesuré le 30/09/2026 sur un bon de CDC Habitat : avec l'option, quatre
+         lignes sans prix paraphrasant le message du locataire et aucun montant ;
+         sans elle, la vraie prestation du tableau — FORFAIT PETIT DÉPANNAGE,
+         198,46 € — son code article, le montant total, et le message du
+         locataire rangé dans `notes`, à sa place. Sur un second bon, aucune
+         différence : le retrait ne fait jamais pire.
+
+         Le commentaire de `texteUtile` attribuait ce symptôme à une photo
+         floue. C'était incomplet : les deux bons mesurés sont des PDF
+         numériques parfaitement nets. */
       // Ni images encodées ni boîtes englobantes : on ne paie que le texte.
       include_image_base64: false,
     }),
