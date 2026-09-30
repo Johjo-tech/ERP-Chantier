@@ -4511,7 +4511,12 @@ function renderDevis(){
   const estST = estSousTraitant();
   const list = state.devis.filter(d=>d.societeId===state.societeId && (estST ? (d.sousTraitantEmetteur && (!sousTraitantActuel() || d.sousTraitantEmetteur===sousTraitantActuel())) : !d.sousTraitantEmetteur));
   return `
-    <div class="page-head"><h1>Devis</h1>${state.formOpen.devis? '' : '<button class="btn primary" onclick="openForm(\'devis\')">+ Nouveau devis</button>'}</div>
+    <div class="page-head"><h1>Devis</h1>${state.formOpen.devis? '' : `<div style="display:flex; gap:8px;">
+      <label class="btn" style="cursor:pointer;">📄 Recharger un devis (PDF)
+        <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="importerDevis(this.files[0], this)">
+      </label>
+      <button class="btn primary" onclick="openForm('devis')">+ Nouveau devis</button>
+    </div>`}</div>
     ${state.formOpen.devis ? '' : `<div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
       <input type="text" id="devisSearchInput" style="flex:1; min-width:220px;" value="${esc(state.devisSearch||'')}" placeholder="Rechercher : client, locataire, interlocuteur, adresse, prix HT/TTC…" oninput="filterDevisList(this.value)" onkeydown="searchEnterCycle(event,'devis')">
       <select style="width:auto; min-width:180px;" onchange="filterDevisConducteur(this.value)">${conducteurFilterOptions(state.devisConducteurFilter)}</select>
@@ -4748,16 +4753,38 @@ function renderDevisListHTML(list){
 }
 function devisForm(){
   const e = state.editing;
+  if(state.ocr && state.ocr.cible === 'devis' && (state.ocr.enCours || state.ocr.etat)) return ocrEcranHTML();
   return `
   <div class="form-panel">
     <h3>${e.id? 'Modifier le devis' : 'Nouveau devis'}</h3>
     ${e.interventionId? `<div class="numref" style="margin-bottom:10px;">Issu d'un rapport d'intervention</div>`:''}
+    ${/* La relecture d'un devis de l'ancien logiciel. Sur un devis NEUF
+          seulement : rouvrir une fiche existante pour la réécrire depuis un PDF
+          n'a pas de sens, et le numéro y est déjà joué. */''}
+    ${e.id? '' : `<div class="ocr-zone" style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2); border-radius:10px;">
+      <label class="btn primary" style="cursor:pointer;">📄 Recharger un devis depuis son PDF
+        <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="lireDevis(this.files[0], this)">
+      </label>
+      <small style="display:block; margin-top:6px; color:var(--text-dim); font-size:11.5px;">Le devis garde son numéro d'origine, et le PDF lui reste attaché. Relisez les champs avant d'enregistrer.</small>
+      <div id="ocrStatutDevis" style="margin-top:8px; font-size:12px;"></div>
+      <div id="devisAttachmentPreview" style="margin-top:6px;"></div>
+    </div>`}
     <div class="form-section">
       <div class="form-section-head">Client & contact</div>
       <div class="field-grid">
         <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur')">${clientSelectOptions(e.client)}</select></div>
         <div class="field"><label>Interlocuteur</label><select id="f_interlocuteur">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
         <div class="field"><label>Date</label><input type="date" id="f_date" value="${e.date||todayISO()}"></div>
+        ${/* Le numéro ne se saisit jamais sur un devis ordinaire — la base le
+              donne. Il n'apparaît que sur un devis RELU, qui garde celui de
+              l'ancien logiciel, et sur une fiche déjà enregistrée, en lecture
+              seule : renuméroter existe en base, mais ce n'est pas un geste à
+              offrir ici. */''}
+        ${e.id
+          ? `<div class="field"><label>N° du devis</label><div class="numref-lg" style="padding-top:9px;">${esc(e.numero||'')}</div></div>`
+          : (e.numero
+              ? `<div class="field"><label>N° du devis (repris du document)</label><input type="text" id="f_numero" value="${esc(e.numero)}" oninput="verifierNumeroDevis(this.value)"><small id="f_numeroAvis" style="font-size:11.5px; color:var(--text-dim);">Videz le champ pour qu'un numéro DEV-… soit attribué.</small></div>`
+              : '')}
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
       </div>
     </div>
@@ -4818,7 +4845,9 @@ async function saveDevis(brouillon){
   const client = document.getElementById('f_client').value.trim();
   if(!client){ alert('Le nom du client est requis.'); return; }
   const id = e.id || uid();
-  const numero = e.numero || await window.nextNumero(state.societeId, 'devis');
+  /* `champSaisi` rend '' quand le champ n'est pas à l'écran : le numéro repris
+     d'un devis relu l'emporte, sinon la base en attribue un de la série. */
+  const numero = champSaisi('f_numero', e.numero) || e.numero || await window.nextNumero(state.societeId, 'devis');
   const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), client, interventionId: e.interventionId || null,
     chantierId: e.chantierId || null,
     adresse: resolveClientAdresse(client),
@@ -8527,7 +8556,7 @@ function bonCommandeForm(){
      formulaire reviendra prérempli. Rendre le suivi depuis `state.ocr` plutôt
      qu'en manipulant le DOM est ce qui lui permet de survivre à `renderTab()` —
      l'ancien message de fin, lui, était effacé par le rendu qui le suivait. */
-  if(state.ocr && (state.ocr.enCours || state.ocr.etat)) return ocrEcranHTML();
+  if(state.ocr && state.ocr.cible === 'bonCommande' && (state.ocr.enCours || state.ocr.etat)) return ocrEcranHTML();
 
   const e = state.editing;
   const statuts = ['en attente','en cours','terminé','annulé'];
@@ -18556,7 +18585,10 @@ function demarrerChronoOCR(){
   ocrChronoTimer = setInterval(majChronoOCR, 1000);
 }
 
-function annulerLectureBC(){
+/* Les trois gestes de l'écran d'attente ne dépendent pas du document lu : ils
+   dispatchent sur `state.ocr.cible`, la seule clé qui distingue une lecture de
+   bon d'une lecture de devis. */
+function annulerLecture(){
   const o = state.ocr;
   if(!o || !o.enCours) return;
   o.annuleParUtilisateur = true;
@@ -18564,7 +18596,7 @@ function annulerLectureBC(){
 }
 
 /** Reprendre la main à la main, après un échec ou un abandon. */
-function quitterLectureBC(){
+function quitterLecture(){
   state.ocr = null;
   renderTab();
 }
@@ -18582,9 +18614,9 @@ function ocrEcranHTML(){
       <div class="ocr-fichier">${esc(o.nom)}</div>
       <div class="ocr-actions">
         <label class="btn primary" style="cursor:pointer;">↻ Réessayer
-          <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="relancerLectureBC(this.files[0], this)">
+          <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="relancerLecture(this.files[0], this)">
         </label>
-        <button type="button" class="btn" onclick="quitterLectureBC()">Saisir à la main</button>
+        <button type="button" class="btn" onclick="quitterLecture()">Saisir à la main</button>
       </div>
     </div>`;
   }
@@ -18597,14 +18629,155 @@ function ocrEcranHTML(){
     <div class="ocr-attente">${esc(window.attenteAnnoncee())}</div>
     <div class="ocr-alerte" id="ocrAlerte" style="display:${etat.alerte?'':'none'};">${esc(etat.alerte||'')}</div>
     <div class="ocr-actions">
-      <button type="button" class="btn ghost" onclick="annulerLectureBC()">Annuler la lecture</button>
+      <button type="button" class="btn ghost" onclick="annulerLecture()">Annuler la lecture</button>
     </div>
   </div>`;
 }
 
-function relancerLectureBC(fichier, input){
+/* ---------- La relecture d'un DEVIS ----------
+   Même mécanique que celle du bon, autre contrat : un devis est émis par nous
+   et adressé au client, l'inverse d'un bon. Ce qui change ici tient en quatre
+   points : la cible de l'écran d'attente, la pièce jointe rangée côté devis, le
+   contrôle de doublon sur le numéro repris, et l'absence de déduction des
+   métiers — `appliquerMetiersDesChapitres` vise une zone du formulaire de bon
+   qui n'existe pas sur un devis, et rendrait [] en silence. */
+
+function retenirPieceJointeDevis(file){
+  state.editing.pieceJointeFichier = file;
+  state.editing.pieceJointeNom = file.name;
+  state.editing.pieceJointeData = null;
+  const preview = document.getElementById('devisAttachmentPreview');
+  if(preview) preview.innerHTML = `<div class="card-sub">📎 ${esc(file.name)} <button class="btn small danger" type="button" onclick="removeDevisAttachment()">✕</button></div>`;
+}
+
+function removeDevisAttachment(){
+  state.editing.pieceJointeFichier = null;
+  state.editing.pieceJointeData = null;
+  state.editing.pieceJointeNom = '';
+  /* `null` explicite, et non « absent » : c'est ce qui distingue « retirer la
+     pièce » de « enregistrer sans y toucher ». */
+  state.editing.pieceJointeChemin = null;
+  const preview = document.getElementById('devisAttachmentPreview');
+  if(preview) preview.innerHTML = '';
+}
+
+/**
+ * Le numéro repris est-il déjà pris ? Dit pendant qu'on regarde encore le PDF.
+ *
+ * Sans réseau : `state.devis` porte déjà tous les devis de la société. Le
+ * contrôle autoritaire, lui, a lieu à l'enregistrement — mais il serait trop
+ * tard pour relire le document.
+ */
+function verifierNumeroDevis(numero){
+  const avis = document.getElementById('f_numeroAvis');
+  if(!avis) return null;
+  const n = (numero || '').trim();
+  const collision = n && state.devis.find(d =>
+    d.societeId === state.societeId && d.numero === n && d.id !== state.editing.id);
+  if(collision){
+    avis.textContent = `Le n° ${n} est déjà celui du devis de ${collision.client || '—'} du ${fmtDate(collision.date)}. Corrigez-le, ou videz le champ pour qu'un numéro DEV-… soit attribué.`;
+    avis.style.color = 'var(--danger)';
+  } else {
+    avis.textContent = "Videz le champ pour qu'un numéro DEV-… soit attribué.";
+    avis.style.color = 'var(--text-dim)';
+  }
+  return collision || null;
+}
+
+async function importerDevis(fichier, input){
+  openForm('devis');
+  renderTab();
+  return lireDevis(fichier, input);
+}
+
+async function lireDevis(fichier, input){
+  if(!fichier) return;
+  if(state.ocr && state.ocr.enCours){
+    showToast('Une lecture est déjà en cours.');
+    return;
+  }
+
+  const controleur = new AbortController();
+  state.ocr = {
+    enCours: true, etape: 'preparation', debut: Date.now(),
+    nom: fichier.name, controleur, evenements: [], etat: null,
+    annuleParUtilisateur: false, cible: 'devis',
+  };
+  renderTab();
+  demarrerChronoOCR();
+
+  try{
+    const extraction = await window.extraireDevis(fichier, {
+      signal: controleur.signal,
+      surEtape: (etape)=>{ if(state.ocr){ state.ocr.etape = etape; majChronoOCR(); } },
+      /* Posé AVANT l'appel distant : si la lecture échoue, le PDF reste
+         attaché — c'est précisément le cas où l'on ressaisit à la main. */
+      surFichierPret: (pret)=>{ retenirPieceJointeDevis(pret); },
+    });
+    const saisie = window.versSaisieDevis(extraction, { tvaDefaut: tvaDefaut() });
+
+    const connus = state.clients.filter(c=>c.societeId===state.societeId).map(c=>c.nom);
+    const rapp = window.rapprocherClient(saisie.client, connus);
+    saisie.client = rapp.nom;
+
+    // Fusion dans le brouillon en cours, sans écraser ce qui est déjà saisi.
+    Object.entries(saisie).forEach(([k, v])=>{
+      if(v === undefined || v === '') return;
+      if(Array.isArray(v) && !v.length) return;
+      state.editing[k] = v;
+    });
+
+    const messages = [];
+    if(!rapp.nom) messages.push('client non détecté');
+    else if(!rapp.reconnu) messages.push('client « ' + rapp.nom + ' » à confirmer');
+    messages.push(...(extraction.avertissements || []));
+
+    state.ocr = null;
+    renderTab();
+
+    /* Le doublon se dit tout de suite, tant que le document est sous les yeux :
+       relire deux fois le même PDF créerait deux devis. */
+    const dejaPris = verifierNumeroDevis(state.editing.numero);
+
+    const zone = document.getElementById('ocrStatutDevis');
+    if(zone){
+      zone.textContent = messages.length
+        ? 'Devis lu — à vérifier : ' + messages.join(' · ')
+        : "Devis lu — vérifiez les champs avant d'enregistrer.";
+      zone.style.color = messages.length ? 'var(--accent-2)' : 'var(--success, #1E6B37)';
+      if(!rapp.reconnu && rapp.suggestions.length){
+        zone.innerHTML += `<div style="margin-top:8px;">
+          <div style="font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">Clients les plus proches :</div>
+          ${rapp.suggestions.map(n=>`<button type="button" class="btn small" style="margin:0 6px 6px 0;" onclick="appliquerClientOCR('${jsAttr(n)}')">${esc(n)}</button>`).join('')}
+        </div>`;
+      }
+    }
+
+    showToast(dejaPris
+      ? `Devis lu, mais le n° ${state.editing.numero} est déjà pris — corrigez-le avant d'enregistrer.`
+      : "Devis lu — relisez avant d'enregistrer.",
+      dejaPris ? 'danger' : 'success', dejaPris ? 8000 : 4000);
+  }catch(err){
+    console.error('OCR devis', err);
+    const ecoule = Date.now() - (state.ocr ? state.ocr.debut : Date.now());
+    let etat;
+    if(state.ocr && state.ocr.annuleParUtilisateur) etat = window.etatAnnule(ecoule);
+    else if(err.name === 'AbortError' || err.name === 'TimeoutError') etat = window.etatDelaiDepasse(ecoule);
+    else etat = window.etatEchec(err.message || 'Lecture impossible.');
+    if(state.ocr) state.ocr.etat = etat;
+    renderTab();
+    if(etat.ton === 'erreur') showToast(etat.alerte || etat.libelle, 'danger', 9000);
+  }finally{
+    arreterChronoOCR();
+    if(state.ocr) state.ocr.enCours = false;
+    if(input) input.value = '';
+  }
+}
+
+function relancerLecture(fichier, input){
+  const cible = state.ocr && state.ocr.cible;
   state.ocr = null;
-  return lireBonCommande(fichier, input);
+  return cible === 'devis' ? lireDevis(fichier, input) : lireBonCommande(fichier, input);
 }
 
 async function lireBonCommande(fichier, input){
@@ -18620,7 +18793,7 @@ async function lireBonCommande(fichier, input){
   state.ocr = {
     enCours: true, etape: 'preparation', debut: Date.now(),
     nom: fichier.name, controleur, evenements: [], etat: null,
-    annuleParUtilisateur: false,
+    annuleParUtilisateur: false, cible: 'bonCommande',
   };
   renderTab();
   demarrerChronoOCR();
@@ -19536,7 +19709,7 @@ Object.assign(window, {
   annotationTool,
   annotationZonePoints,
   annulerInvitationSalarie,
-  annulerLectureBC,
+  annulerLecture,
   annulerRappel,
   apercuCouleur,
   choisirFichiersFactures,
@@ -19544,16 +19717,23 @@ Object.assign(window, {
   fermerImportFactures,
   importClientsHTML,
   importFacturesHTML,
+  importerDevis,
   lancerImportClients,
   lancerImportFactures,
+  lireDevis,
   lireFichierClients,
   ouvrirImportClients,
   ouvrirImportFactures,
   paletteDeLaSociete,
   peutImporterFactures,
+  quitterLecture,
   relancerApercuFactures,
+  relancerLecture,
+  removeDevisAttachment,
+  retenirPieceJointeDevis,
   telechargerRapportClients,
   telechargerRapportFactures,
+  verifierNumeroDevis,
   viderFiltragesDifferes,
   valeurChamp,
   appartenanceTache,
@@ -20181,7 +20361,6 @@ Object.assign(window, {
   quickActionsHTML,
   quickNew,
   quickScheduleBC,
-  quitterLectureBC,
   rafraichirCatalogue,
   rafraichirChiffrageDirecteur,
   rafraichirNumerotation,
@@ -20238,7 +20417,6 @@ Object.assign(window, {
   reinitialiserFiltresFactureReglement,
   reinitialiserFiltresReglements,
   relancerCatalogue,
-  relancerLectureBC,
   relativeTime,
   remettreAuCatalogue,
   remiseAndTotalsHTML,
