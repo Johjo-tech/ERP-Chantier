@@ -39,7 +39,7 @@ import {
   type Creneau,
 } from "@/api/regles-taches";
 import { fusionnerReglages } from "./reglages";
-import { supprimerPieceJointe, televerserPieceJointeBC } from "./pieces-jointes";
+import { supprimerPieceJointe, televerserPieceJointe } from "./pieces-jointes";
 import * as queries from "@/api/queries";
 import type { Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
 
@@ -205,6 +205,16 @@ interface Collection {
   lignes?: { table: TableName; fk: string; vueLecture?: string; avecMontantHt?: boolean };
   photos?: { table: TableName; fk: string };
   /**
+   * Le document reçu du client, rangé dans le bucket privé « terrain ».
+   *
+   * `domaine` est le DEUXIÈME segment du chemin — celui qui sépare les bons des
+   * devis. Le premier reste la société, et c'est lui seul que lisent les
+   * policies Storage : ajouter un domaine ne demande donc aucune migration de
+   * policy. La collection qui le déclare gagne les trois colonnes
+   * `piece_jointe_*` et le rangement qui va avec.
+   */
+  pieceJointe?: { domaine: string };
+  /**
    * `achats` : les dépenses d'un chantier. Une troisième clé nommée plutôt
    * qu'un parcours générique des enfants — le refactoriser aurait touché les
    * lignes de devis, de bon et de facture pour un gain nul sur ce lot.
@@ -235,6 +245,9 @@ const COLLECTIONS: Record<string, Collection> = {
     table: "devis",
     lignes: { table: "devis_lignes", fk: "devis_id", avecMontantHt: true },
     client: true,
+    /* Le devis relu depuis l'ancien logiciel garde son PDF : c'est la seule
+       preuve de ce qu'il disait. */
+    pieceJointe: { domaine: "devis" },
   },
   facture: {
     table: "factures",
@@ -254,6 +267,7 @@ const COLLECTIONS: Record<string, Collection> = {
     },
     photos: { table: "bon_commande_photos", fk: "bon_commande_id" },
     client: true,
+    pieceJointe: { domaine: "bons-commande" },
   },
   intervention: {
     table: "interventions",
@@ -1730,6 +1744,7 @@ function champsCalcules(
  * serait exactement le défaut qu'on est en train de corriger.
  */
 async function rangerPieceJointe(
+  collection: Collection,
   parentId: Uuid,
   enBase: Record<string, unknown>,
   valeur: Record<string, unknown>
@@ -1743,11 +1758,11 @@ async function rangerPieceJointe(
   const societeId = enBase.societe_id as Uuid;
   const range =
     fichier instanceof File
-      ? await televerserPieceJointeBC(societeId, parentId, fichier)
+      ? await televerserPieceJointe(societeId, collection.pieceJointe!.domaine, parentId, fichier)
       : { chemin: null, nom: null, mime: null };
 
   const { error } = await dyn()
-    .from("bons_commande")
+    .from(collection.table)
     .update({
       piece_jointe_chemin: range.chemin,
       piece_jointe_nom: range.nom,
@@ -1908,10 +1923,12 @@ export async function stSet(
       );
     }
 
-    if (prefixe === "bonCommande") {
-      pieceJointe = await rangerPieceJointe(parentId, data_, valeur);
-      await appliquerWorkflow(parentId, cle, valeur);
+    /* Deux conditions, deux raisons — elles étaient liées, et les laisser
+       ensemble ferait tourner le workflow des bons sur un devis. */
+    if (collection.pieceJointe) {
+      pieceJointe = await rangerPieceJointe(collection, parentId, data_, valeur);
     }
+    if (prefixe === "bonCommande") await appliquerWorkflow(parentId, cle, valeur);
 
     /* Les lignes sont posées : la facture peut être émise. Le numéro est
        attribué ici, par le trigger, et relu juste après. */
