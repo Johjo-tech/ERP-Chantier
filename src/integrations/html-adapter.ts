@@ -28,7 +28,14 @@ import {
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import { montantLigneHt } from "@/api/regles-totaux";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
-import { refusTransitionDevis, statutApresGeste, statutsSuivants } from "@/api/regles-statut-devis";
+import {
+  libelleStatutDevis,
+  refusGesteDevis,
+  refusTransitionDevis,
+  statutAEnregistrer,
+  statutApresGeste,
+  statutsSuivants,
+} from "@/api/regles-statut-devis";
 import {
   cibleAPoserLaPiece,
   ciblesALeverLaPiece,
@@ -2443,6 +2450,9 @@ export function injectGlobalFunctions() {
   w.changerStatutDevis = changerStatutDevis;
   w.avancerStatutDevis = avancerStatutDevis;
   w.statutsSuivantsDevis = statutsSuivants;
+  w.libelleStatutDevis = libelleStatutDevis;
+  w.refusGesteDevis = refusGesteDevis;
+  w.statutAEnregistrer = statutAEnregistrer;
   /* Retirer une journée du planning supprime des tâches : c'est un geste
      explicite, jamais déduit d'un enregistrement de bon. */
   w.retirerDatesSupplementaires = retirerDatesSupplementaires;

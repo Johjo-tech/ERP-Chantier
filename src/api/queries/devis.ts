@@ -143,7 +143,7 @@ export function deleteDevis(id: Uuid) {
 export async function devisParNumero(
   societeId: Uuid,
   numero: string
-): Promise<{ id: string; numero: string; client_nom: string | null; date: string } | null> {
+): Promise<{ id: string; numero: string | null; client_nom: string; date: string } | null> {
   const { data, error } = await supabase
     .from("devis")
     .select("id, numero, client_nom, date")

@@ -144,6 +144,7 @@ declare global {
     libelleDelaiPaiement: any;
     libelleDocument: any;
     libelleDocumentRh: any;
+    libelleStatutDevis: any;
     lieuIntervention: any;
     lignesAEnregistrer: any;
     lignesDocumentDirecteur: any;
@@ -215,6 +216,7 @@ declare global {
     referentielCompose: any;
     referentielMetiers: any;
     refusAvoir: any;
+    refusGesteDevis: any;
     refusGesteFacture: any;
     refusImputation: any;
     refusImputationAvoir: any;
@@ -245,6 +247,7 @@ declare global {
     stGet: any;
     stListKeys: any;
     stSet: any;
+    statutAEnregistrer: any;
     statutEnBase: any;
     statutImputation: any;
     statutReglement: any;

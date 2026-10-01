@@ -96,7 +96,7 @@ const ENUMS: Record<string, Record<string, readonly string[]>> = {
   chantier_documents: { famille: ["dpgf", "cctp", "ppsps", "doe", "ccap", "avenant", "dgd"] },
   chantier_dpgf_lignes: { type: ["ligne", "chapitre", "commentaire"] },
   clients: { cadre_facturation: ["B2B_national", "B2B_international", "B2G", "B2C"], delai_paiement_mode: ["net", "fin_de_mois"], mode_paiement: ["virement", "cheque", "especes", "carte", "prelevement", "traite", "autre"] },
-  devis: { logement_statut: ["occupé", "vacant", "commune"], statut: ["brouillon", "envoyé", "accepté", "refusé"] },
+  devis: { logement_statut: ["occupé", "vacant", "commune"], statut: ["brouillon", "émis", "envoyé", "accepté", "refusé"] },
   devis_lignes: { tva_categorie: ["S", "Z", "E", "AE", "K", "G", "O"], type: ["ligne", "chapitre", "commentaire"] },
   facture_cycle_vie: { statut: ["brouillon", "deposee", "recue", "approuvee", "refusee", "paiement_transmis", "encaissee", "rejetee", "suspendue"] },
   facture_entrante_lignes: { tva_categorie: ["S", "Z", "E", "AE", "K", "G", "O"] },

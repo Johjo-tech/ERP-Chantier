@@ -4492,6 +4492,10 @@ function printDocument(type, id, action){
     const refus = window.refusGesteFacture && window.refusGesteFacture('imprimer', doc);
     if(refus){ showToast(refus, 'danger', 7000); return; }
   }
+  if(type==='devis'){
+    const refus = window.refusGesteDevis(doc.statut || 'brouillon');
+    if(refus){ showToast(refus, 'danger', 7000); return; }
+  }
   if(typeof html2pdf === 'undefined'){
     showToast("Le générateur de PDF n'a pas pu se charger (connexion internet bloquée ?). Utilisez Ctrl+P / Cmd+P pour imprimer ou enregistrer en PDF depuis le navigateur.");
     return;
@@ -4679,13 +4683,13 @@ function searchEnterCycle(ev, type){
   }
 }
 /* Les statuts que porte un devis, dans l'ordre de son cycle de vie. */
-const STATUTS_DEVIS = ['brouillon', 'envoyé', 'accepté', 'refusé'];
+const STATUTS_DEVIS = ['brouillon', 'émis', 'envoyé', 'accepté', 'refusé'];
 
 /* Ce qui est permis vit dans `regles-statut-devis.ts`, et la base le garde :
    l'écran ne fait que proposer les passages qu'elle accepterait. */
 const BOUTONS_STATUT_DEVIS = {
   'envoyé':  { libelle: '📤 Marquer envoyé', classe: '' },
-  'accepté': { libelle: '✅ Accepté', classe: 'success' },
+  'accepté': { libelle: '✅ Validé', classe: 'success' },
   'refusé':  { libelle: '✖ Refusé', classe: 'danger' },
 };
 function boutonsStatutDevisHTML(d){
@@ -4695,12 +4699,12 @@ function boutonsStatutDevisHTML(d){
     .join('');
 }
 async function marquerStatutDevis(id, statut){
-  if(statut === 'accepté' && !confirm("Marquer ce devis comme accepté ?\n\nC'est définitif : son statut ne pourra plus changer.")) return;
+  if(statut === 'accepté' && !confirm("Marquer ce devis comme validé ?\n\nC'est définitif : son statut ne pourra plus changer.")) return;
   const refus = await window.changerStatutDevis(id, statut);
   if(refus){ showToast(refus, 'danger', 6000); return; }
   await recharger('devis');
   renderTab();
-  showToast('Devis ' + statut + '.', 'success', 2000);
+  showToast('Devis ' + window.libelleStatutDevis(statut).toLowerCase() + '.', 'success', 2000);
 }
 /* Envoyer, facturer, commander : chacun de ces gestes dit où en est le devis.
    La pièce vient d'être écrite ; un refus sur le devis ne doit pas la faire
@@ -4713,7 +4717,19 @@ async function faireAvancerDevis(devisId, geste){
 }
 function devisStatutFilterOptions(courant){
   return '<option value="">Tous les statuts</option>' + STATUTS_DEVIS
-    .map(s=>`<option value="${esc(s)}" ${s===courant?'selected':''}>${esc(s.charAt(0).toUpperCase()+s.slice(1))}</option>`).join('');
+    .map(s=>`<option value="${esc(s)}" ${s===courant?'selected':''}>${esc(libelleFiltreDevis(s))}</option>`).join('');
+}
+/* Un devis émis n'affiche aucun statut, mais le filtre doit pouvoir le
+   nommer : « Enregistré » est le geste qui l'y a fait passer. */
+function libelleFiltreDevis(s){
+  return s === 'émis' ? 'Enregistré' : window.libelleStatutDevis(s);
+}
+function badgeStatutDevisHTML(d){
+  const libelle = window.libelleStatutDevis(d.statut);
+  return libelle ? `<span class="badge ${badgeClass(d.statut)}">${esc(libelle)}</span>` : '';
+}
+function numeroDevisHTML(d){
+  return d.numero ? esc(d.numero) : 'Brouillon — non numéroté';
 }
 function filterDevisStatut(valeur){
   state.devisStatutFilter = valeur;
@@ -4764,21 +4780,22 @@ function renderDevisListHTML(list){
     const rapportOrigine = d.interventionId ? state.interventions.find(i=>i.id===d.interventionId) : null;
     const bonsCommandeLies = state.bonsCommande.filter(b=>b.devisId===d.id);
     return `<div class="card" id="devis-card-${d.id}" style="cursor:pointer;" onclick="cardRowClick(event,'devis','${jsAttr(d.id)}')"><div class="card-row">
-      <div style="flex:1; min-width:0;"><div class="card-title">${esc(d.client)}</div><div class="card-sub"><span class="numref-lg">${esc(d.numero)}</span> · ${fmtDate(d.date)}${d.interlocuteur? ' · 👤 '+esc(d.interlocuteur):''}${d.conducteur? ' · 🦺 '+esc(d.conducteur):''}</div>${locataireCardLine(d)}
+      <div style="flex:1; min-width:0;"><div class="card-title">${esc(d.client)}</div><div class="card-sub"><span class="numref-lg">${numeroDevisHTML(d)}</span> · ${fmtDate(d.date)}${d.interlocuteur? ' · 👤 '+esc(d.interlocuteur):''}${d.conducteur? ' · 🦺 '+esc(d.conducteur):''}</div>${locataireCardLine(d)}
       ${facturesLiees.length? `<div class="card-sub">Facture${facturesLiees.length>1?'s':''} liée${facturesLiees.length>1?'s':''} : ${facturesLiees.map(f=>`<a href="javascript:void(0)" onclick="goToFacture('${jsAttr(f.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(f.numero)}</a>`).join(', ')}</div>`:''}
       ${rapportOrigine? `<div class="card-sub">Rapport d'origine : <a href="javascript:void(0)" onclick="goToIntervention('${jsAttr(rapportOrigine.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(rapportOrigine.numero)}</a></div>`:''}
       ${bonsCommandeLies.length? `<div class="card-sub">Bon${bonsCommandeLies.length>1?'s':''} de commande lié${bonsCommandeLies.length>1?'s':''} : ${bonsCommandeLies.map(b=>`<a href="javascript:void(0)" onclick="goToBonCommande('${jsAttr(b.id)}')" style="color:var(--accent-2); text-decoration:underline;">${esc(b.numeroBC)}</a>`).join(', ')}</div>`:''}
       </div>
-      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(d.logementStatut)}<span class="badge ${badgeClass(d.statut)}">${esc(d.statut)}</span></div></div>
+      <div style="text-align:right; flex-shrink:0;"><div class="amount">${moneyDisplay(t.ht)} <small style="font-weight:400; color:var(--text-dim); font-size:11px;">HT</small></div><div class="card-sub">${moneyDisplay(t.ttc)} TTC</div>${t.remisePct>0? `<div class="card-sub" style="margin-top:2px;">remise ${t.remisePct}%</div>`:''}<div style="display:flex; gap:6px; align-items:center; justify-content:flex-end; margin-top:5px;">${logementBadge(d.logementStatut)}${badgeStatutDevisHTML(d)}</div></div>
     </div>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" onclick="editItem('devis','${jsAttr(d.id)}')">Modifier</button>
       <button class="btn small" onclick="dupliquerDevis('${jsAttr(d.id)}')">Dupliquer</button>
+      ${window.refusGesteDevis(d.statut||'brouillon') ? '' : `
       <button class="btn small" onclick="printDocument('devis','${jsAttr(d.id)}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('devis','${jsAttr(d.id)}')">Envoyer par email</button>
       ${boutonsStatutDevisHTML(d)}
       ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerEnFacture('${jsAttr(d.id)}')">Transformer en facture</button>`}
-      ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${jsAttr(d.id)}')">Créer un bon de commande</button>`}
+      ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${jsAttr(d.id)}')">Créer un bon de commande</button>`}`}
       <button class="btn small danger" onclick="deleteItem('devis','${jsAttr(d.id)}')">Supprimer</button>
     </div></div>`;
   }).join('') || `<div class="empty">${q? 'Aucun devis ne correspond à la recherche.' : 'Aucun devis pour cette société. Créez-en un, ou dites-le à l\u2019assistant vocal.'}</div>`;
@@ -4814,9 +4831,9 @@ function devisForm(){
               seule : renuméroter existe en base, mais ce n'est pas un geste à
               offrir ici. */''}
         ${e.id
-          ? `<div class="field"><label>N° du devis</label><div class="numref-lg" style="padding-top:9px;">${esc(e.numero||'')}</div></div>`
+          ? `<div class="field"><label>N° du devis</label><div class="numref-lg" style="padding-top:9px;">${e.numero? esc(e.numero) : 'Attribué à l\u2019enregistrement du devis'}</div></div>`
           : (e.numero
-              ? `<div class="field"><label>N° du devis (repris du document)</label><input type="text" id="f_numero" value="${esc(e.numero)}" oninput="verifierNumeroDevis(this.value)"><small id="f_numeroAvis" style="font-size:11.5px; color:var(--text-dim);">Videz le champ pour qu'un numéro DEV-… soit attribué.</small></div>`
+              ? `<div class="field"><label>N° du devis (repris du document)</label><input type="text" id="f_numero" value="${esc(e.numero)}" oninput="verifierNumeroDevis(this.value)"><small id="f_numeroAvis" style="font-size:11.5px; color:var(--text-dim);">Videz le champ pour qu'un numéro DEV-… soit attribué à l'enregistrement.</small></div>`
               : '')}
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
       </div>
@@ -4880,7 +4897,11 @@ async function saveDevis(brouillon){
   const id = e.id || uid();
   /* `champSaisi` rend '' quand le champ n'est pas à l'écran : le numéro repris
      d'un devis relu l'emporte, sinon la base en attribue un de la série. */
-  const numero = champSaisi('f_numero', e.numero) || e.numero || await window.nextNumero(state.societeId, 'devis');
+  /* Le numéro n'est plus demandé ici : la base le pose quand le devis quitte
+     le brouillon (`devis_attribuer_numero`), et le relit dans la foulée. Seul
+     reste celui qu'on reprend d'un ancien devis relu par l'OCR. */
+  const numero = champSaisi('f_numero', e.numero) || e.numero || null;
+  const statut = window.statutAEnregistrer(e.statut, !!brouillon);
   const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), client, interventionId: e.interventionId || null,
     chantierId: e.chantierId || null,
     adresse: resolveClientAdresse(client),
@@ -4897,7 +4918,7 @@ async function saveDevis(brouillon){
       ancienLocataire: document.getElementById('f_ancienLocataire').value
     }),
     date: document.getElementById('f_date').value || todayISO(),
-    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut: e.statut || 'brouillon', ...conducteurDuSelect('f_conducteur') };
+    lignes: state.editing.lignes, remisePourcentage: e.remisePourcentage || 0, statut, ...conducteurDuSelect('f_conducteur') };
   /* Annotation de type seule : ajouter la clé au littéral changerait ce qui part
      à l'écriture, et un champ sans colonne fait rejeter l'insertion entière. */
   if(estSousTraitant()) /** @type {any} */ (obj).sousTraitantEmetteur = sousTraitantActuel()||'Sous-traitant';
@@ -4907,6 +4928,7 @@ async function saveDevis(brouillon){
   if(brouillon){
     state.editing.id = id;
     state.editing.numero = obj.numero;
+    state.editing.statut = obj.statut;
     marquerBrouillonEnregistre();
     return;
   }
@@ -4981,6 +5003,8 @@ async function transmettreALaPlateforme(factureId){
 function transformerEnFacture(devisId){
   const d = state.devis.find(x=>x.id===devisId);
   if(!d) return;
+  const refusSortie = window.refusGesteDevis(d.statut || 'brouillon');
+  if(refusSortie){ showToast(refusSortie, 'danger', 7000); return; }
   const dejaFacture = state.factures.find(f=>f.devisId===devisId);
   if(dejaFacture){
     showToast(`Ce devis a déjà été transformé en facture (${dejaFacture.numero}). Ouvrez-la directement pour la modifier.`);
@@ -4993,6 +5017,8 @@ function transformerEnFacture(devisId){
 function lierDevisABonCommande(devisId){
   const d = state.devis.find(x=>x.id===devisId);
   if(!d) return;
+  const refusSortie = window.refusGesteDevis(d.statut || 'brouillon');
+  if(refusSortie){ showToast(refusSortie, 'danger', 7000); return; }
   const dejaLie = state.bonsCommande.find(b=>b.devisId===devisId);
   if(dejaLie){
     showToast(`Ce devis est déjà lié au bon de commande ${dejaLie.numeroBC}. Ouvrez-le directement pour le modifier.`);
@@ -12235,6 +12261,10 @@ function envoyerDocumentEmail(type, id){
     const refus = window.refusGesteFacture && window.refusGesteFacture('envoyer', doc);
     if(refus){ showToast(refus, 'danger', 7000); return; }
   }
+  if(type==='devis'){
+    const refus = window.refusGesteDevis(doc.statut || 'brouillon');
+    if(refus){ showToast(refus, 'danger', 7000); return; }
+  }
   const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===doc.client);
   const dest = client && client.email ? client.email : '';
   /* « Notre facture » sur un avoir, avec un montant négatif dans la phrase :
@@ -14709,11 +14739,12 @@ function chantierDevisComplHTML(c){
     ${devisLies.length? devisLies.map(d=>{
       const t = computeDocTotals(d);
       return `<div class="chantier-file-row" style="flex-wrap:wrap;">
-        <a href="javascript:void(0)" onclick="ouvrirDevisDepuisChantier('${jsAttr(d.id)}')">📄 ${esc(d.numero)} — ${moneyDisplay(t.ht)} HT</a>
-        <span class="badge ${d.statut==='accepté'?'success':d.statut==='refusé'?'danger':'info'}">${esc(d.statut||'brouillon')}</span>
+        <a href="javascript:void(0)" onclick="ouvrirDevisDepuisChantier('${jsAttr(d.id)}')">📄 ${numeroDevisHTML(d)} — ${moneyDisplay(t.ht)} HT</a>
+        ${badgeStatutDevisHTML(d)}
+        ${window.refusGesteDevis(d.statut||'brouillon') ? '' : `
         <button class="btn small" onclick="printDocument('devis','${jsAttr(d.id)}','save')">Imprimer / PDF</button>
         <button class="btn small" onclick="envoyerDocumentEmail('devis','${jsAttr(d.id)}')">Envoyer par email</button>
-        ${boutonsStatutDevisHTML(d)}
+        ${boutonsStatutDevisHTML(d)}`}
       </div>`;
     }).join('') : ''}
     ${chantierFileListHTML(c, 'devisComplementaires')}
@@ -18726,10 +18757,10 @@ function verifierNumeroDevis(numero){
   const collision = n && state.devis.find(d =>
     d.societeId === state.societeId && d.numero === n && d.id !== state.editing.id);
   if(collision){
-    avis.textContent = `Le n° ${n} est déjà celui du devis de ${collision.client || '—'} du ${fmtDate(collision.date)}. Corrigez-le, ou videz le champ pour qu'un numéro DEV-… soit attribué.`;
+    avis.textContent = `Le n° ${n} est déjà celui du devis de ${collision.client || '—'} du ${fmtDate(collision.date)}. Corrigez-le, ou videz le champ pour qu'un numéro DEV-… soit attribué à l'enregistrement.`;
     avis.style.color = 'var(--danger)';
   } else {
-    avis.textContent = "Videz le champ pour qu'un numéro DEV-… soit attribué.";
+    avis.textContent = "Videz le champ pour qu'un numéro DEV-… soit attribué à l'enregistrement.";
     avis.style.color = 'var(--text-dim)';
   }
   return collision || null;

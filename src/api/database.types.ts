@@ -1406,7 +1406,7 @@ export type Database = {
           legacy_id: string | null
           logement_statut: Database["public"]["Enums"]["logement_statut"] | null
           maj_le: string
-          numero: string
+          numero: string | null
           numero_logement: string | null
           occupant: string | null
           piece_jointe_chemin: string | null
@@ -1440,7 +1440,7 @@ export type Database = {
             | Database["public"]["Enums"]["logement_statut"]
             | null
           maj_le?: string
-          numero: string
+          numero?: string | null
           numero_logement?: string | null
           occupant?: string | null
           piece_jointe_chemin?: string | null
@@ -1474,7 +1474,7 @@ export type Database = {
             | Database["public"]["Enums"]["logement_statut"]
             | null
           maj_le?: string
-          numero?: string
+          numero?: string | null
           numero_logement?: string | null
           occupant?: string | null
           piece_jointe_chemin?: string | null
@@ -6416,7 +6416,7 @@ export type Database = {
     Enums: {
       cadre_facturation: "B2B_national" | "B2B_international" | "B2G" | "B2C"
       delai_paiement_mode: "net" | "fin_de_mois"
-      devis_statut: "brouillon" | "envoyé" | "accepté" | "refusé"
+      devis_statut: "brouillon" | "émis" | "envoyé" | "accepté" | "refusé"
       document_famille:
         | "dpgf"
         | "cctp"
@@ -6588,7 +6588,7 @@ export const Constants = {
     Enums: {
       cadre_facturation: ["B2B_national", "B2B_international", "B2G", "B2C"],
       delai_paiement_mode: ["net", "fin_de_mois"],
-      devis_statut: ["brouillon", "envoyé", "accepté", "refusé"],
+      devis_statut: ["brouillon", "émis", "envoyé", "accepté", "refusé"],
       document_famille: [
         "dpgf",
         "cctp",
