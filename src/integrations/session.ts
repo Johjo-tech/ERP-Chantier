@@ -179,6 +179,7 @@ import {
 } from "./invitations";
 import {
   attenteAnnoncee,
+  decisionDepotOCR,
   etatAnnule,
   etatDelaiDepasse,
   etatEchec,
@@ -970,6 +971,7 @@ export function injecterSession() {
   w.etatEchec = etatEchec;
   w.formaterDuree = formaterDuree;
   w.attenteAnnoncee = attenteAnnoncee;
+  w.decisionDepotOCR = decisionDepotOCR;
   w.versSaisieBonCommande = versSaisieBonCommande;
   w.rapprocherClient = rapprocherClient;
   /* La lecture d'un DEVIS. Même mécanique que celle du bon, autre contrat : un

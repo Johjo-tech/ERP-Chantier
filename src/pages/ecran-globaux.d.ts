@@ -89,6 +89,7 @@ declare global {
     dansLaPeriode: any;
     dateDocument: any;
     dateEcheance: any;
+    decisionDepotOCR: any;
     definirMonNom: any;
     definirRoleDuCompte: any;
     definirSocieteActive: any;

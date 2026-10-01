@@ -156,3 +156,59 @@ export function etatDelaiDepasse(msEcoules: number): EtatLecture {
 export function etatEchec(message: string): EtatLecture {
   return { libelle: "Lecture impossible", ton: "erreur", alerte: message, enCours: false };
 }
+
+// ============ DÉPÔT D'UN DOCUMENT SUR LA PAGE ============
+
+/** Le formulaire qu'une lecture remplit. */
+export type CibleLecture = "devis" | "bonCommande";
+
+/** Ce que l'écran sait au moment où un fichier est lâché sur la page. */
+export interface ContexteDepot {
+  /** L'onglet affiché (`state.tab`), et le sous-onglet de « Plus ». */
+  tab: string;
+  plusTab?: string | null;
+  /** Le formulaire de la cible est-il ouvert ? */
+  formulaireOuvert: boolean;
+  /** Ce formulaire porte-t-il une fiche déjà enregistrée ? */
+  ficheExistante: boolean;
+  /** Un SAV — un bon rattaché à un autre — ne se lit pas depuis un document. */
+  sav: boolean;
+  /** Le droit de créer, cible par cible. */
+  peutCreer: Record<CibleLecture, boolean>;
+}
+
+export type DecisionDepot =
+  | { cible: CibleLecture; geste: "importer" | "lire" }
+  | { refus: string };
+
+/**
+ * Que faire d'un document lâché n'importe où sur la page.
+ *
+ * Jusqu'ici, seule la petite zone du formulaire de création acceptait un
+ * dépôt : sur la page de liste — là où l'on dépose naturellement — le fichier
+ * était seulement empêché d'ouvrir le PDF, et rien ne se passait.
+ *
+ * - **importer** : la liste est affichée ; on ouvre un formulaire neuf et on
+ *   lit, comme le bouton « Importer » de la liste.
+ * - **lire** : un formulaire de création est déjà ouvert ; la lecture le remplit.
+ * - **refus** : écraser une fiche enregistrée ou un SAV avec la lecture d'un
+ *   autre document serait une perte silencieuse.
+ * - `null` : la page n'a rien à lire.
+ */
+export function decisionDepotOCR(c: ContexteDepot): DecisionDepot | null {
+  const cible: CibleLecture | null =
+    c.tab === "devis"
+      ? "devis"
+      : c.tab === "bonsCommande" || (c.tab === "plus" && c.plusTab === "bonsCommande")
+        ? "bonCommande"
+        : null;
+  if (!cible) return null;
+  if (!c.peutCreer[cible]) {
+    return { refus: "Votre rôle ne permet pas de créer cette pièce." };
+  }
+  if (!c.formulaireOuvert) return { cible, geste: "importer" };
+  if (c.ficheExistante || c.sav) {
+    return { refus: "Fermez la fiche en cours pour lire un nouveau document." };
+  }
+  return { cible, geste: "lire" };
+}
