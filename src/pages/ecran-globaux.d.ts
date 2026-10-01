@@ -55,6 +55,7 @@ declare global {
     attenteAvantChiffrage: any;
     autorise: any;
     autoriseNav: any;
+    avancerStatutDevis: any;
     avisAptitude: any;
     avoirDisponible: any;
     badgeOrigine: any;
@@ -64,6 +65,7 @@ declare global {
     bonsDeLaFacture: any;
     cadreSuggere: any;
     catalogueComplet: any;
+    changerStatutDevis: any;
     chargerDocumentsRh: any;
     chargerIntervenants: any;
     chargerInvitations: any;
@@ -246,6 +248,7 @@ declare global {
     statutEnBase: any;
     statutImputation: any;
     statutReglement: any;
+    statutsSuivantsDevis: any;
     supprimerBrouillonsImport: any;
     supprimerDocumentRh: any;
     supprimerTravailSupplementaire: any;

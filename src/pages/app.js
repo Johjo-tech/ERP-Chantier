@@ -4680,6 +4680,37 @@ function searchEnterCycle(ev, type){
 }
 /* Les statuts que porte un devis, dans l'ordre de son cycle de vie. */
 const STATUTS_DEVIS = ['brouillon', 'envoyé', 'accepté', 'refusé'];
+
+/* Ce qui est permis vit dans `regles-statut-devis.ts`, et la base le garde :
+   l'écran ne fait que proposer les passages qu'elle accepterait. */
+const BOUTONS_STATUT_DEVIS = {
+  'envoyé':  { libelle: '📤 Marquer envoyé', classe: '' },
+  'accepté': { libelle: '✅ Accepté', classe: 'success' },
+  'refusé':  { libelle: '✖ Refusé', classe: 'danger' },
+};
+function boutonsStatutDevisHTML(d){
+  if(window.autorise && !window.autorise('devis', 'modifier')) return '';
+  return window.statutsSuivantsDevis(d.statut || 'brouillon')
+    .map(s => `<button class="btn small ${BOUTONS_STATUT_DEVIS[s].classe}" onclick="marquerStatutDevis('${jsAttr(d.id)}','${jsAttr(s)}')">${BOUTONS_STATUT_DEVIS[s].libelle}</button>`)
+    .join('');
+}
+async function marquerStatutDevis(id, statut){
+  if(statut === 'accepté' && !confirm("Marquer ce devis comme accepté ?\n\nC'est définitif : son statut ne pourra plus changer.")) return;
+  const refus = await window.changerStatutDevis(id, statut);
+  if(refus){ showToast(refus, 'danger', 6000); return; }
+  await recharger('devis');
+  renderTab();
+  showToast('Devis ' + statut + '.', 'success', 2000);
+}
+/* Envoyer, facturer, commander : chacun de ces gestes dit où en est le devis.
+   La pièce vient d'être écrite ; un refus sur le devis ne doit pas la faire
+   passer pour un échec, on le signale seulement. */
+async function faireAvancerDevis(devisId, geste){
+  if(!devisId) return;
+  const refus = await window.avancerStatutDevis(devisId, geste);
+  if(refus){ showToast('Statut du devis inchangé : ' + refus, 'danger', 6000); return; }
+  await recharger('devis');
+}
 function devisStatutFilterOptions(courant){
   return '<option value="">Tous les statuts</option>' + STATUTS_DEVIS
     .map(s=>`<option value="${esc(s)}" ${s===courant?'selected':''}>${esc(s.charAt(0).toUpperCase()+s.slice(1))}</option>`).join('');
@@ -4745,6 +4776,7 @@ function renderDevisListHTML(list){
       <button class="btn small" onclick="dupliquerDevis('${jsAttr(d.id)}')">Dupliquer</button>
       <button class="btn small" onclick="printDocument('devis','${jsAttr(d.id)}','save')">Imprimer / PDF</button>
       <button class="btn small" onclick="envoyerDocumentEmail('devis','${jsAttr(d.id)}')">Envoyer par email</button>
+      ${boutonsStatutDevisHTML(d)}
       ${facturesLiees.length? '' : `<button class="btn small" onclick="transformerEnFacture('${jsAttr(d.id)}')">Transformer en facture</button>`}
       ${bonsCommandeLies.length? '' : `<button class="btn small" onclick="lierDevisABonCommande('${jsAttr(d.id)}')">Créer un bon de commande</button>`}
       <button class="btn small danger" onclick="deleteItem('devis','${jsAttr(d.id)}')">Supprimer</button>
@@ -6407,6 +6439,7 @@ async function saveFacture(brouillon){
   const r = await window.stSet('facture:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('facture');
+  await faireAvancerDevis(obj.devisId, 'facturer');
   if(brouillon){
     /* L'identifiant est posé sur la saisie en cours : sans lui, le prochain
        enregistrement créerait une SECONDE facture au lieu de compléter
@@ -8838,6 +8871,7 @@ async function saveBonCommande(brouillon){
   const r = await window.stSet('bonCommande:'+id, obj);
   if(!r){ showToast(saveFailedMessage()); return; }
   await recharger('bonCommande');
+  await faireAvancerDevis(obj.devisId, 'commander');
   if(brouillon){
     state.editing.id = id;
     state.editing.numeroBC = obj.numeroBC;
@@ -12111,12 +12145,24 @@ function openEmailComposeModal(opts){
   document.getElementById('emailDownloadBtn').textContent = '📄 Télécharger le PDF';
   document.getElementById('emailModal').classList.add('open');
 }
+/* Ouvrir la fenêtre d'envoi ne dit pas que le devis est parti : on peut la
+   refermer. Ce sont les trois gestes qui le font sortir — télécharger le PDF,
+   ouvrir la messagerie, copier le texte — qui le marquent envoyé, une fois. */
+function devisParti(){
+  const ctx = state.emailModalCtx;
+  if(!ctx || ctx.docType !== 'devis' || ctx.devisMarque) return;
+  ctx.devisMarque = true;
+  faireAvancerDevis(ctx.docId, 'envoyer')
+    .then(() => { if(state.tab === 'devis') renderTab(); })
+    .catch(e => console.error('Statut du devis non mis à jour après envoi', e));
+}
 function closeEmailModal(){ document.getElementById('emailModal').classList.remove('open'); }
 function closeEmailModalOnBackdrop(ev){ if(ev.target === ev.currentTarget) closeEmailModal(); }
 function emailModalDownload(){
   const ctx = state.emailModalCtx;
   if(!ctx) return;
   ctx.pdfAction();
+  devisParti();
   const btn = document.getElementById('emailDownloadBtn');
   if(btn) btn.textContent = '✓ Téléchargé — vérifiez votre dossier Téléchargements';
 }
@@ -12125,6 +12171,7 @@ function emailModalOpenMailClient(){
   const subject = encodeURIComponent(document.getElementById('email_subject').value);
   const body = encodeURIComponent(document.getElementById('email_body').value);
   window.location.href = `mailto:${dest}?subject=${subject}&body=${body}`;
+  devisParti();
   showToast("Si votre messagerie ne s'est pas ouverte, utilisez \"Copier le texte\" ci-dessous et collez-le dans votre webmail.", 'success', 5000);
 }
 function emailModalCopy(){
@@ -12133,6 +12180,7 @@ function emailModalCopy(){
   const body = document.getElementById('email_body').value;
   const text = `À : ${dest}\nObjet : ${subject}\n\n${body}`;
   navigator.clipboard.writeText(text).then(()=>{
+    devisParti();
     showToast('Texte copié — collez-le dans votre messagerie.', 'success', 2500);
   }).catch(()=>{
     showToast("Impossible de copier automatiquement. Sélectionnez et copiez le texte manuellement.");
@@ -14663,6 +14711,7 @@ function chantierDevisComplHTML(c){
         <span class="badge ${d.statut==='accepté'?'success':d.statut==='refusé'?'danger':'info'}">${esc(d.statut||'brouillon')}</span>
         <button class="btn small" onclick="printDocument('devis','${jsAttr(d.id)}','save')">Imprimer / PDF</button>
         <button class="btn small" onclick="envoyerDocumentEmail('devis','${jsAttr(d.id)}')">Envoyer par email</button>
+        ${boutonsStatutDevisHTML(d)}
       </div>`;
     }).join('') : ''}
     ${chantierFileListHTML(c, 'devisComplementaires')}
@@ -19662,6 +19711,7 @@ Object.assign(window, {
   SOCIETES,
   STATS_PALETTE,
   STATUTS_DEVIS,
+  marquerStatutDevis,
   SUPABASE_ANON_KEY,
   SUPABASE_URL,
   TYPES_ABSENCE,

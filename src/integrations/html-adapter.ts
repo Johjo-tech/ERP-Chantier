@@ -28,6 +28,7 @@ import {
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import { montantLigneHt } from "@/api/regles-totaux";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
+import { refusTransitionDevis, statutApresGeste, statutsSuivants } from "@/api/regles-statut-devis";
 import {
   cibleAPoserLaPiece,
   ciblesALeverLaPiece,
@@ -41,7 +42,7 @@ import {
 import { fusionnerReglages } from "./reglages";
 import { supprimerPieceJointe, televerserPieceJointe } from "./pieces-jointes";
 import * as queries from "@/api/queries";
-import type { Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
+import type { DevisStatut, Json, TableName, TerrainData, TypeDocument, Uuid } from "@/api/types";
 
 // ============ CONVERSION DE NOMS ============
 
@@ -1994,6 +1995,49 @@ export function uuidDeLaCle(cle: string): Uuid | null {
   return uuidParCle.get(cle) ?? null;
 }
 
+/**
+ * Fait passer un devis à un autre statut. Rend le motif d'un refus, ou `null`.
+ *
+ * Une écriture de la seule colonne `statut`, et non un `stSet` : celui-ci
+ * réécrirait l'en-tête et les lignes d'après l'écran, qui peut être en retard
+ * sur un autre onglet. La base garde le cycle (`devis_statut_suit_son_cycle`) ;
+ * la règle est consultée d'abord pour ne pas lui envoyer un refus certain.
+ */
+export async function changerStatutDevis(id: string, statut: DevisStatut): Promise<string | null> {
+  const cle = `devis:${id}`;
+  const enCache = cache.get(cle);
+  const courant = (enCache?.statut as DevisStatut | undefined) ?? "brouillon";
+  const refus = refusTransitionDevis(courant, statut);
+  if (refus) return refus;
+
+  try {
+    const uuid = uuidParCle.get(cle) ?? (await chercherUuid("devis", id));
+    if (!uuid) return "Ce devis est introuvable — rechargez la page.";
+    await queries.updateDevisStatut(uuid, statut);
+    if (enCache) cache.set(cle, { ...enCache, statut });
+    return null;
+  } catch (e) {
+    console.error("Changement de statut du devis refusé", { id, de: courant, vers: statut }, e);
+    /* Le texte utile est celui du déclencheur, rangé par PostgREST dans
+       l'erreur d'origine ; `SupabaseError.message` n'en est que l'emballage. */
+    const origine = (e as { details?: { message?: string } }).details;
+    return origine?.message || (e as Error).message || "Le statut n'a pas pu être changé.";
+  }
+}
+
+/**
+ * Le statut qu'un geste fait prendre au devis — envoyer, facturer, commander.
+ * Ne fait rien si le geste ne le fait pas avancer. Rend le motif d'un refus.
+ */
+export async function avancerStatutDevis(
+  id: string,
+  geste: "envoyer" | "facturer" | "commander"
+): Promise<string | null> {
+  const courant = (cache.get(`devis:${id}`)?.statut as DevisStatut | undefined) ?? "brouillon";
+  const vers = statutApresGeste(courant, geste);
+  return vers ? changerStatutDevis(id, vers) : null;
+}
+
 async function chercherUuid(table: TableName, legacyId: string): Promise<Uuid | null> {
   if (!legacyId) return null;
   const { data } = await dyn()
@@ -2395,6 +2439,10 @@ export function injectGlobalFunctions() {
   /* Ce que la base a réellement écrit comme clé primaire : une fiche neuve doit
      pouvoir rattacher ses lignes filles, qui l'attendent en `uuid`. */
   w.uuidDeLaCle = uuidDeLaCle;
+  /* Le cycle du devis : l'écran propose, la base tranche. */
+  w.changerStatutDevis = changerStatutDevis;
+  w.avancerStatutDevis = avancerStatutDevis;
+  w.statutsSuivantsDevis = statutsSuivants;
   /* Retirer une journée du planning supprime des tâches : c'est un geste
      explicite, jamais déduit d'un enregistrement de bon. */
   w.retirerDatesSupplementaires = retirerDatesSupplementaires;
