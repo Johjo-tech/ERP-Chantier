@@ -22,7 +22,8 @@ import type { DevisStatut } from "./types";
  *
  * - Un brouillon n'a qu'une issue : être enregistré, donc numéroté. Rien ne
  *   sort sans numéro — ni envoi, ni facture, ni bon.
- * - On peut sauter « envoyé » : un devis signé sur place est validé d'emblée.
+ * - On peut sauter « envoyé » : un devis signé sur place est validé d'emblée,
+ *   un devis remis en main propre peut être refusé sans être parti.
  * - Un refus n'est pas définitif : le client revient, ou l'on renvoie une
  *   version corrigée.
  * - Un devis validé est clos : il a engagé une facture ou un bon.
@@ -30,7 +31,7 @@ import type { DevisStatut } from "./types";
  */
 export const TRANSITIONS_DEVIS: Readonly<Record<DevisStatut, readonly DevisStatut[]>> = {
   brouillon: ["émis"],
-  émis: ["envoyé", "accepté"],
+  émis: ["envoyé", "accepté", "refusé"],
   envoyé: ["accepté", "refusé"],
   refusé: ["envoyé", "accepté"],
   accepté: [],
@@ -48,10 +49,17 @@ export function refusTransitionDevis(de: DevisStatut, vers: DevisStatut): string
   return `Un devis « ${de} » ne peut pas passer à « ${vers} ».`;
 }
 
-/** Les statuts vers lesquels l'écran peut proposer de passer d'un clic. */
+/**
+ * Les statuts vers lesquels l'écran propose de passer d'un clic.
+ *
+ * Ni le brouillon — c'est « Enregistrer le devis » qui le fait sortir — ni
+ * « accepté » : un devis se valide en donnant une facture ou un bon de
+ * commande, et un bouton qui ferait la même chose en double finirait par
+ * compter des devis validés qui n'ont jamais rien produit.
+ */
 export function statutsSuivants(de: DevisStatut): readonly DevisStatut[] {
-  // Quitter le brouillon, c'est le bouton « Enregistrer le devis » du formulaire.
-  return de === "brouillon" ? [] : TRANSITIONS_DEVIS[de];
+  if (de === "brouillon") return [];
+  return TRANSITIONS_DEVIS[de].filter((s) => s !== "accepté");
 }
 
 /** Ce qu'on fait d'un devis une fois qu'il existe. */

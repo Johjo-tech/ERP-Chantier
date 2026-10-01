@@ -17,6 +17,7 @@ describe("refusTransitionDevis", () => {
     ["brouillon", "émis"],
     ["émis", "envoyé"],
     ["émis", "accepté"],
+    ["émis", "refusé"],
     ["envoyé", "accepté"],
     ["envoyé", "refusé"],
     ["refusé", "envoyé"],
@@ -47,10 +48,6 @@ describe("refusTransitionDevis", () => {
     }
   });
 
-  it("un devis émis ne se refuse pas avant d'avoir été envoyé", () => {
-    expect(refusTransitionDevis("émis", "refusé")).not.toBeNull();
-  });
-
   it("couvre les cinq statuts de l'énumération", () => {
     expect(Object.keys(TRANSITIONS_DEVIS).sort()).toEqual([...TOUS].sort());
   });
@@ -61,8 +58,14 @@ describe("statutsSuivants", () => {
     expect(statutsSuivants("brouillon")).toEqual([]);
   });
 
-  it("un devis émis se marque envoyé ou validé", () => {
-    expect(statutsSuivants("émis")).toEqual(["envoyé", "accepté"]);
+  it("un devis émis se marque envoyé ou refusé — jamais validé d'un clic", () => {
+    expect(statutsSuivants("émis")).toEqual(["envoyé", "refusé"]);
+  });
+
+  it("la validation vient de la facture ou du bon, pas d'un bouton", () => {
+    for (const s of TOUS) expect(statutsSuivants(s)).not.toContain("accepté");
+    expect(statutsSuivants("envoyé")).toEqual(["refusé"]);
+    expect(statutsSuivants("refusé")).toEqual(["envoyé"]);
   });
 });
 

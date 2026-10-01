@@ -4689,7 +4689,6 @@ const STATUTS_DEVIS = ['brouillon', 'émis', 'envoyé', 'accepté', 'refusé'];
    l'écran ne fait que proposer les passages qu'elle accepterait. */
 const BOUTONS_STATUT_DEVIS = {
   'envoyé':  { libelle: '📤 Marquer envoyé', classe: '' },
-  'accepté': { libelle: '✅ Validé', classe: 'success' },
   'refusé':  { libelle: '✖ Refusé', classe: 'danger' },
 };
 function boutonsStatutDevisHTML(d){
@@ -4699,7 +4698,6 @@ function boutonsStatutDevisHTML(d){
     .join('');
 }
 async function marquerStatutDevis(id, statut){
-  if(statut === 'accepté' && !confirm("Marquer ce devis comme validé ?\n\nC'est définitif : son statut ne pourra plus changer.")) return;
   const refus = await window.changerStatutDevis(id, statut);
   if(refus){ showToast(refus, 'danger', 6000); return; }
   await recharger('devis');
