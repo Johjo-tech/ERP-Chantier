@@ -25,6 +25,7 @@ import {
   setIdentite,
   societeActive,
 } from "./integrations/session";
+import { surveillerVersion } from "./integrations/version";
 
 interface Bridge {
   resolve: (societes: unknown) => void;
@@ -67,6 +68,9 @@ async function init() {
     watchAuthState(() => viderCache());
 
     bridge()?.resolve(societes);
+    /* Un onglet ouvert garde son code d'origine jusqu'au rechargement : sans
+       ceci, une fonction déployée paraît « en panne » à qui n'a pas rechargé. */
+    surveillerVersion();
   } catch (error) {
     console.error("❌ Initialisation impossible :", error);
     bridge()?.reject(error);
