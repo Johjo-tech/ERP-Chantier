@@ -281,6 +281,14 @@ const ENTETE_TVA: Alias = ["montant_tva", "total_tva"];
 const ENTETE_TAUX: Alias = ["taux_tva"];
 const ENTETE_TTC: Alias = ["montant_ttc", "total_ttc"];
 const ENTETE_PDF: Alias = ["fichier_pdf", "pdf_origine"];
+/* La TVA ventilée par taux. Facultative : seul l'export 2026 la porte, et
+   c'est elle qui permet de reprendre une pièce à plusieurs taux. */
+const ENTETE_TVA_PAR_TAUX: readonly { taux: number; alias: Alias }[] = [
+  { taux: 2.1, alias: ["tva_2_1"] },
+  { taux: 5.5, alias: ["tva_5_5"] },
+  { taux: 10, alias: ["tva_10"] },
+  { taux: 20, alias: ["tva_20"] },
+];
 
 const LIGNE_NUMERO: Alias = ["numero_facture", "numero"];
 const LIGNE_ORDRE: Alias = ["num_ligne", "ordre", "position"];
@@ -546,6 +554,65 @@ function tauxLegal(taux: number): boolean {
   return TAUX_LEGAUX.some((t) => Math.abs(t - taux) < 0.001);
 }
 
+/** Arrondi au centime, symétrique : un avoir s'arrondit comme sa facture. */
+function centimes(euros: number): number {
+  return Math.sign(euros) * Math.round(Math.abs(euros) * 100);
+}
+
+export type Ventilation =
+  | { parts: { taux: number; ht: number }[] }
+  | { motif: string };
+
+/**
+ * Le HT de chaque taux d'une pièce qui en porte plusieurs.
+ *
+ * L'export ne donne que le HT TOTAL et la TVA de chaque taux. Le HT d'un taux
+ * se déduit de sa TVA (TVA ÷ taux), arrondi au centime ; le taux le plus bas
+ * reçoit le reste, pour que la somme retombe exactement sur le HT du fichier.
+ * Le plus bas, parce que c'est là qu'un centime d'arrondi déplace le moins de
+ * TVA. Chaque TVA est ensuite RECALCULÉE depuis le HT obtenu : si l'une
+ * s'écarte de plus d'un centime de sa colonne, la pièce ne se laisse pas
+ * ventiler et on le dit — sur une pièce indestructible, on ne devine pas.
+ *
+ * Mesuré sur l'export CHM 2026 : les 29 pièces à deux taux se reconstituent.
+ */
+export function ventilationParTaux(
+  ht: number,
+  tvaParTaux: { taux: number; tva: number }[],
+  tvaTotale: number | null
+): Ventilation {
+  const portees = tvaParTaux.filter((p) => centimes(p.tva) !== 0).sort((a, b) => a.taux - b.taux);
+  if (portees.length < 2) {
+    return { motif: "Taux multiple annoncé, mais la TVA par taux n'en porte pas deux." };
+  }
+  const htC = centimes(ht);
+  const hautes = portees.slice(1).map((p) => ({
+    taux: p.taux,
+    htC: Math.sign(p.tva) * Math.round((Math.abs(centimes(p.tva)) * 100) / p.taux),
+  }));
+  const basse = { taux: portees[0].taux, htC: htC - hautes.reduce((t, p) => t + p.htC, 0) };
+  const parts = [basse, ...hautes];
+
+  for (const [i, p] of parts.entries()) {
+    const attendue = centimes(portees[i].tva);
+    const recalculee = Math.sign(p.htC) * Math.round((Math.abs(p.htC) * p.taux) / 100);
+    if (Math.abs(recalculee - attendue) > 1) {
+      return {
+        motif:
+          `TVA à ${p.taux} % incohérente : ${(attendue / 100).toFixed(2)} annoncé, ` +
+          `${(recalculee / 100).toFixed(2)} pour ${(p.htC / 100).toFixed(2)} HT.`,
+      };
+    }
+  }
+  const somme = portees.reduce((t, p) => t + centimes(p.tva), 0);
+  if (tvaTotale !== null && Math.abs(somme - centimes(tvaTotale)) > 1) {
+    return {
+      motif: `TVA par taux (${(somme / 100).toFixed(2)}) différente de la TVA totale (${tvaTotale}).`,
+    };
+  }
+  return { parts: parts.map((p) => ({ taux: p.taux, ht: p.htC / 100 })) };
+}
+
 const vide: TotauxFichier = {
   pieces: 0,
   factures: 0,
@@ -729,6 +796,7 @@ export function analyserExportFactures(
     ENTETE_TAUX,
     ENTETE_TTC,
     ENTETE_PDF,
+    ...ENTETE_TVA_PAR_TAUX.map((c) => c.alias),
     ["statut"],
     ["source"],
   ]);
@@ -818,7 +886,27 @@ export function analyserExportFactures(
     }
 
     const ht = nombre(champ(ENTETE_HT));
-    const taux = nombre(champ(ENTETE_TAUX));
+    let taux = nombre(champ(ENTETE_TAUX));
+
+    /* « 5,5 + 10 » : une pièce à deux taux. Sans fichier de lignes, elle ne se
+       reprend que si l'export porte la TVA par taux — on en tire alors une
+       ligne par taux, et la pièce garde sa vraie ventilation. */
+    const tvaParTaux = ENTETE_TVA_PAR_TAUX.filter((c) => entete.trouve.has(c.alias)).map((c) => ({
+      taux: c.taux,
+      tva: nombre(champ(c.alias)) ?? 0,
+    }));
+    let ventilation: { taux: number; ht: number }[] | null = null;
+    if (ht !== null && (taux === null || !tauxLegal(taux)) && !avecLignes && tvaParTaux.length) {
+      const v = ventilationParTaux(ht, tvaParTaux, nombre(champ(ENTETE_TVA)));
+      if ("motif" in v) {
+        refuser(v.motif);
+        continue;
+      }
+      ventilation = v.parts;
+      // Le taux de la pièce, pour le rapport : celui qui porte le plus de HT.
+      taux = [...ventilation].sort((a, b) => Math.abs(b.ht) - Math.abs(a.ht))[0].taux;
+    }
+
     if (ht === null || taux === null) {
       refuser(ht === null ? "Montant HT illisible." : "Taux de TVA illisible.");
       continue;
@@ -858,7 +946,9 @@ export function analyserExportFactures(
        elles le fichier entier. On dit ce qu'on ne peut pas vérifier, plutôt
        que de le vérifier de travers — et `TTC = HT + TVA`, la seule identité
        qui engage vraiment, reste contrôlée juste en dessous. */
-    if (tva !== null && !tauxLegal(taux)) {
+    if (ventilation) {
+      // Chaque TVA a déjà été recalculée par `ventilationParTaux`.
+    } else if (tva !== null && !tauxLegal(taux)) {
       signalements.push({
         ligne: l.numero,
         code: numero,
@@ -898,20 +988,18 @@ export function analyserExportFactures(
         incoherent = true;
         continue;
       }
-      sesLignes = [
-        {
-          ligne: l.numero,
-          numero,
-          position: 1,
-          /* Libellé neutre et visiblement générique : sans le compte, on ne
-             sait pas s'il s'agit d'une prestation ou d'une vente, et
-             l'affirmer serait inventer. */
-          designation: DESIGNATION_SANS_LIGNES,
-          compte: "",
-          montantHt: ht,
-          tauxTva: taux,
-        },
-      ];
+      /* Libellé neutre et visiblement générique : sans le compte, on ne
+         sait pas s'il s'agit d'une prestation ou d'une vente, et l'affirmer
+         serait inventer. Une ligne par taux quand la pièce en porte plusieurs. */
+      sesLignes = (ventilation ?? [{ taux, ht }]).map((p, i) => ({
+        ligne: l.numero,
+        numero,
+        position: i + 1,
+        designation: DESIGNATION_SANS_LIGNES,
+        compte: "",
+        montantHt: p.ht,
+        tauxTva: p.taux,
+      }));
     }
     utilises.add(numero);
 
