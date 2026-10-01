@@ -27,6 +27,7 @@ import {
 } from "@/api/client";
 import { colonnesDe, valeursEnum } from "@/api/columns";
 import { montantLigneHt } from "@/api/regles-totaux";
+import { lienSansFiche } from "@/api/regles-client-libre";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
 import {
   libelleStatutDevis,
@@ -235,6 +236,11 @@ interface Collection {
   /** Le document porte le nom du client en clair (colonne `client_nom`). */
   client?: boolean;
   /**
+   * Le nom du client peut être une société sans fiche, saisie librement : un
+   * nom sans fiche défait alors le lien `client_id` (voir `lienSansFiche`).
+   */
+  clientLibre?: boolean;
+  /**
    * Champs que l'app nomme autrement que la base : `{ champApp: colonne }`.
    * Sans cette table, `metiersPerso` remonterait sans `nom` et les listes
    * déroulantes de métiers resteraient vides.
@@ -253,6 +259,7 @@ const COLLECTIONS: Record<string, Collection> = {
     table: "devis",
     lignes: { table: "devis_lignes", fk: "devis_id", avecMontantHt: true },
     client: true,
+    clientLibre: true,
     /* Le devis relu depuis l'ancien logiciel garde son PDF : c'est la seule
        preuve de ce qu'il disait. */
     pieceJointe: { domaine: "devis" },
@@ -488,7 +495,14 @@ async function rattacherClient(
     .eq("nom", nom)
     .limit(1)
     .maybeSingle();
-  if (error || !data) return;
+  if (error) {
+    console.error(`Fiche du client « ${nom} » introuvable`, error);
+    return;
+  }
+  if (!data) {
+    Object.assign(row, lienSansFiche(!!collection.clientLibre, colonnes.has("client_id")));
+    return;
+  }
 
   const c = data as Record<string, unknown>;
   const poser = (colonne: string, v: unknown) => {

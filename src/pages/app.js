@@ -3008,6 +3008,32 @@ async function lookupVilleParCodePostal(cp, targetId){
     }
   }catch(e){ console.error('Erreur recherche ville', e); }
 }
+/* ---------- Devis : société et interlocuteur libres ----------
+   Un devis peut partir chez une société qui n'est pas cliente, à l'attention
+   de quelqu'un qui n'est dans aucune fiche : on propose ce qui existe, sans
+   le rendre obligatoire. Les noms déjà tapés sur d'autres devis sont proposés
+   aussi — sans quoi la même société libre se réécrirait à chaque fois, et
+   chaque graphie deviendrait un « client » différent. */
+function societesProposees(){
+  const fiches = state.clients.filter(c=>c.societeId===state.societeId).map(c=>c.nom);
+  const libres = state.devis.filter(d=>d.societeId===state.societeId).map(d=>d.client);
+  return window.referentielCompose(fiches.sort((a,b)=>(a||'').localeCompare(b||'','fr')), libres);
+}
+function interlocuteursProposes(clientNom){
+  const nom = (clientNom||'').trim();
+  if(!nom) return [];
+  const client = state.clients.find(c=>c.societeId===state.societeId && c.nom===nom);
+  const fiches = client ? state.interlocuteurs.filter(i=>i.clientId===client.id).map(i=>i.nom) : [];
+  const libres = state.devis.filter(d=>d.societeId===state.societeId && d.client===nom).map(d=>d.interlocuteur);
+  return window.referentielCompose(fiches, libres);
+}
+function optionsProposees(noms){
+  return noms.map(n=>`<option value="${esc(n)}"></option>`).join('');
+}
+function majInterlocuteursDevis(clientNom){
+  const liste = document.getElementById('dl_devisInterlocuteurs');
+  if(liste) liste.innerHTML = optionsProposees(interlocuteursProposes(clientNom));
+}
 function refreshInterlocuteurSelect(clientSelectEl, interlocuteurSelectId){
   const selEl = document.getElementById(interlocuteurSelectId);
   if(selEl) selEl.innerHTML = interlocuteurOptions(clientSelectEl.value, '');
@@ -4820,8 +4846,10 @@ function devisForm(){
     <div class="form-section">
       <div class="form-section-head">Client & contact</div>
       <div class="field-grid">
-        <div class="field"><label>Client</label><select id="f_client" onchange="refreshInterlocuteurSelect(this,'f_interlocuteur')">${clientSelectOptions(e.client)}</select></div>
-        <div class="field"><label>Interlocuteur</label><select id="f_interlocuteur">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
+        <div class="field"><label>Société / client</label><input type="text" id="f_client" value="${esc(e.client||'')}" list="dl_devisSocietes" autocomplete="off" placeholder="Choisir ou saisir librement" oninput="majInterlocuteursDevis(this.value)">
+          <datalist id="dl_devisSocietes">${optionsProposees(societesProposees())}</datalist></div>
+        <div class="field"><label>Interlocuteur</label><input type="text" id="f_interlocuteur" value="${esc(e.interlocuteur||'')}" list="dl_devisInterlocuteurs" autocomplete="off" placeholder="Choisir ou saisir librement">
+          <datalist id="dl_devisInterlocuteurs">${optionsProposees(interlocuteursProposes(e.client))}</datalist></div>
         <div class="field"><label>Date</label><input type="date" id="f_date" value="${e.date||todayISO()}"></div>
         ${/* Le numéro ne se saisit jamais sur un devis ordinaire — la base le
               donne. Il n'apparaît que sur un devis RELU, qui garde celui de
@@ -4903,7 +4931,7 @@ async function saveDevis(brouillon){
   const obj = { id, societeId: state.societeId, numero, createdAt: e.createdAt || new Date().toISOString(), client, interventionId: e.interventionId || null,
     chantierId: e.chantierId || null,
     adresse: resolveClientAdresse(client),
-    interlocuteur: document.getElementById('f_interlocuteur').value,
+    interlocuteur: document.getElementById('f_interlocuteur').value.trim(),
     adresseLocataire: document.getElementById('f_adresseLocataire').value,
     codePostal: document.getElementById('f_codePostal').value,
     ville: document.getElementById('f_ville').value,
@@ -20539,6 +20567,7 @@ Object.assign(window, {
   refreshChantierDpgfLignesZone,
   refreshDevisLieSelect,
   refreshInterlocuteurSelect,
+  majInterlocuteursDevis,
   refreshLignesUI,
   refreshNotifBadge,
   signalerEchecsDeChargement,
