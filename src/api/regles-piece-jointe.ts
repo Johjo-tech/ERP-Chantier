@@ -74,6 +74,31 @@ export function verifierPieceJointe(fichier: FichierDecrit): Verdict {
 }
 
 /**
+ * Ce qu'on peut déposer sur une zone de lecture (bon de commande, devis).
+ *
+ * Plus large que la pièce jointe : le HEIC d'un iPhone est accepté, parce que
+ * la préparation le convertit avant la lecture — exactement comme le bouton,
+ * dont le sélecteur l'accepte aussi. Un seul fichier : la lecture remplit UN
+ * formulaire, et en prendre un au hasard parmi plusieurs serait silencieux.
+ * La taille n'est pas jugée ici : la lecture a son propre plafond, et c'est
+ * après conversion qu'il compte.
+ */
+export function verifierDepotLecture(fichiers: FichierDecrit[]): Verdict {
+  if (fichiers.length === 0) {
+    return { ok: false, motif: "Aucun fichier dans ce dépôt — glissez un PDF ou une photo." };
+  }
+  if (fichiers.length > 1) {
+    return { ok: false, motif: "Un seul document à la fois : déposez-les l'un après l'autre." };
+  }
+  const mime = mimeDePieceJointe(fichiers[0].type, fichiers[0].nom);
+  const lisibles: readonly string[] = [...MIMES_PIECE_JOINTE, "image/heic", "image/heif"];
+  if (!lisibles.includes(mime)) {
+    return { ok: false, motif: "Format non pris en charge — un PDF ou une photo (JPEG, PNG, WebP, HEIC)." };
+  }
+  return { ok: true };
+}
+
+/**
  * Un nom de fichier utilisable comme clé d'objet.
  *
  * `uploadFile` colle le nom dans le chemin de stockage. « Bon n°12 – Résidence

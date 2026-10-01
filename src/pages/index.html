@@ -1245,6 +1245,10 @@ input.art-pick{flex-shrink:0; width:108px !important; font-size:12.5px; padding:
 .row-commentaire .commentaire-input{background:transparent; border:1px dashed var(--border); color:var(--text-dim); font-style:italic; font-size:13.5px; min-height:44px; padding:7px 9px;}
 .drag-handle{flex-shrink:0; cursor:grab; color:var(--text-dim); font-size:15px; padding:0 2px; user-select:none; touch-action:none;}
 .drag-handle:active{cursor:grabbing;}
+.ocr-zone{transition:background .15s, border-color .15s;}
+.ocr-zone.depot-actif{border-color:var(--accent) !important; background:var(--accent-soft) !important;}
+.ocr-depot-invite{margin-left:10px; color:var(--text-dim); font-size:12.5px;}
+.ocr-zone.depot-actif .ocr-depot-invite{color:var(--accent); font-weight:600;}
 tr.dnd-row.drag-over-top td{border-top:2px dashed var(--accent);}
 tr.dnd-row.drag-over-bottom td{border-bottom:2px dashed var(--accent);}
 .row-subtotal td{color:var(--text-dim); font-size:12px; padding:4px 6px 12px; border-bottom:1px solid var(--border);}

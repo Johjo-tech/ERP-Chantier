@@ -280,6 +280,7 @@ declare global {
     validerChiffrageHorsCircuit: any;
     validerTache: any;
     ventilationTvaAffichage: any;
+    verifierDepotLecture: any;
     verifierEntite: any;
     verifierPieceJointe: any;
     verrouBonCommande: any;

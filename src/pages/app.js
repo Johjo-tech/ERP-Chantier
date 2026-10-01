@@ -4793,10 +4793,11 @@ function devisForm(){
     ${/* La relecture d'un devis de l'ancien logiciel. Sur un devis NEUF
           seulement : rouvrir une fiche existante pour la réécrire depuis un PDF
           n'a pas de sens, et le numéro y est déjà joué. */''}
-    ${e.id? '' : `<div class="ocr-zone" style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2); border-radius:10px;">
+    ${e.id? '' : `<div class="ocr-zone" ${attributsDepotOCR('devis')} style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2); border-radius:10px;">
       <label class="btn primary" style="cursor:pointer;">📄 Recharger un devis depuis son PDF
         <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="lireDevis(this.files[0], this)">
       </label>
+      <span class="ocr-depot-invite">ou glissez-le ici</span>
       <small style="display:block; margin-top:6px; color:var(--text-dim); font-size:11.5px;">Le devis garde son numéro d'origine, et le PDF lui reste attaché. Relisez les champs avant d'enregistrer.</small>
       <div id="ocrStatutDevis" style="margin-top:8px; font-size:12px;"></div>
       <div id="devisAttachmentPreview" style="margin-top:6px;"></div>
@@ -8602,10 +8603,11 @@ function bonCommandeForm(){
     <h3>${verrou? 'Consulter le bon de commande' : (isSAV? (e.id? 'Modifier le SAV' : 'Nouveau SAV') : (e.id? 'Modifier le bon de commande' : 'Nouveau bon de commande'))}</h3>
     ${verrou? `<div class="facture-verrou-banner"><span>🔒 ${esc(verrou.libelle)}</span></div>` : ''}
     <div style="${verrou? 'pointer-events:none; opacity:.55;' : ''}">
-    ${(isSAV || e.id)? '' : `<div class="ocr-zone" style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2); border-radius:10px; background:rgba(var(--accent-rgb), .06);">
+    ${(isSAV || e.id)? '' : `<div class="ocr-zone" ${attributsDepotOCR('bonCommande')} style="margin:-4px 0 16px; padding:14px 16px; border:2px dashed var(--accent-2); border-radius:10px; background:rgba(var(--accent-rgb), .06);">
       <label class="btn primary" style="cursor:pointer;">📄 Lire un bon de commande (PDF ou photo)
         <input type="file" accept="application/pdf,image/*,.heic,.heif" style="display:none;" onchange="lireBonCommande(this.files[0], this)">
       </label>
+      <span class="ocr-depot-invite">ou glissez-le ici</span>
       <small style="display:block; margin-top:6px; color:var(--text-dim); font-size:11.5px;">Le formulaire est prérempli à partir du document — relisez et corrigez avant d'enregistrer.</small>
       <div id="ocrStatut" style="margin-top:8px; font-size:12px;"></div>
     </div>`}
@@ -18823,6 +18825,42 @@ async function lireDevis(fichier, input){
   }
 }
 
+/* ---------- Dépôt d'un document sur la zone de lecture ----------
+   Le même chemin que le bouton : le fichier déposé part dans `lireDevis` ou
+   `lireBonCommande`, qui gardent la main sur tout le reste — lecture déjà en
+   cours, conversion HEIC, plafond de taille. */
+function attributsDepotOCR(cible){
+  return `ondragover="survolDepotOCR(event)" ondragleave="quitterDepotOCR(event)" ondrop="deposerOCR(event,'${cible}')"`;
+}
+function survolDepotOCR(ev){
+  if(!ev.dataTransfer || ![...ev.dataTransfer.types].includes('Files')) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'copy';
+  ev.currentTarget.classList.add('depot-actif');
+}
+function quitterDepotOCR(ev){
+  /* `dragleave` part aussi en survolant un enfant de la zone : ne l'éteindre
+     que si le pointeur la quitte vraiment. */
+  if(ev.currentTarget.contains(ev.relatedTarget)) return;
+  ev.currentTarget.classList.remove('depot-actif');
+}
+function deposerOCR(ev, cible){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('depot-actif');
+  const fichiers = [...(ev.dataTransfer && ev.dataTransfer.files || [])];
+  const verdict = window.verifierDepotLecture(fichiers.map(f => ({ nom: f.name, type: f.type, taille: f.size })));
+  if(!verdict.ok){ showToast(verdict.motif, 'danger', 5000); return; }
+  return cible === 'devis' ? lireDevis(fichiers[0]) : lireBonCommande(fichiers[0]);
+}
+/* Un fichier lâché à côté de la zone, le navigateur l'ouvre à la place de
+   l'application : le formulaire en cours de saisie est perdu sans un mot. On
+   neutralise ce comportement partout ; seules les zones de dépôt l'acceptent. */
+['dragover', 'drop'].forEach(type => window.addEventListener(type, /** @param {DragEvent} ev */ ev => {
+  if(!ev.dataTransfer || ![...ev.dataTransfer.types].includes('Files')) return;
+  if(ev.target instanceof HTMLInputElement && ev.target.type === 'file') return;
+  ev.preventDefault();
+}));
+
 function relancerLecture(fichier, input){
   const cible = state.ocr && state.ocr.cible;
   state.ocr = null;
@@ -19711,6 +19749,9 @@ Object.assign(window, {
   SOCIETES,
   STATS_PALETTE,
   STATUTS_DEVIS,
+  survolDepotOCR,
+  quitterDepotOCR,
+  deposerOCR,
   marquerStatutDevis,
   SUPABASE_ANON_KEY,
   SUPABASE_URL,

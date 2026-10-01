@@ -58,7 +58,7 @@ import {
   verifierEntite,
 } from "@/api/regles-efacture";
 import { alertesDocument, alertesSalarie, alertesVehicule, trierAlertes } from "./alertes";
-import { apercuDe, urlApercuPdf, verifierPieceJointe } from "@/api/regles-piece-jointe";
+import { apercuDe, urlApercuPdf, verifierDepotLecture, verifierPieceJointe } from "@/api/regles-piece-jointe";
 import {
   ACCENT_DEFAUT,
   paletteAccent,
@@ -975,6 +975,7 @@ export function injecterSession() {
   /* Le bon tel que le client l'a envoyé : ce qu'on accepte, et comment on le
      rouvre depuis un bucket privé. */
   w.verifierPieceJointe = verifierPieceJointe;
+  w.verifierDepotLecture = verifierDepotLecture;
   w.preparerPieceJointe = preparer;
   w.apercuDe = apercuDe;
   w.urlApercuPdf = urlApercuPdf;
