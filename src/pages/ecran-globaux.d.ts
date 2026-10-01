@@ -81,6 +81,7 @@ declare global {
     completudeSociete: any;
     comptesRendusTerrain: any;
     construireIndexFactureBC: any;
+    compteurEnCours: any;
     correspond: any;
     correspondFiche: any;
     criteresDepuisRequete: any;

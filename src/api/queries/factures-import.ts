@@ -21,7 +21,7 @@
  * complémentaires : `factures_entete_figee` regarde `OLD.numero`, qui est vide ;
  * `facture_attribuer_numero` regarde `NEW.numero`, qui est plein — donc il ne
  * touche pas au compteur (`20260914110000…sql:50`). La série importée et la
- * série native `FAC-2026-000001` coexistent sans se voir.
+ * série native `FAC-000001` coexistent sans se voir.
  *
  * ── CE QUI SE JOUE ICI, ET QU'ON NE RATTRAPERA PAS ─────────────────────────
  * Après l'étape 3, la pièce est close : l'en-tête est gelé hors liste blanche,

@@ -1053,6 +1053,7 @@ export function injecterSession() {
   w.listCompteurs = queries.listCompteurs;
   w.reglerCompteur = queries.reglerCompteur;
   w.apercuNumero = queries.apercuNumero;
+  w.compteurEnCours = queries.compteurEnCours;
 
   // Réglages par société
   w.fusionnerReglages = fusionnerReglages;

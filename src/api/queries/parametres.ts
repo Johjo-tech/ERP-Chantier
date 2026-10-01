@@ -93,22 +93,25 @@ export const SERIES_NUMEROTATION: { type: TypeDocument; label: string; prefixe: 
   { type: "devis", label: "Devis", prefixe: "DEV" },
   { type: "facture", label: "Facture", prefixe: "FAC" },
   /* « INT », et non « RAP » : c'est le défaut de `numero_suivant_interne` en
-     base, qui fait seule autorité. L'écran annonçait RAP-2026-000001 dans
-     l'aperçu des réglages, et la base attribuait INT-2026-000001 — sur une
+     base, qui fait seule autorité. L'écran annonçait RAP-000001 dans
+     l'aperçu des réglages, et la base attribuait INT-000001 — sur une
      pièce qui part chez le client. */
   { type: "intervention", label: "Rapport d'intervention", prefixe: "INT" },
   { type: "sav", label: "SAV", prefixe: "SAV" },
 ];
 
-export async function listCompteurs(
-  societeId: Uuid,
-  annee: number = new Date().getFullYear()
-): Promise<Compteur[]> {
+/**
+ * Tous les compteurs de la société, toutes années confondues.
+ *
+ * La série est continue d'une année sur l'autre : au 1er janvier, avant le
+ * premier document, l'année n'a pas encore de ligne et c'est celle de l'année
+ * précédente qui dit où l'on en est. Voir `compteurEnCours`.
+ */
+export async function listCompteurs(societeId: Uuid): Promise<Compteur[]> {
   const { data, error } = await supabase
     .from("compteurs")
     .select("*")
-    .eq("societe_id", societeId)
-    .eq("annee", annee);
+    .eq("societe_id", societeId);
 
   if (error) throw new SupabaseError("Failed to list compteurs", error.code, error);
   return data ?? [];
@@ -150,16 +153,7 @@ export async function reglerCompteur(
   return data;
 }
 
-/**
- * Le prochain numéro tel qu'il sera attribué, pour l'aperçu des réglages.
- *
- * Miroir de `numero_suivant_interne` en base, qui fait seule autorité : six
- * chiffres. Les deux doivent bouger ensemble — un aperçu qui annonce une
- * largeur et une base qui en attribue une autre est pire que pas d'aperçu.
- */
-export function apercuNumero(prefixe: string, valeur: number, annee: number): string {
-  return `${prefixe.trim() || "DOC"}-${annee}-${String(valeur + 1).padStart(6, "0")}`;
-}
+export { apercuNumero, compteurEnCours } from "../regles-numerotation";
 
 // ============ MÉTIERS ============
 

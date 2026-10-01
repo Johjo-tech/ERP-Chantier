@@ -13127,21 +13127,20 @@ async function rafraichirNumerotation(){
 }
 
 function tableauNumerotation(){
-  const annee = new Date().getFullYear();
   const modifiable = window.autorise ? window.autorise('reglages', 'modifier') : true;
 
   return `<table class="table">
     <thead><tr><th>Document</th><th style="width:110px;">Préfixe</th><th style="width:140px;">Dernier n° attribué</th><th>Prochain</th></tr></thead>
     <tbody>
       ${window.SERIES_NUMEROTATION.map(s=>{
-        const c = (compteursCharges||[]).find(x=> x.type===s.type && x.annee===annee);
+        const c = window.compteurEnCours(compteursCharges||[], s.type);
         const prefixe = (c && c.prefixe) || s.prefixe;
         const valeur = c ? c.valeur : 0;
         return `<tr>
           <td>${esc(s.label)}</td>
           <td><input type="text" id="num_p_${esc(s.type)}" value="${esc(prefixe)}" maxlength="8" style="width:90px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${jsAttr(s.type)}')"></td>
           <td><input type="number" min="0" id="num_v_${esc(s.type)}" value="${valeur}" style="width:110px;" ${modifiable?'':'disabled'} oninput="majApercuNumero('${jsAttr(s.type)}')"></td>
-          <td><code id="num_a_${esc(s.type)}">${esc(window.apercuNumero(prefixe, valeur, annee))}</code></td>
+          <td><code id="num_a_${esc(s.type)}">${esc(window.apercuNumero(prefixe, valeur))}</code></td>
         </tr>`;
       }).join('')}
     </tbody>
@@ -13150,10 +13149,9 @@ function tableauNumerotation(){
 }
 
 function majApercuNumero(type){
-  const annee = new Date().getFullYear();
   const p = document.getElementById('num_p_'+type).value;
   const v = parseInt(document.getElementById('num_v_'+type).value, 10) || 0;
-  document.getElementById('num_a_'+type).textContent = window.apercuNumero(p, v, annee);
+  document.getElementById('num_a_'+type).textContent = window.apercuNumero(p, v);
 }
 
 async function saveNumerotation(){
@@ -13163,7 +13161,7 @@ async function saveNumerotation(){
     for(const s of window.SERIES_NUMEROTATION){
       const prefixe = document.getElementById('num_p_'+s.type).value;
       const valeur = parseInt(document.getElementById('num_v_'+s.type).value, 10) || 0;
-      const actuel = (compteursCharges||[]).find(x=> x.type===s.type && x.annee===annee);
+      const actuel = window.compteurEnCours(compteursCharges||[], s.type);
 
       /* Baisser le compteur réattribuerait des numéros déjà émis : on prévient
          plutôt que de créer des doublons en silence. */
@@ -13183,9 +13181,9 @@ async function saveNumerotation(){
 function renderNumerotationSection(){
   return `<div class="card">
     <div class="card-title" style="margin-bottom:10px;">🔢 Numérotation</div>
-    <div class="card-sub" style="margin-bottom:12px;">Préfixe et point de départ de chaque série, pour ${esc(societeName(state.societeId))} en ${new Date().getFullYear()}. Les numéros sont attribués par la base de façon atomique — deux personnes ne peuvent pas obtenir le même.</div>
+    <div class="card-sub" style="margin-bottom:12px;">Préfixe et point de départ de chaque série, pour ${esc(societeName(state.societeId))}. Les numéros sont attribués par la base de façon atomique — deux personnes ne peuvent pas obtenir le même.</div>
     <div id="zoneNumerotation"><div class="empty">Chargement…</div></div>
-    <small style="display:block; margin-top:12px; color:var(--text-dim); font-size:11px;">Les bons de commande n'ont pas de série : leur numéro figure sur le document du client. Les compteurs repartent de zéro chaque année civile.</small>
+    <small style="display:block; margin-top:12px; color:var(--text-dim); font-size:11px;">Les bons de commande n'ont pas de série : leur numéro figure sur le document du client. Les numéros ne portent pas l’année (FAC-000256) : la série continue d’une année sur l’autre, sans repartir de zéro.</small>
   </div>`;
 }
 

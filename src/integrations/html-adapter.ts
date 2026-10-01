@@ -1976,7 +1976,7 @@ export async function stSet(
       err
     );
     /* Le motif le plus parlant d'abord : `details` et `hint` portent la phrase
-       écrite par le déclencheur — « La facture FAC-2026-000012 est numérotée :
+       écrite par le déclencheur — « La facture FAC-000012 est numérotée :
        elle ne peut plus être supprimée » — là où `message` n'est souvent qu'un
        emballage générique. */
     dernierMotifRefus = e.details || e.hint || e.message || null;
