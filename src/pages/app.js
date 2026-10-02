@@ -3809,7 +3809,11 @@ function printableLignesRows(lignes, hidePrices){
       /* Même arithmétique que l'écran, empruntée à la règle plutôt que refaite :
          deux formules pour un seul montant finissent par diverger d'un centime. */
       const sansPrix = !(parseFloat(l.prixUnitaire) > 0) ? ' p-sans-prix' : '';
-      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
+      /* Le commentaire de la bulle 💬 était saisi, enregistré, et jamais
+         imprimé : le client ne lisait pas ce qu'on avait précisé sur la ligne. */
+      const note = (l.commentaire || '').trim();
+      const noteHTML = note ? `<div class="p-ligne-note">${esc(note)}</div>` : '';
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
     }
   });
   return html;
