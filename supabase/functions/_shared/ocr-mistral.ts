@@ -87,6 +87,13 @@ const BUDGET_DEFAUT: Budget = {
   markdownMax: 120_000,
 };
 
+/** Des règles propres à l'émetteur d'un document, reconnues dans son texte. */
+export interface Consignes {
+  /** Pour les traces : « émetteur reconnu : SEM4V ». */
+  nom: string;
+  texte: string;
+}
+
 /** Ce qui distingue une lecture d'une autre. */
 export interface ContratLecture {
   /** Nom du `json_schema` côté Mistral, et clé des traces. */
@@ -100,6 +107,15 @@ export interface ContratLecture {
   /** Ce que le schéma strict laisse encore passer, et qu'il faut signaler. */
   ecartsDeForme: (o: unknown) => string[];
   budget?: Partial<Budget>;
+  /**
+   * Chaque bailleur range ses informations à sa façon. Un prompt unique ne peut
+   * pas dire « chez SEM4V, l'interlocuteur est l'agent de l'EDL » sans le dire à
+   * tous les autres : ces règles ne s'ajoutent donc qu'au document qui les
+   * concerne.
+   */
+  consignesDuDocument?: (markdown: string) => Consignes | null;
+  /** Ce qui se décide sur le texte sans demander l'avis du modèle. */
+  apresLecture?: (lu: Record<string, unknown>, markdown: string) => void;
 }
 
 /**
@@ -115,6 +131,41 @@ function texteUtile(markdown: string): string {
     .replace(/!?\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/^[-_*\s]*$/gm, "")
     .trim();
+}
+
+/**
+ * Les pages mises bout à bout, chacune annoncée par son numéro.
+ *
+ * Un simple `---` entre deux pages ne permettait pas au modèle de savoir où il
+ * en était. Or les consignes parlent de pages : chez SEM4V l'agent de l'EDL est
+ * en bas de page, et au Département les prestations occupent les pages 2 à 6.
+ */
+export function markdownDesPages(pages: string[]): string {
+  return pages
+    .map((md, i) => `--- Page ${i + 1}/${pages.length} ---\n\n${md}`)
+    .join("\n\n")
+    .trim();
+}
+
+/**
+ * Ce que l'OCR a rendu d'une page, en nombres seulement.
+ *
+ * Le 30/09, trois bons sont arrivés à moitié vides, et les traces ne donnaient
+ * qu'un total de caractères. Il a fallu recouper les heures de déploiement pour
+ * comprendre que leurs tableaux s'étaient perdus à l'OCR, et non chez le modèle.
+ * Avec ces comptes, la trace le dit d'elle-même : une page sans rangée, avec un
+ * `[tbl-0.html]` ou un `![img-0]`, a perdu son contenu avant la structuration.
+ * Aucun contenu n'est tracé : un bon porte le nom et le téléphone d'un
+ * locataire.
+ */
+export function mesurerPage(markdown: string) {
+  return {
+    caracteres: texteUtile(markdown).length,
+    // Les rangées de séparation `| --- |` ne sont pas des données.
+    rangees: (markdown.match(/^\s*\|(?!\s*:?-{3,})/gm) ?? []).length,
+    images: (markdown.match(/!\[[^\]]*\]\([^)]*\)/g) ?? []).length,
+    tableauxExternes: (markdown.match(/(?<!!)\[tbl-[^\]]*\]\([^)]*\)/g) ?? []).length,
+  };
 }
 
 /** `MISTRAL_MODEL` est un levier d'urgence : il ne sert qu'à forcer un autre
@@ -304,8 +355,10 @@ export function servirLecture(contrat: ContratLecture) {
     }
 
     const resultatOcr = await ocr.rep.json();
-    const pages: { markdown?: string }[] = resultatOcr.pages ?? [];
-    const markdown = pages.map((p) => p.markdown ?? "").join("\n\n---\n\n").trim();
+    const pages: string[] = (resultatOcr.pages ?? []).map(
+      (p: { markdown?: string }) => p.markdown ?? "",
+    );
+    const markdown = markdownDesPages(pages);
 
     /* Un document illisible rend des pages vides. Envoyer ce vide au modèle de
        structuration ne coûterait pas moins cher et rendrait un formulaire
@@ -315,8 +368,11 @@ export function servirLecture(contrat: ContratLecture) {
        rend `[tbl-0.html](tbl-0.html)` — une référence à un tableau qu'il n'a pas
        su transcrire. Vingt-quatre caractères, aucun texte : le premier garde-fou
        écrit ici la laissait passer, et l'utilisateur récupérait un formulaire
-       entièrement vide sans un mot d'explication. */
-    if (texteUtile(markdown).length < MINIMUM_LISIBLE) {
+       entièrement vide sans un mot d'explication.
+
+       Le compte se fait sur les pages seules : les marqueurs « --- Page 1/2 --- »
+       ajoutés par `markdownDesPages` suffiraient à franchir le seuil. */
+    if (texteUtile(pages.join("\n\n")).length < MINIMUM_LISIBLE) {
       console.error(`OCR sans texte exploitable (${pages.length} page(s)) : ${markdown.slice(0, 200)}`);
       return reponse(502, {
         erreur: "Aucun texte n'a pu être lu sur ce document. Vérifiez la netteté du scan.",
@@ -334,8 +390,21 @@ export function servirLecture(contrat: ContratLecture) {
       });
     }
     tracer(`OCR terminé (${pages.length} page(s), ${markdown.length} caractères)`);
+    pages.forEach((md, i) => {
+      const m = mesurerPage(md);
+      tracer(
+        `page ${i + 1}/${pages.length} : ${m.caracteres} car., ${m.rangees} rangées, ` +
+          `${m.images} image(s), ${m.tableauxExternes} tableau(x) externalisé(s)`,
+      );
+    });
 
     // ---- 2. Le Markdown devient le contrat ----------------------------------
+
+    const consignes = contrat.consignesDuDocument?.(markdown) ?? null;
+    if (consignes) tracer(`émetteur reconnu : ${consignes.nom}`);
+    const promptSysteme = consignes
+      ? `${contrat.promptSysteme}\n${consignes.texte}`
+      : contrat.promptSysteme;
 
     const modele = modeleExtraction();
     const extraction = await appeler(
@@ -345,7 +414,7 @@ export function servirLecture(contrat: ContratLecture) {
         model: modele,
         temperature: 0,
         messages: [
-          { role: "system", content: contrat.promptSysteme },
+          { role: "system", content: promptSysteme },
           { role: "user", content: `${contrat.intitule}\n\n${markdown}` },
         ],
         response_format: {
@@ -401,6 +470,8 @@ export function servirLecture(contrat: ContratLecture) {
       const avertissements = Array.isArray(lu.avertissements) ? lu.avertissements : [];
       lu.avertissements = [...avertissements, "Lecture partiellement incertaine, relisez les champs."];
     }
+
+    contrat.apresLecture?.(lu, markdown);
 
     tracer(
       `terminé en ${attendu} s (${(lu.lignes as unknown[])?.length ?? 0} lignes, ` +
