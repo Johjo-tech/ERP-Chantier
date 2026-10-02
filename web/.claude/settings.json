@@ -1,0 +1,70 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(supabase db push:*)",
+      "Bash(npx supabase db push:*)",
+      "Bash(supabase db reset --linked:*)",
+      "Bash(npx supabase db reset --linked:*)",
+      "Bash(supabase link:*)",
+      "Bash(npx supabase link:*)",
+      "Bash(supabase db query --linked:*)",
+      "Bash(npx supabase db query --linked:*)",
+      "Bash(supabase functions deploy:*)",
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(supabase secrets set:*)",
+      "Bash(npx supabase secrets set:*)",
+      "Bash(*deployer.sh*)",
+      "Bash(vercel --prod:*)",
+      "Bash(npx vercel --prod:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(git clean -fdx:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf ..:*)",
+      "Bash(rm -rf ../*:*)",
+      "Bash(rm -rf src:*)",
+      "Bash(rm -rf supabase:*)",
+      "Bash(psql *supabase.co*)",
+      "Bash(curl *supabase.co*)",
+      "Read(../.env*)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Edit(../src/**)",
+      "Edit(../supabase/**)",
+      "Write(../src/**)",
+      "Write(../supabase/**)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(npx supabase stop --no-backup:*)"
+    ],
+    "allow": [
+      "Bash(npm run check)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run lint)",
+      "Bash(npm run test:run)",
+      "Bash(npm run test:rls)",
+      "Bash(npm run build)",
+      "Bash(npm run base:locale)",
+      "Bash(npx supabase status:*)",
+      "Bash(npx supabase start:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/garde-prod.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}

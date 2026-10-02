@@ -1,0 +1,50 @@
+# facturation
+
+**Rôle** : factures et avoirs (brouillon, émission, verrous, duplication),
+règlements (unitaires, groupés, lettrage), files Validation / À facturer,
+situations de travaux, factures nées d'un devis ou d'un rapport, pièce
+imprimable, PDF et e-mail.
+
+- **Tables / vues / RPC** : `factures`, `facture_lignes`, `reglements`,
+  `chantier_avancement_factures`, `chantier_dpgf_lignes` ; `v_facture_totaux`
+  (totaux) et **`v_facture_solde`** corrigée (payé, reste, état, retard, dû,
+  crédit — proposition `20260926040000`, D-FAC-01) ; RPC
+  `enregistrer_reglement_groupe`, `imputer_avoir` et déclencheur de statut
+  (proposition `20260926041000`, D-FAC-02) ; numérotation et gel par la base.
+  Gestes d'un seul tenant (relecture 4, propositions `2026092613*`) :
+  `supprimer_brouillon_facture` (situation comprise, D-R4-03), `etablir_avoir`
+  (D-R4-04), `annuler_imputation` (D-R4-05) ; émission et enregistrement d'un
+  brouillon gardés (`numero is null`, statut, cadenas — D-R4-07).
+- **Droits** : `factures` (écrire, émettre = modifier : admin, secrétaire),
+  `reglements` (voir : aussi le rôle lecture) ; files de bons sous
+  `bons_commande/voir`. Le terrain n'y a aucun accès.
+- **Écrans identiques à l'ancien** (vague « écrans identiques », D-ECR-FAC-xx,
+  mesurés par `tests/visuel/ecrans-facturation.ts`) : cartes de factures et
+  barre « ne montre que le possible » (`domain/actions.ts`, parité exhaustive),
+  modales avoir / imputation / e-mail / règlement groupé, dossiers par client,
+  formulaire de facture dans le panneau de l'ancien (voile sur une émise).
+- **Écrans** : `/factures`, `/factures/avoirs`,
+  onglets Validation / À facturer (les files du menu, `/facturation/…` ; les
+  anciennes adresses `/factures/validation`, `/factures/a-facturer` y
+  redirigent — D-R4-02), `/factures/reglements`
+  (Par client), `/par-facture`, `/tous` (critères dans l'adresse),
+  `/factures/reglements/dossier?client=…` (groupé, lettrage, ✎ / ✕).
+- **Règles** (`domain/`, parités `tests/parite/facturation.essai.ts`,
+  `reglements.essai.ts`) : création TOUJOURS en brouillon ; numéro par la base ;
+  émise = définitive (L441-9), correction par avoir ; cadenas posé quand un
+  brouillon part (PDF, e-mail, impression) et levé avec confirmation (D-FAC-05) ;
+  règlement jamais au-delà du reste ; virement groupé de la plus ancienne à la
+  plus récente, répartition montrée avant validation, imputé par la base ;
+  lettrage = 1 facture + 1 avoir, plus petit des deux restes ; un avoir n'est
+  jamais dû ; retard = reste exigible > 0,01 et échéance passée.
+- **Pièce imprimée** : `domain/impression.ts` → `documents` (modèle, aperçu,
+  PDF jsPDF, e-mail `mailto:` — D-FAC-03, D-FAC-04).
+- **Rapport → facture** : par la voie unique du module interventions
+  (`api/transformations.ts`, D-CLI-09). **Croisement facture ↔ bon**
+  (`domain/croisement.ts`, `hooks/useCroisement.ts`, TRV-07) : la recherche
+  des deux listes suit la clé puis la référence client normalisée.
+- **Identité de l'acheteur** recopiée de la fiche à la création et à la
+  modification d'un brouillon (CLI-26, `clients/domain/rattachement.ts`).
+- **Non repris** : factures de sous-traitant FST (D-FAC-09), vente de
+  véhicule (D-FAC-11, module véhicules), facture électronique (PDP, Factur-X),
+  import historique.
