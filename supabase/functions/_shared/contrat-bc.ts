@@ -19,6 +19,9 @@
  * désignent désormais le lieu d'intervention, ce qui correspond au libellé du
  * formulaire — et le champ que `saveBonCommande` enregistre réellement.
  */
+
+import type { ContratLecture } from "./ocr-mistral.ts";
+
 export const CHAMPS_TEXTE = [
   "client",
   "numeroBC",
@@ -206,3 +209,12 @@ export function ecartsDeForme(o: unknown): string[] {
   if (!Array.isArray(b.avertissements)) e.push("avertissements : absent ou pas un tableau");
   return e;
 }
+
+export const CONTRAT_BC: ContratLecture = {
+  nom: "bon_commande",
+  intitule: "Voici le bon en Markdown :",
+  leDocument: "ce bon",
+  promptSysteme: PROMPT_SYSTEME,
+  schemaJson: SCHEMA_JSON,
+  ecartsDeForme,
+};
