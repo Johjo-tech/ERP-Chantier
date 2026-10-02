@@ -55,6 +55,7 @@ export interface ExtractionBC {
   numeroLogement?: string | null;
   logementStatut?: string | null;
   occupant?: string | null;
+  telephoneLocataire?: string | null;
   etage?: string | null;
   notes?: string | null;
   montantTotalHT?: number | null;
@@ -488,6 +489,7 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     logementStatut,
     numeroLogement: e.numeroLogement ?? "",
     occupant: e.occupant ?? "",
+    telephoneLocataire: e.telephoneLocataire ?? "",
     etage: e.etage ?? "",
     notes: e.notes ?? "",
     montant: e.montantTotalHT ?? undefined,
