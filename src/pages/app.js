@@ -3952,6 +3952,34 @@ function resserrerSiPageDeTrop(area){
 }
 
 /**
+ * Cale le bloc de fin (totaux, accord du client, pied) au bas de la dernière
+ * feuille, en allongeant la page du document du blanc qui y reste.
+ *
+ * Rend la mesure à capturer : celle d'après si l'allongement tient dans le
+ * même nombre de pages, celle d'avant sinon — un arrondi ne doit jamais
+ * coûter une page blanche.
+ */
+function calerLaFinEnBas(area, avant){
+  const page = area.querySelector('.p-page');
+  if(!page || !page.querySelector('.p-fin')) return avant;
+  const cible = window.hauteurPourFinirEnBas({
+    hauteurTotale: avant.h,
+    hauteurTranche: avant.l * ((HAUTEUR_A4_MM - PIED_PDF_MM) / LARGEUR_A4_MM),
+    hauteurDocument: page.offsetHeight,
+  });
+  if(cible === null) return avant;
+
+  page.style.minHeight = cible + 'px';
+  const h = Math.max(area.scrollHeight, area.offsetHeight);
+  const l = Math.max(area.scrollWidth, area.offsetWidth);
+  if(decoupagePdf(h, l).pages > decoupagePdf(avant.h, avant.l).pages){
+    page.style.minHeight = '';
+    return avant;
+  }
+  return { h, l };
+}
+
+/**
  * Écrit l'identification légale au bas de CHAQUE page.
  *
  * Elle ne figurait qu'une fois, à la suite du contenu : sur un document de
@@ -4018,7 +4046,7 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
     area.classList.add('pdf-en-cours');
     await attendreRendu();
 
-    const { h: hauteur, l: largeur } = resserrerSiPageDeTrop(area);
+    const { h: hauteur, l: largeur } = calerLaFinEnBas(area, resserrerSiPageDeTrop(area));
     if(!hauteur || !largeur) throw new Error("le document à imprimer est vide");
 
     const opt = {
@@ -4074,6 +4102,10 @@ async function lancerGenerationPdf(area, nomFichier, action, factureId){
     showToast("Impossible de produire le PDF. Réessayez, ou utilisez Ctrl+P / Cmd+P pour imprimer la page.");
   }finally{
     area.classList.remove('pdf-en-cours', 'pdf-serre');
+    /* La hauteur calée vaut pour cette capture seulement : imprimée ensuite
+       par le navigateur, la page garderait le blanc d'une autre pagination. */
+    const pageCalee = area.querySelector('.p-page');
+    if(pageCalee) pageCalee.style.minHeight = '';
     area.style.display = 'none';
     nettoyerCalquesPdf();
   }
@@ -4273,6 +4305,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
       ${printableLignesRows(lignes, hidePrices)}
     </table>
+    <div class="p-fin">
     <div class="p-bloc-bas">
       ${blocReglementHTML(type, doc, s, em, hidePrices)}
       <div class="p-totaux">${blocTotauxHTML(doc, t, fmt)}</div>
@@ -4291,6 +4324,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     <div class="p-bas-de-page">
       ${blocMentionsHTML(type, s)}
       <div class="p-footer">${esc(piedDePageHTML(em, s))}</div>
+    </div>
     </div>
     </div>
   `;

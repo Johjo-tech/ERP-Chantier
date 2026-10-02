@@ -47,6 +47,7 @@ declare global {
     annulerInvitation: any;
     apercuDe: any;
     apercuNumero: any;
+    hauteurPourFinirEnBas: any;
     apportsDeLaFacture: any;
     apportsDuBon: any;
     arrondiCentime: any;

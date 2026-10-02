@@ -243,6 +243,7 @@ import {
   prochainePosition,
   referentielCompose,
 } from "@/api/regles-referentiels";
+import { hauteurPourFinirEnBas } from "@/api/regles-mise-en-page";
 import {
   badgeOrigine,
   comptesRendusTerrain,
@@ -738,6 +739,7 @@ export function injecterSession() {
   w.metiersDesChapitres = metiersDesChapitres;
   w.referentielMetiers = referentielMetiers;
   w.referentielCompose = referentielCompose;
+  w.hauteurPourFinirEnBas = hauteurPourFinirEnBas;
   w.entreesDuDomaine = entreesDuDomaine;
   w.memeEntree = memeEntree;
   w.normaliserEntree = normaliserEntree;

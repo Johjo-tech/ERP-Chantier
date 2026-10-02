@@ -1528,6 +1528,11 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-doc .p-chapitre td{ background:rgba(var(--accent-rgb), .10); border-bottom:none;
   padding:1.5mm 3mm; text-transform:none; letter-spacing:.05em; }
 .p-doc .p-chapitre td:first-child{ border-left:1.2mm solid var(--accent); font-weight:700; font-size:10.5pt; }
+/* Le chapitre se saisit en minuscules et l'écran l'affiche en capitales
+   (`.chapitre-input`) : le document doit le montrer comme l'écran, sans quoi
+   le client reçoit autre chose que ce qu'on a relu. Seule la désignation —
+   le `none` ci-dessus garde les montants tels quels. */
+.p-doc .p-chapitre td:first-child{ text-transform:uppercase; }
 .p-doc .p-chapitre td.st{ font-size:8.5pt; color:var(--text-dim); font-weight:400; text-align:right; }
 .p-doc .p-chapitre td.stv{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10pt; text-align:right; }
 
@@ -1622,6 +1627,12 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 #printArea.pdf-serre .p-notes{ margin-top:4mm; }
 #printArea.pdf-serre .p-section-title{ margin:4mm 0 1.5mm; }
 .p-bas-de-page{ margin-top:auto; padding-top:6mm; break-inside:avoid; page-break-inside:avoid; }
+/* Totaux, accord du client et pied forment un seul bloc, calé au bas de la
+   DERNIÈRE page : c'est là qu'on cherche le montant et qu'on signe. Sur un
+   document de plusieurs pages, `calerLaFinEnBas` étire la page jusqu'au bas de
+   la dernière feuille ; `margin-top:auto` fait le reste. */
+.p-fin{ margin-top:auto; break-inside:avoid; page-break-inside:avoid; }
+.p-fin .p-bas-de-page{ margin-top:0; }
 .p-section-title{ font-size:8pt; letter-spacing:1px; text-transform:uppercase; color:#6B7686; font-weight:700; margin:8mm 0 2mm; }
 .p-photos{ display:flex; gap:4mm; flex-wrap:wrap; margin-top:2mm; }
 .p-photo{ width:42mm; height:42mm; object-fit:cover; border-radius:2mm; border:1px solid #E2E6ED; }
