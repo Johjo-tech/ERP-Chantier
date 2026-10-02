@@ -18,9 +18,14 @@
  * `adresseIntervention` disparaît : `adresse` / `codePostal` / `ville`
  * désignent désormais le lieu d'intervention, ce qui correspond au libellé du
  * formulaire — et le champ que `saveBonCommande` enregistre réellement.
+ *
+ * `telephoneLocataire`, enfin : la colonne et le champ du formulaire existaient,
+ * le contrat devis le lisait, celui du bon non. Deux bailleurs sur sept ont
+ * signalé un numéro de locataire écrit sur le bon et resté vide à l'écran.
  */
 
 import type { ContratLecture } from "./ocr-mistral.ts";
+import { consignesDe, corrigerLecture, profilDe } from "./profils-bc.ts";
 
 export const CHAMPS_TEXTE = [
   "client",
@@ -39,9 +44,12 @@ export const CHAMPS_TEXTE = [
   "numeroLogement",
   "logementStatut",
   "occupant",
+  "telephoneLocataire",
   "etage",
   "notes",
 ] as const;
+
+export type ChampTexte = typeof CHAMPS_TEXTE[number];
 
 export interface Ligne {
   type: "ligne" | "chapitre" | "commentaire";
@@ -69,6 +77,7 @@ export interface BonCommande {
   numeroLogement?: string | null;
   logementStatut?: "occupé" | "vacant" | "commune" | null;
   occupant?: string | null;
+  telephoneLocataire?: string | null;
   etage?: string | null;
   notes?: string | null;
   montantTotalHT?: number | null;
@@ -96,6 +105,12 @@ export interface BonCommande {
  * service comptable, parfois propre au marché. `bc_generer_facture` la porte
  * jusqu'à `factures.facturation_*`, que la facture électronique lit avant
  * l'adresse du client.
+ *
+ * Les retours des utilisateurs du 30/09, bailleur par bailleur, ont fait
+ * préciser le reste : où prendre le téléphone de l'interlocuteur, les formats
+ * de date des bailleurs (« 29.09.2026 »), le sens de « logement sur passe », et
+ * qu'un tableau de prestations peut courir sur plusieurs pages. Ce qui ne vaut
+ * que pour un bailleur vit dans `profils-bc.ts`.
  */
 export const PROMPT_SYSTEME =
   `Tu extrais les données d'un bon de commande / bon de travail français du BTP, fourni en Markdown issu d'un OCR.
@@ -103,16 +118,18 @@ Trois éléments comptent plus que les autres, parce que tout l'aval en dépend 
 
 Règles :
 - client : l'organisme qui ÉMET le bon (bailleur, mairie, syndic…), jamais l'entreprise destinataire.
-- numeroBC : le numéro du bon, à chercher activement — « N° de commande », « Bon n° », « Commande n° », « BC », souvent en en-tête ou en pied. C'est la référence sous laquelle le client connaît l'affaire. Ne le confonds ni avec le n° d'affaire/dossier (referenceChantier) ni avec un n° de marché. dateBC : date d'édition du bon. referenceChantier : n° d'affaire ou de dossier.
-- dateFinTravaux : date limite d'exécution. Dates au format YYYY-MM-DD.
-- adresse / codePostal / ville : le LIEU D'INTERVENTION (chantier), résidence et appartement inclus dans adresse. Ni l'adresse de l'entreprise destinataire, ni celle du client qui émet le bon — son siège figure presque toujours en en-tête, c'est le piège à éviter. Cherche le bloc « lieu d'intervention », « adresse des travaux », « site » ou le logement désigné ; ce n'est jamais l'en-tête.
+- numeroBC : le numéro du bon, à chercher activement — « N° de commande », « Bon n° », « Commande n° », « BC », souvent en en-tête ou en pied. C'est la référence sous laquelle le client connaît l'affaire. Ne le confonds ni avec le n° d'affaire/dossier (referenceChantier) ni avec un n° de marché. referenceChantier : n° d'affaire ou de dossier.
+- dateBC : date d'émission du bon — « du JJ/MM/AAAA » sous le numéro, « Édité le », « Date », ou la date de saisie ou de validation. dateFinTravaux : date limite d'exécution — « Fin d'exécution », « Date fin intervention », « à réaliser avant / pour le », la seconde date de « travaux à faire du … au … ». Rends les dates au format YYYY-MM-DD ; sur le bon elles s'écrivent JJ/MM/AAAA, JJ.MM.AAAA ou JJ/MM/AA (année 20AA).
+- adresse / codePostal / ville : le LIEU D'INTERVENTION (chantier), résidence et appartement inclus dans adresse. Ni l'adresse de l'entreprise destinataire, ni celle du client qui émet le bon — son siège figure presque toujours en en-tête, c'est le piège à éviter. Cherche le bloc « lieu d'intervention », « adresse des travaux », « adresse d'exécution », « site » ou le logement désigné ; ce n'est jamais l'en-tête.
 - facturationAdresse / facturationCodePostal / facturationVille : l'adresse OÙ ENVOYER LA FACTURE, quand le bon la désigne — bloc « adresse de facturation », « facture à adresser à », « service facturier », « comptabilité fournisseurs ». C'est une TROISIÈME adresse, distincte du chantier et de l'en-tête. Si le bon n'en désigne aucune, null : ne recopie pas l'en-tête à sa place.
 - numeroLogement, etage : depuis le bloc lieu d'intervention.
-- logementStatut : 'occupé' si un locataire est présent, 'vacant' si logement vide, 'commune' pour parties communes.
-- occupant : nom du locataire présent. interlocuteur : gardien, gestionnaire ou chargé d'affaires côté client, avec téléphone si indiqué.
+- logementStatut : 'occupé' si un locataire est présent, 'vacant' si logement vide, 'commune' pour parties communes. « Logement sur passe », « logt sur pass » : le bailleur a remis la clé passe, le logement est vide → 'vacant'.
+- occupant : nom du locataire présent. telephoneLocataire : le ou les numéros du LOCATAIRE (domicile, portable), souvent sur la ligne qui suit son nom ; jamais celui de l'interlocuteur.
+- interlocuteur : gardien, gestionnaire ou chargé d'affaires côté client, avec SON téléphone si indiqué — celui écrit à côté de son nom, jamais le standard de l'en-tête ou du pied de page, ni celui de l'entreprise destinataire.
 - notes : observations et consignes d'accès.
-- lignes : une entrée par prestation, type 'ligne', designation = code article + intitulé + TOUTE la description qui suit (une seule ligne, jamais scindée). type 'chapitre' uniquement pour un titre de section (corps de métier) situé dans la liste des prestations ; s'il n'y en a pas, aucun chapitre. Nombres avec point décimal.
-- AU MOINS UNE ligne de type 'ligne' est obligatoire : elle dit ce qu'il y a à faire. Beaucoup de bons ne portent aucun tableau chiffré, seulement un descriptif ; dans ce cas, résume les travaux demandés en une ligne (ou une par nature de travaux), qte/prixUnitaire à null. Un prix absent n'est pas une raison de ne pas rendre la ligne. Ne rends jamais une liste de lignes vide, ni faite uniquement de chapitres ou de commentaires.
+- lignes : une entrée par prestation, type 'ligne', designation = code article + intitulé + TOUTE la description qui suit (une seule ligne, jamais scindée). Le texte qui suit une prestation lui appartient ; mais une rangée qui porte son propre code article, sa propre quantité ou son propre prix est une NOUVELLE ligne : n'en fusionne jamais deux. type 'chapitre' uniquement pour un titre de section (corps de métier) situé dans la liste des prestations ; s'il n'y en a pas, aucun chapitre. Nombres avec point décimal.
+- Le document est découpé par des marqueurs « --- Page n/N --- ». Un tableau de prestations peut se poursuivre sur plusieurs pages, son en-tête de colonnes répété : rends chaque rangée de CHAQUE page, dans l'ordre. Une annexe (attestation de TVA, conditions générales, plan de prévention) n'est pas le bon : n'en tire ni adresse, ni ligne, ni date.
+- AU MOINS UNE ligne de type 'ligne' est obligatoire : elle dit ce qu'il y a à faire. Beaucoup de bons ne portent aucun tableau chiffré, seulement un descriptif ; dans ce cas, et dans ce cas SEULEMENT, résume les travaux demandés en une ligne (ou une par nature de travaux), qte/prixUnitaire à null. Un prix absent n'est pas une raison de ne pas rendre la ligne. Ne rends jamais une liste de lignes vide, ni faite uniquement de chapitres ou de commentaires.
 - montantTotalHT : seulement s'il est écrit sur le bon.
 - Ne devine jamais : valeur absente ou illisible = null, et une phrase courte dans avertissements (5 maximum).
 `;
@@ -141,6 +158,7 @@ export const SCHEMA_JSON = {
     numeroLogement: texteNullable,
     logementStatut: { type: ["string", "null"], enum: ["occupé", "vacant", "commune", null] },
     occupant: texteNullable,
+    telephoneLocataire: texteNullable,
     etage: texteNullable,
     notes: texteNullable,
     montantTotalHT: nombreNullable,
@@ -217,4 +235,9 @@ export const CONTRAT_BC: ContratLecture = {
   promptSysteme: PROMPT_SYSTEME,
   schemaJson: SCHEMA_JSON,
   ecartsDeForme,
+  consignesDuDocument(markdown) {
+    const profil = profilDe(markdown);
+    return profil ? { nom: profil.nom, texte: consignesDe(profil) } : null;
+  },
+  apresLecture: corrigerLecture,
 };

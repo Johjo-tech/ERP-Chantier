@@ -4,7 +4,8 @@
  * Toute la mécanique — l'OCR puis la structuration sous schéma strict, le
  * budget de temps, la reprise unique sur refus passager, la cartographie des
  * erreurs, les en-têtes CORS — vit dans `_shared/ocr-mistral.ts`. Ce qui est
- * propre au bon vit dans `_shared/contrat-bc.ts`.
+ * propre au bon vit dans `_shared/contrat-bc.ts`, et ce qui est propre à chaque
+ * bailleur dans `_shared/profils-bc.ts`.
  *
  * Cette fonction en était une copie, faite avant que le socle n'existe. Les
  * pages nommées et les traces par page, ajoutées au socle, ne seraient arrivées
