@@ -89,6 +89,7 @@ import {
   filtrerReglements,
   totalReglements,
 } from "@/api/regles-filtres-reglements";
+import { TRI_FACTURES_DEFAUT, TRIS_FACTURES, trierFactures } from "@/api/regles-tri-factures";
 import {
   avoirDisponible,
   estAvoir,
@@ -936,6 +937,12 @@ export function injecterSession() {
   w.criteresVersRequete = criteresVersRequete;
   w.criteresDepuisRequete = criteresDepuisRequete;
   w.estRapproche = estRapproche;
+
+  /* L'ordre de la liste des factures. Les clés et leurs libellés viennent du
+     même module : la liste déroulante ne peut pas proposer un tri inconnu. */
+  w.TRIS_FACTURES = TRIS_FACTURES;
+  w.TRI_FACTURES_DEFAUT = TRI_FACTURES_DEFAUT;
+  w.trierFactures = trierFactures;
 
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;

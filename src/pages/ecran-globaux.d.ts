@@ -29,6 +29,8 @@ declare global {
     SCHEMAS_ADRESSE_ELECTRONIQUE: any;
     SECONDAIRE_DEFAUT: any;
     SERIES_NUMEROTATION: any;
+    TRIS_FACTURES: any;
+    TRI_FACTURES_DEFAUT: any;
     TYPES_DOCUMENT_RH: any;
     TYPES_VISITE: any;
     UNITES_DEFAUT: any;
@@ -47,7 +49,6 @@ declare global {
     annulerInvitation: any;
     apercuDe: any;
     apercuNumero: any;
-    hauteurPourFinirEnBas: any;
     apportsDeLaFacture: any;
     apportsDuBon: any;
     arrondiCentime: any;
@@ -81,8 +82,8 @@ declare global {
     completudeClient: any;
     completudeSociete: any;
     comptesRendusTerrain: any;
-    construireIndexFactureBC: any;
     compteurEnCours: any;
+    construireIndexFactureBC: any;
     correspond: any;
     correspondFiche: any;
     criteresDepuisRequete: any;
@@ -136,6 +137,7 @@ declare global {
     formaterTaux: any;
     fusionnerReglages: any;
     grouperParClient: any;
+    hauteurPourFinirEnBas: any;
     html2pdf: any;
     identifiantsLegaux: any;
     importerCatalogue: any;
@@ -272,6 +274,7 @@ declare global {
     travauxParMetier: any;
     trierAlertes: any;
     trierDocumentsRh: any;
+    trierFactures: any;
     trierVisites: any;
     tvaIntracomFr: any;
     typeDocumentRh: any;

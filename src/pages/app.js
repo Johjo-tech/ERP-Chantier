@@ -176,7 +176,7 @@ let state = {
   societeId: 'kta', tab: 'dashboard', plusTab: 'clients', reglagesTab: 'organisation', currentRole: null, devisSearch: '', factureSearch: '', interventionSearch: '', bonCommandeSearch: '', reglementsClient: null, reglementsVue: 'clients', reglementFiltres: null, globalSearch: '', ghostMode: false, viewingDoc: null, searchCycle: null, emailModalCtx: null, dashRevenuePeriod: '6m', reglementSelection: [], planningWeekStart: null,
   devisConducteurFilter: '', devisStatutFilter: '', factureConducteurFilter: '',
   factureLogementFilter: '', factureClientFilter: '', factureInterlocuteurFilter: '',
-  factureMetierFilter: '', factureReglementFilter: '',
+  factureMetierFilter: '', factureReglementFilter: '', factureTri: '',
   facturePeriode: 'tout', facturePeriodeDebut: '', facturePeriodeFin: '', interventionConducteurFilter: '', bonCommandeConducteurFilter: '', planningConducteurFilter: '', bonCommandeTechnicienFilter: '', planningTechnicienFilter: '', planningSousTraitantFilter: '', planningMetierFilter: '', bonCommandeTypeFilter: '',
   devis: [], factures: [], interventions: [], bonsCommande: [], clients: [], documents: [], reglements: [], interlocuteurs: [], conducteurs: [], techniciens: [], metiersPerso: [], referentiels: [], fournisseurs: [], sousTraitants: [], chantiers: [], salaries: [], vehicules: [], materiels: [], settings: {}, viewingChantier: null, viewingVehicule: null, viewingMateriel: null, chantierTypeFilter: '', chantierAchatsFiltre: '',
   bcCardOuverte: null,
@@ -4714,9 +4714,9 @@ function searchEnterCycle(ev, type){
       matches: (q) => state.devis.filter(d=>d.societeId===state.societeId && devisMatchesSearch(d, q)) },
     facture: {
       prefix: 'facture-card-',
-      matches: () => window.filtrerDocuments(
+      matches: () => facturesDansLOrdre(window.filtrerDocuments(
         state.factures.filter(f=>f.societeId===state.societeId),
-        criteresFactures(vueFactures), contexteFacture),
+        criteresFactures(vueFactures), contexteFacture)),
     },
     intervention: { prefix: 'intervention-card-',
       matches: (q) => state.interventions.filter(i=>i.societeId===state.societeId && interventionMatchesSearch(i, q)) },
@@ -5767,8 +5767,8 @@ function importFacturesHTML(){
    quels filtres chaque vue affiche — la règle métier vit là, et non dans des
    conditions éparpillées dans le gabarit. */
 const FILTRES_FACTURES = {
-  liste:      ['recherche','client','interlocuteur','conducteur','logement','reglement','periode'],
-  avoirs:     ['recherche','client','conducteur','periode'],
+  liste:      ['recherche','client','interlocuteur','conducteur','logement','reglement','periode','tri'],
+  avoirs:     ['recherche','client','conducteur','periode','tri'],
   validation: ['recherche','client','interlocuteur','conducteur','metier','periode'],
   afacturer:  ['recherche','client','interlocuteur','conducteur','metier','periode'],
 };
@@ -5829,6 +5829,7 @@ function aideRechercheFactures(vue){
 }
 
 function champFiltreFactures(cle, vue){
+  if(cle === 'tri') return selectTriFacturesHTML();
   const v = critereFactures(cle, vue);
   switch(cle){
     case 'recherche':
@@ -5865,6 +5866,26 @@ function champFiltreFactures(cle, vue){
         <input type="date" style="width:auto;" value="${esc(state.facturePeriodeFin)}" onchange="filterFactureBorne('fin', this.value)" title="Au">` : ''}`;
     default: return '';
   }
+}
+
+/* Le tri n'est pas un filtre : il ne cache rien. Il reste donc hors de
+   `CLE_ETAT_FILTRE`, et « ✕ Effacer » le laisse en place — comme celui des
+   règlements. */
+function selectTriFacturesHTML(){
+  const courant = state.factureTri || window.TRI_FACTURES_DEFAUT;
+  return `<select style="width:auto; min-width:230px;" onchange="trierFacturesPar(this.value)" title="Ordre d'affichage">
+    ${window.TRIS_FACTURES.map(([k,l])=>`<option value="${k}" ${k===courant?'selected':''}>${esc(l)}</option>`).join('')}
+  </select>`;
+}
+function trierFacturesPar(valeur){
+  state.factureTri = valeur;
+  redessinerApresFrappe(rafraichirZoneFactures, true);
+}
+/* L'ordre choisi vaut pour la liste ET pour le parcours par Entrée : sans quoi
+   Entrée sauterait d'une carte à l'autre au hasard de l'écran. Le montant est
+   celui de la carte, remise et signe de l'avoir compris. */
+function facturesDansLOrdre(liste){
+  return window.trierFactures(liste, state.factureTri, f => computeDocTotals(f).ht);
 }
 
 function barreFiltresFactures(vue){
@@ -6273,7 +6294,7 @@ function boutonsFactureHTML(f, actions, verrou){
 }
 function renderFacturesListHTML(list, vue){
   const criteres = criteresFactures(vue || 'liste');
-  const filtered = window.filtrerDocuments(list, criteres, contexteFacture);
+  const filtered = facturesDansLOrdre(window.filtrerDocuments(list, criteres, contexteFacture));
   if(!filtered.length){
     /* « Aucune facture pour cette société » sur une recherche infructueuse
        envoyait chercher un problème de données là où il n'y avait qu'un mot mal
@@ -20429,6 +20450,7 @@ Object.assign(window, {
   marquerPieceCommandee,
   majEtatReglement,
   majTriReglement,
+  trierFacturesPar,
   majFiltreFactureReglement,
   majFiltreReglement,
   materielForm,
