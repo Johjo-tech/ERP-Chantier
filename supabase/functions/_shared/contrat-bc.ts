@@ -22,6 +22,13 @@
  * `telephoneLocataire`, enfin : la colonne et le champ du formulaire existaient,
  * le contrat devis le lisait, celui du bon non. Deux bailleurs sur sept ont
  * signalé un numéro de locataire écrit sur le bon et resté vide à l'écran.
+ *
+ * Le 06/10, `referenceChantier` a quitté le contrat. La lecture y mettait le
+ * numéro de commande, un code de résidence ou un numéro de marché, selon les
+ * bailleurs : une référence fausse coûte plus qu'un champ vide, que l'on
+ * remplit à la main quand il y a lieu. `ancienLocataire` et `numeroDevis` y
+ * sont entrés : le premier avait son champ sans que la lecture le remplisse, le
+ * second devenait une ligne de travaux faute d'avoir sa place.
  */
 
 import type { ContratLecture } from "./ocr-mistral.ts";
@@ -30,8 +37,8 @@ import { consignesDe, corrigerLecture, profilDe } from "./profils-bc.ts";
 export const CHAMPS_TEXTE = [
   "client",
   "numeroBC",
+  "numeroDevis",
   "dateBC",
-  "referenceChantier",
   "natureTravaux",
   "dateFinTravaux",
   "interlocuteur",
@@ -44,12 +51,11 @@ export const CHAMPS_TEXTE = [
   "numeroLogement",
   "logementStatut",
   "occupant",
+  "ancienLocataire",
   "telephoneLocataire",
   "etage",
   "notes",
 ] as const;
-
-export type ChampTexte = typeof CHAMPS_TEXTE[number];
 
 export interface Ligne {
   type: "ligne" | "chapitre" | "commentaire";
@@ -65,8 +71,8 @@ export interface Ligne {
 export interface BonCommande {
   client?: string | null;
   numeroBC?: string | null;
+  numeroDevis?: string | null;
   dateBC?: string | null;
-  referenceChantier?: string | null;
   natureTravaux?: string | null;
   dateFinTravaux?: string | null;
   interlocuteur?: string | null;
@@ -79,6 +85,7 @@ export interface BonCommande {
   numeroLogement?: string | null;
   logementStatut?: "occupé" | "vacant" | "commune" | null;
   occupant?: string | null;
+  ancienLocataire?: string | null;
   telephoneLocataire?: string | null;
   etage?: string | null;
   notes?: string | null;
@@ -120,16 +127,17 @@ Trois éléments comptent plus que les autres, parce que tout l'aval en dépend 
 
 Règles :
 - client : l'organisme qui ÉMET le bon (bailleur, mairie, syndic…), jamais l'entreprise destinataire.
-- numeroBC : le numéro du bon, à chercher activement — « N° de commande », « Bon n° », « Commande n° », « BC », souvent en en-tête ou en pied. C'est la référence sous laquelle le client connaît l'affaire. Ne le confonds ni avec le n° d'affaire/dossier (referenceChantier) ni avec un n° de marché. referenceChantier : n° d'affaire ou de dossier.
+- numeroBC : le numéro du bon, à chercher activement — « N° de commande », « Bon n° », « Commande n° », « BC », souvent en en-tête ou en pied. C'est la référence sous laquelle le client connaît l'affaire. Rends-le tel qu'écrit, sans le libellé qui le précède. Ne le confonds ni avec un n° d'affaire, de dossier ou de marché, ni avec un numéro de devis.
+- numeroDevis : le numéro du DEVIS auquel le bon fait suite (« suite à votre devis n° », case « Devis », « réf. devis »), tel qu'écrit ; null si le bon n'en cite pas.
 - dateBC : date d'émission du bon — « du JJ/MM/AAAA » sous le numéro, « Édité le », « Date », ou la date de saisie ou de validation. dateFinTravaux : date limite d'exécution — « Fin d'exécution », « Date fin intervention », « à réaliser avant / pour le », la seconde date de « travaux à faire du … au … ». Rends les dates au format YYYY-MM-DD ; sur le bon elles s'écrivent JJ/MM/AAAA, JJ.MM.AAAA ou JJ/MM/AA (année 20AA).
-- adresse / codePostal / ville : le LIEU D'INTERVENTION (chantier), résidence et appartement inclus dans adresse. Ni l'adresse de l'entreprise destinataire, ni celle du client qui émet le bon — son siège figure presque toujours en en-tête, c'est le piège à éviter. Cherche le bloc « lieu d'intervention », « adresse des travaux », « adresse d'exécution », « site » ou le logement désigné ; ce n'est jamais l'en-tête.
+- adresse / codePostal / ville : le LIEU D'INTERVENTION (chantier). adresse ne porte QUE la résidence et la voie, avec le bâtiment, l'entrée ou l'allée s'il y en a (« RÉSIDENCE LES TILLEULS, 12 rue des Lilas, Bât. B ») : le numéro de logement va dans numeroLogement, l'étage dans etage, le code postal et la ville dans leurs champs — jamais répétés dans adresse. Ni l'adresse de l'entreprise destinataire, ni celle du client qui émet le bon — son siège figure presque toujours en en-tête, c'est le piège à éviter. Cherche le bloc « lieu d'intervention », « adresse des travaux », « adresse d'exécution », « site » ou le logement désigné ; ce n'est jamais l'en-tête.
 - facturationAdresse / facturationCodePostal / facturationVille : l'adresse OÙ ENVOYER LA FACTURE, quand le bon la désigne — bloc « adresse de facturation », « facture à adresser à », « service facturier », « comptabilité fournisseurs ». C'est une TROISIÈME adresse, distincte du chantier et de l'en-tête. Si le bon n'en désigne aucune, null : ne recopie pas l'en-tête à sa place.
-- numeroLogement, etage : depuis le bloc lieu d'intervention.
+- numeroLogement, etage : depuis le bloc lieu d'intervention, seuls (« APPT 59 » → « 59 »).
 - logementStatut : 'occupé' si un locataire est présent, 'vacant' si logement vide, 'commune' pour parties communes. « Logement sur passe », « logt sur pass » : le bailleur a remis la clé passe, le logement est vide → 'vacant'.
-- occupant : nom du locataire présent. telephoneLocataire : le ou les numéros du LOCATAIRE (domicile, portable), souvent sur la ligne qui suit son nom ; jamais celui de l'interlocuteur.
+- occupant : nom du locataire présent. ancienLocataire : sur un logement vacant, le locataire qui est parti (« ancien occupant », « locataire sortant », « sortant : … ») ; null sinon. telephoneLocataire : le ou les numéros du LOCATAIRE (domicile, portable), souvent sur la ligne qui suit son nom ; jamais celui de l'interlocuteur.
 - interlocuteur : gardien, gestionnaire ou chargé d'affaires côté client, avec SON téléphone si indiqué — celui écrit à côté de son nom, jamais le standard de l'en-tête ou du pied de page, ni celui de l'entreprise destinataire.
-- notes : observations et consignes d'accès.
-- lignes : une entrée par prestation, type 'ligne', designation = code article + intitulé + TOUTE la description qui suit (une seule ligne, jamais scindée). Le texte qui suit une prestation lui appartient ; mais une rangée qui porte son propre code article, sa propre quantité ou son propre prix est une NOUVELLE ligne : n'en fusionne jamais deux. code : le code article de la ligne tel qu'imprimé, SEUL, sans le libellé (« ECPEIN025 », « PLO144 », « MIN001 ») — en tête de la désignation, collé par un tiret, ou entre parenthèses à la fin ; null s'il n'y en a pas. Un code de résidence, un numéro de logement, un code ESI ou un numéro de devis n'est pas un code article. type 'chapitre' uniquement pour un titre de section (corps de métier) situé dans la liste des prestations ; s'il n'y en a pas, aucun chapitre. Nombres avec point décimal.
+- notes : COURT — trois phrases au plus — et seulement ce qui sert au technicien : ce qu'il y a à faire quand les lignes ne le disent pas, et comment entrer (clés, code, badge, personne à prévenir, disponibilités). JAMAIS : les mentions réglementaires (amiante, DTA, CREP, plan de prévention), les consignes de facturation (adresse d'envoi, délai de paiement, pièces à joindre), les clauses de prix ou de marché, les références et codes déjà rendus ailleurs, le nom ou le téléphone d'un interlocuteur (ils vont dans interlocuteur). null s'il ne reste rien.
+- lignes : une entrée par prestation, type 'ligne', designation = code article + intitulé + TOUTE la description qui suit (une seule ligne, jamais scindée). Le texte qui suit une prestation lui appartient ; mais une rangée qui porte son propre code article, sa propre quantité ou son propre prix est une NOUVELLE ligne : n'en fusionne jamais deux. code : le code article de la ligne tel qu'imprimé, SEUL, sans le libellé (« ECPEIN025 », « PLO144 », « MIN001 ») — en tête de la désignation, collé par un tiret, ou entre parenthèses à la fin ; null s'il n'y en a pas. Un code de résidence, un numéro de logement, un code ESI ou un numéro de devis n'est pas un code article — et un numéro de devis n'est pas non plus une ligne : il va dans numeroDevis. type 'chapitre' uniquement pour un titre de section (corps de métier) situé dans la liste des prestations ; s'il n'y en a pas, aucun chapitre. Nombres avec point décimal.
 - Le document est découpé par des marqueurs « --- Page n/N --- ». Un tableau de prestations peut se poursuivre sur plusieurs pages, son en-tête de colonnes répété : rends chaque rangée de CHAQUE page, dans l'ordre. Une annexe (attestation de TVA, conditions générales, plan de prévention) n'est pas le bon : n'en tire ni adresse, ni ligne, ni date.
 - AU MOINS UNE ligne de type 'ligne' est obligatoire : elle dit ce qu'il y a à faire. Beaucoup de bons ne portent aucun tableau chiffré, seulement un descriptif ; dans ce cas, et dans ce cas SEULEMENT, résume les travaux demandés en une ligne (ou une par nature de travaux), qte/prixUnitaire à null. Un prix absent n'est pas une raison de ne pas rendre la ligne. Ne rends jamais une liste de lignes vide, ni faite uniquement de chapitres ou de commentaires.
 - montantTotalHT : seulement s'il est écrit sur le bon.
@@ -146,8 +154,8 @@ export const SCHEMA_JSON = {
   properties: {
     client: texteNullable,
     numeroBC: texteNullable,
+    numeroDevis: texteNullable,
     dateBC: texteNullable,
-    referenceChantier: texteNullable,
     natureTravaux: texteNullable,
     dateFinTravaux: texteNullable,
     interlocuteur: texteNullable,
@@ -160,6 +168,7 @@ export const SCHEMA_JSON = {
     numeroLogement: texteNullable,
     logementStatut: { type: ["string", "null"], enum: ["occupé", "vacant", "commune", null] },
     occupant: texteNullable,
+    ancienLocataire: texteNullable,
     telephoneLocataire: texteNullable,
     etage: texteNullable,
     notes: texteNullable,
