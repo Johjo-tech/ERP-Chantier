@@ -29,6 +29,8 @@ declare global {
     SCHEMAS_ADRESSE_ELECTRONIQUE: any;
     SECONDAIRE_DEFAUT: any;
     SERIES_NUMEROTATION: any;
+    TRIS_FACTURES: any;
+    TRI_FACTURES_DEFAUT: any;
     TYPES_DOCUMENT_RH: any;
     TYPES_VISITE: any;
     UNITES_DEFAUT: any;
@@ -275,6 +277,7 @@ declare global {
     travauxParMetier: any;
     trierAlertes: any;
     trierDocumentsRh: any;
+    trierFactures: any;
     trierVisites: any;
     tvaIntracomFr: any;
     typeDocumentRh: any;
