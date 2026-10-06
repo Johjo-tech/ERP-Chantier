@@ -191,6 +191,7 @@ declare global {
     nextNumero: any;
     nextSAVNumero: any;
     nomIntervenant: any;
+    nomSalarie: any;
     normaliserEntree: any;
     ongletsAutorises: any;
     origineDeLaCorrespondance: any;
@@ -278,6 +279,7 @@ declare global {
     trierAlertes: any;
     trierDocumentsRh: any;
     trierFactures: any;
+    trierSalaries: any;
     trierVisites: any;
     tvaIntracomFr: any;
     typeDocumentRh: any;

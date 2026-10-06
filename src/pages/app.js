@@ -484,7 +484,7 @@ const COLLECTIONS_ETAT = {
   'fournisseur':  { champ:'fournisseurs',  ranger: v => v.sort(parNom) },
   'sousTraitant': { champ:'sousTraitants', ranger: v => v },
   'chantier':     { champ:'chantiers',     ranger: v => trierParDate(v, ['dateDebut']) },
-  'salarie':      { champ:'salaries',      ranger: v => v.sort(parNom) },
+  'salarie':      { champ:'salaries',      ranger: v => window.trierSalaries(v) },
   'vehicule':     { champ:'vehicules',     ranger: v => v.sort(parNom) },
   'materiel':     { champ:'materiels',     ranger: v => v.sort(parNom) },
 };
@@ -15886,7 +15886,7 @@ function renderEquipesRH(){
         <div style="margin-top:10px;">
           ${membres.map(s=>`
             <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-top:1px solid var(--border);">
-              <span style="flex:1;">${esc([s.prenom,s.nom].filter(Boolean).join(' '))}${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</span>
+              <span style="flex:1;">${esc(window.nomSalarie(s))}${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</span>
               ${s.profileId? '' : '<span class="card-sub" title="Sans compte, ce membre ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}
               <button class="btn small ghost" onclick="retirerDeLEquipe('${jsAttr(s.id)}')">Retirer</button>
             </div>`).join('') || '<div class="empty" style="margin:6px 0;">Aucun membre. Cette équipe ne peut rien déclarer.</div>'}
@@ -15894,14 +15894,14 @@ function renderEquipesRH(){
         ${sansEquipe.length? `<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
           <select id="ajoutMembre_${t.id}" style="flex:1;">
             <option value="">— Ajouter un salarié —</option>
-            ${sansEquipe.map(s=>`<option value="${s.id}">${esc([s.prenom,s.nom].filter(Boolean).join(' '))}</option>`).join('')}
+            ${sansEquipe.map(s=>`<option value="${s.id}">${esc(window.nomSalarie(s))}</option>`).join('')}
           </select>
           <button class="btn small" onclick="ajouterALEquipe('${jsAttr(t.id)}')">+ Ajouter</button>
         </div>` : ''}
       </div>`;
     }).join('') || '<div class="empty">Aucune équipe. Créez-en une pour pouvoir planifier.</div>'}
     ${sansEquipe.length? `<div class="section-title" style="margin-top:26px;">Salariés sans équipe (${sansEquipe.length})</div>
-      <div class="card"><div class="card-sub">${sansEquipe.map(s=>esc([s.prenom,s.nom].filter(Boolean).join(' '))).join(' · ')}</div></div>` : ''}
+      <div class="card"><div class="card-sub">${sansEquipe.map(s=>esc(window.nomSalarie(s))).join(' · ')}</div></div>` : ''}
   `;
 }
 async function ajouterALEquipe(equipeId){
@@ -16034,7 +16034,7 @@ function renderSalarieListHTML(list){
     return `<div class="card">
       <div class="card-row">
         <div style="flex:1; min-width:0;">
-          <div class="card-title">${esc(s.prenom)} ${esc(s.nom)} ${habilitationsAlerte.length||carteBtpAlerte? `<span class="badge warn" style="margin-left:6px;" title="${esc([carteBtpAlerte? 'Carte BTP' : '', habilitationsAlerte.length? `${habilitationsAlerte.length} habilitation(s)` : ''].filter(Boolean).join(', '))}">⚠ à vérifier</span>`:''}${badgeVisiteMedicaleListe(s.id)}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc([...dossier.manquants.map(t=>t.libelle), dossier.manqueMedical? 'Suivi médical' : ''].filter(Boolean).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}${s.profileId? '' : '<span class="badge warn" style="margin-left:6px;" title="Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}</div>
+          <div class="card-title">${esc(window.nomSalarie(s))} ${habilitationsAlerte.length||carteBtpAlerte? `<span class="badge warn" style="margin-left:6px;" title="${esc([carteBtpAlerte? 'Carte BTP' : '', habilitationsAlerte.length? `${habilitationsAlerte.length} habilitation(s)` : ''].filter(Boolean).join(', '))}">⚠ à vérifier</span>`:''}${badgeVisiteMedicaleListe(s.id)}${absenceEnCours? `<span class="badge" style="margin-left:6px; background:#fff0f0; color:#a30f22;">🏖️ Absent (${esc(absenceEnCours.type)}, retour ${fmtDate(absenceEnCours.dateFin)})</span>`:''}${dossier && !dossier.complet? `<span class="badge danger" style="margin-left:6px;" title="${esc([...dossier.manquants.map(t=>t.libelle), dossier.manqueMedical? 'Suivi médical' : ''].filter(Boolean).join(', '))||'Document expiré'}">📁 dossier incomplet</span>`:''}${s.profileId? '' : '<span class="badge warn" style="margin-left:6px;" title="Sans compte, ce salarié ne peut pas déclarer ses travaux lui-même">⚠ sans compte</span>'}</div>
           <div class="card-sub">${esc(s.poste||'')}${s.typeContrat? ' · '+esc(s.typeContrat):''}${s.technicienId? ' · 🔧 équipe liée':''}</div>
           <div class="card-sub">${s.telephone? '📞 '+esc(s.telephone):''}${s.email? ' · ✉ '+esc(s.email):''}</div>
         </div>
@@ -16382,7 +16382,7 @@ function renderRHDocuments(){
                même endroit, on renvoie donc vers son registre. */
             const manques = bilan.manquants.length + (bilan.manqueMedical ? 1 : 0);
             return `<tr>
-              <td style="text-align:left;"><strong>${esc(s.prenom)} ${esc(s.nom)}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
+              <td style="text-align:left;"><strong>${esc(window.nomSalarie(s))}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
               ${obligatoires.map(t=>`<td style="text-align:center;">${pastilleDocumentRh(docs, t)}</td>`).join('')}
               <td style="text-align:center;">${pastilleVisiteRh(s.id)}</td>
               <td>${autres||'—'}</td>
@@ -16396,7 +16396,7 @@ function renderRHDocuments(){
     <div class="card-sub" style="margin-top:8px;">Légende : ✓ au dossier · ~ expire bientôt · ! expiré · ? sans date de fin · ✕ manquant. La colonne 🩺 se corrige depuis l'onglet Visites médicales.</div>
     ${ouvert? `<div class="card" style="margin-top:20px;">
       <div class="card-row">
-        <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — dossier documentaire</div>
+        <div class="card-title">${esc(window.nomSalarie(ouvert.s))} — dossier documentaire</div>
         <button class="btn small ghost" onclick="ouvrirDossierRh('${jsAttr(ouvert.s.id)}')">Fermer</button>
       </div>
       <div style="margin-top:10px;">${dossierRhHTML(ouvert.s)}</div>

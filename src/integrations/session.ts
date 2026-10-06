@@ -90,6 +90,7 @@ import {
   totalReglements,
 } from "@/api/regles-filtres-reglements";
 import { TRI_FACTURES_DEFAUT, TRIS_FACTURES, trierFactures } from "@/api/regles-tri-factures";
+import { nomSalarie, trierSalaries } from "@/api/regles-salaries";
 import {
   avoirDisponible,
   estAvoir,
@@ -944,6 +945,12 @@ export function injecterSession() {
   w.TRIS_FACTURES = TRIS_FACTURES;
   w.TRI_FACTURES_DEFAUT = TRI_FACTURES_DEFAUT;
   w.trierFactures = trierFactures;
+
+  /* Le nom d'un salarié et sa place dans les listes RH. Le chargement de la
+     collection et l'affichage lisent le même module : l'ordre affiché suit le
+     mot qu'on lit en premier. */
+  w.nomSalarie = nomSalarie;
+  w.trierSalaries = trierSalaries;
 
   w.verifierEntite = verifierEntite;
   w.completudeClient = completudeClient;
