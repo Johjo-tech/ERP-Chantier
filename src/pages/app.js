@@ -4945,14 +4945,7 @@ function devisForm(){
   </div>`;
 }
 function cleanLogementFields(statut, raw){
-  return {
-    logementStatut: statut,
-    occupant: statut === 'occupé' ? (raw.occupant||'') : '',
-    etage: (statut === 'occupé' || statut === 'vacant') ? (raw.etage||'') : '',
-    numeroLogement: (statut === 'occupé' || statut === 'vacant') ? (raw.numeroLogement||'') : '',
-    precisionCommune: statut === 'commune' ? (raw.precisionCommune||'') : '',
-    ancienLocataire: statut === 'vacant' ? (raw.ancienLocataire||'') : ''
-  };
+  return window.champsLogement(statut, raw);
 }
 async function saveDevis(brouillon){
   const e = state.editing;

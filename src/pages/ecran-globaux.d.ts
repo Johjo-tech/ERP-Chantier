@@ -47,7 +47,6 @@ declare global {
     annulerInvitation: any;
     apercuDe: any;
     apercuNumero: any;
-    hauteurPourFinirEnBas: any;
     apportsDeLaFacture: any;
     apportsDuBon: any;
     arrondiCentime: any;
@@ -66,6 +65,7 @@ declare global {
     bonsDeLaFacture: any;
     cadreSuggere: any;
     catalogueComplet: any;
+    champsLogement: any;
     changerStatutDevis: any;
     chargerDocumentsRh: any;
     chargerIntervenants: any;
@@ -81,8 +81,8 @@ declare global {
     completudeClient: any;
     completudeSociete: any;
     comptesRendusTerrain: any;
-    construireIndexFactureBC: any;
     compteurEnCours: any;
+    construireIndexFactureBC: any;
     correspond: any;
     correspondFiche: any;
     criteresDepuisRequete: any;
@@ -136,6 +136,7 @@ declare global {
     formaterTaux: any;
     fusionnerReglages: any;
     grouperParClient: any;
+    hauteurPourFinirEnBas: any;
     html2pdf: any;
     identifiantsLegaux: any;
     importerCatalogue: any;

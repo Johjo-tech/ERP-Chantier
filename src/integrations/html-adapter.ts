@@ -29,6 +29,7 @@ import { colonnesDe, valeursEnum } from "@/api/columns";
 import { montantLigneHt } from "@/api/regles-totaux";
 import { lienSansFiche } from "@/api/regles-client-libre";
 import { memeMetier, tachesAcreer } from "@/api/regles-metiers";
+import { champsLogement } from "@/api/regles-logement";
 import {
   libelleStatutDevis,
   refusGesteDevis,
@@ -2467,6 +2468,7 @@ export function injectGlobalFunctions() {
   w.libelleStatutDevis = libelleStatutDevis;
   w.refusGesteDevis = refusGesteDevis;
   w.statutAEnregistrer = statutAEnregistrer;
+  w.champsLogement = champsLogement;
   /* Retirer une journée du planning supprime des tâches : c'est un geste
      explicite, jamais déduit d'un enregistrement de bon. */
   w.retirerDatesSupplementaires = retirerDatesSupplementaires;
