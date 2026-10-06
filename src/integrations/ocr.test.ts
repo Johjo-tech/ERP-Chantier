@@ -35,6 +35,20 @@ describe("rapprocherClient, sur les noms que rendent les profils", () => {
     expect(r.reconnu).toBe(true);
   });
 
+  /* Le 05/10, un bon SEM4V lu chez CHM Entretien s'est enregistré sans client :
+     la fiche écrit « SEM 4V » en deux mots, le bon « SEM4V » en un seul. */
+  it("SEM4V retrouve la fiche qui écrit « SEM 4V » en deux mots", () => {
+    const fiche =
+      "SOCIETE D'ECONOMIE MIXTE DE CONSTRUCTION ET DE RENOVATION DES 4 VALLEES EN ABREGE SEM 4V (SEM 4V)";
+    const r = rapprocherClient("SEM4V", [fiche, "SEM DE CONSTRUCTION DU DPT DE L AIN (SEMCODA)"]);
+    expect(r).toEqual({ nom: fiche, reconnu: true, suggestions: [] });
+  });
+
+  it("le nom long lu sur le bon retrouve la fiche courte « SEM4V »", () => {
+    const lu = "Société d'Économie Mixte des 4 Vallées (SEM 4V)";
+    expect(rapprocherClient(lu, ["SEM4V", "PLURALIS"]).nom).toBe("SEM4V");
+  });
+
   it("SDH propose les deux fiches plutôt que d'en choisir une, quand elles sont en double", () => {
     const fiches = ["(SDH) SOCIETE DAUPHINOIS POUR", "SOC DAUPHINOISE POUR L HABITAT (SDH)"];
     const r = rapprocherClient("SDH", fiches);

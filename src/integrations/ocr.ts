@@ -520,6 +520,12 @@ function normaliser(nom: string): string {
     .toUpperCase()
     .replace(/\b(SA|SAS|SASU|SARL|EURL|SCI|OPH|HLM|SA HLM|OFFICE PUBLIC DE L HABITAT)\b/g, " ")
     .replace(/[^A-Z0-9]+/g, " ")
+    /* Un sigle coupé avant ses chiffres reste le même sigle. La fiche de CHM
+       Entretien écrit « SEM 4V », le bon « SEM4V » : ni l'inclusion ni les
+       mots-clés ne les rapprochaient — « 4V » est trop court pour compter —
+       et le bon s'enregistrait sans client. « DES 4 VALLEES » reste intact :
+       seul un groupe chiffres-puis-lettres se recolle. */
+    .replace(/\b([A-Z]+) (\d+[A-Z]+)\b/g, "$1$2")
     .trim();
 }
 

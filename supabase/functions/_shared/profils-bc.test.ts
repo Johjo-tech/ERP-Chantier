@@ -77,6 +77,12 @@ describe("corrigerLecture", () => {
     expect(lu.numeroBC).toBe("70000");
   });
 
+  it("rend SEM4V sous un seul nom, quelle que soit la graphie lue", () => {
+    const lu: Record<string, unknown> = { client: "SOCIETE D'ECONOMIE MIXTE DES 4 VALLEES" };
+    corrigerLecture(lu, "SEM 4V — Société d'Économie Mixte des 4 Vallées\nBon n° 70000");
+    expect(lu.client).toBe("SEM4V");
+  });
+
   it("donne à SDH son nom, quand le bon appelle « Client » le locataire", () => {
     const lu: Record<string, unknown> = { client: "M DUPONT JEAN" };
     corrigerLecture(lu, "Client: 00000000 M DUPONT JEAN\n…\nwww.sdh.fr");

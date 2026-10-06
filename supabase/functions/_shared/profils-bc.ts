@@ -45,7 +45,12 @@ export const PROFILS: ProfilEmetteur[] = [
   {
     nom: "SEM4V",
     reconnaitre: [/\bSEM\s?4\s?V\b/i, /\b4\s+VALL[ÉE]ES\b/i],
+    /* Les fiches l'écrivent « SEM4V » ou « … SEM 4V (SEM 4V) », et le modèle
+       rendait tantôt l'un, tantôt la raison sociale entière : un seul nom,
+       que le rapprochement retrouve sous ses deux graphies. */
+    client: "SEM4V",
     consignes: [
+      "client : « SEM4V ».",
       "interlocuteur : la personne qui a fait l'EDL (état des lieux), indiquée en bas de page, avec son téléphone. JAMAIS le gardien, même s'il est nommé plus haut.",
       "notes : UNIQUEMENT le texte de la rubrique « Observation » (ou « Observations »). Rien d'autre : ni consignes d'accès, ni description des travaux.",
       "telephoneLocataire : le téléphone du locataire, dans le bloc qui le nomme.",
