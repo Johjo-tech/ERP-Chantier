@@ -115,6 +115,17 @@ describe("CONTRAT_BC", () => {
     expect([...SCHEMA_JSON.required].sort()).toEqual(Object.keys(SCHEMA_JSON.properties).sort());
   });
 
+  it("demande le code article de chaque ligne, et le schéma strict l'exige", () => {
+    const ligne = SCHEMA_JSON.properties.lignes.items;
+    expect(Object.keys(ligne.properties)).toContain("code");
+    expect([...ligne.required].sort()).toEqual(Object.keys(ligne.properties).sort());
+  });
+
+  it("signale un code de ligne rendu sous une autre forme que du texte", () => {
+    const lu = { lignes: [{ type: "ligne", designation: "x", code: 144 }], avertissements: [] };
+    expect(ecartsDeForme(lu)).toContain("lignes[0].code : pas un texte");
+  });
+
   it("signale un téléphone rendu sous une autre forme que du texte", () => {
     const lu = { lignes: [], avertissements: [], telephoneLocataire: 600000000 };
     expect(ecartsDeForme(lu)).toContain("telephoneLocataire : number au lieu de texte");

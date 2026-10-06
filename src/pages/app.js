@@ -19024,6 +19024,18 @@ async function lireBonCommande(fichier, input){
     const rapp = window.rapprocherClient(saisie.client, connus);
     saisie.client = rapp.nom;
 
+    /* Une ligne dont le code est au catalogue prend son article, comme si on
+       l'avait choisi à la main : c'est ce que faisaient les utilisateurs après
+       chaque lecture. Le catalogue vit en base, d'où l'attente — et
+       l'utilisateur a pu renoncer entre-temps. */
+    const rattachement = await window.rattacherLignesAuCatalogue(saisie.lignes || []);
+    if(controleur.signal.aborted){
+      const abandon = new Error('Lecture interrompue.');
+      abandon.name = 'AbortError';
+      throw abandon;
+    }
+    saisie.lignes = rattachement.lignes;
+
     // On fusionne dans le brouillon en cours sans écraser ce qui est déjà saisi
     Object.entries(saisie).forEach(([k, v])=>{
       if(v === undefined || v === '' ) return;
@@ -19036,6 +19048,11 @@ async function lireBonCommande(fichier, input){
     if(!rapp.nom) messages.push('client non détecté');
     else if(!rapp.reconnu) messages.push('client « ' + rapp.nom + ' » à confirmer');
     messages.push(...avert);
+    if(rattachement.erreur) messages.push('catalogue injoignable, lignes laissées telles que lues');
+    else if(rattachement.absents.length){
+      messages.push('code' + (rattachement.absents.length > 1 ? 's' : '') + ' absent'
+        + (rattachement.absents.length > 1 ? 's' : '') + ' du catalogue : ' + rattachement.absents.join(', '));
+    }
 
     /* La lecture a abouti : l'écran rend la main au formulaire, désormais
        prérempli. Le compte rendu part en toast **et** dans le bloc de statut,
@@ -19071,13 +19088,16 @@ async function lireBonCommande(fichier, input){
       }
     }
 
-    /* Un seul toast, qui porte les deux nouvelles : le document est lu, et le
-       nombre d'interventions que ses chapitres impliquent au planning. */
+    /* Un seul toast, qui porte toutes les nouvelles : le document est lu, ce
+       que le catalogue en a repris, et le nombre d'interventions que ses
+       chapitres impliquent au planning. */
+    const n = rattachement.reprises;
+    const duCatalogue = n ? ` ${n} ligne${n > 1 ? 's' : ''} reprise${n > 1 ? 's' : ''} du catalogue.` : '';
     showToast(
       metiersLus.length > 1
-        ? `Bon lu — ${metiersLus.length} métiers sur ses chapitres, donc ${metiersLus.length} interventions à planifier. Relisez avant d'enregistrer.`
-        : 'Bon de commande lu — relisez avant d\'enregistrer.',
-      'success', metiersLus.length > 1 ? 7000 : 4000);
+        ? `Bon lu — ${metiersLus.length} métiers sur ses chapitres, donc ${metiersLus.length} interventions à planifier.${duCatalogue} Relisez avant d'enregistrer.`
+        : `Bon de commande lu.${duCatalogue} Relisez avant d'enregistrer.`,
+      'success', metiersLus.length > 1 || n ? 7000 : 4000);
   }catch(err){
     console.error('OCR', err);
     const ecoule = state.ocr ? Date.now() - state.ocr.debut : 0;

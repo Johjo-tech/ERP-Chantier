@@ -21,6 +21,20 @@ describe("versSaisieBonCommande", () => {
   it("laisse le champ vide quand le bon n'en porte pas", () => {
     expect(versSaisieBonCommande(extraction({})).telephoneLocataire).toBe("");
   });
+
+  it("met le code lu dans le champ « Code » de la ligne, jamais dans celui d'un chapitre", () => {
+    const saisie = versSaisieBonCommande(
+      extraction({
+        lignes: [
+          { type: "chapitre", code: null, designation: "PEINTURE" },
+          { type: "ligne", code: "PLO144", designation: "PLO144 Recherche de fuite", qte: 1 },
+          { type: "ligne", code: null, designation: "Changer VMC cuisine", qte: 1 },
+        ],
+      })
+    );
+    const lignes = saisie.lignes as { articleReference?: string }[];
+    expect(lignes.map((l) => l.articleReference)).toEqual([undefined, "PLO144", undefined]);
+  });
 });
 
 describe("rapprocherClient, sur les noms que rendent les profils", () => {

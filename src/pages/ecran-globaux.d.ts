@@ -212,6 +212,7 @@ declare global {
     purgerVisitesMedicales: any;
     rapportRejetsCsv: any;
     rapprocherClient: any;
+    rattacherLignesAuCatalogue: any;
     reactiverArticle: any;
     rechercherAdresse: any;
     rechercherEntreprise: any;

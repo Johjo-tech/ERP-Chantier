@@ -11,6 +11,7 @@
 
 import { supabase, todayISO } from "@/api/client";
 import { essentielsDeLecture } from "@/api/regles-bc";
+import { codeArticleLu } from "@/api/regles-ligne-catalogue";
 import { essentielsDeLectureDevis, remiseNormalisee } from "@/api/regles-devis";
 import {
   DELAI_BASCULE_ANALYSE_MS,
@@ -20,6 +21,8 @@ import {
 
 export interface LigneExtraite {
   type: "ligne" | "chapitre" | "commentaire";
+  /** Le code article du bordereau, quand le bon en imprime un. */
+  code?: string | null;
   designation: string;
   qte?: number | null;
   unite?: string | null;
@@ -496,6 +499,10 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     lignes: e.lignes.map((l, i) => ({
       id: `ocr-${Date.now()}-${i}`,
       type: l.type,
+      /* Le code lu va dans le champ « Code » de la ligne : c'est par lui que
+         `rattacherLignesAuCatalogue` retrouve l'article, et c'est là que
+         l'utilisateur le cherche quand le catalogue ne le connaît pas. */
+      articleReference: l.type === "ligne" ? (codeArticleLu(l) ?? undefined) : undefined,
       designation: l.designation,
       qte: l.qte ?? undefined,
       unite: l.unite ?? undefined,

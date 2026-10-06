@@ -53,6 +53,8 @@ export type ChampTexte = typeof CHAMPS_TEXTE[number];
 
 export interface Ligne {
   type: "ligne" | "chapitre" | "commentaire";
+  /** Le code article du bordereau, seul : c'est lui qui retrouve le catalogue. */
+  code?: string | null;
   designation: string;
   qte?: number | null;
   unite?: string | null;
@@ -127,7 +129,7 @@ Règles :
 - occupant : nom du locataire présent. telephoneLocataire : le ou les numéros du LOCATAIRE (domicile, portable), souvent sur la ligne qui suit son nom ; jamais celui de l'interlocuteur.
 - interlocuteur : gardien, gestionnaire ou chargé d'affaires côté client, avec SON téléphone si indiqué — celui écrit à côté de son nom, jamais le standard de l'en-tête ou du pied de page, ni celui de l'entreprise destinataire.
 - notes : observations et consignes d'accès.
-- lignes : une entrée par prestation, type 'ligne', designation = code article + intitulé + TOUTE la description qui suit (une seule ligne, jamais scindée). Le texte qui suit une prestation lui appartient ; mais une rangée qui porte son propre code article, sa propre quantité ou son propre prix est une NOUVELLE ligne : n'en fusionne jamais deux. type 'chapitre' uniquement pour un titre de section (corps de métier) situé dans la liste des prestations ; s'il n'y en a pas, aucun chapitre. Nombres avec point décimal.
+- lignes : une entrée par prestation, type 'ligne', designation = code article + intitulé + TOUTE la description qui suit (une seule ligne, jamais scindée). Le texte qui suit une prestation lui appartient ; mais une rangée qui porte son propre code article, sa propre quantité ou son propre prix est une NOUVELLE ligne : n'en fusionne jamais deux. code : le code article de la ligne tel qu'imprimé, SEUL, sans le libellé (« ECPEIN025 », « PLO144 », « MIN001 ») — en tête de la désignation, collé par un tiret, ou entre parenthèses à la fin ; null s'il n'y en a pas. Un code de résidence, un numéro de logement, un code ESI ou un numéro de devis n'est pas un code article. type 'chapitre' uniquement pour un titre de section (corps de métier) situé dans la liste des prestations ; s'il n'y en a pas, aucun chapitre. Nombres avec point décimal.
 - Le document est découpé par des marqueurs « --- Page n/N --- ». Un tableau de prestations peut se poursuivre sur plusieurs pages, son en-tête de colonnes répété : rends chaque rangée de CHAQUE page, dans l'ordre. Une annexe (attestation de TVA, conditions générales, plan de prévention) n'est pas le bon : n'en tire ni adresse, ni ligne, ni date.
 - AU MOINS UNE ligne de type 'ligne' est obligatoire : elle dit ce qu'il y a à faire. Beaucoup de bons ne portent aucun tableau chiffré, seulement un descriptif ; dans ce cas, et dans ce cas SEULEMENT, résume les travaux demandés en une ligne (ou une par nature de travaux), qte/prixUnitaire à null. Un prix absent n'est pas une raison de ne pas rendre la ligne. Ne rends jamais une liste de lignes vide, ni faite uniquement de chapitres ou de commentaires.
 - montantTotalHT : seulement s'il est écrit sur le bon.
@@ -169,13 +171,14 @@ export const SCHEMA_JSON = {
         additionalProperties: false,
         properties: {
           type: { type: "string", enum: ["ligne", "chapitre", "commentaire"] },
+          code: texteNullable,
           designation: { type: "string" },
           qte: nombreNullable,
           unite: texteNullable,
           prixUnitaire: nombreNullable,
           tva: nombreNullable,
         },
-        required: ["type", "designation", "qte", "unite", "prixUnitaire", "tva"],
+        required: ["type", "code", "designation", "qte", "unite", "prixUnitaire", "tva"],
       },
     },
     avertissements: { type: "array", items: { type: "string" } },
@@ -222,6 +225,7 @@ export function ecartsDeForme(o: unknown): string[] {
         e.push(`lignes[${i}].type : « ${l.type} » inconnu`);
       }
       if (typeof l.designation !== "string") e.push(`lignes[${i}].designation : absente`);
+      if (l.code != null && typeof l.code !== "string") e.push(`lignes[${i}].code : pas un texte`);
     });
   }
   if (!Array.isArray(b.avertissements)) e.push("avertissements : absent ou pas un tableau");

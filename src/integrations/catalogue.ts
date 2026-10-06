@@ -18,6 +18,12 @@ import {
   encodageDuFichier,
   rapportRejetsCsv,
 } from "@/api/regles-import-articles";
+import {
+  codesAChercher,
+  rattacherAuCatalogue,
+  type LigneDocument,
+  type Rattachement,
+} from "@/api/regles-ligne-catalogue";
 import type { Article, ArticleInsert, Uuid } from "@/api/types";
 import { societeActive } from "./session";
 
@@ -124,6 +130,34 @@ export async function articleParCode(code: string): Promise<ArticleLegacy | null
   return article ? versLegacy(article, societe.id) : null;
 }
 
+/**
+ * Les lignes d'un bon lu, chacune avec son article quand son code est au
+ * catalogue de la société.
+ *
+ * Le catalogue injoignable n'empêche pas la lecture d'aboutir : les lignes
+ * restent telles que lues, et `erreur` le dit à l'écran.
+ */
+export async function rattacherLignesAuCatalogue<L extends LigneDocument>(
+  lignes: L[]
+): Promise<Rattachement<L> & { erreur: string | null }> {
+  const telles = { lignes, reprises: 0, absents: [], erreur: null };
+  const codes = codesAChercher(lignes);
+  const societe = societeActive();
+  if (!codes.length || !societe) return telles;
+
+  try {
+    const articles = await queries.articlesParCodes(societe.uuid, codes);
+    const rattachement = rattacherAuCatalogue(
+      lignes,
+      articles.map((a) => versLegacy(a, societe.id))
+    );
+    return { ...rattachement, erreur: null };
+  } catch (err) {
+    console.error("Rattachement des lignes lues au catalogue impossible", err);
+    return { ...telles, erreur: (err as Error)?.message ?? String(err) };
+  }
+}
+
 export async function enregistrerArticle(
   id: string | null,
   valeurs: Partial<ArticleLegacy>
@@ -184,6 +218,7 @@ export function injecterCatalogue() {
   w.famillesCatalogue = famillesCatalogue;
   w.chercherArticlesLigne = chercherArticlesLigne;
   w.articleParCode = articleParCode;
+  w.rattacherLignesAuCatalogue = rattacherLignesAuCatalogue;
   w.enregistrerArticle = enregistrerArticle;
   w.retirerArticle = retirerArticle;
   w.reactiverArticle = reactiverArticle;

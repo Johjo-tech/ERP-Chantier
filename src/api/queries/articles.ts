@@ -176,6 +176,34 @@ export async function getArticleParCode(
   return data;
 }
 
+/**
+ * Les articles actifs dont le code figure dans la liste.
+ *
+ * Une lecture de bon apporte d'un coup tous ses codes : un aller-retour par lot
+ * plutôt qu'un par ligne. Seuls les actifs, comme à la saisie : une référence
+ * retirée du catalogue ne remplit pas une ligne.
+ */
+export async function articlesParCodes(
+  societeId: Uuid,
+  codes: string[]
+): Promise<Article[]> {
+  if (!codes.length) return [];
+
+  const trouves: Article[] = [];
+  for (const lot of enLots(codes, LOT_IMPORT)) {
+    const { data, error } = await supabase
+      .from("articles")
+      .select("*")
+      .eq("societe_id", societeId)
+      .eq("actif", true)
+      .in("code", lot);
+
+    if (error) throw new SupabaseError("Recherche d'articles impossible", error.code, error);
+    trouves.push(...(data ?? []));
+  }
+  return trouves;
+}
+
 // ============ IMPORT EN MASSE ============
 
 /** Taille d'un lot d'écriture : au-delà, la requête devient trop lourde. */
