@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyserExportFactures, ventilationParTaux } from "./regles-import-factures";
+import { analyserExportFactures, motifRefusEcriture, ventilationParTaux } from "./regles-import-factures";
 
 /* L'en-tête et des lignes réelles de l'export CHM 2026. */
 const ENTETE =
@@ -70,5 +70,52 @@ describe("analyserExportFactures — export 2026 à TVA ventilée", () => {
   it("une pièce à 0 % prend la catégorie choisie", () => {
     const r = lire("FAC016698;FACTURE;2026-05-22;2026-06-30;01000439;BOUYGUES BATIMENT SUD-EST;33687,64;0,00;0;0,00;0,00;0,00;33687,64;FAC016698.pdf");
     expect(r.factures[0].categorieTva).toBe("E");
+  });
+});
+
+/* Ce que `insertOne` lève : l'emballage de `SupabaseError`, et dans `details`
+   l'erreur PostgREST d'origine. */
+function refus(code: string, texteBase: string) {
+  return { message: "Failed to create factures", code, details: { code, message: texteBase } };
+}
+
+describe("motifRefusEcriture", () => {
+  it("une pièce déjà reprise n'est pas dite « numéro déjà pris »", () => {
+    // Le 06/10/2026 : 319 pièces d'AKT Elec et d'Alkia annoncées « numéro déjà
+    // pris », alors qu'aucune facture de leur société ne portait ce numéro.
+    const err = refus("23505", 'duplicate key value violates unique constraint "factures_societe_legacy_id_key"');
+    expect(motifRefusEcriture(err)).toBe("cette pièce a déjà été reprise dans cette société");
+  });
+
+  it("un numéro pris se dit pris dans cette société", () => {
+    const err = refus("23505", 'duplicate key value violates unique constraint "factures_societe_numero_unique_idx"');
+    expect(motifRefusEcriture(err)).toBe("ce numéro est déjà pris dans cette société");
+  });
+
+  it("un doublon inconnu montre la contrainte plutôt qu'un motif inventé", () => {
+    const texte = 'duplicate key value violates unique constraint "factures_legacy_id_key"';
+    expect(motifRefusEcriture(refus("23505", texte))).toBe(texte);
+  });
+
+  it("un refus sans code connu montre le texte de la base, pas l'emballage", () => {
+    // FAC000453 n'avait reçu que « Failed to create factures ».
+    expect(motifRefusEcriture(refus("", "TypeError: Failed to fetch"))).toBe("TypeError: Failed to fetch");
+  });
+
+  it("une pièce figée se reconnaît à son SQLSTATE", () => {
+    // Le nom `restrict_violation` n'arrive jamais jusqu'ici : c'est 23001.
+    const err = refus("23001", "La facture FAC000453 est numérotée : elle ne peut plus être supprimée.");
+    expect(motifRefusEcriture(err)).toBe("la base refuse : la pièce est déjà figée");
+  });
+
+  it("garde les motifs déjà traduits", () => {
+    expect(motifRefusEcriture(refus("42501", "new row violates row-level security policy"))).toBe(
+      "vos droits ne permettent pas d'écrire les factures"
+    );
+  });
+
+  it("une erreur hors PostgREST garde son propre message", () => {
+    expect(motifRefusEcriture(new Error("réseau coupé"))).toBe("réseau coupé");
+    expect(motifRefusEcriture(undefined)).toBe("refus de la base");
   });
 });

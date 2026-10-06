@@ -250,9 +250,12 @@ export const CATEGORIES_TAUX_ZERO: Record<string, string> = {
 /**
  * Le marqueur d'origine, posé dans `legacy_id`.
  *
- * Préfixé, et ce n'est pas cosmétique : l'unicité de `factures.legacy_id` est
- * GLOBALE et non par société (`schema-cloud.sql:2953`). Deux sociétés du parc
- * important chacune leur « FAC000452 » se heurteraient sans ce préfixe.
+ * Le préfixe distingue une pièce reprise d'une clé kv_store — c'est lui que lit
+ * `estPieceHistorique`. Il ne dit rien de la société, et n'a pas à le dire :
+ * l'unicité porte sur (societe_id, legacy_id), comme celle du numéro
+ * (`20261006120000_la_reprise_se_cloisonne_par_societe`). Tant qu'elle était
+ * globale, la FAC000453 d'AKT Elec était refusée parce que KTA Plomberie avait
+ * déjà repris la sienne.
  */
 export const PREFIXE_LEGACY = "compta:";
 
@@ -263,6 +266,43 @@ export function legacyDuNumero(numero: string): string {
 /** Cette pièce vient-elle d'une reprise comptable ? Une seule définition. */
 export function estPieceHistorique(legacyId: string | null | undefined): boolean {
   return String(legacyId ?? "").startsWith(PREFIXE_LEGACY);
+}
+
+/** Les deux unicités qu'une reprise peut heurter, sous leur nom en base. */
+const CONTRAINTE_NUMERO = "factures_societe_numero_unique_idx";
+const CONTRAINTE_REPRISE = "factures_societe_legacy_id_key";
+
+/**
+ * Un refus de la base, dit en français à qui importe.
+ *
+ * Les deux doublons ne se confondent plus. Ils étaient tous deux dits « ce
+ * numéro est déjà pris » — y compris quand le numéro n'existait nulle part dans
+ * la société, ce qui envoyait chercher un doublon introuvable.
+ *
+ * Pour tout le reste, le texte de la base et non celui de l'emballage :
+ * `SupabaseError.message` vaut « Failed to create factures » quel que soit le
+ * refus, et c'est tout ce que l'écran montrait — une coupure réseau comprise.
+ */
+export function motifRefusEcriture(err: unknown): string {
+  const e = (err ?? {}) as { code?: string; message?: string; details?: { message?: string } };
+  const texteBase = e.details?.message ?? "";
+
+  switch (e.code) {
+    case "42501":
+      return "vos droits ne permettent pas d'écrire les factures";
+    case "23502":
+      return "une colonne obligatoire est restée vide";
+    case "23503":
+      return "le client référencé n'existe pas";
+    /* `restrict_violation`, que lèvent les déclencheurs des pièces figées,
+       arrive sous son SQLSTATE et non sous son nom. */
+    case "23001":
+      return "la base refuse : la pièce est déjà figée";
+    case "23505":
+      if (texteBase.includes(CONTRAINTE_NUMERO)) return "ce numéro est déjà pris dans cette société";
+      if (texteBase.includes(CONTRAINTE_REPRISE)) return "cette pièce a déjà été reprise dans cette société";
+  }
+  return texteBase || e.message || "refus de la base";
 }
 
 // ============ LES COLONNES, ET LEURS ALIAS ============
