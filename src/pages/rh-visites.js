@@ -610,7 +610,7 @@ export function renderRHVisites(){
             const avis = derniere ? window.avisAptitude(derniere.avis) : null;
             const couleur = avis ? (avis.gravite==='danger'?'#a30f22':avis.gravite==='warn'?'#a56200':'#15803d') : 'inherit';
             return `<tr>
-              <td style="text-align:left;"><strong>${esc(s.prenom)} ${esc(s.nom)}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
+              <td style="text-align:left;"><strong>${esc(window.nomSalarie(s))}</strong>${s.poste? ` <span class="card-sub">· ${esc(s.poste)}</span>`:''}</td>
               <td style="text-align:center;">${pastilleVisiteRh(s.id)}</td>
               <td>${derniere? fmtDate(derniere.dateVisite) : '—'}</td>
               <td>${derniere? esc(window.typeVisite(derniere.type).libelle) : '—'}</td>
@@ -625,7 +625,7 @@ export function renderRHVisites(){
     </div>` : '<div class="empty">Aucun salarié pour cette société.</div>'}
     ${ouvert? `<div class="card" style="margin-top:20px;">
       <div class="card-row">
-        <div class="card-title">${esc(ouvert.s.prenom)} ${esc(ouvert.s.nom)} — suivi médical</div>
+        <div class="card-title">${esc(window.nomSalarie(ouvert.s))} — suivi médical</div>
         <button class="btn small ghost" onclick="ouvrirRegistreVisites('${jsAttr(ouvert.s.id)}')">Fermer</button>
       </div>
       <div style="margin-top:10px;">${visitesMedicalesHTML(ouvert.s)}</div>
