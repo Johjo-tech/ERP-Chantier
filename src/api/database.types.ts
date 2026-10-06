@@ -265,6 +265,7 @@ export type Database = {
           nature_travaux: string | null
           notes: string | null
           numero_bc: string | null
+          numero_devis: string | null
           numero_interne: string | null
           numero_logement: string | null
           occupant: string | null
@@ -330,6 +331,7 @@ export type Database = {
           nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
+          numero_devis?: string | null
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
@@ -395,6 +397,7 @@ export type Database = {
           nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
+          numero_devis?: string | null
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
@@ -5718,6 +5721,7 @@ export type Database = {
           nature_travaux: string | null
           notes: string | null
           numero_bc: string | null
+          numero_devis: string | null
           numero_interne: string | null
           numero_logement: string | null
           occupant: string | null
@@ -5734,6 +5738,7 @@ export type Database = {
           statut: string | null
           statut_workflow: string | null
           technicien: string | null
+          telephone_locataire: string | null
           tentatives_contact: Json | null
           ville: string | null
         }
@@ -5782,6 +5787,7 @@ export type Database = {
           nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
+          numero_devis?: string | null
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
@@ -5798,6 +5804,7 @@ export type Database = {
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          telephone_locataire?: string | null
           tentatives_contact?: Json | null
           ville?: string | null
         }
@@ -5846,6 +5853,7 @@ export type Database = {
           nature_travaux?: string | null
           notes?: string | null
           numero_bc?: string | null
+          numero_devis?: string | null
           numero_interne?: string | null
           numero_logement?: string | null
           occupant?: string | null
@@ -5862,6 +5870,7 @@ export type Database = {
           statut?: string | null
           statut_workflow?: string | null
           technicien?: string | null
+          telephone_locataire?: string | null
           tentatives_contact?: Json | null
           ville?: string | null
         }
