@@ -140,7 +140,7 @@ export async function articleParCode(code: string): Promise<ArticleLegacy | null
 export async function rattacherLignesAuCatalogue<L extends LigneDocument>(
   lignes: L[]
 ): Promise<Rattachement<L> & { erreur: string | null }> {
-  const telles = { lignes, reprises: 0, absents: [], erreur: null };
+  const telles = { lignes, reprises: 0, absents: [], desaccords: [], erreur: null };
   const codes = codesAChercher(lignes);
   const societe = societeActive();
   if (!codes.length || !societe) return telles;

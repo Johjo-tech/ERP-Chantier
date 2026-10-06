@@ -19053,6 +19053,12 @@ async function lireBonCommande(fichier, input){
       messages.push('code' + (rattachement.absents.length > 1 ? 's' : '') + ' absent'
         + (rattachement.absents.length > 1 ? 's' : '') + ' du catalogue : ' + rattachement.absents.join(', '));
     }
+    /* Un code connu dont l'article ne ressemble pas au texte du bon est
+       probablement mal lu : la ligne n'a rien pris du catalogue, et l'écran
+       dit ce qu'il a écarté pour que l'utilisateur tranche. */
+    rattachement.desaccords.forEach(d=>{
+      messages.push('code ' + d.code + ' à vérifier, le catalogue y met « ' + d.designation + ' »');
+    });
 
     /* La lecture a abouti : l'écran rend la main au formulaire, désormais
        prérempli. Le compte rendu part en toast **et** dans le bloc de statut,

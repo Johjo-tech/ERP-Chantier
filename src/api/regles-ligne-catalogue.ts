@@ -86,6 +86,57 @@ function comparable(texte: string): string {
     .trim();
 }
 
+/** Ces mots se trouvent dans toutes les désignations : ils ne prouvent rien. */
+const MOTS_VIDES = new Set([
+  "de", "du", "des", "la", "le", "les", "et", "en", "au", "aux", "un", "une",
+  "sur", "par", "pour", "avec", "ou", "dans", "tout", "tous", "toute", "toutes", "type",
+]);
+
+/**
+ * Les mots qui portent le sens d'une désignation, réduits à leurs cinq
+ * premières lettres : « PEINT » et « PEINTURE », « chambre » et « chambres »
+ * sont le même mot. Les nombres seuls n'en sont pas — « 15 » ou « 21 »
+ * apparaissent dans trop de désignations sans rapport.
+ */
+function racines(texte: string): Set<string> {
+  return new Set(
+    comparable(texte)
+      .split(" ")
+      .filter((m) => m.length >= 2 && !MOTS_VIDES.has(m) && !/^\d+$/.test(m))
+      .map((m) => m.slice(0, 5))
+  );
+}
+
+/**
+ * Le texte du bon parle-t-il de l'article que son code désigne ?
+ *
+ * Le code est lu par un OCR : « ECPEIN023 » pour « ECPEIN025 », un O pris pour
+ * un 0. Le plus souvent, le code mal lu n'existe pas au catalogue, et la ligne
+ * est simplement signalée. Mais s'il existe, il désigne un autre article, et
+ * rien ne le trahissait : la ligne prenait la désignation et le prix d'un
+ * travail que le bon ne commande pas. Un seul mot en commun suffit — les
+ * bordereaux et le catalogue ne disent pas les choses dans les mêmes termes
+ * (« lés PVC plombant » d'un côté, « mise en oeuvre de lés PVC » de l'autre) —
+ * mais aucun mot en commun ne laisse pas de doute.
+ *
+ * Deux cas passent sans comparaison : un bon qui n'imprime que le code, faute
+ * de texte à comparer, et un article à 0 €, case à remplir par nature
+ * (« DIVERS ») qui va avec n'importe quel libellé.
+ *
+ * La limite : deux articles voisins d'une même famille partagent presque tous
+ * leurs mots — « Forfait pièce sans entoilage (WC) » et « (Chambre) ». Une
+ * erreur entre eux passe ce contrôle ; le prix et la désignation affichés
+ * restent à relire.
+ */
+export function concorde(texteDuBon: string, article: ArticleCatalogue): boolean {
+  if (!(article.prixUnitaire > 0)) return true;
+  const duBon = racines(texteDuBon);
+  if (!duBon.size) return true;
+  const duCatalogue = racines(`${article.designation} ${article.description ?? ""}`);
+  for (const r of duBon) if (duCatalogue.has(r)) return true;
+  return false;
+}
+
 /**
  * La ligne lue, devenue l'article du catalogue.
  *
@@ -134,6 +185,12 @@ export interface Rattachement<L> {
   reprises: number;
   /** Les codes lus que le catalogue ne connaît pas, pour le dire à l'écran. */
   absents: string[];
+  /**
+   * Les codes connus dont l'article ne ressemble pas au texte du bon — un code
+   * probablement mal lu. La ligne reste telle que lue ; la désignation du
+   * catalogue est rendue pour que l'écran puisse dire ce qu'il a écarté.
+   */
+  desaccords: { code: string; designation: string }[];
 }
 
 /** Les codes à chercher au catalogue, sans doublon. */
@@ -155,6 +212,7 @@ export function rattacherAuCatalogue<L extends LigneDocument>(
 ): Rattachement<L> {
   const parCode = new Map(articles.map((a) => [normaliserCode(a.code), a]));
   const absents = new Set<string>();
+  const desaccords = new Map<string, string>();
   let reprises = 0;
 
   const rattachees = lignes.map((ligne) => {
@@ -165,9 +223,18 @@ export function rattacherAuCatalogue<L extends LigneDocument>(
       absents.add(code);
       return ligne;
     }
+    if (!concorde(sansCode(ligne.designation ?? "", article.code), article)) {
+      desaccords.set(code, article.designation);
+      return ligne;
+    }
     reprises++;
     return ligneDepuisCatalogue(ligne, article);
   });
 
-  return { lignes: rattachees, reprises, absents: [...absents] };
+  return {
+    lignes: rattachees,
+    reprises,
+    absents: [...absents],
+    desaccords: [...desaccords].map(([code, designation]) => ({ code, designation })),
+  };
 }

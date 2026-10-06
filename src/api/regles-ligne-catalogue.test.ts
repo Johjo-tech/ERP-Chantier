@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   codeArticleLu,
   codesAChercher,
+  concorde,
   ligneDepuisCatalogue,
   rattacherAuCatalogue,
   sansCode,
@@ -103,6 +104,37 @@ describe("ligneDepuisCatalogue", () => {
   });
 });
 
+describe("concorde", () => {
+  /* Des paires réelles : le texte d'un bon, la désignation que le catalogue
+     donne au même code. Les termes diffèrent, l'article est le bon. */
+  it.each([
+    ["Tarif heure MO courante - Tarif horaire € HT de main d'oeuvre courante", "Tarif horaire HT de main d'ouvre courante"],
+    ["0603-0010 LE QUATUOR MAIN-OEUVRE NORMALE", "MAIN OEUVRE NORMALE"],
+    ["Mise en oeuvre de lés PVC au sol, de type plombant", "\"Lés PVC \"\"plombant\"\" Entrée / Dégagement\""],
+    ["T2 MUR ET PLF PEINT", "T2 MUR ET PLF PEINT"],
+    ["SEJOUR FOURNITURE ET POSE DE SOL SOUPLE DALLE / LA", "SEJOUR FOURNITURE ET POSE DE SOL SOUPLE DALLE / LAMES A CLIPSER"],
+  ])("reconnaît « %s » dans « %s »", (texteDuBon, designation) => {
+    expect(concorde(texteDuBon, article({ designation }))).toBe(true);
+  });
+
+  it("refuse un article sans aucun mot en commun avec le bon — un code mal lu", () => {
+    expect(concorde("Recherche de fuite", article({ designation: "Forfait pièce sans entoilage (WC)" }))).toBe(false);
+  });
+
+  it("ne compte ni les mots vides ni les nombres seuls comme des mots en commun", () => {
+    const a = article({ designation: "Remplacer réducteur pression diamètre 15/21 - 20/27" });
+    expect(concorde("Pose de la porte 15/21", a)).toBe(false);
+  });
+
+  it("accepte tout texte sur un article à 0 €, case à remplir par nature", () => {
+    expect(concorde("Peinture (T45)", article({ code: "DIVERS", designation: "divers", prixUnitaire: 0 }))).toBe(true);
+  });
+
+  it("accepte un bon qui n'imprime que le code : il n'y a rien à comparer", () => {
+    expect(concorde("", article())).toBe(true);
+  });
+});
+
 describe("rattacherAuCatalogue", () => {
   const lignes = [
     { type: "chapitre", designation: "PEINTURE", articleReference: undefined },
@@ -123,6 +155,15 @@ describe("rattacherAuCatalogue", () => {
     expect(r.lignes[0]).toBe(lignes[0]);
     expect(r.lignes[2]).toBe(lignes[2]);
     expect(r.lignes[3]).toBe(lignes[3]);
+  });
+
+  it("n'applique pas un article qui ne ressemble pas au texte du bon, et le signale", () => {
+    const malLue = [{ type: "ligne", designation: "Recherche de fuite", articleReference: "ECPEIN023", prixUnitaire: 160 }];
+    const wc = article({ code: "ECPEIN023", designation: "Forfait pièce sans entoilage (WC)", prixUnitaire: 150 });
+    const r = rattacherAuCatalogue(malLue, [wc]);
+    expect(r.lignes[0]).toBe(malLue[0]);
+    expect(r.reprises).toBe(0);
+    expect(r.desaccords).toEqual([{ code: "ECPEIN023", designation: "Forfait pièce sans entoilage (WC)" }]);
   });
 
   it("ne cherche chaque code qu'une fois, et jamais celui d'un chapitre", () => {
