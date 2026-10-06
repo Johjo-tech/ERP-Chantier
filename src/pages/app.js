@@ -2901,9 +2901,12 @@ async function confirmerLien(depuis, id, targetId){
 function devisSelectOptions(clientNom, current, excludeBonCommandeId, interlocuteurNom){
   const list = state.devis.filter(d=>{
     if(d.societeId!==state.societeId) return false;
+    /* Le devis déjà lié passe avant les filtres : masqué parce que
+       l'interlocuteur lu diffère du sien, il disparaissait de la liste, et
+       l'enregistrement, qui relit la liste, défaisait le lien en silence. */
+    if(d.id===current) return true;
     if(clientNom && d.client!==clientNom) return false;
     if(interlocuteurNom && (d.interlocuteur||'')!==interlocuteurNom) return false;
-    if(d.id===current) return true;
     const dejaLie = state.bonsCommande.some(b=>b.devisId===d.id && b.id!==excludeBonCommandeId);
     if(dejaLie) return false;
     return true;
@@ -5109,6 +5112,7 @@ function setBCMode(mode){
   e.ancienLocataire = grab('bc_ancienLocataire') ?? e.ancienLocataire;
   e.occupant = grab('bc_occupant') ?? e.occupant;
   e.telephoneLocataire = grab('bc_telephoneLocataire') ?? e.telephoneLocataire;
+  e.numeroDevis = grab('bc_numeroDevis') ?? e.numeroDevis;
   e.etage = grab('bc_etage') ?? e.etage;
   e.numeroLogement = grab('bc_numeroLogement') ?? e.numeroLogement;
   e.dateReception = grab('bc_dateReception') ?? e.dateReception;
@@ -8704,7 +8708,8 @@ function bonCommandeForm(){
       <div class="field-grid">
         <div class="field"><label>Client</label><select id="bc_client" onchange="refreshInterlocuteurSelect(this,'bc_interlocuteur'); refreshDevisLieSelect()">${clientSelectOptions(e.client)}</select></div>
         <div class="field"><label>Interlocuteur</label><select id="bc_interlocuteur" onchange="refreshDevisLieSelect()">${interlocuteurOptions(e.client, e.interlocuteur)}</select></div>
-        ${isSAV? '' : `<div class="field"><label>Devis lié (si applicable)</label><select id="bc_devisId" onchange="applyDevisMontant(this.value)">${devisSelectOptions(e.client, e.devisId, e.id, e.interlocuteur)}</select></div>`}
+        ${isSAV? '' : `<div class="field"><label>Devis lié (si applicable)</label><select id="bc_devisId" onchange="applyDevisMontant(this.value)">${devisSelectOptions(e.client, e.devisId, e.id, e.interlocuteur)}</select></div>
+        <div class="field"><label>N° de devis cité par le bon</label><input type="text" id="bc_numeroDevis" value="${esc(e.numeroDevis||'')}" placeholder="Ex : DEV6074 (devis Cegid)"></div>`}
       </div>
       ${/* Replié par défaut : trois champs vides sur les trois quarts des bons,
             alors que le cas est rare — seuls les gros donneurs d'ordre facturent
@@ -8906,6 +8911,7 @@ async function saveBonCommande(brouillon){
     ...cleanLogementFields(document.getElementById('bc_logementStatut').value, {
       occupant: document.getElementById('bc_occupant').value,
       telephoneLocataire: champSaisi('bc_telephoneLocataire', e.telephoneLocataire),
+      numeroDevis: champSaisi('bc_numeroDevis', e.numeroDevis),
       etage: document.getElementById('bc_etage').value,
       numeroLogement: document.getElementById('bc_numeroLogement').value,
       precisionCommune: document.getElementById('bc_precisionCommune').value,
@@ -19036,6 +19042,17 @@ async function lireBonCommande(fichier, input){
     }
     saisie.lignes = rattachement.lignes;
 
+    /* Le devis que le bon cite se lie quand il a été fait ici ; fait sur Cegid,
+       il n'existe pas dans l'ERP et son numéro reste dans « N° de devis ». */
+    const dejaLies = new Set(state.bonsCommande
+      .filter(b=>b.devisId && b.id!==state.editing.id).map(b=>b.devisId));
+    const devisCite = window.devisCiteParLeBon(
+      saisie.numeroDevis,
+      state.devis.filter(d=>d.societeId===state.societeId),
+      dejaLies,
+      rapp.reconnu ? rapp.nom : '');
+    if(devisCite) saisie.devisId = devisCite.id;
+
     // On fusionne dans le brouillon en cours sans écraser ce qui est déjà saisi
     Object.entries(saisie).forEach(([k, v])=>{
       if(v === undefined || v === '' ) return;
@@ -19098,12 +19115,13 @@ async function lireBonCommande(fichier, input){
        que le catalogue en a repris, et le nombre d'interventions que ses
        chapitres impliquent au planning. */
     const n = rattachement.reprises;
-    const duCatalogue = n ? ` ${n} ligne${n > 1 ? 's' : ''} reprise${n > 1 ? 's' : ''} du catalogue.` : '';
+    const duCatalogue = (n ? ` ${n} ligne${n > 1 ? 's' : ''} reprise${n > 1 ? 's' : ''} du catalogue.` : '')
+      + (devisCite ? ` Devis ${devisCite.numero} lié.` : '');
     showToast(
       metiersLus.length > 1
         ? `Bon lu — ${metiersLus.length} métiers sur ses chapitres, donc ${metiersLus.length} interventions à planifier.${duCatalogue} Relisez avant d'enregistrer.`
         : `Bon de commande lu.${duCatalogue} Relisez avant d'enregistrer.`,
-      'success', metiersLus.length > 1 || n ? 7000 : 4000);
+      'success', metiersLus.length > 1 || duCatalogue ? 7000 : 4000);
   }catch(err){
     console.error('OCR', err);
     const ecoule = state.ocr ? Date.now() - state.ocr.debut : 0;

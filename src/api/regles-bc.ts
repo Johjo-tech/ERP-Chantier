@@ -568,3 +568,50 @@ export function lieuIntervention(bon: {
     renseigne: rue !== "",
   };
 }
+
+/**
+ * Un numéro de devis réduit à ce qui l'identifie : « DEV-006275 », « dev 6275 »
+ * et « DEV6275 » désignent le même devis. L'ERP numérote avec un tiret et des
+ * zéros, l'ancien logiciel sans, et un bailleur recopie comme il l'entend.
+ */
+export function cleNumeroDevis(numero: string): string {
+  // Les zéros d'abord, groupe par groupe : ôter les séparateurs avant souderait
+  // « 2023-0147 » en un seul nombre, dont le zéro ne serait plus en tête.
+  return numero
+    .toUpperCase()
+    .replace(/\d+/g, (chiffres) => chiffres.replace(/^0+(?=\d)/, ""))
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+export interface DevisLiable {
+  id: string;
+  numero?: string | null;
+  client?: string | null;
+}
+
+/**
+ * Le devis de l'ERP que le bon cite, quand il y en a un et un seul.
+ *
+ * Un devis fait sur Cegid n'existe pas ici : rien n'est trouvé, et le numéro
+ * reste en texte sur le bon. Un devis déjà lié à un autre bon ne se lie pas une
+ * seconde fois — la liste « Devis lié » l'écarte de même. Quand le client du bon
+ * est connu, un devis d'un autre client n'est pas retenu : même numéro, autre
+ * affaire.
+ */
+export function devisCiteParLeBon<D extends DevisLiable>(
+  numeroLu: string | null | undefined,
+  devis: D[],
+  dejaLies: Set<string>,
+  client = ""
+): D | null {
+  const cle = cleNumeroDevis(numeroLu ?? "");
+  if (!cle) return null;
+  const candidats = devis.filter(
+    (d) =>
+      d.numero &&
+      cleNumeroDevis(d.numero) === cle &&
+      !dejaLies.has(d.id) &&
+      (!client || !d.client || d.client === client)
+  );
+  return candidats.length === 1 ? candidats[0] : null;
+}

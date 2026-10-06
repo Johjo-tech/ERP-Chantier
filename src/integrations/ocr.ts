@@ -41,8 +41,9 @@ export interface LigneExtraite {
 export interface ExtractionBC {
   client?: string | null;
   numeroBC?: string | null;
+  /** Le devis auquel le bon fait suite, tel qu'écrit — souvent un devis Cegid. */
+  numeroDevis?: string | null;
   dateBC?: string | null;
-  referenceChantier?: string | null;
   natureTravaux?: string | null;
   dateFinTravaux?: string | null;
   interlocuteur?: string | null;
@@ -58,6 +59,7 @@ export interface ExtractionBC {
   numeroLogement?: string | null;
   logementStatut?: string | null;
   occupant?: string | null;
+  ancienLocataire?: string | null;
   telephoneLocataire?: string | null;
   etage?: string | null;
   notes?: string | null;
@@ -478,9 +480,9 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     client: e.client ?? "",
     interlocuteur: e.interlocuteur ?? "",
     numeroBC: e.numeroBC ?? "",
+    numeroDevis: e.numeroDevis ?? "",
     sansBC: !e.numeroBC,
     dateReception: e.dateBC ?? todayISO(),
-    referenceChantier: e.referenceChantier ?? "",
     natureTravaux: e.natureTravaux ?? "",
     dateFinTravaux: e.dateFinTravaux ?? "",
     adresse: e.adresse ?? "",
@@ -492,6 +494,7 @@ export function versSaisieBonCommande(e: ExtractionBC): Record<string, unknown> 
     logementStatut,
     numeroLogement: e.numeroLogement ?? "",
     occupant: e.occupant ?? "",
+    ancienLocataire: e.ancienLocataire ?? "",
     telephoneLocataire: e.telephoneLocataire ?? "",
     etage: e.etage ?? "",
     notes: e.notes ?? "",

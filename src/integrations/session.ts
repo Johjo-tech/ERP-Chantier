@@ -218,6 +218,7 @@ import {
   attenteAvantChiffrage,
   blocagesChiffrage,
   blocagesValidationConducteur,
+  devisCiteParLeBon,
   etapeValidation,
   lieuIntervention,
   manquesBonCommande,
@@ -976,6 +977,7 @@ export function injecterSession() {
   w.decisionDepotOCR = decisionDepotOCR;
   w.versSaisieBonCommande = versSaisieBonCommande;
   w.rapprocherClient = rapprocherClient;
+  w.devisCiteParLeBon = devisCiteParLeBon;
   /* La lecture d'un DEVIS. Même mécanique que celle du bon, autre contrat : un
      devis est émis par nous et adressé au client, l'inverse d'un bon. */
   w.extraireDevis = extraireDevis;

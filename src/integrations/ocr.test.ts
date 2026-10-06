@@ -22,6 +22,15 @@ describe("versSaisieBonCommande", () => {
     expect(versSaisieBonCommande(extraction({})).telephoneLocataire).toBe("");
   });
 
+  it("reporte l'ancien locataire et le devis cité, et ne remplit plus la référence chantier", () => {
+    const saisie = versSaisieBonCommande(
+      extraction({ ancienLocataire: "M. EXEMPLE", numeroDevis: "DEV6074" })
+    );
+    expect(saisie.ancienLocataire).toBe("M. EXEMPLE");
+    expect(saisie.numeroDevis).toBe("DEV6074");
+    expect(saisie).not.toHaveProperty("referenceChantier");
+  });
+
   it("met le code lu dans le champ « Code » de la ligne, jamais dans celui d'un chapitre", () => {
     const saisie = versSaisieBonCommande(
       extraction({

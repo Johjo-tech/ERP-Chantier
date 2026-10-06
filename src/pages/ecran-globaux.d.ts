@@ -102,6 +102,7 @@ declare global {
     depasseLePlafondLegal: any;
     dernierRefus: any;
     derniereVisite: any;
+    devisCiteParLeBon: any;
     devisParNumero: any;
     docx: any;
     dossierSalarie: any;
