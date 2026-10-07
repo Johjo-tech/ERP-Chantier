@@ -1,0 +1,41 @@
+/*
+ * Tailwind SANS sa remise à zéro (« preflight »).
+ *
+ * L'application doit rendre au pixel près ce que rend l'ancienne, qui n'a
+ * jamais eu de remise à zéro : ses marges de titres, ses listes, ses boutons
+ * partent des styles du navigateur, puis de sa propre feuille
+ * (`styles/ancien.css`, copie verbatim). Le preflight de Tailwind les écrasait
+ * tous. On ne garde que le thème et les utilitaires, rangés dans des couches :
+ * une règle hors couche — toutes celles de l'ancienne feuille — l'emporte
+ * toujours sur une couche, quelle que soit sa spécificité. Un utilitaire resté
+ * dans un écran pas encore repris ne peut donc plus contredire l'ancien rendu.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/*
+ * Les jetons à la manière de shadcn/ui, que connaissent encore les écrans des
+ * modules, pointent sur les variables de l'ancienne feuille : un `bg-primary`
+ * oublié prend la couleur de la société, pas un bleu qui n'a jamais existé.
+ */
+@theme {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--text-dim);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent);
+  --color-primary: var(--accent-2);
+  --color-primary-foreground: var(--sur-accent-2);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--text);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-success: var(--success);
+  --color-warning: var(--accent);
+  --color-card: var(--surface);
+  --radius-md: 8px;
+  --font-sans: var(--police-texte);
+}

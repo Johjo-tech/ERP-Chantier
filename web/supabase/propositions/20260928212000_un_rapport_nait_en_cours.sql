@@ -1,0 +1,23 @@
+-- PROPOSITION — non appliquée en production.
+--
+-- Défaut corrigé (DEF-ECR-01, D-COR2-01) : `interventions.statut` n'a pas de défaut. Un rapport repris ou
+-- écrit hors de l'écran (import, SQL, autre canal) naît SANS statut, et la liste de l'ancien écran
+-- l'affiche en pastille grise vide. web/ affiche déjà « en cours » pour un statut absent ; en base, le
+-- rapport doit naître avec ce statut, celui que l'écran donne à tout rapport neuf (`STATUT_DEFAUT`).
+--
+-- Un défaut ne s'applique qu'aux INSERT qui n'envoient pas la colonne : un INSERT qui écrit `statut: null`
+-- explicitement garde NULL (supabase-js envoie NULL pour une clé absente d'une ligne quand plusieurs lignes
+-- partent ensemble — CLAUDE.md). L'écran envoie toujours le statut ; le défaut couvre les autres canaux.
+-- Les rapports déjà sans statut ne sont PAS réécrits ici (donnée de production : à trancher par un humain,
+-- requête de relevé ci-dessous) — l'écran les montre « en cours » en attendant.
+--
+-- Idempotent. Validé par : tests/rls/interventions.essai.ts (« [proposition] … naît « en cours » »).
+-- Essai à blanc (par un humain) :
+--   begin;
+--   \i 20260928212000_un_rapport_nait_en_cours.sql
+--   select column_default from information_schema.columns
+--    where table_schema = 'public' and table_name = 'interventions' and column_name = 'statut';  -- 'en cours'::text
+--   select count(*) from interventions where statut is null or btrim(statut) = '';                  -- relevé
+--   rollback;
+
+alter table public.interventions alter column statut set default 'en cours';

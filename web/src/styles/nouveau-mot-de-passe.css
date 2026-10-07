@@ -1,0 +1,144 @@
+/*
+ * COPIE VERBATIM du <style> de l'application historique — NE PAS MODIFIER.
+ *
+ * Source : src/pages/nouveau-mot-de-passe.html, lignes 8 à 137 (entre <style> et </style>)
+ * Commit : ffbb0b01919d67647024251db0bab43811ee5663
+ * Portée : posée par la seule page « nouveau mot de passe »
+ * Recopie : python3 web/scripts/copier-css-ancien.py
+ *
+ * La nouvelle application doit être visuellement identique à l'ancienne : on
+ * reprend sa feuille telle quelle plutôt que de la réécrire, et on produit le
+ * même HTML, avec les mêmes classes. Ce qui manque ou diffère vit dans
+ * `complements.css`, jamais ici : le corps de ce fichier doit rester égal à la
+ * source (garde-fou `tests/garde-fous-style.essai.ts`).
+ */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .login-header h1 {
+      margin: 0;
+      color: #182233;
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .login-header p {
+      margin: 8px 0 0;
+      color: #6B7686;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: #182233;
+      font-weight: 600;
+      font-size: 13.5px;
+    }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #E2E6ED;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 11px 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 10px;
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .success-message {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #E8F5EC;
+      color: #1E6B37;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .success-message.show { display: block; }
+    .error-message {
+      color: #D9363E;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: #6B7686;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .loading.show {
+      display: block;
+    }
