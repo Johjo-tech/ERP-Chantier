@@ -3,6 +3,7 @@ import {
   codeArticleLu,
   codesAChercher,
   concorde,
+  imprimeLesCodes,
   ligneDepuisCatalogue,
   rattacherAuCatalogue,
   sansCode,
@@ -169,5 +170,30 @@ describe("rattacherAuCatalogue", () => {
   it("ne cherche chaque code qu'une fois, et jamais celui d'un chapitre", () => {
     const doublon = [...lignes, { type: "ligne", designation: "x", articleReference: "ECPEIN025" }];
     expect(codesAChercher(doublon)).toEqual(["ECPEIN025", "PRM991"]);
+  });
+});
+
+describe("imprimeLesCodes", () => {
+  const chapitre = { type: "chapitre", designation: "Peinture" };
+  const codee = { type: "ligne", designation: "Forfait chambre", articleReference: "ECPEIN025" };
+  const libre = { type: "ligne", designation: "Rebouchage" };
+
+  it("imprime la colonne dès qu'une ligne porte un code", () => {
+    expect(imprimeLesCodes({ lignes: [chapitre, libre, codee] })).toBe(true);
+  });
+
+  it("n'imprime pas une colonne vide sur un document chiffré à la main", () => {
+    expect(imprimeLesCodes({ lignes: [chapitre, libre, { ...libre, articleReference: "  " }] })).toBe(false);
+    expect(imprimeLesCodes({ lignes: [] })).toBe(false);
+    expect(imprimeLesCodes({})).toBe(false);
+  });
+
+  it("ne compte que les lignes chiffrées", () => {
+    expect(imprimeLesCodes({ lignes: [{ ...chapitre, articleReference: "ECPEIN025" }, libre] })).toBe(false);
+  });
+
+  it("tait le compte comptable qu'une pièce reprise garde à la place du code", () => {
+    const reprise = { type: "ligne", designation: "Travaux", articleReference: "706000" };
+    expect(imprimeLesCodes({ lignes: [reprise], legacyId: "compta:FAC000452" })).toBe(false);
   });
 });

@@ -1420,6 +1420,13 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* L'unité n'est pas un nombre : collée à droite, elle s'éloignait de la
    quantité qu'elle qualifie. « 12   m² » se lit, « 12       m² » se déchiffre. */
 .p-lignes th.unite, .p-lignes td.unite{ text-align:left; padding-left:1mm; }
+/* Un code coupé en deux ne se retrouve plus dans le bordereau du client : il
+   tient sur une ligne, et la colonne prend la largeur du plus long. */
+.p-lignes td.code{ white-space:nowrap; padding-right:1mm; font-size:8.5pt; color:#4A5568; }
+/* La colonne « Code » prenait sa place aux montants, et « Montant HT » passait
+   sur deux lignes : un intitulé tient sur une ligne, et c'est la désignation,
+   seule à pouvoir se replier, qui cède la largeur. */
+.p-lignes th{ white-space:nowrap; }
 /* Le commentaire et le chapitre racontent : ils restent à gauche même si le
    tableau devait un jour être aligné autrement. */
 .p-lignes .p-comment td, .p-lignes .p-chapitre td{ text-align:left; }
