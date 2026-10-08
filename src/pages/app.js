@@ -3791,8 +3791,10 @@ async function deleteItem(type, id){
 function sousTotalChapitreHTML(total, fmt){
   return `<td class="st">Total HT</td><td class="stv">${fmt(total)}</td>`;
 }
-function printableLignesRows(lignes, hidePrices){
+function printableLignesRows(lignes, hidePrices, avecCode){
   const fmt = hidePrices ? (()=>'•••') : money;
+  /* La colonne « Code » décale tout ce qui s'étend sur la largeur du tableau. */
+  const colCode = avecCode ? 1 : 0;
   /* Le total d'un chapitre s'écrit maintenant sur sa bande, donc avant ses
      lignes : il se prend dans la liste des sous-totaux au lieu de s'accumuler
      au fil du parcours. Même règle que l'écran — la refaire ici finirait par
@@ -3805,9 +3807,9 @@ function printableLignesRows(lignes, hidePrices){
     const cls = l.classe ? ' '+esc(l.classe) : '';
     const badge = l.badge ? `<span class="p-badge-origine">${esc(l.badge)}</span> ` : '';
     if(t === 'chapitre'){
-      html += `<tr class="p-chapitre${cls}"><td colspan="4">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
+      html += `<tr class="p-chapitre${cls}"><td colspan="${4+colCode}">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
     } else if(t === 'commentaire'){
-      html += `<tr class="p-comment${cls}"><td colspan="6">${badge}${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-comment${cls}"><td colspan="${6+colCode}">${badge}${esc(l.designation)}</td></tr>`;
     } else {
       /* Même arithmétique que l'écran, empruntée à la règle plutôt que refaite :
          deux formules pour un seul montant finissent par diverger d'un centime. */
@@ -3816,7 +3818,8 @@ function printableLignesRows(lignes, hidePrices){
          imprimé : le client ne lisait pas ce qu'on avait précisé sur la ligne. */
       const note = (l.commentaire || '').trim();
       const noteHTML = note ? `<div class="p-ligne-note">${esc(note)}</div>` : '';
-      html += `<tr class="${(cls+sansPrix).trim()}"><td>${badge}${esc(l.designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
+      const codeHTML = avecCode ? `<td class="code">${esc(l.articleReference||'')}</td>` : '';
+      html += `<tr class="${(cls+sansPrix).trim()}">${codeHTML}<td>${badge}${esc(l.designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
     }
   });
   return html;
@@ -4257,6 +4260,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
   const t = computeTotalsAvecRemise(lignes, doc.remisePourcentage || 0);
   const fmt = hidePrices ? (()=>'•••') : money;
   const title = resolu.titre;
+  const avecCode = window.imprimeLesCodes({ lignes, legacyId: doc.legacyId });
 
   /* Une facture émise porte l'identité de son émetteur au jour de l'émission.
      Les brouillons, eux, suivent les réglages courants. */
@@ -4309,8 +4313,8 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </div>
     </div>
     <table class="p-lignes">
-      <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
-      ${printableLignesRows(lignes, hidePrices)}
+      <tr>${avecCode? '<th class="code">Code</th>' : ''}<th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
+      ${printableLignesRows(lignes, hidePrices, avecCode)}
     </table>
     <div class="p-fin">
     <div class="p-bloc-bas">

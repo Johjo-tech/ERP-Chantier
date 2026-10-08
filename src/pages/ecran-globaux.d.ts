@@ -143,6 +143,7 @@ declare global {
     html2pdf: any;
     identifiantsLegaux: any;
     importerCatalogue: any;
+    imprimeLesCodes: any;
     imputer: any;
     imputerAvoir: any;
     integrerTravailSupplementaire: any;

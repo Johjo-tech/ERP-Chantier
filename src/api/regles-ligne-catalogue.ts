@@ -12,6 +12,8 @@
  * `integrations/catalogue.ts`, qui l'appelle.
  */
 
+import { estPieceHistorique } from "./regles-import-factures";
+
 /** Ce que la règle lit d'un article : le format de l'écran, sans le reste. */
 export interface ArticleCatalogue {
   code: string;
@@ -237,4 +239,29 @@ export function rattacherAuCatalogue<L extends LigneDocument>(
     absents: [...absents],
     desaccords: [...desaccords].map(([code, designation]) => ({ code, designation })),
   };
+}
+
+/**
+ * Le document imprimé porte-t-il une colonne « Code » ?
+ *
+ * Le code était saisi, enregistré, repris du devis à la facture et transmis
+ * dans la facture électronique — mais absent du papier. Or les bailleurs
+ * commandent par le code de leur bordereau : sans lui, ils rapprochent chaque
+ * ligne du devis ou de la facture par son seul libellé.
+ *
+ * La colonne ne paraît que si une ligne en porte un. Un devis chiffré à la
+ * main n'en a aucun, et une colonne vide y prendrait sa place à la désignation.
+ *
+ * Une pièce reprise de l'ancienne comptabilité n'en porte jamais : son
+ * `article_reference` garde le compte comptable de la ligne — 706000 —, que le
+ * client lirait comme une référence d'article.
+ */
+export function imprimeLesCodes(document: {
+  lignes?: readonly LigneDocument[] | null;
+  legacyId?: string | null;
+}): boolean {
+  if (estPieceHistorique(document.legacyId)) return false;
+  return (document.lignes ?? []).some(
+    (l) => (l.type ?? "ligne") === "ligne" && String(l.articleReference ?? "").trim() !== ""
+  );
 }
