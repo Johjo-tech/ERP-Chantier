@@ -66,6 +66,7 @@ declare global {
     bonEstFacture: any;
     bonsDeLaFacture: any;
     cadreSuggere: any;
+    casseAdresse: any;
     catalogueComplet: any;
     champsLogement: any;
     changerStatutDevis: any;
@@ -158,6 +159,7 @@ declare global {
     lignesAEnregistrer: any;
     lignesDocumentDirecteur: any;
     lignesHaystack: any;
+    lignesRemplies: any;
     lireExportArticles: any;
     lireExportClients: any;
     listCompteurs: any;
@@ -216,6 +218,7 @@ declare global {
     prochaineVisiteSuggeree: any;
     purgerDocumentsRh: any;
     purgerVisitesMedicales: any;
+    quantiteImprimee: any;
     rapportRejetsCsv: any;
     rapprocherClient: any;
     rattacherLignesAuCatalogue: any;
@@ -283,6 +286,7 @@ declare global {
     trierFactures: any;
     trierSalaries: any;
     trierVisites: any;
+    tvaImprimee: any;
     tvaIntracomFr: any;
     typeDocumentRh: any;
     typeVisite: any;

@@ -113,6 +113,7 @@ import {
   totauxDocument,
   ventilationTvaAffichage,
 } from "@/api/regles-totaux";
+import { casseAdresse, lignesRemplies, quantiteImprimee, tvaImprimee } from "@/api/regles-impression";
 import {
   arrondiCentime,
   montantPropose,
@@ -891,6 +892,12 @@ export function injecterSession() {
   /* Ce que chaque métier pèse : la pré-facture s'y vérifie par corps d'état. */
   w.montantsParMetier = montantsParMetier;
   w.formaterTaux = formaterTaux;
+  /* La mise en forme des pièces imprimées, la même que dans la nouvelle
+     application : les deux impriment le même papier. */
+  w.casseAdresse = casseAdresse;
+  w.lignesRemplies = lignesRemplies;
+  w.quantiteImprimee = quantiteImprimee;
+  w.tvaImprimee = tvaImprimee;
   w.soldeAPayer = soldeAPayer;
 
   /* Les règlements d'une facture. L'état de la facture se DÉDUIT d'eux : un

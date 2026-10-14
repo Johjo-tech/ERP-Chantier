@@ -3276,18 +3276,21 @@ function resolveClientAdresse(nom){
  * document : mieux vaut l'adresse d'aujourd'hui que pas d'adresse du tout. La
  * rue, elle, reste celle qu'on a figée.
  */
-function adresseClientDuDocument(doc){
+/* `forme` met en forme l'adresse et la ville une à une, avant qu'elles ne
+   soient jointes : la pièce imprimée y passe `casseAdresse`. */
+function adresseClientDuDocument(doc, forme){
+  forme = forme || (v=>v);
   const f = [doc.facturationAdresse, doc.facturationCodePostal, doc.facturationVille].filter(Boolean);
   if(f.length){
     return {
-      rue: doc.facturationAdresse || '',
-      cpVille: [doc.facturationCodePostal, doc.facturationVille].filter(Boolean).join(' '),
+      rue: forme(doc.facturationAdresse) || '',
+      cpVille: [doc.facturationCodePostal, forme(doc.facturationVille)].filter(Boolean).join(' '),
     };
   }
   const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===doc.client) || {};
   return {
-    rue: doc.adresse || c.adresse || '',
-    cpVille: [c.codePostal, c.ville].filter(Boolean).join(' '),
+    rue: forme(doc.adresse || c.adresse) || '',
+    cpVille: [c.codePostal, forme(c.ville)].filter(Boolean).join(' '),
   };
 }
 function logementLabel(statut){
@@ -3793,8 +3796,28 @@ async function deleteItem(type, id){
 function sousTotalChapitreHTML(total, fmt){
   return `<td class="stv">${fmt(total)}</td><td></td>`;
 }
-function printableLignesRows(lignes, hidePrices, avecCode){
-  const fmt = hidePrices ? (()=>'•••') : money;
+/* Les montants d'une pièce, dans son sens : un avoir s'imprime en négatif,
+   ses montants étant enregistrés positifs (c'est le type qui dit le sens). Un
+   zéro ne prend jamais de signe : « -0,00 € » ne dirait rien de plus. */
+function formateurPiece(hidePrices, sens){
+  if(hidePrices) return ()=>'•••';
+  return m=>{
+    const n = Number(m) || 0;
+    return money(sens < 0 && Math.abs(n) >= 0.005 ? -n : n);
+  };
+}
+/* Les adresses du client et du lieu, en capitales dans les fiches reprises,
+   s'impriment « majuscule aux mots » ; celles de l'émetteur restent telles
+   quelles. La donnée ne change pas. */
+function adressesImprimees(d){
+  const c = window.casseAdresse;
+  return { ...d,
+    adresse: c(d.adresse), adresseLocataire: c(d.adresseLocataire), ville: c(d.ville),
+    precisionCommune: c(d.precisionCommune),
+    facturationAdresse: c(d.facturationAdresse), facturationVille: c(d.facturationVille) };
+}
+function printableLignesRows(lignes, hidePrices, avecCode, sens){
+  const fmt = formateurPiece(hidePrices, sens || 1);
   /* Le total d'un chapitre s'écrit maintenant sur sa bande, donc avant ses
      lignes : il se prend dans la liste des sous-totaux au lieu de s'accumuler
      au fil du parcours. Même règle que l'écran — la refaire ici finirait par
@@ -3824,7 +3847,7 @@ function printableLignesRows(lignes, hidePrices, avecCode){
       const code = avecCode ? String(l.articleReference||'').trim() : '';
       const codeHTML = code ? `<div class="p-ligne-code">${esc(code)}</div>` : '';
       const designation = window.designationSousCode(code, l.designation || '');
-      html += `<tr class="${(cls+sansPrix).trim()}"><td>${codeHTML}${badge}${esc(designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${codeHTML}${badge}${esc(designation)}${noteHTML}</td><td class="num">${esc(window.quantiteImprimee(l.qte))}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${window.tvaImprimee(l.tva)}</td></tr>`;
     }
   });
   return html;
@@ -4249,7 +4272,9 @@ function documentImprimable(type, id){
   if(type==='bonCommande'){
     const b = (state.bonsCommande||[]).find(x=>x.id===id);
     if(!b) return null;
-    return { doc: { ...b, numero: b.numeroInterne || b.numeroBC || '', date: b.dateReception || b.date }, titre: 'BON DE COMMANDE' };
+    /* Un SAV naît d'un bon d'origine : intitulé « BON DE COMMANDE », il se
+       lisait comme une nouvelle commande du client. */
+    return { doc: { ...b, numero: b.numeroInterne || b.numeroBC || '', date: b.dateReception || b.date }, titre: b.bonCommandeId ? 'SAV' : 'BON DE COMMANDE' };
   }
   const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
   if(!doc) return null;
@@ -4260,12 +4285,15 @@ function documentImprimable(type, id){
 function renderPrintDoc(type, id, hidePrices, lignesOverride){
   const resolu = documentImprimable(type, id);
   if(!resolu) return '<p>Document introuvable.</p>';
-  const doc = resolu.doc;
+  const doc = adressesImprimees(resolu.doc);
   const s = state.settings[state.societeId] || {};
   const socName = societeName(state.societeId);
-  const lignes = lignesOverride || doc.lignes;
+  /* Le chapitre, le commentaire ou la ligne laissés vides d'un devis ou d'un
+     bon ne sortent pas sur le papier. Une facture s'imprime telle qu'émise. */
+  const lignes = type === 'facture' ? (lignesOverride || doc.lignes) : window.lignesRemplies(lignesOverride || doc.lignes);
   const t = computeTotalsAvecRemise(lignes, doc.remisePourcentage || 0);
-  const fmt = hidePrices ? (()=>'•••') : money;
+  const sens = type === 'facture' ? window.signeDocument(doc.typeDocument) : 1;
+  const fmt = formateurPiece(hidePrices, sens);
   const title = resolu.titre;
   const avecCode = window.imprimeLesCodes({ lignes, legacyId: doc.legacyId });
 
@@ -4297,7 +4325,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     iban: doc.emetteurIban || s.iban,
   };
   const r = (s.reglages && s.reglages.documents) || {};
-  const adrClient = adresseClientDuDocument(doc);
+  const adrClient = adresseClientDuDocument(doc, window.casseAdresse);
   const fisc = [em.siret? `<b>Siret</b> ${esc(em.siret)}`:'', s.codeNaf? `<b>APE</b> ${esc(s.codeNaf)}`:''].filter(Boolean).join(' · ');
   const logo = logoHTML(s);
   return `
@@ -4321,12 +4349,12 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     </div>
     <table class="p-lignes">
       <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
-      ${printableLignesRows(lignes, hidePrices, avecCode)}
+      ${printableLignesRows(lignes, hidePrices, avecCode, sens)}
     </table>
     <div class="p-fin">
     <div class="p-bloc-bas">
       ${type === 'devis' ? blocGaucheDevisHTML(blocReglementHTML(type, doc, s, em, hidePrices)) : blocReglementHTML(type, doc, s, em, hidePrices)}
-      <div class="p-totaux">${blocTotauxHTML(doc, t, fmt)}</div>
+      <div class="p-totaux">${blocTotauxHTML(doc, t, fmt, sens)}</div>
     </div>
     ${/* Une facture ne se signe pas : elle constate une créance, elle ne
          recueille pas d'accord. Le devis recueille l'accord du client dans son
@@ -4409,22 +4437,28 @@ function libelleModePaiement(mode){
  * chiffre que le payeur cherche, et le faire disparaître quand il égale le
  * TTC obligerait à savoir lequel lire.
  */
-function blocTotauxHTML(doc, t, fmt){
+function blocTotauxHTML(doc, t, fmt, sens){
   const v = t.ventilation || [];
+  /* Remise, acompte, retenue viennent EN DÉDUCTION : « -12,00 € » sur une
+     facture ; sur un avoir, dont le total est négatif, la même déduction le
+     ramène vers zéro et s'écrit sans signe. */
+  const deduction = m => sens < 0 ? fmt(-m) : '-'+fmt(m);
+  // La base d'un taux s'affiche même sans les prix : seul son signe suit la pièce.
+  const base = formateurPiece(false, sens || 1);
   const kv = (l, x, c) => `<div class="p-kv${c||''}"><span>${l}</span><em>${x}</em></div>`;
   const solde = window.soldeAPayer(t, {
     acomptes: doc.acomptesDeduits,
     retenuePourcentage: doc.retenueGarantiePourcentage,
   });
   return (v.length > 1
-      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map(pa=>kv(`TVA ${window.formaterTaux(pa.taux)} sur ${money(pa.base)}`, fmt(pa.montant))).join('')}${kv('Total TVA', fmt(t.tva), ' somme')}</div>`
+      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map(pa=>kv(`TVA ${window.formaterTaux(pa.taux)} sur ${base(pa.base)}`, fmt(pa.montant))).join('')}${kv('Total TVA', fmt(t.tva), ' somme')}</div>`
       : '')
     + kv('Total HT', fmt(t.htAvant))
-    + (t.remisePct>0 ? kv(`Remise (${t.remisePct} %)`, '-'+fmt(t.remiseMontantHT)) : '')
+    + (t.remisePct>0 ? kv(`Remise (${t.remisePct} %)`, deduction(t.remiseMontantHT)) : '')
     + kv(v.length===1 ? `Total TVA ${window.formaterTaux(v[0].taux)}` : 'Total TVA', fmt(t.tva))
     + kv('Total TTC', fmt(t.ttc), ' p-ttc')
-    + (solde.acomptes>0 ? kv('Acompte déjà versé', '-'+fmt(solde.acomptes)) : '')
-    + (solde.retenueMontant>0 ? kv(`Retenue de garantie (${window.formaterTaux(solde.retenuePourcentage)})`, '-'+fmt(solde.retenueMontant)) : '')
+    + (solde.acomptes>0 ? kv('Acompte déjà versé', deduction(solde.acomptes)) : '')
+    + (solde.retenueMontant>0 ? kv(`Retenue de garantie (${window.formaterTaux(solde.retenuePourcentage)})`, deduction(solde.retenueMontant)) : '')
     + kv('Net à payer', fmt(solde.netAPayer), ' p-net');
 }
 
