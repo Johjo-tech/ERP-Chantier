@@ -20,8 +20,10 @@
  * Au 3, les deux déclencheurs s'effacent pour des raisons opposées et
  * complémentaires : `factures_entete_figee` regarde `OLD.numero`, qui est vide ;
  * `facture_attribuer_numero` regarde `NEW.numero`, qui est plein — donc il ne
- * touche pas au compteur (`20260914110000…sql:50`). La série importée et la
- * série native `FAC-000001` coexistent sans se voir.
+ * touche pas au compteur (`20260914110000…sql:50`). Tant que la série native
+ * portait un tiret (`FAC-000001`), elle ne croisait jamais l'importée ; sans
+ * tiret, un numéro importé au-delà du compteur est sauté par la base, et
+ * `numerosDejaPris` signale celui qui existe déjà.
  *
  * ── CE QUI SE JOUE ICI, ET QU'ON NE RATTRAPERA PAS ─────────────────────────
  * Après l'étape 3, la pièce est close : l'en-tête est gelé hors liste blanche,

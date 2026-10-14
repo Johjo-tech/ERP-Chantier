@@ -1078,6 +1078,7 @@ export function injecterSession() {
   w.listCompteurs = queries.listCompteurs;
   w.reglerCompteur = queries.reglerCompteur;
   w.apercuNumero = queries.apercuNumero;
+  w.refusPrefixe = queries.refusPrefixe;
   w.compteurEnCours = queries.compteurEnCours;
 
   // Réglages par société

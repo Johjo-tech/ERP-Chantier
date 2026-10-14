@@ -234,6 +234,7 @@ declare global {
     refusGesteFacture: any;
     refusImputation: any;
     refusImputationAvoir: any;
+    refusPrefixe: any;
     refusReglement: any;
     regimeSuivi: any;
     reglerCompteur: any;
