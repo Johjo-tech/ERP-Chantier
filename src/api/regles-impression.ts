@@ -46,7 +46,7 @@ function enNombre(v: number | string | null | undefined): number {
 /** La quantité d'une ligne à la française : « 2,5 », pas « 2.5 ». */
 export function quantiteImprimee(q: number | string | null | undefined): string {
   const n = enNombre(q);
-  return Number.isFinite(n) ? String(n).replace(".", ",") : String(q ?? "");
+  return Number.isFinite(n) ? String(n).replace(".", ",") : String(q);
 }
 
 /**
