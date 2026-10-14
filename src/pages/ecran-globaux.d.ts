@@ -104,6 +104,7 @@ declare global {
     depasseLePlafondLegal: any;
     dernierRefus: any;
     derniereVisite: any;
+    designationSousCode: any;
     devisCiteParLeBon: any;
     devisParNumero: any;
     docx: any;
@@ -144,7 +145,6 @@ declare global {
     identifiantsLegaux: any;
     importerCatalogue: any;
     imprimeLesCodes: any;
-    designationSousCode: any;
     imputer: any;
     imputerAvoir: any;
     integrerTravailSupplementaire: any;
