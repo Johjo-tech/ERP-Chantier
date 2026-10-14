@@ -33,6 +33,7 @@
 
 import { enLots, insertMany, insertOne, supabase, SupabaseError, updateOne } from "../client";
 import { estAvoir, MODE_REGLEMENT_IMPUTATION } from "../regles-avoir";
+import { motifRefusEcriture } from "../regles-import-factures";
 import type { FactureInsert, FactureLigneInsert, FactureStatut, Uuid } from "../types";
 
 /**
@@ -96,19 +97,6 @@ export interface ResultatImportFactures {
   brouillonsOrphelins: { numero: string; id: string }[];
 }
 
-/** Un refus de la base, dit en français plutôt que recopié brut. */
-function motifLisible(err: unknown): string {
-  const e = err as { code?: string; message?: string };
-  if (e?.code === "42501") return "vos droits ne permettent pas d'écrire les factures";
-  if (e?.code === "23502") return "une colonne obligatoire est restée vide";
-  if (e?.code === "23505") return "ce numéro est déjà pris";
-  if (e?.code === "23503") return "le client référencé n'existe pas";
-  if (e?.code === "2201G" || e?.code === "restrict_violation") {
-    return "la base refuse : la pièce est déjà figée";
-  }
-  return e?.message || "refus de la base";
-}
-
 /**
  * Écrit les pièces, une par une.
  *
@@ -142,7 +130,7 @@ export async function importerFactures(
       } as FactureInsert);
       id = facture.id as Uuid;
     } catch (err) {
-      echecs.push({ numero: piece.numero, etape: "entete", motif: motifLisible(err) });
+      echecs.push({ numero: piece.numero, etape: "entete", motif: motifRefusEcriture(err) });
       onProgress?.(i + 1, pieces.length);
       continue;
     }
@@ -155,7 +143,7 @@ export async function importerFactures(
       );
       lignes += posees.length;
     } catch (err) {
-      echecs.push({ numero: piece.numero, etape: "lignes", motif: motifLisible(err) });
+      echecs.push({ numero: piece.numero, etape: "lignes", motif: motifRefusEcriture(err) });
       brouillonsOrphelins.push({ numero: piece.numero, id });
       onProgress?.(i + 1, pieces.length);
       continue;
@@ -168,7 +156,7 @@ export async function importerFactures(
       await updateOne("factures", id, { numero: piece.numero, statut: piece.statut });
       ecrites++;
     } catch (err) {
-      echecs.push({ numero: piece.numero, etape: "numero", motif: motifLisible(err) });
+      echecs.push({ numero: piece.numero, etape: "numero", motif: motifRefusEcriture(err) });
       brouillonsOrphelins.push({ numero: piece.numero, id });
       onProgress?.(i + 1, pieces.length);
       continue;
@@ -203,7 +191,7 @@ export async function importerFactures(
             reference: REFERENCE_AVOIR_REPRIS,
           } as never);
         } catch (err) {
-          echecs.push({ numero: piece.numero, etape: "imputation", motif: motifLisible(err) });
+          echecs.push({ numero: piece.numero, etape: "imputation", motif: motifRefusEcriture(err) });
         }
       }
     }
