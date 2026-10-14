@@ -333,7 +333,36 @@ const ENTETE_ECARTEES: Record<string, string> = {
  * le compte est le premier nombre du nom. Sans fichier de lignes, chaque compte non nul
  * devient une ligne de la pièce, et la ventilation comptable ne se perd pas.
  */
-const COLONNE_HT_PAR_COMPTE = /^ht_(\d{3,8})(?:_|$)/;
+/* Classe 6 ou 7 seulement : « HT 2026 » n'est pas un compte, et il reste une colonne inconnue, signalée. */
+const COLONNE_HT_PAR_COMPTE = /^ht_([67]\d{2,7})(?:_|$)/;
+
+/**
+ * Les lignes d'une pièce tirées de ses colonnes de HT par compte — ou le motif qui refuse le fichier.
+ * Une ligne s'écrit en valeur absolue, son signe porté par le type : un compte de signe contraire à la
+ * pièce (une remise sur un compte) ferait écrire un HT faux sur une pièce indestructible. Un montant
+ * illisible, ou des comptes muets devant un total non nul, ne se devinent pas non plus.
+ */
+function lignesParCompte(
+  colonnes: { compte: string; i: number }[],
+  champs: string[],
+  ht: number
+): { parts: { compte: string; ht: number }[] } | { motif: string } {
+  const parts: { compte: string; ht: number }[] = [];
+  for (const c of colonnes) {
+    const brut = (champs[c.i] ?? "").trim();
+    const valeur = brut ? nombre(brut) : 0;
+    if (valeur === null) return { motif: `Montant « ${brut} » illisible dans la colonne du compte ${c.compte}.` };
+    if (Math.abs(valeur) >= 0.005) parts.push({ compte: c.compte, ht: valeur });
+  }
+  const contraire = parts.find((p) => ht !== 0 && (p.ht < 0) !== (ht < 0));
+  if (contraire) {
+    return { motif: `Compte ${contraire.compte} de signe contraire à la pièce (${contraire.ht} pour ${ht} HT) : sa ligne s'écrirait fausse.` };
+  }
+  if (!parts.length && Math.abs(ht) >= 0.005) {
+    return { motif: `Total HT de ${ht}, mais aucun compte ne le porte dans les colonnes de HT par compte.` };
+  }
+  return { parts };
+}
 
 /**
  * Le nom d'une colonne tel qu'on le compare : sans BOM, sans casse, SANS ACCENT, les
@@ -906,6 +935,11 @@ export function analyserExportFactures(
   }
   const avecLignes = brutesLignes !== null;
 
+  const comptesLus = brutesEntetes[0].champs.map(nomColonne).map((n) => COLONNE_HT_PAR_COMPTE.exec(n)?.[1]).filter(Boolean);
+  const enDouble = comptesLus.find((c, k) => comptesLus.indexOf(c) !== k);
+  if (enDouble) {
+    return echec(`Colonne de HT du compte ${enDouble} présente deux fois : on ne saurait laquelle croire.`, encodage, brutesEntetes[0].champs.join(";").slice(0, 200));
+  }
   const htParCompte = Object.entries(entete.position)
     .map(([nom, i]) => ({ compte: COLONNE_HT_PAR_COMPTE.exec(nom)?.[1] ?? "", i }))
     .filter((c) => c.compte)
@@ -963,6 +997,18 @@ export function analyserExportFactures(
        fichier se dément — ou une date JJ/MM a été écrite MM/JJ. Un seul écart refuse le
        fichier, comme pour les montants : on ne date pas une pièce indestructible au hasard. */
     const moisBrut = champ(ENTETE_MOIS).trim();
+    if (!/^\d{4}-/.test(champ(ENTETE_DATE).trim()) && !moisBrut) {
+      refuser(
+        `Date « ${champ(ENTETE_DATE).trim()} » au format JJ/MM/AAAA sans colonne « Mois » pour la confirmer : ` +
+          `jour et mois pourraient être inversés.`
+      );
+      continue;
+    }
+    if (moisBrut && moisLu(moisBrut) === null) {
+      refuser(`Mois « ${moisBrut} » illisible : attendu MM/AAAA.`);
+      incoherent = true;
+      continue;
+    }
     if (moisBrut && moisLu(moisBrut) !== date.slice(0, 7)) {
       refuser(`Mois « ${moisBrut} » différent de celui de la date ${date} : le fichier se dément lui-même.`);
       incoherent = true;
@@ -1077,11 +1123,20 @@ export function analyserExportFactures(
          serait inventer. Une ligne par taux quand la pièce en porte plusieurs. */
       /* Le HT par compte, quand l'export le porte : une ligne par compte non nul, libellée
          d'après le plan comptable — la somme est contrôlée juste en dessous. */
-      const parCompte = ventilation
-        ? []
-        : htParCompte
-            .map((c) => ({ compte: c.compte, ht: nombre(l.champs[c.i] ?? "") ?? 0 }))
-            .filter((c) => Math.abs(c.ht) >= 0.005);
+      if (ventilation && htParCompte.length) {
+        signalements.push({
+          ligne: l.numero,
+          code: numero,
+          motif: "Pièce à plusieurs taux : une ligne par taux, ses colonnes de HT par compte ne sont pas reprises.",
+        });
+      }
+      const lues = ventilation || !htParCompte.length ? { parts: [] } : lignesParCompte(htParCompte, l.champs, ht);
+      if ("motif" in lues) {
+        refuser(lues.motif);
+        incoherent = true;
+        continue;
+      }
+      const parCompte = lues.parts;
       sesLignes = parCompte.length
         ? parCompte.map((c, i) => ({
             ligne: l.numero,

@@ -167,3 +167,42 @@ describe("analyserExportFactures — reprise KTA 2026", () => {
     expect(lireKta("FAC1;Facture;08/01/2026;;C1;X;100,00;0,00;0,00;100,00;5,5%;5,50;105,50;01/2026;").factures[0].tauxTva).toBe(5.5);
   });
 });
+
+describe("analyserExportFactures — reprise KTA 2026, les refus (relecture)", () => {
+  it("refuse des comptes de signes contraires : une remise sur un compte ferait écrire un HT faux", () => {
+    const r = lireKta("FAC1;Facture;08/01/2026;;C1;X;1000,00;-100,00;0,00;900,00;10%;90,00;990,00;01/2026;");
+    expect(r.rejets[0].motif).toMatch(/signe contraire/);
+    expect(r.incoherent).toBe(true);
+  });
+
+  it("refuse un montant de compte illisible, et des comptes nuls face à un HT non nul", () => {
+    const illisible = lireKta("FAC1;Facture;08/01/2026;;C1;X;abc;100,00;0,00;100,00;10%;10,00;110,00;01/2026;");
+    expect(illisible.rejets[0].motif).toMatch(/« abc » illisible/);
+    expect(illisible.incoherent).toBe(true);
+    const nuls = lireKta("FAC1;Facture;08/01/2026;;C1;X;0,00;;0,00;500,00;10%;50,00;550,00;01/2026;");
+    expect(nuls.rejets[0].motif).toMatch(/aucun compte/);
+    expect(nuls.incoherent).toBe(true);
+  });
+
+  it("écarte une date JJ/MM/AAAA que rien ne confirme : sans colonne Mois, elle pourrait être mois/jour", () => {
+    const entete = "Numéro;Type;Date;Client;Total HT;Taux TVA;TVA;Total TTC";
+    const sansMois = analyserExportFactures(new TextEncoder().encode([entete, "FAC1;Facture;03/04/2026;X;10,00;10%;1,00;11,00"].join("\r\n")), null);
+    expect(sansMois.factures).toEqual([]);
+    expect(sansMois.rejets[0].motif).toMatch(/colonne « Mois »/);
+    const moisVide = lireKta("FAC1;Facture;03/04/2026;;C1;X;10,00;0,00;0,00;10,00;10%;1,00;11,00;;");
+    expect(moisVide.rejets[0].motif).toMatch(/colonne « Mois »/);
+  });
+
+  it("un mois illisible est dit illisible", () => {
+    expect(lireKta("FAC1;Facture;08/01/2026;;C1;X;10,00;0,00;0,00;10,00;10%;1,00;11,00;janv. 2026;").rejets[0].motif).toMatch(/Mois « janv\. 2026 » illisible/);
+  });
+
+  it("« HT 2026 » n'est pas un compte ; une colonne de compte en double refuse le fichier", () => {
+    const annee = analyserExportFactures(new TextEncoder().encode(["Numéro;Date;Client;HT 2026;Total HT;Taux TVA;Mois", "FAC1;08/01/2026;X;10,00;10,00;10%;01/2026"].join("\r\n")), null);
+    expect(annee.factures[0].lignes.map((l) => l.compte)).toEqual([""]);
+    expect(annee.signalements.map((s) => s.motif).join(" ")).toMatch(/« ht_2026 »/);
+    const double = analyserExportFactures(new TextEncoder().encode(["Numéro;Date;Client;HT 706000;HT 706000;Total HT;Taux TVA;Mois", "FAC1;08/01/2026;X;10,00;5,00;15,00;10%;01/2026"].join("\r\n")), null);
+    expect(double.rejets[0].motif).toMatch(/706000.*deux fois/);
+    expect(double.factures).toEqual([]);
+  });
+});
