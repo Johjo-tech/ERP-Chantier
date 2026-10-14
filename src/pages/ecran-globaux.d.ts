@@ -144,6 +144,7 @@ declare global {
     identifiantsLegaux: any;
     importerCatalogue: any;
     imprimeLesCodes: any;
+    designationSousCode: any;
     imputer: any;
     imputerAvoir: any;
     integrerTravailSupplementaire: any;

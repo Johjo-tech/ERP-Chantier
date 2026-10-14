@@ -3,6 +3,7 @@ import {
   codeArticleLu,
   codesAChercher,
   concorde,
+  designationSousCode,
   imprimeLesCodes,
   ligneDepuisCatalogue,
   rattacherAuCatalogue,
@@ -178,11 +179,11 @@ describe("imprimeLesCodes", () => {
   const codee = { type: "ligne", designation: "Forfait chambre", articleReference: "ECPEIN025" };
   const libre = { type: "ligne", designation: "Rebouchage" };
 
-  it("imprime la colonne dès qu'une ligne porte un code", () => {
+  it("imprime les codes dès qu'une ligne en porte un", () => {
     expect(imprimeLesCodes({ lignes: [chapitre, libre, codee] })).toBe(true);
   });
 
-  it("n'imprime pas une colonne vide sur un document chiffré à la main", () => {
+  it("n'imprime rien de plus sur un document chiffré à la main", () => {
     expect(imprimeLesCodes({ lignes: [chapitre, libre, { ...libre, articleReference: "  " }] })).toBe(false);
     expect(imprimeLesCodes({ lignes: [] })).toBe(false);
     expect(imprimeLesCodes({})).toBe(false);
@@ -195,5 +196,22 @@ describe("imprimeLesCodes", () => {
   it("tait le compte comptable qu'une pièce reprise garde à la place du code", () => {
     const reprise = { type: "ligne", designation: "Travaux", articleReference: "706000" };
     expect(imprimeLesCodes({ lignes: [reprise], legacyId: "compta:FAC000452" })).toBe(false);
+  });
+});
+
+describe("designationSousCode", () => {
+  it("ne redit pas le code quand la désignation n'est que lui", () => {
+    expect(designationSousCode("DIVERS", "DIVERS")).toBe("");
+    expect(designationSousCode("DIVERS", " divers ")).toBe("");
+  });
+
+  it("imprime entière une désignation qui commence par le code", () => {
+    expect(designationSousCode("FORFAIT", "Forfait déplacement")).toBe("Forfait déplacement");
+    expect(designationSousCode("PLO144", "PLO144 Recherche de fuite")).toBe("PLO144 Recherche de fuite");
+  });
+
+  it("laisse la désignation telle quelle sans code", () => {
+    expect(designationSousCode("", "Rebouchage")).toBe("Rebouchage");
+    expect(designationSousCode("", "")).toBe("");
   });
 });

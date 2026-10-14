@@ -242,15 +242,14 @@ export function rattacherAuCatalogue<L extends LigneDocument>(
 }
 
 /**
- * Le document imprimé porte-t-il une colonne « Code » ?
+ * Le document imprimé porte-t-il le code de ses articles ?
  *
  * Le code était saisi, enregistré, repris du devis à la facture et transmis
  * dans la facture électronique — mais absent du papier. Or les bailleurs
  * commandent par le code de leur bordereau : sans lui, ils rapprochent chaque
- * ligne du devis ou de la facture par son seul libellé.
- *
- * La colonne ne paraît que si une ligne en porte un. Un devis chiffré à la
- * main n'en a aucun, et une colonne vide y prendrait sa place à la désignation.
+ * ligne du devis ou de la facture par son seul libellé. Il s'imprime sur sa
+ * propre ligne, au-dessus de la désignation, comme sur les devis du client
+ * d'avant l'application (09/10) ; une ligne sans code ne change pas.
  *
  * Une pièce reprise de l'ancienne comptabilité n'en porte jamais : son
  * `article_reference` garde le compte comptable de la ligne — 706000 —, que le
@@ -264,4 +263,16 @@ export function imprimeLesCodes(document: {
   return (document.lignes ?? []).some(
     (l) => (l.type ?? "ligne") === "ligne" && String(l.articleReference ?? "").trim() !== ""
   );
+}
+
+/**
+ * La désignation imprimée sous son code.
+ *
+ * Celle qui n'est que le code (« DIVERS » sous le code DIVERS, lignes saisies
+ * ainsi) ne le redit pas. Toute autre s'imprime ENTIÈRE, même si elle commence
+ * par le code : c'est le texte qui engage, et retirer le code coupait des mots
+ * (« Forfait déplacement » sous le code FORFAIT devenait « déplacement »).
+ */
+export function designationSousCode(code: string, designation: string): string {
+  return code && designation.trim().toUpperCase() === code.toUpperCase() ? "" : designation;
 }

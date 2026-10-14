@@ -20,6 +20,7 @@ import {
 } from "@/api/regles-import-articles";
 import {
   codesAChercher,
+  designationSousCode,
   imprimeLesCodes,
   rattacherAuCatalogue,
   type LigneDocument,
@@ -227,6 +228,7 @@ export function injecterCatalogue() {
   w.importerCatalogue = importerCatalogue;
   w.catalogueComplet = catalogueComplet;
   w.imprimeLesCodes = imprimeLesCodes;
+  w.designationSousCode = designationSousCode;
   /* La lecture du fichier vit dans un module de règles, sans base ni DOM :
      l'écran ne fait que la déclencher. */
   w.lireExportArticles = (donnees: ArrayBuffer | Uint8Array) => {

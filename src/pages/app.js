@@ -3787,14 +3787,14 @@ async function deleteItem(type, id){
   renderTab();
 }
 /* Les deux dernières cases de la bande de chapitre. Le total y est porté par
-   le titre au lieu d'une ligne à part, qu'il fallait aller chercher plus bas. */
+   le titre au lieu d'une ligne à part, qu'il fallait aller chercher plus bas.
+   Le client le veut sous « Montant HT », sans libellé, au bord des montants
+   qu'il additionne ; « % TVA » reste vide (09/10). */
 function sousTotalChapitreHTML(total, fmt){
-  return `<td class="st">Total HT</td><td class="stv">${fmt(total)}</td>`;
+  return `<td class="stv">${fmt(total)}</td><td></td>`;
 }
 function printableLignesRows(lignes, hidePrices, avecCode){
   const fmt = hidePrices ? (()=>'•••') : money;
-  /* La colonne « Code » décale tout ce qui s'étend sur la largeur du tableau. */
-  const colCode = avecCode ? 1 : 0;
   /* Le total d'un chapitre s'écrit maintenant sur sa bande, donc avant ses
      lignes : il se prend dans la liste des sous-totaux au lieu de s'accumuler
      au fil du parcours. Même règle que l'écran — la refaire ici finirait par
@@ -3807,9 +3807,9 @@ function printableLignesRows(lignes, hidePrices, avecCode){
     const cls = l.classe ? ' '+esc(l.classe) : '';
     const badge = l.badge ? `<span class="p-badge-origine">${esc(l.badge)}</span> ` : '';
     if(t === 'chapitre'){
-      html += `<tr class="p-chapitre${cls}"><td colspan="${4+colCode}">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
+      html += `<tr class="p-chapitre${cls}"><td colspan="4">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
     } else if(t === 'commentaire'){
-      html += `<tr class="p-comment${cls}"><td colspan="${6+colCode}">${badge}${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-comment${cls}"><td colspan="6">${badge}${esc(l.designation)}</td></tr>`;
     } else {
       /* Même arithmétique que l'écran, empruntée à la règle plutôt que refaite :
          deux formules pour un seul montant finissent par diverger d'un centime. */
@@ -3818,8 +3818,13 @@ function printableLignesRows(lignes, hidePrices, avecCode){
          imprimé : le client ne lisait pas ce qu'on avait précisé sur la ligne. */
       const note = (l.commentaire || '').trim();
       const noteHTML = note ? `<div class="p-ligne-note">${esc(note)}</div>` : '';
-      const codeHTML = avecCode ? `<td class="code">${esc(l.articleReference||'')}</td>` : '';
-      html += `<tr class="${(cls+sansPrix).trim()}">${codeHTML}<td>${badge}${esc(l.designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
+      /* Le code sur sa propre ligne, au-dessus de la désignation, comme sur
+         les devis du client d'avant l'application : une colonne à part
+         prenait sa largeur à la désignation et aux montants (09/10). */
+      const code = avecCode ? String(l.articleReference||'').trim() : '';
+      const codeHTML = code ? `<div class="p-ligne-code">${esc(code)}</div>` : '';
+      const designation = window.designationSousCode(code, l.designation || '');
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${codeHTML}${badge}${esc(designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
     }
   });
   return html;
@@ -4207,18 +4212,20 @@ function metaDocHTML(type, doc){
  * naturelle pour le gestionnaire qui rapproche.
  */
 function carteChantierHTML(doc){
+  /* L'ordre est celui du client (09/10) : l'occupant, l'adresse, le
+     logement, son état et l'étage, puis le téléphone. L'ancien locataire suit
+     l'occupant, la précision d'une partie commune suit l'état du logement.
+     `carteChantierHTML` sert devis, bon ET facture — mais seuls les deux
+     premiers portent le téléphone, la facture n'a donc jamais rien à rendre
+     sur cette ligne. */
   const lieu = [
-    doc.numeroLogement ? 'Logement n° '+esc(doc.numeroLogement) : '',
     doc.occupant ? '<b>'+esc(doc.occupant)+'</b>' : '',
-    /* Sous le nom, jamais à côté : c'est l'ordre dans lequel on cherche un
-       numéro. `carteChantierHTML` sert devis, bon ET facture — mais seuls les
-       deux premiers portent la colonne, la facture n'aura donc jamais rien à
-       rendre ici. */
-    doc.telephoneLocataire ? '☎ '+esc(doc.telephoneLocataire) : '',
     doc.ancienLocataire ? 'Ancien locataire : '+esc(doc.ancienLocataire) : '',
     esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville)),
+    doc.numeroLogement ? 'Logement n° '+esc(doc.numeroLogement) : '',
     [doc.logementStatut? esc(logementLabel(doc.logementStatut)):'', doc.etage? 'Étage '+esc(doc.etage):''].filter(Boolean).join(' — '),
-    doc.precisionCommune ? esc(doc.precisionCommune) : ''
+    doc.precisionCommune ? esc(doc.precisionCommune) : '',
+    doc.telephoneLocataire ? '☎ '+esc(doc.telephoneLocataire) : ''
   ].filter(Boolean).join('<br>');
   const refs = [
     doc.refBonCommandeClient ? ['Votre bon de commande', esc(doc.refBonCommandeClient)] : null,
@@ -4313,24 +4320,21 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </div>
     </div>
     <table class="p-lignes">
-      <tr>${avecCode? '<th class="code">Code</th>' : ''}<th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
+      <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
       ${printableLignesRows(lignes, hidePrices, avecCode)}
     </table>
     <div class="p-fin">
     <div class="p-bloc-bas">
-      ${blocReglementHTML(type, doc, s, em, hidePrices)}
+      ${type === 'devis' ? blocGaucheDevisHTML(blocReglementHTML(type, doc, s, em, hidePrices)) : blocReglementHTML(type, doc, s, em, hidePrices)}
       <div class="p-totaux">${blocTotauxHTML(doc, t, fmt)}</div>
     </div>
     ${/* Une facture ne se signe pas : elle constate une créance, elle ne
-         recueille pas d'accord. Le devis, lui, vit de l'accord du client, et
-         le bon de commande de la validation de sa pré-facture. */
-      type === 'facture' ? '' : `<table class="p-sign"><tr>
-      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
-      ${/* Le devis ne recueille QUE la signature du client : l'émetteur
-           s'engage en l'envoyant, et une seconde ligne laissée vierge fait
-           douter que le document soit complet. La validation de pré-facture,
-           elle, se signe bien des deux côtés — c'est un arbitrage interne. */
-        type === 'devis' ? '' : `<td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>`}
+         recueille pas d'accord. Le devis recueille l'accord du client dans son
+         encadré, à gauche des totaux. Reste la validation de la pré-facture,
+         qui se signe des deux côtés — c'est un arbitrage interne. */
+      type === 'facture' || type === 'devis' ? '' : `<table class="p-sign"><tr>
+      <td>Validation de la pré-facture :<div class="p-sigline"></div></td>
+      <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
     </tr></table>`}
     <div class="p-bas-de-page">
       ${blocMentionsHTML(type, s)}
@@ -4467,6 +4471,16 @@ function blocReglementHTML(type, doc, s, em, hidePrices){
     + echeance
     + (conditions ? `<div>${esc(conditions)}</div>` : `<div>Règlement par ${esc(mode)}</div>`)
     + `</div>`;
+}
+
+/* Le devis vit de l'accord du client : le client le demande dans un encadré
+   à gauche des totaux, sur le modèle de « Pour votre règlement », avec la
+   place de la signature (07/10). Le règlement du devis, s'il y en a un, reste
+   au-dessus. Le devis ne recueille QUE la signature du client : l'émetteur
+   s'engage en l'envoyant. */
+function blocGaucheDevisHTML(reglementHTML){
+  const reglement = reglementHTML === '<div></div>' ? '' : reglementHTML;
+  return `<div class="p-gauche">${reglement}<div class="p-reglement p-accord"><b>Bon pour accord</b><div>Date et signature du client :</div><div class="p-sigline"></div></div></div>`;
 }
 
 /* Les mentions du code de commerce ne concernent que la facture : les faire
