@@ -3276,18 +3276,21 @@ function resolveClientAdresse(nom){
  * document : mieux vaut l'adresse d'aujourd'hui que pas d'adresse du tout. La
  * rue, elle, reste celle qu'on a figée.
  */
-function adresseClientDuDocument(doc){
+/* `forme` met en forme l'adresse et la ville une à une, avant qu'elles ne
+   soient jointes : la pièce imprimée y passe `casseAdresse`. */
+function adresseClientDuDocument(doc, forme){
+  forme = forme || (v=>v);
   const f = [doc.facturationAdresse, doc.facturationCodePostal, doc.facturationVille].filter(Boolean);
   if(f.length){
     return {
-      rue: doc.facturationAdresse || '',
-      cpVille: [doc.facturationCodePostal, doc.facturationVille].filter(Boolean).join(' '),
+      rue: forme(doc.facturationAdresse) || '',
+      cpVille: [doc.facturationCodePostal, forme(doc.facturationVille)].filter(Boolean).join(' '),
     };
   }
   const c = state.clients.find(x=>x.societeId===state.societeId && x.nom===doc.client) || {};
   return {
-    rue: doc.adresse || c.adresse || '',
-    cpVille: [c.codePostal, c.ville].filter(Boolean).join(' '),
+    rue: forme(doc.adresse || c.adresse) || '',
+    cpVille: [c.codePostal, forme(c.ville)].filter(Boolean).join(' '),
   };
 }
 function logementLabel(statut){
@@ -3787,14 +3790,34 @@ async function deleteItem(type, id){
   renderTab();
 }
 /* Les deux dernières cases de la bande de chapitre. Le total y est porté par
-   le titre au lieu d'une ligne à part, qu'il fallait aller chercher plus bas. */
+   le titre au lieu d'une ligne à part, qu'il fallait aller chercher plus bas.
+   Le client le veut sous « Montant HT », sans libellé, au bord des montants
+   qu'il additionne ; « % TVA » reste vide (09/10). */
 function sousTotalChapitreHTML(total, fmt){
-  return `<td class="st">Total HT</td><td class="stv">${fmt(total)}</td>`;
+  return `<td class="stv">${fmt(total)}</td><td></td>`;
 }
-function printableLignesRows(lignes, hidePrices, avecCode){
-  const fmt = hidePrices ? (()=>'•••') : money;
-  /* La colonne « Code » décale tout ce qui s'étend sur la largeur du tableau. */
-  const colCode = avecCode ? 1 : 0;
+/* Les montants d'une pièce, dans son sens : un avoir s'imprime en négatif,
+   ses montants étant enregistrés positifs (c'est le type qui dit le sens). Un
+   zéro ne prend jamais de signe : « -0,00 € » ne dirait rien de plus. */
+function formateurPiece(hidePrices, sens){
+  if(hidePrices) return ()=>'•••';
+  return m=>{
+    const n = Number(m) || 0;
+    return money(sens < 0 && Math.abs(n) >= 0.005 ? -n : n);
+  };
+}
+/* Les adresses du client et du lieu, en capitales dans les fiches reprises,
+   s'impriment « majuscule aux mots » ; celles de l'émetteur restent telles
+   quelles. La donnée ne change pas. */
+function adressesImprimees(d){
+  const c = window.casseAdresse;
+  return { ...d,
+    adresse: c(d.adresse), adresseLocataire: c(d.adresseLocataire), ville: c(d.ville),
+    precisionCommune: c(d.precisionCommune),
+    facturationAdresse: c(d.facturationAdresse), facturationVille: c(d.facturationVille) };
+}
+function printableLignesRows(lignes, hidePrices, avecCode, sens){
+  const fmt = formateurPiece(hidePrices, sens || 1);
   /* Le total d'un chapitre s'écrit maintenant sur sa bande, donc avant ses
      lignes : il se prend dans la liste des sous-totaux au lieu de s'accumuler
      au fil du parcours. Même règle que l'écran — la refaire ici finirait par
@@ -3807,9 +3830,9 @@ function printableLignesRows(lignes, hidePrices, avecCode){
     const cls = l.classe ? ' '+esc(l.classe) : '';
     const badge = l.badge ? `<span class="p-badge-origine">${esc(l.badge)}</span> ` : '';
     if(t === 'chapitre'){
-      html += `<tr class="p-chapitre${cls}"><td colspan="${4+colCode}">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
+      html += `<tr class="p-chapitre${cls}"><td colspan="4">${esc(l.designation)}</td>${sousTotalChapitreHTML(sousTotaux[chap++] || 0, fmt)}</tr>`;
     } else if(t === 'commentaire'){
-      html += `<tr class="p-comment${cls}"><td colspan="${6+colCode}">${badge}${esc(l.designation)}</td></tr>`;
+      html += `<tr class="p-comment${cls}"><td colspan="6">${badge}${esc(l.designation)}</td></tr>`;
     } else {
       /* Même arithmétique que l'écran, empruntée à la règle plutôt que refaite :
          deux formules pour un seul montant finissent par diverger d'un centime. */
@@ -3818,8 +3841,13 @@ function printableLignesRows(lignes, hidePrices, avecCode){
          imprimé : le client ne lisait pas ce qu'on avait précisé sur la ligne. */
       const note = (l.commentaire || '').trim();
       const noteHTML = note ? `<div class="p-ligne-note">${esc(note)}</div>` : '';
-      const codeHTML = avecCode ? `<td class="code">${esc(l.articleReference||'')}</td>` : '';
-      html += `<tr class="${(cls+sansPrix).trim()}">${codeHTML}<td>${badge}${esc(l.designation)}${noteHTML}</td><td class="num">${l.qte}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${l.tva}%</td></tr>`;
+      /* Le code sur sa propre ligne, au-dessus de la désignation, comme sur
+         les devis du client d'avant l'application : une colonne à part
+         prenait sa largeur à la désignation et aux montants (09/10). */
+      const code = avecCode ? String(l.articleReference||'').trim() : '';
+      const codeHTML = code ? `<div class="p-ligne-code">${esc(code)}</div>` : '';
+      const designation = window.designationSousCode(code, l.designation || '');
+      html += `<tr class="${(cls+sansPrix).trim()}"><td>${codeHTML}${badge}${esc(designation)}${noteHTML}</td><td class="num">${esc(window.quantiteImprimee(l.qte))}</td><td class="unite">${esc(l.unite||'u')}</td><td class="num">${fmt(l.prixUnitaire)}</td><td class="num">${fmt(window.montantLigneHt(l))}</td><td class="num">${window.tvaImprimee(l.tva)}</td></tr>`;
     }
   });
   return html;
@@ -4207,18 +4235,20 @@ function metaDocHTML(type, doc){
  * naturelle pour le gestionnaire qui rapproche.
  */
 function carteChantierHTML(doc){
+  /* L'ordre est celui du client (09/10) : l'occupant, l'adresse, le
+     logement, son état et l'étage, puis le téléphone. L'ancien locataire suit
+     l'occupant, la précision d'une partie commune suit l'état du logement.
+     `carteChantierHTML` sert devis, bon ET facture — mais seuls les deux
+     premiers portent le téléphone, la facture n'a donc jamais rien à rendre
+     sur cette ligne. */
   const lieu = [
-    doc.numeroLogement ? 'Logement n° '+esc(doc.numeroLogement) : '',
     doc.occupant ? '<b>'+esc(doc.occupant)+'</b>' : '',
-    /* Sous le nom, jamais à côté : c'est l'ordre dans lequel on cherche un
-       numéro. `carteChantierHTML` sert devis, bon ET facture — mais seuls les
-       deux premiers portent la colonne, la facture n'aura donc jamais rien à
-       rendre ici. */
-    doc.telephoneLocataire ? '☎ '+esc(doc.telephoneLocataire) : '',
     doc.ancienLocataire ? 'Ancien locataire : '+esc(doc.ancienLocataire) : '',
     esc(withVille(doc.adresseLocataire, doc.codePostal, doc.ville)),
+    doc.numeroLogement ? 'Logement n° '+esc(doc.numeroLogement) : '',
     [doc.logementStatut? esc(logementLabel(doc.logementStatut)):'', doc.etage? 'Étage '+esc(doc.etage):''].filter(Boolean).join(' — '),
-    doc.precisionCommune ? esc(doc.precisionCommune) : ''
+    doc.precisionCommune ? esc(doc.precisionCommune) : '',
+    doc.telephoneLocataire ? '☎ '+esc(doc.telephoneLocataire) : ''
   ].filter(Boolean).join('<br>');
   const refs = [
     doc.refBonCommandeClient ? ['Votre bon de commande', esc(doc.refBonCommandeClient)] : null,
@@ -4242,7 +4272,9 @@ function documentImprimable(type, id){
   if(type==='bonCommande'){
     const b = (state.bonsCommande||[]).find(x=>x.id===id);
     if(!b) return null;
-    return { doc: { ...b, numero: b.numeroInterne || b.numeroBC || '', date: b.dateReception || b.date }, titre: 'BON DE COMMANDE' };
+    /* Un SAV naît d'un bon d'origine : intitulé « BON DE COMMANDE », il se
+       lisait comme une nouvelle commande du client. */
+    return { doc: { ...b, numero: b.numeroInterne || b.numeroBC || '', date: b.dateReception || b.date }, titre: b.bonCommandeId ? 'SAV' : 'BON DE COMMANDE' };
   }
   const doc = (type==='devis' ? state.devis : state.factures).find(x=>x.id===id);
   if(!doc) return null;
@@ -4253,12 +4285,15 @@ function documentImprimable(type, id){
 function renderPrintDoc(type, id, hidePrices, lignesOverride){
   const resolu = documentImprimable(type, id);
   if(!resolu) return '<p>Document introuvable.</p>';
-  const doc = resolu.doc;
+  const doc = adressesImprimees(resolu.doc);
   const s = state.settings[state.societeId] || {};
   const socName = societeName(state.societeId);
-  const lignes = lignesOverride || doc.lignes;
+  /* Le chapitre, le commentaire ou la ligne laissés vides d'un devis ou d'un
+     bon ne sortent pas sur le papier. Une facture s'imprime telle qu'émise. */
+  const lignes = type === 'facture' ? (lignesOverride || doc.lignes) : window.lignesRemplies(lignesOverride || doc.lignes);
   const t = computeTotalsAvecRemise(lignes, doc.remisePourcentage || 0);
-  const fmt = hidePrices ? (()=>'•••') : money;
+  const sens = type === 'facture' ? window.signeDocument(doc.typeDocument) : 1;
+  const fmt = formateurPiece(hidePrices, sens);
   const title = resolu.titre;
   const avecCode = window.imprimeLesCodes({ lignes, legacyId: doc.legacyId });
 
@@ -4290,7 +4325,7 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
     iban: doc.emetteurIban || s.iban,
   };
   const r = (s.reglages && s.reglages.documents) || {};
-  const adrClient = adresseClientDuDocument(doc);
+  const adrClient = adresseClientDuDocument(doc, window.casseAdresse);
   const fisc = [em.siret? `<b>Siret</b> ${esc(em.siret)}`:'', s.codeNaf? `<b>APE</b> ${esc(s.codeNaf)}`:''].filter(Boolean).join(' · ');
   const logo = logoHTML(s);
   return `
@@ -4313,24 +4348,21 @@ function renderPrintDoc(type, id, hidePrices, lignesOverride){
       </div>
     </div>
     <table class="p-lignes">
-      <tr>${avecCode? '<th class="code">Code</th>' : ''}<th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
-      ${printableLignesRows(lignes, hidePrices, avecCode)}
+      <tr><th style="width:44%;">Désignation</th><th class="num">Qté</th><th class="unite">Unité</th><th class="num">PU HT</th><th class="num">Montant HT</th><th class="num">% TVA</th></tr>
+      ${printableLignesRows(lignes, hidePrices, avecCode, sens)}
     </table>
     <div class="p-fin">
     <div class="p-bloc-bas">
-      ${blocReglementHTML(type, doc, s, em, hidePrices)}
-      <div class="p-totaux">${blocTotauxHTML(doc, t, fmt)}</div>
+      ${type === 'devis' ? blocGaucheDevisHTML(blocReglementHTML(type, doc, s, em, hidePrices)) : blocReglementHTML(type, doc, s, em, hidePrices)}
+      <div class="p-totaux">${blocTotauxHTML(doc, t, fmt, sens)}</div>
     </div>
     ${/* Une facture ne se signe pas : elle constate une créance, elle ne
-         recueille pas d'accord. Le devis, lui, vit de l'accord du client, et
-         le bon de commande de la validation de sa pré-facture. */
-      type === 'facture' ? '' : `<table class="p-sign"><tr>
-      <td>${type==='devis'? 'Bon pour accord, date et signature du client :' : 'Validation de la pré-facture :'}<div class="p-sigline"></div></td>
-      ${/* Le devis ne recueille QUE la signature du client : l'émetteur
-           s'engage en l'envoyant, et une seconde ligne laissée vierge fait
-           douter que le document soit complet. La validation de pré-facture,
-           elle, se signe bien des deux côtés — c'est un arbitrage interne. */
-        type === 'devis' ? '' : `<td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>`}
+         recueille pas d'accord. Le devis recueille l'accord du client dans son
+         encadré, à gauche des totaux. Reste la validation de la pré-facture,
+         qui se signe des deux côtés — c'est un arbitrage interne. */
+      type === 'facture' || type === 'devis' ? '' : `<table class="p-sign"><tr>
+      <td>Validation de la pré-facture :<div class="p-sigline"></div></td>
+      <td>Pour ${esc(em.nom)} :<div class="p-sigline"></div></td>
     </tr></table>`}
     <div class="p-bas-de-page">
       ${blocMentionsHTML(type, s)}
@@ -4405,22 +4437,28 @@ function libelleModePaiement(mode){
  * chiffre que le payeur cherche, et le faire disparaître quand il égale le
  * TTC obligerait à savoir lequel lire.
  */
-function blocTotauxHTML(doc, t, fmt){
+function blocTotauxHTML(doc, t, fmt, sens){
   const v = t.ventilation || [];
+  /* Remise, acompte, retenue viennent EN DÉDUCTION : « -12,00 € » sur une
+     facture ; sur un avoir, dont le total est négatif, la même déduction le
+     ramène vers zéro et s'écrit sans signe. */
+  const deduction = m => sens < 0 ? fmt(-m) : '-'+fmt(m);
+  // La base d'un taux s'affiche même sans les prix : seul son signe suit la pièce.
+  const base = formateurPiece(false, sens || 1);
   const kv = (l, x, c) => `<div class="p-kv${c||''}"><span>${l}</span><em>${x}</em></div>`;
   const solde = window.soldeAPayer(t, {
     acomptes: doc.acomptesDeduits,
     retenuePourcentage: doc.retenueGarantiePourcentage,
   });
   return (v.length > 1
-      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map(pa=>kv(`TVA ${window.formaterTaux(pa.taux)} sur ${money(pa.base)}`, fmt(pa.montant))).join('')}${kv('Total TVA', fmt(t.tva), ' somme')}</div>`
+      ? `<div class="p-tva-detail"><b>Détail TVA</b>${v.map(pa=>kv(`TVA ${window.formaterTaux(pa.taux)} sur ${base(pa.base)}`, fmt(pa.montant))).join('')}${kv('Total TVA', fmt(t.tva), ' somme')}</div>`
       : '')
     + kv('Total HT', fmt(t.htAvant))
-    + (t.remisePct>0 ? kv(`Remise (${t.remisePct} %)`, '-'+fmt(t.remiseMontantHT)) : '')
+    + (t.remisePct>0 ? kv(`Remise (${t.remisePct} %)`, deduction(t.remiseMontantHT)) : '')
     + kv(v.length===1 ? `Total TVA ${window.formaterTaux(v[0].taux)}` : 'Total TVA', fmt(t.tva))
     + kv('Total TTC', fmt(t.ttc), ' p-ttc')
-    + (solde.acomptes>0 ? kv('Acompte déjà versé', '-'+fmt(solde.acomptes)) : '')
-    + (solde.retenueMontant>0 ? kv(`Retenue de garantie (${window.formaterTaux(solde.retenuePourcentage)})`, '-'+fmt(solde.retenueMontant)) : '')
+    + (solde.acomptes>0 ? kv('Acompte déjà versé', deduction(solde.acomptes)) : '')
+    + (solde.retenueMontant>0 ? kv(`Retenue de garantie (${window.formaterTaux(solde.retenuePourcentage)})`, deduction(solde.retenueMontant)) : '')
     + kv('Net à payer', fmt(solde.netAPayer), ' p-net');
 }
 
@@ -4467,6 +4505,16 @@ function blocReglementHTML(type, doc, s, em, hidePrices){
     + echeance
     + (conditions ? `<div>${esc(conditions)}</div>` : `<div>Règlement par ${esc(mode)}</div>`)
     + `</div>`;
+}
+
+/* Le devis vit de l'accord du client : le client le demande dans un encadré
+   à gauche des totaux, sur le modèle de « Pour votre règlement », avec la
+   place de la signature (07/10). Le règlement du devis, s'il y en a un, reste
+   au-dessus. Le devis ne recueille QUE la signature du client : l'émetteur
+   s'engage en l'envoyant. */
+function blocGaucheDevisHTML(reglementHTML){
+  const reglement = reglementHTML === '<div></div>' ? '' : reglementHTML;
+  return `<div class="p-gauche">${reglement}<div class="p-reglement p-accord"><b>Bon pour accord</b><div>Date et signature du client :</div><div class="p-sigline"></div></div></div>`;
 }
 
 /* Les mentions du code de commerce ne concernent que la facture : les faire

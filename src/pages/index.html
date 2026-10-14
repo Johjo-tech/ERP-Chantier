@@ -1420,12 +1420,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* L'unité n'est pas un nombre : collée à droite, elle s'éloignait de la
    quantité qu'elle qualifie. « 12   m² » se lit, « 12       m² » se déchiffre. */
 .p-lignes th.unite, .p-lignes td.unite{ text-align:left; padding-left:1mm; }
-/* Un code coupé en deux ne se retrouve plus dans le bordereau du client : il
-   tient sur une ligne, et la colonne prend la largeur du plus long. */
-.p-lignes td.code{ white-space:nowrap; padding-right:1mm; font-size:8.5pt; color:#4A5568; }
-/* La colonne « Code » prenait sa place aux montants, et « Montant HT » passait
-   sur deux lignes : un intitulé tient sur une ligne, et c'est la désignation,
-   seule à pouvoir se replier, qui cède la largeur. */
+/* « Montant HT » passait sur deux lignes : un intitulé tient sur une ligne,
+   et c'est la désignation, seule à pouvoir se replier, qui cède la largeur. */
 .p-lignes th{ white-space:nowrap; }
 /* Le commentaire et le chapitre racontent : ils restent à gauche même si le
    tableau devait un jour être aligné autrement. */
@@ -1443,6 +1439,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 /* Un commentaire se saisit sur plusieurs lignes : le HTML les fondait en une
    seule, et la liste des travaux devenait un paragraphe illisible. */
 .p-comment td, .p-ligne-note{ white-space:pre-line; }
+/* Dans le tableau des pièces, la ligne « commentaire » s'écrit dans le
+   caractère des lignes d'article : le client la lisait comme une note à part
+   (07/10). La note 💬 d'une ligne d'article (.p-ligne-note) ne change pas. */
+.p-lignes .p-comment td{ font-style:normal; color:inherit; font-size:9.5pt; }
 .p-ligne-note{ font-style:italic; color:#6B7686; font-size:8.5pt; margin-top:.6mm; }
 /* Ce que le technicien ou le conducteur a ajouté pendant le chantier : le
    directeur doit le distinguer de ce qui était commandé au départ. */
@@ -1498,7 +1498,11 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 .p-doc .p-emetteur-coord{ font-size:8.5pt; color:var(--text-dim); line-height:1.6; }
 /* Les identifiants et les dates s'écrivent à l'encre du texte, pas dans la
    couleur de la société : ce sont des données qu'on recopie, pas des titres. */
-.p-doc .p-ident-fisc{ grid-area:2 / 2 / 3 / 3; align-self:end; font-size:8pt; line-height:1.5; }
+/* Siret et TVA suivent les coordonnées de l'émetteur, à 2 mm : calés au bas
+   de la rangée des dates, ils s'écartaient du site internet d'1,5 cm sur un
+   devis (quatre dates). C'est le bloc qui remonte d'1 mm ; la marge de
+   l'émetteur, et donc les dates de droite, ne bougent pas. */
+.p-doc .p-ident-fisc{ grid-area:2 / 2 / 3 / 3; align-self:start; margin-top:-1mm; font-size:8pt; line-height:1.5; }
 .p-doc .p-ident-fisc b{ font-weight:600; }
 /* Le filet vertical se poursuit d'une rangée à l'autre : les deux blocs de la
    colonne de droite le portent, et rien ne les sépare. */
@@ -1520,8 +1524,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 
 /* Chantier et client, côte à côte. Le fond est un voile de la couleur de la
    société et non un aplat : un gabarit fait d'aplats mange l'encre. */
-.p-doc .p-cartes{ display:grid; grid-template-columns:1fr 1fr; gap:8mm; margin-top:6mm; }
-.p-doc .p-carte{ background:rgba(var(--accent-rgb), .06); padding:3.5mm 5mm;
+/* Les encadrés respirent, dedans comme autour : le client les trouvait
+   tassés contre l'en-tête et le tableau (07/10). */
+.p-doc .p-cartes{ display:grid; grid-template-columns:1fr 1fr; gap:8mm; margin-top:9mm; margin-bottom:6mm; }
+.p-doc .p-carte{ background:rgba(var(--accent-rgb), .06); padding:5mm 5mm;
   break-inside:avoid; page-break-inside:avoid; }
 .p-doc .p-carte-titre{ font-size:8pt; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
   color:var(--accent-2); margin-bottom:2mm; }
@@ -1544,8 +1550,10 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
    le client reçoit autre chose que ce qu'on a relu. Seule la désignation —
    le `none` ci-dessus garde les montants tels quels. */
 .p-doc .p-chapitre td:first-child{ text-transform:uppercase; }
-.p-doc .p-chapitre td.st{ font-size:8.5pt; color:var(--text-dim); font-weight:400; text-align:right; }
-.p-doc .p-chapitre td.stv{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10pt; text-align:right; }
+/* Le sous-total tombe sous « Montant HT » : la bande du chapitre a 3 mm de
+   marge, les cellules des lignes 2 mm ; sans ce retour, il tombait 1 mm à
+   gauche des montants qu'il additionne. */
+.p-doc .p-chapitre td.stv{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10pt; text-align:right; padding-right:2mm; }
 
 /* Le pavé de règlement se cale par le bas sur le net à payer, quelle que soit
    la hauteur du détail de TVA au-dessus. */
@@ -1556,7 +1564,16 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
   text-transform:uppercase; color:var(--accent-2); margin-bottom:2mm; }
 .p-doc .p-reglement div{ margin-bottom:1mm; }
 .p-doc .p-reglement span{ font-family:'JetBrains Mono',monospace; font-size:8.5pt; color:#182233; }
+/* L'encadré « Bon pour accord » du devis : celui de « Pour votre règlement »,
+   avec la place de la signature. */
+.p-doc .p-accord .p-sigline{ margin-top:12mm; width:auto; }
+.p-doc .p-gauche{ display:flex; flex-direction:column; gap:4mm; }
 .p-doc .p-totaux{ display:flex; flex-direction:column; gap:2mm; }
+/* Total HT, Total TVA (et remise, acompte, retenue) prennent la marge des
+   bandeaux « Total TTC » et « Net à payer » : libellés et montants sur les
+   mêmes bords. Le détail de TVA a déjà la sienne ; la mise en page serrée
+   remet tout à zéro, bandeaux compris, et reste alignée. */
+.p-doc .p-totaux > .p-kv:not(.p-ttc):not(.p-net){ padding-left:4mm; padding-right:4mm; }
 .p-doc .p-tva-detail{ background:rgba(var(--accent-rgb), .06); padding:2.2mm 4mm; font-size:9pt; }
 .p-doc .p-tva-detail b{ display:block; font-size:8pt; font-weight:700; letter-spacing:.06em;
   text-transform:uppercase; color:var(--accent-2); margin-bottom:1.5mm; }
@@ -1627,8 +1644,8 @@ footer.note{font-size:11.5px; color:var(--text-dim); margin-top:20px; padding-to
 #printArea.pdf-serre .p-lignes{ margin-top:3mm; }
 #printArea.pdf-serre .p-lignes td{ padding-top:.6mm; padding-bottom:.6mm; line-height:1.15; }
 #printArea.pdf-serre .p-chapitre td{ padding-top:.9mm; padding-bottom:.9mm; }
-#printArea.pdf-serre .p-cartes{ margin-top:3mm; }
-#printArea.pdf-serre .p-carte{ padding:2.2mm 4mm; }
+#printArea.pdf-serre .p-cartes{ margin-top:5mm; margin-bottom:4mm; }
+#printArea.pdf-serre .p-carte{ padding:3.2mm 4mm; }
 #printArea.pdf-serre .p-bloc-bas{ margin-top:3mm; }
 #printArea.pdf-serre .p-tva-detail{ padding:1.4mm 4mm; }
 #printArea.pdf-serre .p-kv{ padding:.2mm 0; }
