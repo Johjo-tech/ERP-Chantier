@@ -156,7 +156,7 @@ export async function reglerCompteur(
   return data;
 }
 
-export { apercuNumero, compteurEnCours } from "../regles-numerotation";
+export { apercuNumero, compteurEnCours, refusPrefixe } from "../regles-numerotation";
 
 // ============ MÉTIERS ============
 

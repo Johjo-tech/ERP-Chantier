@@ -33,13 +33,17 @@ export function apercuNumero(prefixe: string, valeur: number): string {
 }
 
 /**
- * Pourquoi un préfixe est refusé, ou `null` s'il convient.
+ * Pourquoi un préfixe est refusé, ou `null` s'il convient (vide : la base
+ * prend son préfixe par défaut).
  *
  * Collé au numéro, un préfixe qui finit par un chiffre s'y confondrait :
  * « DEV2 » + 000124 se lirait DEV2000124, un numéro qu'on ne sait plus couper.
+ * Un tiret, une espace ou un accent s'écriraient au milieu du numéro.
  */
 export function refusPrefixe(prefixe: string): string | null {
-  return /\d$/.test(prefixe.trim())
-    ? "Le préfixe finit par une lettre ou « _ » : collé au numéro, un chiffre s'y confondrait."
-    : null;
+  const p = prefixe.trim();
+  if (!p) return null;
+  if (!/^[A-Za-z0-9_]+$/.test(p)) return "Lettres, chiffres ou « _ » seulement.";
+  if (!/[A-Za-z_]$/.test(p)) return "Le préfixe finit par une lettre ou « _ » : collé au numéro, un chiffre s'y confondrait.";
+  return null;
 }

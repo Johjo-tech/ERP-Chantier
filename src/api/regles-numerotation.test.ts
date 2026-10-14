@@ -12,6 +12,11 @@ describe("refusPrefixe", () => {
     expect(refusPrefixe("DEV2")).toMatch(/finit par une lettre/);
   });
 
+  it("refuse le tiret, l'espace et l'accent", () => {
+    expect(refusPrefixe("DEV-")).toMatch(/seulement/);
+    expect(refusPrefixe("DÉV")).toMatch(/seulement/);
+  });
+
   it("accepte lettres, chiffres au milieu et « _ » en fin", () => {
     expect(refusPrefixe("FAC")).toBeNull();
     expect(refusPrefixe("F2_")).toBeNull();

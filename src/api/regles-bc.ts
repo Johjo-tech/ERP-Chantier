@@ -511,6 +511,13 @@ export function essentielsDeLecture(lu: {
 }
 
 /**
+ * Un numéro de NOTRE série SAV : « SAV-… » (l'ancienne forme) ou « SAV » collé
+ * à ses six chiffres, depuis que les numéros ont perdu le tiret. Une référence
+ * du client qui commence par « SAV » reste la sienne.
+ */
+const NUMERO_SAV = /^SAV(-|\d{6}$)/;
+
+/**
  * La référence du bon telle que le client la connaît, ou rien.
  *
  * Miroir exact de `public.ref_bc_client` : c'est la même valeur qui part dans
@@ -528,13 +535,6 @@ export function essentielsDeLecture(lu: {
  * Le champ est un textarea : un bon peut en citer plusieurs, seule la première
  * ligne fait référence.
  */
-/**
- * Un numéro de NOTRE série SAV : « SAV-… » (l'ancienne forme) ou « SAV » collé
- * à ses six chiffres, depuis que les numéros ont perdu le tiret. Une référence
- * du client qui commence par « SAV » reste la sienne.
- */
-const NUMERO_SAV = /^SAV(-|\d{6}$)/;
-
 export function refBonCommandeClient(numeroBC?: string | null): string | null {
   const brut = (numeroBC ?? "").trim();
   if (!brut || NUMERO_SAV.test(brut)) return null;
@@ -578,8 +578,9 @@ export function lieuIntervention(bon: {
 
 /**
  * Un numéro de devis réduit à ce qui l'identifie : « DEV-006275 », « dev 6275 »
- * et « DEV6275 » désignent le même devis. L'ERP numérote avec un tiret et des
- * zéros, l'ancien logiciel sans, et un bailleur recopie comme il l'entend.
+ * et « DEV6275 » désignent le même devis. L'ERP a numéroté avec un tiret puis
+ * sans, toujours avec des zéros, l'ancien logiciel sans zéros, et un bailleur
+ * recopie comme il l'entend.
  */
 export function cleNumeroDevis(numero: string): string {
   // Les zéros d'abord, groupe par groupe : ôter les séparateurs avant souderait

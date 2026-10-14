@@ -13247,6 +13247,13 @@ function majApercuNumero(type){
 async function saveNumerotation(){
   const annee = new Date().getFullYear();
   const uuid = window.societeActive().uuid;
+  /* Tout se vérifie avant la première écriture : un refus au milieu de la
+     boucle laissait les séries d'au-dessus enregistrées et celles d'en dessous
+     non, sans dire laquelle était en cause. */
+  for(const s of window.SERIES_NUMEROTATION){
+    const refus = window.refusPrefixe(document.getElementById('num_p_'+s.type).value);
+    if(refus){ showToast(`${s.label} : ${refus}`); return; }
+  }
   try{
     for(const s of window.SERIES_NUMEROTATION){
       const prefixe = document.getElementById('num_p_'+s.type).value;
