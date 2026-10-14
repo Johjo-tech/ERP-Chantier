@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleNumeroDevis, devisCiteParLeBon } from "./regles-bc";
+import { cleNumeroDevis, devisCiteParLeBon, refBonCommandeClient } from "./regles-bc";
 
 describe("cleNumeroDevis", () => {
   it.each([
@@ -43,5 +43,17 @@ describe("devisCiteParLeBon", () => {
   it("ne cherche rien quand le bon ne cite pas de devis", () => {
     expect(devisCiteParLeBon(null, devis, new Set())).toBeNull();
     expect(devisCiteParLeBon("", devis, new Set())).toBeNull();
+  });
+});
+
+describe("refBonCommandeClient", () => {
+  it("écarte un numéro de notre série SAV, avec ou sans tiret", () => {
+    expect(refBonCommandeClient("SAV-000012")).toBeNull();
+    expect(refBonCommandeClient("SAV000012")).toBeNull();
+  });
+
+  it("garde une référence du client qui commence par SAV", () => {
+    expect(refBonCommandeClient("SAVOIE-2026-14")).toBe("SAVOIE-2026-14");
+    expect(refBonCommandeClient("SAV12")).toBe("SAV12");
   });
 });

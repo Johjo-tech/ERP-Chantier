@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { apercuNumero, compteurEnCours } from "./regles-numerotation";
+import { apercuNumero, compteurEnCours, refusPrefixe } from "./regles-numerotation";
 
 describe("apercuNumero", () => {
-  it("annonce le numéro suivant sur six chiffres, sans année", () => {
-    expect(apercuNumero("FAC", 255)).toBe("FAC-000256");
+  it("annonce le numéro suivant sur six chiffres, sans année ni tiret", () => {
+    expect(apercuNumero("FAC", 255)).toBe("FAC000256");
+  });
+});
+
+describe("refusPrefixe", () => {
+  it("refuse un préfixe qui finit par un chiffre", () => {
+    expect(refusPrefixe("DEV2")).toMatch(/finit par une lettre/);
+  });
+
+  it("accepte lettres, chiffres au milieu et « _ » en fin", () => {
+    expect(refusPrefixe("FAC")).toBeNull();
+    expect(refusPrefixe("F2_")).toBeNull();
+    expect(refusPrefixe("")).toBeNull();
   });
 });
 

@@ -21,6 +21,7 @@ import type {
   TablesUpdate,
   Uuid,
 } from "../types";
+import { refusPrefixe } from "../regles-numerotation";
 
 // ============ SOCIÉTÉS ============
 
@@ -133,6 +134,8 @@ export async function reglerCompteur(
   if (!Number.isFinite(valeur) || valeur < 0) {
     throw new Error("Le dernier numéro doit être un entier positif.");
   }
+  const refus = refusPrefixe(prefixe);
+  if (refus) throw new Error(refus);
 
   const { data, error } = await supabase
     .from("compteurs")

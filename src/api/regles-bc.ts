@@ -528,9 +528,16 @@ export function essentielsDeLecture(lu: {
  * Le champ est un textarea : un bon peut en citer plusieurs, seule la première
  * ligne fait référence.
  */
+/**
+ * Un numéro de NOTRE série SAV : « SAV-… » (l'ancienne forme) ou « SAV » collé
+ * à ses six chiffres, depuis que les numéros ont perdu le tiret. Une référence
+ * du client qui commence par « SAV » reste la sienne.
+ */
+const NUMERO_SAV = /^SAV(-|\d{6}$)/;
+
 export function refBonCommandeClient(numeroBC?: string | null): string | null {
   const brut = (numeroBC ?? "").trim();
-  if (!brut || brut.startsWith("SAV-")) return null;
+  if (!brut || NUMERO_SAV.test(brut)) return null;
 
   const premiere = brut.split("\n")[0].trim();
   if (!premiere || premiere === "Sans BC" || premiere === "En attente de BC") return null;

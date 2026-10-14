@@ -4904,7 +4904,7 @@ function devisForm(){
         ${e.id
           ? `<div class="field"><label>N° du devis</label><div class="numref-lg" style="padding-top:9px;">${e.numero? esc(e.numero) : 'Attribué à l\u2019enregistrement du devis'}</div></div>`
           : (e.numero
-              ? `<div class="field"><label>N° du devis (repris du document)</label><input type="text" id="f_numero" value="${esc(e.numero)}" oninput="verifierNumeroDevis(this.value)"><small id="f_numeroAvis" style="font-size:11.5px; color:var(--text-dim);">Videz le champ pour qu'un numéro DEV-… soit attribué à l'enregistrement.</small></div>`
+              ? `<div class="field"><label>N° du devis (repris du document)</label><input type="text" id="f_numero" value="${esc(e.numero)}" oninput="verifierNumeroDevis(this.value)"><small id="f_numeroAvis" style="font-size:11.5px; color:var(--text-dim);">Videz le champ pour qu'un numéro DEV… soit attribué à l'enregistrement.</small></div>`
               : '')}
         <div class="field"><label>Conducteur de travaux</label><select id="f_conducteur">${conducteurSelectOptions(conducteurIdDe(e))}</select></div>
       </div>
@@ -13273,7 +13273,7 @@ function renderNumerotationSection(){
     <div class="card-title" style="margin-bottom:10px;">🔢 Numérotation</div>
     <div class="card-sub" style="margin-bottom:12px;">Préfixe et point de départ de chaque série, pour ${esc(societeName(state.societeId))}. Les numéros sont attribués par la base de façon atomique — deux personnes ne peuvent pas obtenir le même.</div>
     <div id="zoneNumerotation"><div class="empty">Chargement…</div></div>
-    <small style="display:block; margin-top:12px; color:var(--text-dim); font-size:11px;">Les bons de commande n'ont pas de série : leur numéro figure sur le document du client. Les numéros ne portent pas l’année (FAC-000256) : la série continue d’une année sur l’autre, sans repartir de zéro.</small>
+    <small style="display:block; margin-top:12px; color:var(--text-dim); font-size:11px;">Les bons de commande n'ont pas de série : leur numéro figure sur le document du client. Les numéros ne portent pas l’année (FAC000256) : la série continue d’une année sur l’autre, sans repartir de zéro.</small>
   </div>`;
 }
 
@@ -18843,10 +18843,10 @@ function verifierNumeroDevis(numero){
   const collision = n && state.devis.find(d =>
     d.societeId === state.societeId && d.numero === n && d.id !== state.editing.id);
   if(collision){
-    avis.textContent = `Le n° ${n} est déjà celui du devis de ${collision.client || '—'} du ${fmtDate(collision.date)}. Corrigez-le, ou videz le champ pour qu'un numéro DEV-… soit attribué à l'enregistrement.`;
+    avis.textContent = `Le n° ${n} est déjà celui du devis de ${collision.client || '—'} du ${fmtDate(collision.date)}. Corrigez-le, ou videz le champ pour qu'un numéro DEV… soit attribué à l'enregistrement.`;
     avis.style.color = 'var(--danger)';
   } else {
-    avis.textContent = "Videz le champ pour qu'un numéro DEV-… soit attribué à l'enregistrement.";
+    avis.textContent = "Videz le champ pour qu'un numéro DEV… soit attribué à l'enregistrement.";
     avis.style.color = 'var(--text-dim)';
   }
   return collision || null;
