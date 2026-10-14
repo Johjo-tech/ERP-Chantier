@@ -5702,7 +5702,12 @@ function importFacturesHTML(){
       ${(a.totaux.pieces !== t.pieces)? `<div class="card-sub" style="margin-top:6px;">Le fichier porte ${a.totaux.pieces} pièces pour ${moneyDisplay(a.totaux.ht)} HT ; l'écart vient des pièces écartées ou déjà présentes.</div>`:''}
     </div>
 
-    ${!i.octetsL? `<div class="wf-banner" style="margin-top:10px;">
+    ${!i.octetsL && a.pieces.some(p=>p.lignes.some(l=>l.article_reference))? `<div class="wf-banner" style="margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:6px;">Lignes reprises du fichier</div>
+      <div class="card-sub" style="margin-bottom:8px;">Le fichier porte le HT de chaque pièce par compte comptable : chaque pièce aura une ligne par compte (${esc([...new Set(a.pieces.flatMap(p=>p.lignes.map(l=>l.article_reference).filter(Boolean)))].join(', '))}), et leur somme a été vérifiée contre le total HT. Un fichier de lignes déposé ici prendrait leur place.</div>
+      <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichiersFactures(this.files)">
+    </div>`
+    : !i.octetsL? `<div class="wf-banner" style="margin-top:10px;">
       <div style="font-weight:700; margin-bottom:6px;">Sans le détail des lignes</div>
       <div class="card-sub" style="margin-bottom:8px;">Les montants ci-dessus sont exacts — ils viennent du fichier des factures. Chaque pièce portera un seul poste, libellé « ${esc(window.DESIGNATION_SANS_LIGNES||'Facturation (historique)')} ». Si votre logiciel sait aussi exporter le détail par compte comptable, ajoutez-le ici : l'aperçu se refera.</div>
       <input type="file" accept=".csv,.txt,text/csv" onchange="choisirFichiersFactures(this.files)">

@@ -10,6 +10,8 @@
  *
  *   août 2026 : `numero,type,date_facture,…,total_ht,total_tva`   virgule, point décimal
  *   année 2025 : `numero_facture;type;date_facture;…;montant_ht`  point-virgule, virgule décimale
+ *   reprise KTA 2026 : `Numéro;Type;Date;Échéance;…;Total HT;Taux TVA` noms « humains »,
+ *     dates JJ/MM/AAAA, taux « 10% », HT ventilé par compte (`HT 706000 (travaux)`)
  *
  * Même logiciel, deux extractions, deux vocabulaires. Coder l'un aurait rejeté
  * l'autre, et demander un ré-export pour un nom de colonne serait absurde :
@@ -277,10 +279,13 @@ const ENTETE_ECHEANCE: Alias = ["date_echeance", "echeance"];
 const ENTETE_CODE_CLIENT: Alias = ["code_client", "client_code_externe"];
 const ENTETE_NOM_CLIENT: Alias = ["client", "client_nom"];
 const ENTETE_HT: Alias = ["montant_ht", "total_ht"];
-const ENTETE_TVA: Alias = ["montant_tva", "total_tva"];
+const ENTETE_TVA: Alias = ["montant_tva", "total_tva", "tva"];
 const ENTETE_TAUX: Alias = ["taux_tva"];
 const ENTETE_TTC: Alias = ["montant_ttc", "total_ttc"];
-const ENTETE_PDF: Alias = ["fichier_pdf", "pdf_origine"];
+const ENTETE_PDF: Alias = ["fichier_pdf", "pdf_origine", "pdf"];
+/* Le mois comptable de la pièce (« 01/2026 ») : il CONTRÔLE la date. C'est lui qui
+   écarte une date JJ/MM/AAAA lue à l'américaine (mois/jour). */
+const ENTETE_MOIS: Alias = ["mois"];
 /* La TVA ventilée par taux. Facultative : seul l'export 2026 la porte, et
    c'est elle qui permet de reprendre une pièce à plusieurs taux. */
 const ENTETE_TVA_PAR_TAUX: readonly { taux: number; alias: Alias }[] = [
@@ -320,7 +325,30 @@ const ENTETE_ECARTEES: Record<string, string> = {
   source: "trace d'extraction, sans destination dans le modèle.",
   fichier_pdf: "le PDF d'origine n'est pas repris ; seul son nom est conservé en référence.",
   pdf_origine: "le PDF d'origine n'est pas repris ; seul son nom est conservé en référence.",
+  pdf: "le PDF d'origine n'est pas repris ; seul son nom est conservé en référence.",
 };
+
+/**
+ * Le HT par compte comptable porté en colonnes (« HT 706000 (travaux) », « HT 706100 ») :
+ * le compte est le premier nombre du nom. Sans fichier de lignes, chaque compte non nul
+ * devient une ligne de la pièce, et la ventilation comptable ne se perd pas.
+ */
+const COLONNE_HT_PAR_COMPTE = /^ht_(\d{3,8})(?:_|$)/;
+
+/**
+ * Le nom d'une colonne tel qu'on le compare : sans BOM, sans casse, SANS ACCENT, les
+ * espaces et tirets devenus `_`. « Numéro », « Total HT », « Taux TVA » rejoignent ainsi
+ * `numero`, `total_ht`, `taux_tva` ; les noms déjà écrits ainsi ne changent pas.
+ */
+export function nomColonne(brut: string): string {
+  return brut
+    .trim()
+    .replace(/^\uFEFF/, "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[\s-]+/g, "_");
+}
 
 /**
  * Racine de compte → désignation, quand le fichier n'en porte pas.
@@ -385,7 +413,7 @@ export function natureDuFichier(donnees: ArrayBuffer | Uint8Array): NatureFichie
   const texte = decoderTexte(donnees).texte;
   const premiere = lireCsv(texte.split(/\r?\n/, 1)[0] ?? "", separateurDe(texte))[0];
   const noms = new Set(
-    (premiere?.champs ?? []).map((c) => c.trim().replace(/^﻿/, "").toLowerCase())
+    (premiere?.champs ?? []).map(nomColonne)
   );
 
   const cotéEntetes = MARQUEURS_ENTETES.filter((m) => noms.has(m)).length;
@@ -417,10 +445,35 @@ export function nombre(brut: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Une date ISO, et rien d'autre — un format libre se lirait de travers. */
+/**
+ * Une date ISO, ou JJ/MM/AAAA — et rien d'autre : un format libre se lirait de travers.
+ *
+ * JJ/MM/AAAA est l'écriture française de la reprise KTA 2026. L'année sur QUATRE chiffres
+ * et une date qui existe sont exigées (« 08/01/26 », « 31/02/2026 » restent refusées) ;
+ * la colonne « Mois », quand le fichier la porte, écarte en plus une lecture mois/jour.
+ */
 export function dateIso(brut: string): string | null {
   const t = (brut ?? "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (!m) return null;
+  const [jour, mois, annee] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(annee, mois - 1, jour));
+  if (d.getUTCFullYear() !== annee || d.getUTCMonth() !== mois - 1 || d.getUTCDate() !== jour) return null;
+  return `${annee}-${String(mois).padStart(2, "0")}-${String(jour).padStart(2, "0")}`;
+}
+
+/** Un taux de TVA : « 10 », « 10% », « 10 % », « 5,5% ». « 5,5 + 10 » reste illisible (pièce à deux taux). */
+export function tauxLu(brut: string): number | null {
+  return nombre((brut ?? "").trim().replace(/\s*%$/, ""));
+}
+
+/** Le mois comptable « MM/AAAA » (ou « AAAA-MM »), au format « AAAA-MM » ; `null` s'il ne se lit pas. */
+function moisLu(brut: string): string | null {
+  const t = (brut ?? "").trim();
+  const fr = /^(\d{1,2})\/(\d{4})$/.exec(t);
+  if (fr && Number(fr[1]) >= 1 && Number(fr[1]) <= 12) return `${fr[2]}-${fr[1].padStart(2, "0")}`;
+  return /^\d{4}-\d{2}$/.test(t) ? t : null;
 }
 
 /**
@@ -447,7 +500,7 @@ export interface EnteteResolu {
 }
 
 function resoudreEntete(champs: string[], requises: Alias[], connues: Alias[]): EnteteResolu {
-  const propres = champs.map((c) => c.trim().replace(/^﻿/, "").toLowerCase());
+  const propres = champs.map(nomColonne);
   const position: Record<string, number> = {};
   propres.forEach((nom, i) => {
     if (nom && position[nom] === undefined) position[nom] = i;
@@ -469,7 +522,7 @@ function resoudreEntete(champs: string[], requises: Alias[], connues: Alias[]): 
     position,
     trouve,
     manquantes: requises.filter((a) => !trouve.has(a)),
-    inconnues: propres.filter((n) => n && !reconnues.has(n)),
+    inconnues: propres.filter((n) => n && !reconnues.has(n) && !COLONNE_HT_PAR_COMPTE.test(n)),
   };
 }
 
@@ -729,7 +782,7 @@ function lireLignes(
       designation,
       compte,
       montantHt,
-      tauxTva: nombre(champ(LIGNE_TAUX)),
+      tauxTva: tauxLu(champ(LIGNE_TAUX)),
     });
     parNumero.set(numero, bloc);
   }
@@ -796,6 +849,7 @@ export function analyserExportFactures(
     ENTETE_TAUX,
     ENTETE_TTC,
     ENTETE_PDF,
+    ENTETE_MOIS,
     ...ENTETE_TVA_PAR_TAUX.map((c) => c.alias),
     ["statut"],
     ["source"],
@@ -835,6 +889,13 @@ export function analyserExportFactures(
     if (!parNumero) {
       return { factures: [], rejets, signalements, totaux: vide, encodage, incoherent: true };
     }
+  } else if (Object.keys(entete.position).some((n) => COLONNE_HT_PAR_COMPTE.test(n))) {
+    signalements.push({
+      ligne: 1,
+      motif:
+        "Fichier de lignes absent : chaque pièce reçoit une ligne par compte comptable, d'après ses " +
+        "colonnes de HT par compte. Leur somme est contrôlée contre le total HT.",
+    });
   } else {
     signalements.push({
       ligne: 1,
@@ -844,6 +905,19 @@ export function analyserExportFactures(
     });
   }
   const avecLignes = brutesLignes !== null;
+
+  const htParCompte = Object.entries(entete.position)
+    .map(([nom, i]) => ({ compte: COLONNE_HT_PAR_COMPTE.exec(nom)?.[1] ?? "", i }))
+    .filter((c) => c.compte)
+    .sort((a, b) => a.i - b.i);
+  if (htParCompte.length && avecLignes) {
+    signalements.push({
+      ligne: 1,
+      motif:
+        `Colonnes de HT par compte (${htParCompte.map((c) => c.compte).join(", ")}) non reprises : ` +
+        `le fichier de lignes fait foi.`,
+    });
+  }
 
   const factures: FactureImportee[] = [];
   const vues = new Map<string, number>();
@@ -881,12 +955,22 @@ export function analyserExportFactures(
 
     const date = dateIso(champ(ENTETE_DATE));
     if (!date) {
-      refuser(`Date « ${champ(ENTETE_DATE).trim()} » illisible : attendu AAAA-MM-JJ.`);
+      refuser(`Date « ${champ(ENTETE_DATE).trim()} » illisible : attendu AAAA-MM-JJ ou JJ/MM/AAAA.`);
+      continue;
+    }
+
+    /* Le mois comptable, quand le fichier le porte, doit être celui de la date : sinon le
+       fichier se dément — ou une date JJ/MM a été écrite MM/JJ. Un seul écart refuse le
+       fichier, comme pour les montants : on ne date pas une pièce indestructible au hasard. */
+    const moisBrut = champ(ENTETE_MOIS).trim();
+    if (moisBrut && moisLu(moisBrut) !== date.slice(0, 7)) {
+      refuser(`Mois « ${moisBrut} » différent de celui de la date ${date} : le fichier se dément lui-même.`);
+      incoherent = true;
       continue;
     }
 
     const ht = nombre(champ(ENTETE_HT));
-    let taux = nombre(champ(ENTETE_TAUX));
+    let taux = tauxLu(champ(ENTETE_TAUX));
 
     /* « 5,5 + 10 » : une pièce à deux taux. Sans fichier de lignes, elle ne se
        reprend que si l'export porte la TVA par taux — on en tire alors une
@@ -991,15 +1075,32 @@ export function analyserExportFactures(
       /* Libellé neutre et visiblement générique : sans le compte, on ne
          sait pas s'il s'agit d'une prestation ou d'une vente, et l'affirmer
          serait inventer. Une ligne par taux quand la pièce en porte plusieurs. */
-      sesLignes = (ventilation ?? [{ taux, ht }]).map((p, i) => ({
-        ligne: l.numero,
-        numero,
-        position: i + 1,
-        designation: DESIGNATION_SANS_LIGNES,
-        compte: "",
-        montantHt: p.ht,
-        tauxTva: p.taux,
-      }));
+      /* Le HT par compte, quand l'export le porte : une ligne par compte non nul, libellée
+         d'après le plan comptable — la somme est contrôlée juste en dessous. */
+      const parCompte = ventilation
+        ? []
+        : htParCompte
+            .map((c) => ({ compte: c.compte, ht: nombre(l.champs[c.i] ?? "") ?? 0 }))
+            .filter((c) => Math.abs(c.ht) >= 0.005);
+      sesLignes = parCompte.length
+        ? parCompte.map((c, i) => ({
+            ligne: l.numero,
+            numero,
+            position: i + 1,
+            designation: designationDuCompte(c.compte) ?? DESIGNATION_SANS_LIGNES,
+            compte: c.compte,
+            montantHt: c.ht,
+            tauxTva: taux,
+          }))
+        : (ventilation ?? [{ taux, ht }]).map((p, i) => ({
+            ligne: l.numero,
+            numero,
+            position: i + 1,
+            designation: DESIGNATION_SANS_LIGNES,
+            compte: "",
+            montantHt: p.ht,
+            tauxTva: p.taux,
+          }));
     }
     utilises.add(numero);
 
